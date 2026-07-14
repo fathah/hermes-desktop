@@ -3,6 +3,10 @@ import {
   PROVIDER_BASE_URLS,
   canonicalProviderBaseUrl,
 } from "../src/main/provider-registry";
+import {
+  OPENCODE_GO_BASE_URL,
+  OPENCODE_ZEN_BASE_URL,
+} from "../src/shared/url-key-map";
 
 describe("provider-registry", () => {
   describe("canonicalProviderBaseUrl", () => {
@@ -30,6 +34,12 @@ describe("provider-registry", () => {
       );
       expect(canonicalProviderBaseUrl("cerebras")).toBe(
         "https://api.cerebras.ai/v1",
+      );
+      expect(canonicalProviderBaseUrl("opencode-go")).toBe(
+        OPENCODE_GO_BASE_URL,
+      );
+      expect(canonicalProviderBaseUrl("opencode-zen")).toBe(
+        OPENCODE_ZEN_BASE_URL,
       );
       // Must stay the agent's own default (international) — a CN value here
       // would be written into every empty-base_url alibaba config on save.
@@ -76,6 +86,9 @@ describe("provider-registry", () => {
       expect(canonicalProviderBaseUrl("MISTRAL")).toBe(
         "https://api.mistral.ai/v1",
       );
+      expect(canonicalProviderBaseUrl("OPENCODE-GO")).toBe(
+        OPENCODE_GO_BASE_URL,
+      );
     });
 
     it("returns null for providers that don't have a canonical URL", () => {
@@ -105,6 +118,8 @@ describe("provider-registry", () => {
         "mistral",
         "xiaomi",
         "ollama-cloud",
+        "opencode-go",
+        "opencode-zen",
       ];
       for (const provider of requiredBuiltins) {
         expect(PROVIDER_BASE_URLS[provider]).toBeTruthy();

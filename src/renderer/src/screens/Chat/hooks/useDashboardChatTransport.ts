@@ -14,6 +14,7 @@ import { executeSlash, type SlashExecOutcome } from "../slashExec";
 import type { AgentCommandsCatalogResponse } from "../slash/types";
 import type { ActiveTurn, Attachment, ChatMessage, UsageState } from "../types";
 import type { DesktopSessionContinuationItem } from "../../../../../shared/session-continuation";
+import { nativeOpenCodeProviderForUrl } from "../../../../../shared/url-key-map";
 
 interface SessionResponse {
   info?: unknown;
@@ -513,6 +514,12 @@ export function resolveDashboardProviderForModel(
   const model = requestedModel.trim();
 
   if (requestedBaseUrl) {
+    // Route exact official OpenCode URLs through Hermes Agent's native
+    // providers when issuing a Dashboard model command. The helper is
+    // deliberately host+path exact; third-party proxies stay custom.
+    const nativeOpenCodeProvider = nativeOpenCodeProviderForUrl(modelBaseUrl);
+    if (nativeOpenCodeProvider) return nativeOpenCodeProvider;
+
     const builtInProvider = builtInProviderForCustomBaseUrl(
       modelBaseUrl || "",
       model,

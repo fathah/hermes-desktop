@@ -15,6 +15,8 @@ import { expectedEnvKeyForModel } from "../src/main/installer";
 describe("expectedEnvKeyForModel — provider-name lookup", () => {
   it.each([
     ["openrouter", "OPENROUTER_API_KEY"],
+    ["opencode-go", "OPENCODE_GO_API_KEY"],
+    ["opencode-zen", "OPENCODE_ZEN_API_KEY"],
     ["anthropic", "ANTHROPIC_API_KEY"],
     ["openai", "OPENAI_API_KEY"],
     ["ollama-cloud", "OLLAMA_API_KEY"],
@@ -75,6 +77,30 @@ describe("expectedEnvKeyForModel — URL fallback for custom/auto providers", ()
     expect(
       expectedEnvKeyForModel("custom", "https://api.xiaomimimo.com/v1"),
     ).toBe("XIAOMI_API_KEY");
+    expect(
+      expectedEnvKeyForModel("custom", "https://opencode.ai/zen/go/v1"),
+    ).toBe("OPENCODE_GO_API_KEY");
+    expect(expectedEnvKeyForModel("custom", "https://opencode.ai/zen/v1")).toBe(
+      "OPENCODE_ZEN_API_KEY",
+    );
+  });
+
+  it("accepts service roots but does not use a host-wide OpenCode fallback", () => {
+    expect(expectedEnvKeyForModel("custom", "https://opencode.ai/zen/go")).toBe(
+      "OPENCODE_GO_API_KEY",
+    );
+    expect(expectedEnvKeyForModel("custom", "https://opencode.ai/zen")).toBe(
+      "OPENCODE_ZEN_API_KEY",
+    );
+    expect(
+      expectedEnvKeyForModel("custom", "https://opencode.ai/zen/go/v1/models"),
+    ).toBeNull();
+    expect(
+      expectedEnvKeyForModel(
+        "custom",
+        "https://example.com/opencode.ai/zen/go/v1",
+      ),
+    ).toBeNull();
   });
 
   it("recognizes a known endpoint when provider is 'auto'", () => {

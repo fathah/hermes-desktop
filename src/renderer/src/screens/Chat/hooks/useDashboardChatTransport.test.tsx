@@ -268,6 +268,61 @@ describe("useDashboardChatTransport recovery", () => {
     );
   });
 
+  it("sends a native OpenCode Go model switch without downgrading to custom", async () => {
+    let liveModel = "bad-model";
+    let liveProvider = "bad-provider";
+    dashboardMock.request.mockImplementation(async (method, params) => {
+      if (method === "session.create") {
+        return {
+          session_id: "live-opencode-go",
+          stored_session_id: "stored-opencode-go",
+        };
+      }
+      if (method === "slash.exec") {
+        const command =
+          params && typeof params === "object" && "command" in params
+            ? String(params.command)
+            : "";
+        const match = command.match(/^\/model\s+(.+?)\s+--provider\s+(.+)$/);
+        if (match) {
+          liveModel = match[1];
+          liveProvider = match[2];
+        }
+        return {};
+      }
+      if (method === "model.options") {
+        return { model: liveModel, provider: liveProvider, providers: [] };
+      }
+      return {};
+    });
+
+    const api: HarnessApi = {};
+    render(<Harness api={api} />);
+    const initialSend = api.send;
+
+    await act(async () => {
+      api.setProvider?.("opencode-go");
+      api.setModel?.("mimo-v2.5");
+    });
+    await waitFor(() => expect(api.send).not.toBe(initialSend));
+
+    await act(async () => {
+      await api.send?.("hello from MiMo");
+    });
+
+    const slashCommands = dashboardMock.request.mock.calls
+      .filter(([method]) => method === "slash.exec")
+      .map(([, params]) =>
+        params && typeof params === "object" && "command" in params
+          ? String(params.command)
+          : "",
+      );
+    expect(slashCommands).toEqual(["/model mimo-v2.5 --provider opencode-go"]);
+    expect(
+      slashCommands.some((command) => command.includes("--provider custom")),
+    ).toBe(false);
+  });
+
   it("discards an in-flight dashboard client after the connection mode changes", async () => {
     let releaseFirstConnect: (() => void) | null = null;
     const requests: Array<{ method: string; params: unknown }> = [];

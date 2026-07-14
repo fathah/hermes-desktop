@@ -8,9 +8,10 @@
  *   - Renderer: Edit Model dialog (Models.tsx)
  *   - Renderer: Setup wizard's custom-host path (Setup.tsx)
  *
- * The patterns intentionally match by hostname substring (case-insensitive)
+ * Most patterns intentionally match by hostname substring (case-insensitive)
  * so paths like `/v1`, `/openai/v1`, `/api/codex/v1` all resolve to the
- * same provider. Order matters only for overlapping hosts (none today).
+ * same provider. OpenCode is the exception: Go and Zen share a host, so their
+ * entries match only the canonical paths and Go must remain ahead of Zen.
  *
  * The fallback `CUSTOM_API_KEY` is what we write for any base URL the
  * desktop doesn't recognise — e.g. a self-hosted reverse proxy or a
@@ -22,7 +23,31 @@ export interface UrlKeyMapping {
   envKey: string;
 }
 
+export const OPENCODE_GO_BASE_URL = "https://opencode.ai/zen/go/v1";
+export const OPENCODE_ZEN_BASE_URL = "https://opencode.ai/zen/v1";
+
+const OPENCODE_GO_URL_PATTERN =
+  /^https:\/\/opencode\.ai\/zen\/go(?:\/v1)?\/?$/i;
+const OPENCODE_ZEN_URL_PATTERN = /^https:\/\/opencode\.ai\/zen(?:\/v1)?\/?$/i;
+
+/**
+ * Identify a first-class OpenCode provider from its exact service root or
+ * canonical `/v1` endpoint. A host-only match is unsafe because Go and Zen use
+ * different credentials on the same host.
+ */
+export function nativeOpenCodeProviderForUrl(
+  url: string | null | undefined,
+): "opencode-go" | "opencode-zen" | null {
+  const candidate = (url || "").trim();
+  if (OPENCODE_GO_URL_PATTERN.test(candidate)) return "opencode-go";
+  if (OPENCODE_ZEN_URL_PATTERN.test(candidate)) return "opencode-zen";
+  return null;
+}
+
 export const URL_KEY_MAP: ReadonlyArray<UrlKeyMapping> = [
+  // Go must precede Zen: both providers share opencode.ai/zen.
+  { pattern: OPENCODE_GO_URL_PATTERN, envKey: "OPENCODE_GO_API_KEY" },
+  { pattern: OPENCODE_ZEN_URL_PATTERN, envKey: "OPENCODE_ZEN_API_KEY" },
   { pattern: /inference\.hermesone\.org/i, envKey: "HERMESONE_API_KEY" },
   { pattern: /openrouter\.ai/i, envKey: "OPENROUTER_API_KEY" },
   { pattern: /anthropic\.com/i, envKey: "ANTHROPIC_API_KEY" },
@@ -68,8 +93,9 @@ export function customProviderEnvKey(name: string): string {
  */
 export function expectedEnvKeyForUrl(url: string | null | undefined): string {
   if (!url) return CUSTOM_API_KEY_ENV;
+  const candidate = url.trim();
   for (const { pattern, envKey } of URL_KEY_MAP) {
-    if (pattern.test(url)) return envKey;
+    if (pattern.test(candidate)) return envKey;
   }
   return CUSTOM_API_KEY_ENV;
 }
@@ -82,7 +108,8 @@ export function expectedEnvKeyForUrl(url: string | null | undefined): string {
  */
 export function isKnownProviderUrl(url: string | null | undefined): boolean {
   if (!url) return false;
-  return URL_KEY_MAP.some(({ pattern }) => pattern.test(url));
+  const candidate = url.trim();
+  return URL_KEY_MAP.some(({ pattern }) => pattern.test(candidate));
 }
 
 /**

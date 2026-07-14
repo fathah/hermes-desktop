@@ -21,6 +21,7 @@ import { getActiveProfileNameSync, profileHome, stripAnsi } from "./utils";
 import { setupAskpass, AskpassHandle } from "./askpass";
 import { precacheSudoCredentials } from "./sudoCreds";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
+import { nativeOpenCodeProviderForUrl } from "../shared/url-key-map";
 
 const IS_WINDOWS = process.platform === "win32";
 
@@ -301,6 +302,8 @@ function activeAuthFile(profile: string): string {
 // See issue #236.
 const PROVIDER_ENV_KEYS: Record<string, string> = {
   openrouter: "OPENROUTER_API_KEY",
+  "opencode-go": "OPENCODE_GO_API_KEY",
+  "opencode-zen": "OPENCODE_ZEN_API_KEY",
   anthropic: "ANTHROPIC_API_KEY",
   openai: "OPENAI_API_KEY",
   "ollama-cloud": "OLLAMA_API_KEY",
@@ -377,6 +380,15 @@ export function expectedEnvKeyForModel(
 ): string | null {
   const direct = PROVIDER_ENV_KEYS[provider.trim().toLowerCase()];
   if (direct) return direct;
+
+  // OpenCode Go and Zen share a host. Resolve their exact canonical paths
+  // before the general URL map so a `custom` URL cannot use the wrong
+  // provider's credential.
+  const nativeOpenCodeProvider = nativeOpenCodeProviderForUrl(baseUrl);
+  if (nativeOpenCodeProvider) {
+    return PROVIDER_ENV_KEYS[nativeOpenCodeProvider];
+  }
+
   for (const [pattern, envKey] of URL_TO_ENV_KEY) {
     if (pattern.test(baseUrl)) return envKey;
   }

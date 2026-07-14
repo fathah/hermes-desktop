@@ -3,7 +3,13 @@ import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import http from "http";
+import https from "https";
+import { EventEmitter } from "events";
 import type { AddressInfo } from "net";
+
+// model-discovery only needs install paths/constants. Avoid requiring a working
+// Electron binary when installer.ts is imported for those constants.
+vi.mock("electron", () => ({ app: undefined }));
 
 /**
  * model-discovery is a small HTTP client; we spin up a real loopback
@@ -39,12 +45,74 @@ function close(): Promise<void> {
   return new Promise((resolve) => server.close(() => resolve()));
 }
 
+function mockHttpsModelCatalogs(catalogs: Record<string, string[]>): {
+  requestSpy: ReturnType<typeof vi.spyOn>;
+  requests: Array<{
+    authorization: string;
+    hostname: string;
+    path: string;
+  }>;
+} {
+  const requests: Array<{
+    authorization: string;
+    hostname: string;
+    path: string;
+  }> = [];
+
+  const requestImpl = (
+    options: http.RequestOptions,
+    callback?: (response: http.IncomingMessage) => void,
+  ): http.ClientRequest => {
+    const request = new EventEmitter() as unknown as http.ClientRequest;
+    Object.assign(request, {
+      destroy: vi.fn(() => request),
+      end: vi.fn(() => {
+        const headers = (options.headers || {}) as Record<string, unknown>;
+        const path = String(options.path || "");
+        requests.push({
+          authorization: String(
+            headers.Authorization || headers.authorization || "",
+          ),
+          hostname: String(options.hostname || ""),
+          path,
+        });
+
+        const response = new EventEmitter() as unknown as http.IncomingMessage;
+        Object.assign(response, {
+          headers: {},
+          resume: vi.fn(),
+          setEncoding: vi.fn(() => response),
+          statusCode: 200,
+        });
+        callback?.(response);
+        queueMicrotask(() => {
+          response.emit(
+            "data",
+            JSON.stringify({
+              data: (catalogs[path] || []).map((id) => ({ id })),
+            }),
+          );
+          response.emit("end");
+        });
+        return request;
+      }),
+    });
+    return request;
+  };
+
+  const requestSpy = vi
+    .spyOn(https, "request")
+    .mockImplementation(requestImpl as typeof https.request);
+  return { requestSpy, requests };
+}
+
 describe("model-discovery", () => {
   beforeEach(() => {
     testHome = mkdtempSync(join(tmpdir(), "hermes-discovery-"));
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
     if (server && server.listening) await close();
     rmSync(testHome, { recursive: true, force: true });
@@ -172,6 +240,76 @@ describe("model-discovery", () => {
     expect(receivedAuth).toBe("Bearer sk-mimo-test");
     expect(result.status).toBe("ok");
     expect(result.models).toEqual(["mimo-v2.5-pro"]);
+  });
+
+  it("discovers native OpenCode providers from their canonical /models endpoints with separate Bearer keys", async () => {
+    writeFileSync(
+      join(testHome, ".env"),
+      [
+        "OPENCODE_GO_API_KEY=go-test-key",
+        "OPENCODE_ZEN_API_KEY=zen-test-key",
+        "",
+      ].join("\n"),
+    );
+    const { requests } = mockHttpsModelCatalogs({
+      "/zen/go/v1/models": ["mimo-v2.5", "glm-5"],
+      "/zen/v1/models": ["gpt-5.4"],
+    });
+
+    const { discoverProviderModels } = await loadDiscovery();
+    const go = await discoverProviderModels(
+      "opencode-go",
+      undefined,
+      undefined,
+      undefined,
+    );
+    const zen = await discoverProviderModels(
+      "opencode-zen",
+      undefined,
+      undefined,
+      undefined,
+    );
+
+    expect(go).toMatchObject({
+      status: "ok",
+      models: ["glm-5", "mimo-v2.5"],
+    });
+    expect(zen).toMatchObject({ status: "ok", models: ["gpt-5.4"] });
+    expect(requests).toEqual([
+      {
+        authorization: "Bearer go-test-key",
+        hostname: "opencode.ai",
+        path: "/zen/go/v1/models",
+      },
+      {
+        authorization: "Bearer zen-test-key",
+        hostname: "opencode.ai",
+        path: "/zen/v1/models",
+      },
+    ]);
+  });
+
+  it("returns status=no-key for both native OpenCode providers without their own keys", async () => {
+    writeFileSync(join(testHome, ".env"), "");
+    const { requestSpy } = mockHttpsModelCatalogs({});
+
+    const { discoverProviderModels } = await loadDiscovery();
+    const go = await discoverProviderModels(
+      "opencode-go",
+      undefined,
+      undefined,
+      undefined,
+    );
+    const zen = await discoverProviderModels(
+      "opencode-zen",
+      undefined,
+      undefined,
+      undefined,
+    );
+
+    expect(go).toMatchObject({ status: "no-key", models: [] });
+    expect(zen).toMatchObject({ status: "no-key", models: [] });
+    expect(requestSpy).not.toHaveBeenCalled();
   });
 
   it("returns status=unsupported for known no-discovery providers", async () => {

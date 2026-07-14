@@ -27,6 +27,8 @@ describe("hostDerivedEnvKeyForUrl", () => {
     ["https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"],
     ["https://api.anthropic.com/v1", "ANTHROPIC_API_KEY"],
     ["https://api.openai.com/v1", "OPENAI_API_KEY"],
+    ["https://opencode.ai/zen/go/v1", "OPENCODE_GO_API_KEY"],
+    ["https://opencode.ai/zen/v1", "OPENCODE_ZEN_API_KEY"],
     ["https://api-inference.huggingface.co/models/x", "HF_TOKEN"],
   ])("maps %s → %s", (url, expected) => {
     expect(hostDerivedEnvKeyForUrl(url)).toBe(expected);

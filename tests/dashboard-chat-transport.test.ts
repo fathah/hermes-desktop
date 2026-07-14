@@ -606,6 +606,38 @@ describe("ensureDashboardRuntimeSession", () => {
 });
 
 describe("resolveDashboardProviderForModel", () => {
+  it.each([
+    ["https://opencode.ai/zen/go", "opencode-go"],
+    ["https://opencode.ai/zen/go/v1/", "opencode-go"],
+    ["https://opencode.ai/zen", "opencode-zen"],
+    ["https://opencode.ai/zen/v1/", "opencode-zen"],
+  ])(
+    "routes official custom OpenCode URL %s through native provider %s",
+    (baseUrl, expectedProvider) => {
+      expect(
+        resolveDashboardProviderForModel("custom", "mimo-v2.5", baseUrl, {
+          provider: "custom",
+          model: "mimo-v2.5",
+          providers: [],
+        }),
+      ).toBe(expectedProvider);
+    },
+  );
+
+  it.each([
+    "https://proxy.example/v1",
+    "https://opencode.ai/zen/go/v1/models",
+    "https://opencode.ai.evil.example/zen/go/v1",
+  ])("keeps non-official OpenCode-like URL %s custom", (baseUrl) => {
+    expect(
+      resolveDashboardProviderForModel("custom", "mimo-v2.5", baseUrl, {
+        provider: "custom",
+        model: "mimo-v2.5",
+        providers: [],
+      }),
+    ).toBe("custom");
+  });
+
   it("maps Hermes One custom rows on known built-in endpoints to dashboard built-in providers", () => {
     expect(
       resolveDashboardProviderForModel(

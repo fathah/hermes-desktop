@@ -6,6 +6,8 @@ import {
   SETTINGS_SECTIONS,
   LOCAL_PRESETS,
   OPENAI_COMPATIBLE_BASE_URLS,
+  PROVIDER_CARDS,
+  providerRouteForEnvKey,
   DASHSCOPE_ENDPOINTS,
   THEME_OPTIONS,
 } from "../src/renderer/src/constants";
@@ -23,6 +25,8 @@ describe("PROVIDERS", () => {
   it("includes all v0.9.0 providers", () => {
     const values = PROVIDERS.options.map((o) => o.value);
     expect(values).toContain("openrouter");
+    expect(values).toContain("opencode-go");
+    expect(values).toContain("opencode-zen");
     expect(values).toContain("aimlapi");
     expect(values).toContain("anthropic");
     expect(values).toContain("openai");
@@ -82,6 +86,43 @@ describe("PROVIDERS", () => {
     expect(dashscope?.configProvider).toBe("alibaba");
     expect(dashscope?.envKey).toBe("DASHSCOPE_API_KEY");
     expect(dashscope?.baseUrl).toBe(DASHSCOPE_ENDPOINTS[0].baseUrl);
+  });
+
+  it.each([
+    {
+      id: "opencode-go",
+      envKey: "OPENCODE_GO_API_KEY",
+      baseUrl: "https://opencode.ai/zen/go/v1",
+    },
+    {
+      id: "opencode-zen",
+      envKey: "OPENCODE_ZEN_API_KEY",
+      baseUrl: "https://opencode.ai/zen/v1",
+    },
+  ])(
+    "routes $id setup through its native provider",
+    ({ id, envKey, baseUrl }) => {
+      const setup = PROVIDERS.setup.find((entry) => entry.id === id);
+      expect(setup).toMatchObject({
+        id,
+        envKey,
+        url: "https://opencode.ai/auth",
+        configProvider: id,
+        baseUrl,
+        needsKey: true,
+      });
+      expect(PROVIDERS.labels[id]).toMatch(/^OpenCode (Go|Zen)$/);
+      expect(providerRouteForEnvKey(envKey)).toEqual({
+        provider: id,
+        baseUrl,
+      });
+    },
+  );
+
+  it("exposes OpenCode Go and Zen as native provider cards", () => {
+    const cardIds = PROVIDER_CARDS.map((card) => card.id);
+    expect(cardIds).toContain("opencode-go");
+    expect(cardIds).toContain("opencode-zen");
   });
 });
 
@@ -244,6 +285,14 @@ describe("LOCAL_PRESETS", () => {
   it("maps every preset id to an OpenAI-compatible base URL", () => {
     for (const preset of LOCAL_PRESETS) {
       expect(OPENAI_COMPATIBLE_BASE_URLS[preset.id]).toBeTruthy();
+    }
+  });
+
+  it("keeps native OpenCode providers out of custom compatibility tables", () => {
+    const presetIds = LOCAL_PRESETS.map((preset) => preset.id);
+    for (const provider of ["opencode-go", "opencode-zen"]) {
+      expect(presetIds).not.toContain(provider);
+      expect(OPENAI_COMPATIBLE_BASE_URLS).not.toHaveProperty(provider);
     }
   });
 });

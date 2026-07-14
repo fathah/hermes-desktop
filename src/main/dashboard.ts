@@ -519,7 +519,8 @@ export async function startDashboard(
     return getRemoteDashboardStatusForConfig(config, profile);
   if (mode === "ssh") return getSshDashboardStatusForConfig(config, profile);
 
-  const existing = getManagedDashboard(profile);
+  const resolvedProfile = resolveProfile(profile);
+  const existing = getManagedDashboard(resolvedProfile);
   if (existing) {
     return {
       supported: true,
@@ -541,8 +542,7 @@ export async function startDashboard(
       ? `${compat.detail}: ${compat.error}`
       : compat.detail;
 
-  const resolvedProfile = resolveProfile(profile);
-  const key = profileKey(profile);
+  const key = resolvedProfile ?? "default";
   const token = randomBytes(24).toString("hex");
   const port = await getFreePort();
   const baseUrl = `http://127.0.0.1:${port}`;

@@ -1,3 +1,8 @@
+import {
+  OPENCODE_GO_BASE_URL,
+  OPENCODE_ZEN_BASE_URL,
+} from "../shared/url-key-map";
+
 /**
  * Canonical inference base URLs for built-in providers — mirrors
  * hermes-agent's `PROVIDER_REGISTRY` defaults.
@@ -15,6 +20,8 @@
 export const PROVIDER_BASE_URLS: Record<string, string> = {
   openai: "https://api.openai.com/v1",
   openrouter: "https://openrouter.ai/api/v1",
+  "opencode-go": OPENCODE_GO_BASE_URL,
+  "opencode-zen": OPENCODE_ZEN_BASE_URL,
   "ollama-cloud": "https://ollama.com/v1",
   aimlapi: "https://api.aimlapi.com/v1",
   deepseek: "https://api.deepseek.com/v1",

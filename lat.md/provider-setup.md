@@ -20,6 +20,16 @@ DashScope API-key traffic uses the agent's native `alibaba` provider. The agent 
 
 DashScope users choose between the mainland China and international endpoints during first-run setup ([[src/renderer/src/screens/Setup/Setup.tsx]]). Both choices keep `provider: alibaba`; only `base_url` changes. The **Setup picker** defaults to mainland China (`DEFAULT_DASHSCOPE_BASE_URL`) and always writes `base_url` explicitly, but the **canonical registry** ([[src/main/provider-registry.ts]] `PROVIDER_BASE_URLS`) stays on the international endpoint because it mirrors the agent's own default and is what `setModelConfig` fills into an empty `base_url` — a CN value there would silently repoint existing international users. The Providers tab has no endpoint field anymore (the active model is picked from configured providers), so `confirmModelPick` preserves the current `base_url` when re-picking an `alibaba` model — dropping it to empty would let the canonical fill flip a mainland user to the intl endpoint.
 
+## OpenCode Go and Zen use native providers
+
+OpenCode's two services route through Hermes Agent's native providers so each service resolves its own key instead of falling back to the custom-provider placeholder.
+
+**OpenCode Go** uses `provider: opencode-go`, `OPENCODE_GO_API_KEY`, and `https://opencode.ai/zen/go/v1`. **OpenCode Zen** uses `provider: opencode-zen`, `OPENCODE_ZEN_API_KEY`, and `https://opencode.ai/zen/v1`. Their cards and `providerRouteForEnvKey` routes live in [[src/renderer/src/constants.ts]], while [[src/main/provider-registry.ts]] supplies the canonical URLs used by config writes and live `/models` discovery.
+
+Neither slug belongs in `LOCAL_PRESETS`, `OPENAI_COMPATIBLE_BASE_URLS`, or `OPENAI_COMPAT_PROVIDERS`: those collections deliberately route through `custom`, which makes Hermes Agent ignore the dedicated OpenCode key and can resolve `api_key` as `no-key-required`. The Dashboard model switch therefore stays native and sends `/model <model-id> --provider opencode-go` (or `opencode-zen`); model ids such as `mimo-v2.5` remain unprefixed.
+
+Existing `custom + base_url` OpenCode settings are intentionally not rewritten and their `CUSTOM_API_KEY` is not copied. To move an existing setup, choose the native OpenCode Go or Zen provider and set its dedicated key. [[src/shared/url-key-map.ts#nativeOpenCodeProviderForUrl]] uses an exact host and path so Go and Zen cannot consume each other's key and third-party proxies remain custom. Dashboard uses that exact route only when issuing a model command; it does not write back to config or `.env`.
+
 ## OpenAI-compatible endpoints route through Local
 
 Endpoints the agent does not natively support (Groq, DeepSeek, Together, Fireworks, Cerebras, AtlasCloud, Mistral, AIML, …) are offered as `LOCAL_PRESETS` chips under the `local` card, not as top-level cards.

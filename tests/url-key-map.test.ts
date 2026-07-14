@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   URL_KEY_MAP,
+  OPENAI_COMPAT_PROVIDERS,
+  OPENCODE_GO_BASE_URL,
+  OPENCODE_ZEN_BASE_URL,
   expectedEnvKeyForUrl,
   isLocalBaseUrl,
   isKnownProviderUrl,
+  nativeOpenCodeProviderForUrl,
   CUSTOM_API_KEY_ENV,
 } from "../src/shared/url-key-map";
 
@@ -34,10 +38,40 @@ describe("URL_KEY_MAP", () => {
       "https://api.mistral.ai/v1": "MISTRAL_API_KEY",
       "https://api.perplexity.ai": "PERPLEXITY_API_KEY",
       "https://api.atlascloud.ai/v1": "ATLASCLOUD_API_KEY",
+      [OPENCODE_GO_BASE_URL]: "OPENCODE_GO_API_KEY",
+      [OPENCODE_ZEN_BASE_URL]: "OPENCODE_ZEN_API_KEY",
     };
     for (const [url, envKey] of Object.entries(expected)) {
       expect(expectedEnvKeyForUrl(url)).toBe(envKey);
     }
+  });
+
+  it("distinguishes OpenCode Go and Zen by exact service path", () => {
+    expect(expectedEnvKeyForUrl(OPENCODE_GO_BASE_URL)).toBe(
+      "OPENCODE_GO_API_KEY",
+    );
+    expect(expectedEnvKeyForUrl(`${OPENCODE_GO_BASE_URL}/`)).toBe(
+      "OPENCODE_GO_API_KEY",
+    );
+    expect(expectedEnvKeyForUrl(OPENCODE_ZEN_BASE_URL)).toBe(
+      "OPENCODE_ZEN_API_KEY",
+    );
+
+    expect(expectedEnvKeyForUrl("https://opencode.ai/zen/go")).toBe(
+      "OPENCODE_GO_API_KEY",
+    );
+    expect(expectedEnvKeyForUrl("https://opencode.ai/zen")).toBe(
+      "OPENCODE_ZEN_API_KEY",
+    );
+    expect(expectedEnvKeyForUrl(`${OPENCODE_GO_BASE_URL}/models`)).toBe(
+      CUSTOM_API_KEY_ENV,
+    );
+    expect(expectedEnvKeyForUrl("https://opencode.ai/other/v1")).toBe(
+      CUSTOM_API_KEY_ENV,
+    );
+    expect(
+      expectedEnvKeyForUrl("https://example.com/opencode.ai/zen/go/v1"),
+    ).toBe(CUSTOM_API_KEY_ENV);
   });
 
   it("matches case-insensitively (URL the user typed may vary in case)", () => {
@@ -74,6 +108,42 @@ describe("URL_KEY_MAP", () => {
     expect(
       expectedEnvKeyForUrl("https://openrouter.ai/api/v1/chat/completions"),
     ).toBe("OPENROUTER_API_KEY");
+  });
+});
+
+describe("nativeOpenCodeProviderForUrl", () => {
+  it("returns the native provider only for exact service URLs", () => {
+    expect(nativeOpenCodeProviderForUrl(OPENCODE_GO_BASE_URL)).toBe(
+      "opencode-go",
+    );
+    expect(nativeOpenCodeProviderForUrl(` ${OPENCODE_GO_BASE_URL}/ `)).toBe(
+      "opencode-go",
+    );
+    expect(nativeOpenCodeProviderForUrl(OPENCODE_ZEN_BASE_URL)).toBe(
+      "opencode-zen",
+    );
+    expect(nativeOpenCodeProviderForUrl("HTTPS://OPENCODE.AI/ZEN/V1")).toBe(
+      "opencode-zen",
+    );
+
+    expect(nativeOpenCodeProviderForUrl("https://opencode.ai/zen/go")).toBe(
+      "opencode-go",
+    );
+    expect(nativeOpenCodeProviderForUrl("https://opencode.ai/zen")).toBe(
+      "opencode-zen",
+    );
+    expect(
+      nativeOpenCodeProviderForUrl(`${OPENCODE_ZEN_BASE_URL}/models`),
+    ).toBeNull();
+    expect(
+      nativeOpenCodeProviderForUrl("https://not-opencode.ai/zen/go/v1"),
+    ).toBeNull();
+    expect(nativeOpenCodeProviderForUrl(null)).toBeNull();
+  });
+
+  it("keeps native OpenCode providers out of the custom endpoint set", () => {
+    expect(OPENAI_COMPAT_PROVIDERS.has("opencode-go")).toBe(false);
+    expect(OPENAI_COMPAT_PROVIDERS.has("opencode-zen")).toBe(false);
   });
 });
 
@@ -120,6 +190,17 @@ describe("isLocalBaseUrl", () => {
 });
 
 describe("URL_KEY_MAP shape", () => {
+  it("keeps the more specific OpenCode Go rule ahead of Zen", () => {
+    const goIndex = URL_KEY_MAP.findIndex(
+      ({ envKey }) => envKey === "OPENCODE_GO_API_KEY",
+    );
+    const zenIndex = URL_KEY_MAP.findIndex(
+      ({ envKey }) => envKey === "OPENCODE_ZEN_API_KEY",
+    );
+    expect(goIndex).toBeGreaterThanOrEqual(0);
+    expect(zenIndex).toBeGreaterThan(goIndex);
+  });
+
   it("every entry has a unique env var name", () => {
     const envKeys = URL_KEY_MAP.map((m) => m.envKey);
     expect(new Set(envKeys).size).toBe(envKeys.length);

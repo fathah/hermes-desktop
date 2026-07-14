@@ -8,6 +8,11 @@ import {
   gatewayUsage,
 } from "./tui-gateway-stream";
 
+// These tests exercise pure main-process helpers and do not need an Electron
+// runtime. Keep imports isolated so a missing local Electron binary cannot mask
+// gateway env regressions.
+vi.mock("electron", () => ({ app: undefined }));
+
 // Mocks so hermes.ts (which transitively reaches electron via ./installer) can
 // be imported under vitest for the gateway-env regression tests below. Only
 // the names hermes.ts imports from each module need to exist.
@@ -48,6 +53,7 @@ vi.mock("./secrets", () => ({ providerListSafe: vi.fn(() => ({})) }));
 
 import { readEnv } from "./config";
 import { providerListSafe } from "./secrets";
+import { getActiveProfileNameSync, profileHome } from "./utils";
 import { buildGatewayEnv, tuiGatewayEnv } from "./hermes";
 
 describe("tui gateway stream mapping", () => {
@@ -177,15 +183,25 @@ describe("gateway env builders consult the secrets provider", () => {
   // fallback path; buildGatewayEnv/tuiGatewayEnv read only readEnv(), so a
   // command-provider user got a gateway with silently missing API keys.
   const savedKey = process.env.ANTHROPIC_API_KEY;
+  const savedOpenCodeGoKey = process.env.OPENCODE_GO_API_KEY;
+  const savedOpenCodeZenKey = process.env.OPENCODE_ZEN_API_KEY;
 
   beforeEach(() => {
     vi.mocked(readEnv).mockReset().mockReturnValue({});
     vi.mocked(providerListSafe).mockReset().mockReturnValue({});
     delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.OPENCODE_GO_API_KEY;
+    delete process.env.OPENCODE_ZEN_API_KEY;
   });
   afterEach(() => {
     if (savedKey === undefined) delete process.env.ANTHROPIC_API_KEY;
     else process.env.ANTHROPIC_API_KEY = savedKey;
+    if (savedOpenCodeGoKey === undefined)
+      delete process.env.OPENCODE_GO_API_KEY;
+    else process.env.OPENCODE_GO_API_KEY = savedOpenCodeGoKey;
+    if (savedOpenCodeZenKey === undefined)
+      delete process.env.OPENCODE_ZEN_API_KEY;
+    else process.env.OPENCODE_ZEN_API_KEY = savedOpenCodeZenKey;
   });
 
   it("buildGatewayEnv injects a provider-resolved key absent from process.env and .env", () => {
@@ -211,6 +227,38 @@ describe("gateway env builders consult the secrets provider", () => {
     expect(buildGatewayEnv().ANTHROPIC_API_KEY).toBe("from-process-env");
   });
 
+  it("buildGatewayEnv keeps separate OpenCode keys and prefers .env over provider secrets", () => {
+    vi.mocked(readEnv).mockReturnValue({
+      OPENCODE_GO_API_KEY: "go-from-dotenv",
+    });
+    vi.mocked(providerListSafe).mockReturnValue({
+      OPENCODE_GO_API_KEY: "go-from-provider",
+      OPENCODE_ZEN_API_KEY: "zen-from-provider",
+    });
+
+    const env = buildGatewayEnv();
+    expect(env.OPENCODE_GO_API_KEY).toBe("go-from-dotenv");
+    expect(env.OPENCODE_ZEN_API_KEY).toBe("zen-from-provider");
+  });
+
+  it("reads the active coder profile for API gateway env", () => {
+    const envByProfile: Record<string, Record<string, string>> = {
+      default: { OPENCODE_GO_API_KEY: "wrong-default-key" },
+      coder: { OPENCODE_GO_API_KEY: "coder-go-key" },
+    };
+    vi.mocked(getActiveProfileNameSync).mockReturnValueOnce("coder");
+    vi.mocked(readEnv).mockImplementationOnce(
+      (profile) => envByProfile[profile || "default"],
+    );
+
+    const env = buildGatewayEnv();
+
+    expect(readEnv).toHaveBeenCalledWith("coder");
+    expect(providerListSafe).toHaveBeenCalledWith("coder");
+    expect(env.OPENCODE_GO_API_KEY).toBe("coder-go-key");
+    expect(env.OPENCODE_GO_API_KEY).not.toBe("wrong-default-key");
+  });
+
   it("tuiGatewayEnv injects a provider-resolved key absent from process.env and .env", () => {
     vi.mocked(providerListSafe).mockReturnValue({
       ANTHROPIC_API_KEY: "from-provider",
@@ -224,5 +272,28 @@ describe("gateway env builders consult the secrets provider", () => {
       ANTHROPIC_API_KEY: "from-provider",
     });
     expect(tuiGatewayEnv().ANTHROPIC_API_KEY).toBe("from-dotenv");
+  });
+
+  it("reads the active coder profile for TUI gateway env", () => {
+    const envByProfile: Record<string, Record<string, string>> = {
+      default: { OPENCODE_GO_API_KEY: "wrong-default-key" },
+      coder: { OPENCODE_GO_API_KEY: "coder-go-key" },
+    };
+    vi.mocked(getActiveProfileNameSync).mockReturnValueOnce("coder");
+    vi.mocked(profileHome).mockImplementationOnce(
+      (profile) => `/tmp/hermes-test-home/profiles/${String(profile)}`,
+    );
+    vi.mocked(readEnv).mockImplementationOnce(
+      (profile) => envByProfile[profile || "default"],
+    );
+
+    const env = tuiGatewayEnv();
+
+    expect(readEnv).toHaveBeenCalledWith("coder");
+    expect(providerListSafe).toHaveBeenCalledWith("coder");
+    expect(env.HERMES_HOME).toBe("/tmp/hermes-test-home/profiles/coder");
+    expect(env.HERMES_PROFILE).toBe("coder");
+    expect(env.OPENCODE_GO_API_KEY).toBe("coder-go-key");
+    expect(env.OPENCODE_GO_API_KEY).not.toBe("wrong-default-key");
   });
 });

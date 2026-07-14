@@ -862,23 +862,27 @@ export function tuiGatewayEnv(profile?: string): Record<string, string> {
     ? `${HERMES_REPO}${envPathDelimiter}${existingPythonPath}`
     : HERMES_REPO;
   if (resolved) env.HERMES_PROFILE = resolved;
-  for (const [key, value] of Object.entries(readEnv(profile))) {
+  for (const [key, value] of Object.entries(readEnv(resolved))) {
     if (value) env[key] = value;
   }
   // Overlay provider-enumerated secrets BENEATH the values above (fill only
   // keys still absent), so a `command`-provider user gets the same resolved
   // key set here as on the CLI fallback path: process.env > .env > provider.
-  for (const [key, value] of Object.entries(providerListSafe(profile))) {
+  for (const [key, value] of Object.entries(providerListSafe(resolved))) {
     if (value && !env[key]) env[key] = value;
   }
   return env;
 }
 
 function getTuiGatewayClient(profile?: string): TuiGatewayClient {
-  const key = profileKey(profile);
+  // Resolve once so the cache key and environment cannot disagree if the
+  // active-profile file changes between lookups (or the caller omitted a
+  // profile).
+  const resolved = resolveProfile(profile);
+  const key = resolved ?? "default";
   let client = tuiGatewayClients.get(key);
   if (!client) {
-    client = new TuiGatewayClient(key, tuiGatewayEnv(profile));
+    client = new TuiGatewayClient(key, tuiGatewayEnv(resolved));
     tuiGatewayClients.set(key, client);
   }
   return client;
@@ -2366,6 +2370,8 @@ function sendMessageViaCli(
   const KNOWN_API_KEYS = [
     "OPENROUTER_API_KEY",
     "OPENAI_API_KEY",
+    "OPENCODE_GO_API_KEY",
+    "OPENCODE_ZEN_API_KEY",
     "OLLAMA_API_KEY",
     "AIMLAPI_API_KEY",
     "ANTHROPIC_API_KEY",
@@ -3045,10 +3051,11 @@ function gatewayLogPath(profile?: string): string {
 }
 
 export function buildGatewayEnv(profile?: string): Record<string, string> {
+  const resolved = resolveProfile(profile);
   // Make sure this profile's config.yaml enables the api_server and binds the
   // profile's own port before we spawn.
-  ensureApiServerConfig(profile);
-  const port = getProfilePort(profile);
+  ensureApiServerConfig(resolved);
+  const port = getProfilePort(resolved);
 
   const gatewayEnv: Record<string, string> = {
     ...(process.env as Record<string, string>),
@@ -3063,7 +3070,7 @@ export function buildGatewayEnv(profile?: string): Record<string, string> {
   };
 
   // Inject ALL profile API keys so the gateway can authenticate with any provider.
-  const profileEnv = readEnv(profile);
+  const profileEnv = readEnv(resolved);
   for (const [k, value] of Object.entries(profileEnv)) {
     if (value) {
       gatewayEnv[k] = value;
@@ -3074,7 +3081,7 @@ export function buildGatewayEnv(profile?: string): Record<string, string> {
   // keys still absent), so a `command`-provider user gets the same resolved
   // key set on the gateway-spawn path as on the CLI fallback path:
   // process.env > .env > provider.
-  for (const [k, value] of Object.entries(providerListSafe(profile))) {
+  for (const [k, value] of Object.entries(providerListSafe(resolved))) {
     if (value && !gatewayEnv[k]) {
       gatewayEnv[k] = value;
     }
@@ -3108,7 +3115,7 @@ export function buildGatewayEnv(profile?: string): Record<string, string> {
   // gateway's `os.getenv("API_SERVER_KEY")` fallback see whatever the
   // desktop sees, regardless of source. This is the canonical fix until
   // upstream learns to read `api_server.token` directly.
-  const resolvedApiServerKey = getApiServerKey(profile);
+  const resolvedApiServerKey = getApiServerKey(resolved);
   if (resolvedApiServerKey) {
     gatewayEnv.API_SERVER_KEY = resolvedApiServerKey;
   }
