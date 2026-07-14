@@ -25,4 +25,12 @@ describe("remote management renderer gates", () => {
     );
     expect(layout).not.toContain("showPlatformToolsets={!remoteMode}");
   });
+
+  it("does not replace Profiles with a remote-mode notice", () => {
+    const layout = readFileSync(
+      join(root, "src/renderer/src/screens/Layout/Layout.tsx"),
+      "utf8",
+    );
+    expect(layout).not.toContain('<RemoteNotice feature="Profiles" />');
+  });
 });

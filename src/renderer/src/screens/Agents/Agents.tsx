@@ -29,12 +29,14 @@ interface AgentsProps {
   activeProfile: string;
   onSelectProfile: (name: string) => void;
   onChatWith: (name: string) => void;
+  remoteMode?: boolean;
 }
 
 function Agents({
   activeProfile,
   onSelectProfile,
   onChatWith,
+  remoteMode = false,
 }: AgentsProps): React.JSX.Element {
   const { t } = useI18n();
   const { openProfile } = useProfileModal();
@@ -140,6 +142,7 @@ function Agents({
   // Load the signed-in state once, then run one automatic pass per visit so
   // console-side edits appear without a manual click.
   useEffect(() => {
+    if (remoteMode) return;
     void (async () => {
       try {
         const status = await window.hermesAPI.getAgentSyncStatus();
@@ -152,10 +155,11 @@ function Agents({
         // Bridge unavailable: leave the affordance hidden.
       }
     })();
-  }, [runSync]);
+  }, [remoteMode, runSync]);
 
   // Syncs triggered elsewhere (e.g. right after sign-in) refresh the list too.
   useEffect(() => {
+    if (remoteMode) return undefined;
     if (!window.hermesAPI.onAgentSyncUpdated) return undefined;
     return window.hermesAPI.onAgentSyncUpdated((result: AgentSyncResult) => {
       setSyncStatus((s) => (s ? { ...s, lastResult: result } : s));
@@ -163,7 +167,7 @@ function Agents({
         void loadProfiles();
       }
     });
-  }, [loadProfiles]);
+  }, [loadProfiles, remoteMode]);
 
   function syncSummary(result: AgentSyncResult): string {
     if (result.status === "unauthorized") return t("agents.syncUnauthorized");
@@ -221,11 +225,11 @@ function Agents({
     // Show "Starting…" only when this profile's gateway isn't already up, so
     // switching to an already-running profile doesn't flash a fake spinner.
     const alreadyRunning = profiles.find((p) => p.id === name)?.gatewayRunning;
-    setStartingProfile(alreadyRunning ? null : name);
+    setStartingProfile(remoteMode || alreadyRunning ? null : name);
     await window.hermesAPI.setActiveProfile(name);
     onSelectProfile(name);
     loadProfiles();
-    pollGatewayReady(name);
+    if (!remoteMode) pollGatewayReady(name);
   }
 
   // "Chat" button — make the agent active (starts its gateway) then open a
@@ -260,7 +264,7 @@ function Agents({
           <p className="agents-subtitle">{t("agents.subtitle")}</p>
         </div>
         <div className="agents-header-actions">
-          {syncStatus && !syncStatus.signedIn && (
+          {!remoteMode && syncStatus && !syncStatus.signedIn && (
             <span
               className="agents-sync-hint"
               title={t("agents.syncSignedOutHint")}
@@ -268,7 +272,7 @@ function Agents({
               {t("agents.syncSignedOut")}
             </span>
           )}
-          {syncStatus?.signedIn && (
+          {!remoteMode && syncStatus?.signedIn && (
             <span
               className="agents-sync-hint"
               title={
@@ -283,7 +287,7 @@ function Agents({
                 : (syncStatus.accountLabel ?? "")}
             </span>
           )}
-          {syncStatus?.signedIn && (
+          {!remoteMode && syncStatus?.signedIn && (
             <button
               className="btn btn-secondary btn-sm"
               onClick={() => void runSync()}
@@ -453,28 +457,30 @@ function Agents({
               )}
             </div>
             <div className="agents-cell-actions">
-              <button
-                type="button"
-                className="agents-row-edit"
-                title={t("agents.editAppearanceFor", {
-                  name: p.name,
-                })}
-                aria-label={t("agents.editAppearanceFor", {
-                  name: p.name,
-                })}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setError("");
-                  openProfile(p.id, {
-                    onChanged: loadProfiles,
-                    onDeleted: (n) => {
-                      if (activeProfile === n) onSelectProfile("default");
-                    },
-                  });
-                }}
-              >
-                <Pencil size={14} />
-              </button>
+              {!remoteMode && (
+                <button
+                  type="button"
+                  className="agents-row-edit"
+                  title={t("agents.editAppearanceFor", {
+                    name: p.name,
+                  })}
+                  aria-label={t("agents.editAppearanceFor", {
+                    name: p.name,
+                  })}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setError("");
+                    openProfile(p.id, {
+                      onChanged: loadProfiles,
+                      onDeleted: (n) => {
+                        if (activeProfile === n) onSelectProfile("default");
+                      },
+                    });
+                  }}
+                >
+                  <Pencil size={14} />
+                </button>
+              )}
               <button
                 className="btn btn-primary btn-sm"
                 onClick={(e) => {
