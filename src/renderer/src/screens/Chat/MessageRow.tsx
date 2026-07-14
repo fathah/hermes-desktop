@@ -7,7 +7,9 @@ import { AgentMarkdown } from "../../components/AgentMarkdown";
 import { AttachmentChip } from "../../components/AttachmentChip";
 import { MediaSegmentView } from "../../components/MediaImage";
 import { useI18n } from "../../components/useI18n";
+import ProfileAvatar from "../../components/common/ProfileAvatar";
 import { parseMediaTokens, cleanLeakedToolTags } from "./mediaUtils";
+import { useAgentAppearance } from "./AgentAvatarContext";
 import type { ChatBubbleMessage, ChatMessage } from "./types";
 
 export const APPROVAL_RE =
@@ -141,6 +143,13 @@ export const HermesAvatar = memo(function HermesAvatar({
   /** True only for the avatar of the turn currently being generated. */
   active?: boolean;
 }): React.JSX.Element {
+  // A profile with its own identity (a custom avatar image, or any non-default
+  // named profile with its coloured initial) shows that avatar — matching the
+  // Profiles page (issue #679). The default profile keeps the animated Hermes
+  // mark below. Hooks still run unconditionally; only the render branches.
+  const { avatar, name, color } = useAgentAppearance();
+  const useProfileAvatar = !!avatar || (!!name && name !== "default");
+
   const [frozenSrc, setFrozenSrc] = useState<string | null>(null);
   const [playing, setPlaying] = useState(active);
   // Re-keying the <img> on each play session restarts the gif from frame 0 so
@@ -193,7 +202,14 @@ export const HermesAvatar = memo(function HermesAvatar({
 
   return (
     <div className="chat-avatar chat-avatar-agent">
-      {playing ? (
+      {useProfileAvatar ? (
+        <ProfileAvatar
+          name={name || "default"}
+          color={color}
+          avatar={avatar}
+          size={size}
+        />
+      ) : playing ? (
         <img key={playKey} src={loadingGif} width={size} height={size} alt="" />
       ) : (
         <img src={frozenSrc ?? loadingGif} width={size} height={size} alt="" />
