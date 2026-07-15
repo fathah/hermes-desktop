@@ -43,6 +43,7 @@ export function startMainProcess(): void {
     getMainWindow: () => mainWindow,
     notifyConnectionConfigChanged,
     notifyModelLibraryChanged,
+    notifyCustomProvidersChanged,
     openExternalUrl,
   });
 
@@ -124,6 +125,10 @@ function notifyConnectionConfigChanged(): void {
 
 function notifyModelLibraryChanged(): void {
   mainWindow?.webContents.send("model-library-changed");
+}
+
+function notifyCustomProvidersChanged(): void {
+  mainWindow?.webContents.send("custom-providers-changed");
 }
 
 function openExternalUrl(rawUrl: unknown): void {

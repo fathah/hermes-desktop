@@ -58,6 +58,8 @@ Opening a sidebar session after switching profiles consumes that blank selected-
 
 The switcher trigger preserves the old app-brand label for an unrenamed default profile: when `listProfiles` returns the fallback `name === id === "default"`, the button shows `common.appName`; once a custom name is stored, it shows that user-facing name.
 
+The same per-profile appearance also drives the agent avatar inside the transcript. [[src/renderer/src/screens/Layout/Layout.tsx#Layout]] passes `getAppearance(run.profile)` to each [[src/renderer/src/screens/Chat/Chat.tsx]] as `agentAppearance`, which forwards `{ name, color, avatar }` through [[src/renderer/src/screens/Chat/MessageList.tsx]] to every [[src/renderer/src/screens/Chat/MessageRow.tsx#HermesAvatar]] (and the reasoning/tool-activity rows in [[src/renderer/src/screens/Chat/HistoryRow.tsx]]). `HermesAvatar` plays the looping `loadingo.gif` only while a turn is generating (`active`); once generation stops it runs out the current gif loop, then swaps to the agent's [[src/renderer/src/components/common/ProfileAvatar.tsx]] so idle turns are identified by who produced them. The live typing indicator has no resolved agent yet, so it falls back to the gif.
+
 ### SSH tunnel profile routing
 
 SSH tunnel chat must retarget the tunnel to the selected profile's port before sending a turn — the dashboard port for dashboard transport, or the api_server port on the gateway-only fallback.

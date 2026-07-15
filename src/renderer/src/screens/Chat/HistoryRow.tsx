@@ -5,6 +5,7 @@ import { useI18n } from "../../components/useI18n";
 import { AttachmentChip } from "../../components/AttachmentChip";
 import { ToolGlyph, humanizeToolName } from "../../components/toolMeta";
 import { HermesAvatar, AvatarSpacer } from "./MessageRow";
+import type { AgentAvatarInfo } from "./MessageRow";
 import type {
   Attachment,
   ReasoningMessage,
@@ -18,6 +19,7 @@ export const ReasoningRow = memo(function ReasoningRow({
   msg,
   active = false,
   showAvatar = true,
+  agent,
 }: {
   msg: ReasoningMessage;
   /** True only while this turn's reasoning is still streaming. Controls the
@@ -26,6 +28,8 @@ export const ReasoningRow = memo(function ReasoningRow({
   /** False on continuation rows of a turn — render a spacer instead of an
    *  avatar so one turn shows a single avatar. */
   showAvatar?: boolean;
+  /** Appearance of the chatting agent, shown once the avatar goes idle. */
+  agent?: AgentAvatarInfo;
 }): React.JSX.Element {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -35,7 +39,11 @@ export const ReasoningRow = memo(function ReasoningRow({
         showAvatar ? "" : " chat-message--grouped"
       }`}
     >
-      {showAvatar ? <HermesAvatar active={active} /> : <AvatarSpacer />}
+      {showAvatar ? (
+        <HermesAvatar active={active} agent={agent} />
+      ) : (
+        <AvatarSpacer />
+      )}
       <div
         className={`chat-reasoning-group${
           active ? " chat-reasoning-group--active" : ""
@@ -240,12 +248,15 @@ export const ToolActivityGroup = memo(function ToolActivityGroup({
   items,
   active = false,
   showAvatar = true,
+  agent,
 }: {
   items: ToolItem[];
   /** True while the turn is still streaming and this is the trailing run —
    *  drives the spinner on the collapsed summary. */
   active?: boolean;
   showAvatar?: boolean;
+  /** Appearance of the chatting agent, shown once the avatar goes idle. */
+  agent?: AgentAvatarInfo;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const last = items[items.length - 1];
@@ -260,7 +271,11 @@ export const ToolActivityGroup = memo(function ToolActivityGroup({
         showAvatar ? "" : " chat-message--grouped"
       }`}
     >
-      {showAvatar ? <HermesAvatar active={active} /> : <AvatarSpacer />}
+      {showAvatar ? (
+        <HermesAvatar active={active} agent={agent} />
+      ) : (
+        <AvatarSpacer />
+      )}
       <div
         className={`chat-tool-group${active ? " chat-tool-group--active" : ""}`}
       >

@@ -106,6 +106,9 @@ interface ChatProps {
   onSessionIdChange?: (runId: string, sessionId: string | null) => void;
   /** Reports the first user message as a best-effort conversation title. */
   onTitleChange?: (runId: string, title: string) => void;
+  /** Resolved avatar/colour of `profile`, so idle agent avatars in the
+   *  transcript show the agent's profile picture instead of the loading gif. */
+  agentAppearance?: { color?: string | null; avatar?: string | null };
 }
 
 function Chat({
@@ -120,8 +123,20 @@ function Chat({
   onLoadingChange,
   onSessionIdChange,
   onTitleChange,
+  agentAppearance,
 }: ChatProps): React.JSX.Element {
   const { t } = useI18n();
+  // Identity + appearance of the agent this conversation is with. Passed to the
+  // transcript so idle avatars render the agent's profile picture (the loading
+  // gif is only shown while a turn is generating).
+  const agentAvatar = useMemo(
+    () => ({
+      name: profile ?? "default",
+      color: agentAppearance?.color,
+      avatar: agentAppearance?.avatar,
+    }),
+    [profile, agentAppearance?.color, agentAppearance?.avatar],
+  );
   const [messages, setMessages] = useState<ChatMessage[]>(
     initialMessages ?? [],
   );
@@ -1000,6 +1015,7 @@ function Chat({
               onApprove={actions.handleApprove}
               onDeny={actions.handleDeny}
               onClarifyResolved={handleClarifyResolved}
+              agentAvatar={agentAvatar}
             />
           )}
           <div ref={bottomRef} />

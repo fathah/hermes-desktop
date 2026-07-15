@@ -1,5 +1,6 @@
 import type { ConnectionConfig } from "./config";
 import {
+  RemoteOAuthError,
   requestRemoteOAuthJson,
   type RemoteOAuthRequestOptions,
 } from "./remote-oauth";
@@ -11,6 +12,36 @@ import {
 
 export type RemoteDashboardRequestOptions = RemoteOAuthRequestOptions;
 
+export class RemoteDashboardApiError extends Error {
+  readonly unsupported: boolean;
+
+  constructor(
+    message: string,
+    readonly statusCode?: number,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = "RemoteDashboardApiError";
+    this.unsupported = statusCode === 404;
+  }
+}
+
+function statusCodeFromError(error: unknown): number | undefined {
+  if (error instanceof RemoteOAuthError) return error.statusCode;
+  if (!(error instanceof Error)) return undefined;
+  const match = /^\s*(\d{3})(?::|\b)/.exec(error.message);
+  return match ? Number(match[1]) : undefined;
+}
+
+function normalizeRemoteDashboardError(error: unknown): Error {
+  if (error instanceof RemoteOAuthError && error.needsOAuthLogin) return error;
+  const cause = error instanceof Error ? error : undefined;
+  const message = cause?.message ?? String(error);
+  return new RemoteDashboardApiError(message, statusCodeFromError(error), {
+    cause,
+  });
+}
+
 /**
  * Authenticated direct-Remote dashboard request boundary.
  *
@@ -18,7 +49,7 @@ export type RemoteDashboardRequestOptions = RemoteOAuthRequestOptions;
  * requests keep the existing X-Hermes-Session-Token transport. Callers must
  * select this only for direct Remote mode; local and SSH have separate paths.
  */
-export function remoteDashboardRequestJson<T>(
+export async function remoteDashboardRequestJson<T>(
   connection: ConnectionConfig,
   path: string,
   options: RemoteDashboardRequestOptions = {},
@@ -38,12 +69,16 @@ export function remoteDashboardRequestJson<T>(
     profile,
   };
 
-  if (connection.remoteAuthMode === "oauth") {
-    return requestRemoteOAuthJson(
-      dashboardApiUrl(config, path),
-      options,
-    ) as Promise<T>;
-  }
+  try {
+    if (connection.remoteAuthMode === "oauth") {
+      return (await requestRemoteOAuthJson(
+        dashboardApiUrl(config, path),
+        options,
+      )) as T;
+    }
 
-  return remoteRequestJson<T>(config, path, options);
+    return await remoteRequestJson<T>(config, path, options);
+  } catch (error) {
+    throw normalizeRemoteDashboardError(error);
+  }
 }

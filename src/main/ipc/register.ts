@@ -278,6 +278,11 @@ import {
   listWallets,
   renameWallet,
 } from "../wallet-store";
+import {
+  listCustomProviders,
+  removeCustomProvider,
+  upsertCustomProvider,
+} from "../providers-store";
 import { syncWalletsForProfile } from "../wallet-sync";
 import { getWalletPortfolio, provisionAgentWallet } from "../wallet-actions";
 import { getTokenBalances } from "../wallet-balances";
@@ -414,6 +419,7 @@ export interface IpcContext {
   getMainWindow: () => BrowserWindow | null;
   notifyConnectionConfigChanged: () => void;
   notifyModelLibraryChanged: () => void;
+  notifyCustomProvidersChanged: () => void;
   openExternalUrl: (rawUrl: unknown) => void;
 }
 
@@ -663,6 +669,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     getMainWindow,
     notifyConnectionConfigChanged,
     notifyModelLibraryChanged,
+    notifyCustomProvidersChanged,
     openExternalUrl,
   } = context;
   const mainWindow = getMainWindow();
@@ -2103,6 +2110,33 @@ export function registerIpcHandlers(context: IpcContext): void {
     "delete-wallet",
     (_event, profile: string | undefined, id: string) =>
       deleteWallet(profile, id),
+  );
+
+  // Custom (OpenAI-compatible) providers are desktop-local and profile-scoped.
+  // This store owns provider identity (name + base URL) so a configured
+  // provider renders as a card independent of whether a model is added yet; the
+  // key still lives in the profile `.env` and models in `models.json`.
+  ipcMain.handle("list-custom-providers", (_event, profile?: string) =>
+    listCustomProviders(profile),
+  );
+  ipcMain.handle(
+    "upsert-custom-provider",
+    (
+      _event,
+      profile: string | undefined,
+      input: { name: string; baseUrl: string },
+    ) => {
+      const record = upsertCustomProvider(profile, input);
+      notifyCustomProvidersChanged();
+      return record;
+    },
+  );
+  ipcMain.handle(
+    "remove-custom-provider",
+    (_event, profile: string | undefined, name: string) => {
+      removeCustomProvider(profile, name);
+      notifyCustomProvidersChanged();
+    },
   );
   // Cloud wallets provisioned by the backend for the profile's linked agent.
   // Read-only here; the desktop no longer mints wallets locally.

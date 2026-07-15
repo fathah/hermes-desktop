@@ -12,6 +12,7 @@ import type {
   WalletSyncResult,
 } from "../shared/wallets";
 import type { TokenBalancesResponse } from "../shared/tokens";
+import type { CustomProviderRecord } from "../shared/custom-providers";
 import type {
   DeviceCodeInfo,
   HermesAccount,
@@ -672,6 +673,15 @@ interface HermesAPI {
     name: string,
   ) => Promise<{ success: boolean; error?: string }>;
   listWallets: (profile?: string) => Promise<ProfileWallet[]>;
+  listCustomProviders: (profile?: string) => Promise<CustomProviderRecord[]>;
+  upsertCustomProvider: (
+    profile: string | undefined,
+    input: { name: string; baseUrl: string },
+  ) => Promise<CustomProviderRecord | null>;
+  removeCustomProvider: (
+    profile: string | undefined,
+    name: string,
+  ) => Promise<void>;
   syncWallets: (profile?: string) => Promise<WalletSyncResult>;
   getWalletPortfolio: (
     profile: string | undefined,
@@ -901,6 +911,7 @@ interface HermesAPI {
   } | null>;
   removeModelDefinition: (model: string) => Promise<boolean>;
   onModelLibraryChanged: (callback: () => void) => () => void;
+  onCustomProvidersChanged: (callback: () => void) => () => void;
 
   // Claw3D
   claw3dStatus: () => Promise<{

@@ -72,7 +72,19 @@ interface Props {
   onBlur: (key: string) => void | Promise<void>;
   onToggleVisibility: (key: string) => void;
   onRemove: (key: string) => void | Promise<void>;
+  /** Active profile — scopes the custom-provider store IPC calls. */
+  profile?: string;
 }
+
+// Best-effort display name recovered from an orphaned `CUSTOM_PROVIDER_<X>_KEY`
+// env var (a provider whose key was saved but whose identity record/models were
+// never persisted). It round-trips: `customProviderEnvKey(envKeyToName(k)) === k`,
+// so the recovered card's key field resolves to the same env var.
+const envKeyToName = (envKey: string): string =>
+  envKey
+    .replace(/^CUSTOM_PROVIDER_/, "")
+    .replace(/_KEY$/, "")
+    .toLowerCase();
 
 // Per-provider model manager, shown inside a provider's config modal — the
 // OpenCode-style "models under a provider" surface. It lists the library models
@@ -389,6 +401,7 @@ export function ProviderKeysSection({
   onBlur,
   onToggleVisibility,
   onRemove,
+  profile,
 }: Props): React.JSX.Element {
   const { t } = useI18n();
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -400,9 +413,11 @@ export function ProviderKeysSection({
     name: string;
     baseUrl: string;
   } | null>(null);
-  // Already-added custom providers, derived from the model library (there's no
-  // separate store — a custom provider *is* its name + base URL + models).
-  const [customProviders, setCustomProviders] = useState<
+  // Configured custom providers loaded from the desktop's per-profile store
+  // (`providers.json`) unioned with any legacy providers still only present as
+  // `models.json` rows. `customProviders` (below) further folds in orphan
+  // recovery from `env`.
+  const [storedProviders, setStoredProviders] = useState<
     { name: string; baseUrl: string }[]
   >([]);
 
@@ -424,31 +439,69 @@ export function ProviderKeysSection({
     );
   }, [keyItems, env, search, t]);
 
-  // A custom provider is a `custom`-routed model whose host we don't recognise
-  // (unknown host → CUSTOM_API_KEY). Known compat hosts (groq, hermesone, …)
-  // are configured via their own key cards, so we exclude them here. Group by
-  // provider label (name), falling back to the host for legacy unlabeled models.
-  const loadCustom = useCallback(async () => {
-    const all = (await window.hermesAPI.listModels()) as LibModel[];
+  // Load configured custom providers: the authoritative `providers.json` records
+  // (so a keyed provider shows even with zero models), unioned with legacy
+  // providers that only exist as `models.json` rows (unknown host → CUSTOM_API_KEY;
+  // known compat hosts like groq/hermesone own dedicated key cards and are
+  // excluded). Deduped by the derived env-key anchor.
+  const loadStored = useCallback(async () => {
     const seen = new Set<string>();
     const list: { name: string; baseUrl: string }[] = [];
+    const push = (name: string, baseUrl: string): void => {
+      if (!name) return;
+      const anchor = customProviderEnvKey(name);
+      if (seen.has(anchor)) return;
+      seen.add(anchor);
+      list.push({ name, baseUrl });
+    };
+
+    try {
+      const records = await window.hermesAPI.listCustomProviders(profile);
+      for (const r of records) push(r.name, r.baseUrl);
+    } catch {
+      /* store unavailable — fall back to the models-derived list below */
+    }
+
+    const all = (await window.hermesAPI.listModels()) as LibModel[];
     for (const m of all) {
       if (m.provider !== "custom" || !m.baseUrl) continue;
       if (expectedEnvKeyForUrl(m.baseUrl) !== CUSTOM_API_KEY_ENV) continue;
-      const name = m.providerLabel || hostOf(m.baseUrl);
-      const key = m.providerLabel
-        ? `label:${m.providerLabel}`
-        : `url:${normUrl(m.baseUrl)}`;
+      push(m.providerLabel || hostOf(m.baseUrl), m.baseUrl);
+    }
+    setStoredProviders(list);
+  }, [profile]);
+  useEffect(() => {
+    void loadStored();
+    const offModels = window.hermesAPI.onModelLibraryChanged(
+      () => void loadStored(),
+    );
+    const offProviders = window.hermesAPI.onCustomProvidersChanged(
+      () => void loadStored(),
+    );
+    return () => {
+      offModels();
+      offProviders();
+    };
+  }, [loadStored]);
+
+  // Final card list: stored providers plus "orphan recovery" — any
+  // `CUSTOM_PROVIDER_*_KEY` env var with a value but no matching record/model
+  // (a provider whose key was saved before its identity was persisted). These
+  // surface with an empty base URL so the user can complete or remove them.
+  const customProviders = useMemo(() => {
+    const seen = new Set(
+      storedProviders.map((p) => customProviderEnvKey(p.name)),
+    );
+    const list = [...storedProviders];
+    for (const key of Object.keys(env)) {
+      if (!/^CUSTOM_PROVIDER_.+_KEY$/.test(key)) continue;
+      if (!env[key] || !env[key].trim()) continue;
       if (seen.has(key)) continue;
       seen.add(key);
-      list.push({ name, baseUrl: m.baseUrl });
+      list.push({ name: envKeyToName(key), baseUrl: "" });
     }
-    setCustomProviders(list);
-  }, []);
-  useEffect(() => {
-    void loadCustom();
-    return window.hermesAPI.onModelLibraryChanged(() => void loadCustom());
-  }, [loadCustom]);
+    return list;
+  }, [storedProviders, env]);
 
   function openConfig(field: FieldDef) {
     setPickerOpen(false);
@@ -466,7 +519,7 @@ export function ProviderKeysSection({
   }
 
   // Remove a custom provider: delete its models (matched by label, or base URL
-  // for legacy unlabeled ones), then clear its dedicated key.
+  // for legacy unlabeled ones), drop its identity record, then clear its key.
   async function removeCustomAndClose(name: string, baseUrl: string) {
     const all = (await window.hermesAPI.listModels()) as LibModel[];
     const target = normUrl(baseUrl);
@@ -478,8 +531,11 @@ export function ProviderKeysSection({
         : normUrl(m.baseUrl) === target;
       if (match) await window.hermesAPI.removeModel(m.id);
     }
-    if (name) await onRemove(customProviderEnvKey(name));
-    await loadCustom();
+    if (name) {
+      await window.hermesAPI.removeCustomProvider(profile, name);
+      await onRemove(customProviderEnvKey(name));
+    }
+    await loadStored();
     setCustomEditing(null);
   }
 
@@ -714,8 +770,19 @@ export function ProviderKeysSection({
               cp.name === name && normUrl(cp.baseUrl) === normUrl(baseUrl),
           );
           const keyType = !visibleKeys.has(keyEnv) ? "password" : "text";
-          const close = () =>
-            void loadCustom().then(() => setCustomEditing(null));
+          // Persist the provider's identity (name + base URL) to providers.json
+          // so its card survives even with no models added, then refresh + close.
+          const close = () => {
+            const finish = (): Promise<void> =>
+              loadStored().then(() => setCustomEditing(null));
+            if (ready) {
+              void window.hermesAPI
+                .upsertCustomProvider(profile, { name, baseUrl })
+                .then(finish, finish);
+            } else {
+              void finish();
+            }
+          };
           return (
             <div className="models-modal-overlay" onClick={close}>
               <div

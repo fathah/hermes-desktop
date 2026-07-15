@@ -160,6 +160,11 @@ function Providers({
   // configured models. Sourced from the model library (models.json).
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [libModels, setLibModels] = useState<LibModel[]>([]);
+  // Configured custom providers from the desktop store — so the model picker
+  // lists a keyed custom provider even before any model is saved under it.
+  const [customProviders, setCustomProviders] = useState<
+    { name: string; baseUrl: string }[]
+  >([]);
   const [pickGroupKey, setPickGroupKey] = useState("");
   const [pickModel, setPickModel] = useState("");
   const modelLoaded = useRef(false);
@@ -478,23 +483,36 @@ function Providers({
         models: byBrand.get(brand) ?? [],
       });
     }
-    // 2) Named custom providers whose dedicated key is set.
+    // 2) Named custom providers whose dedicated key is set. Source labels from
+    //    the desktop store (providers.json) unioned with any legacy providers
+    //    that only exist as models.json rows, so a keyed provider lists even
+    //    with zero saved models (discovery fills its list from the base URL).
+    const labelBaseUrls = new Map<string, string>();
+    for (const cp of customProviders) labelBaseUrls.set(cp.name, cp.baseUrl);
     for (const [label, models] of byLabel) {
+      if (!labelBaseUrls.has(label))
+        labelBaseUrls.set(label, models[0]?.baseUrl ?? "");
+    }
+    for (const [label, storedBaseUrl] of labelBaseUrls) {
       const keyEnv = customProviderEnvKey(label);
       if (!isSet(keyEnv)) continue;
+      const models = byLabel.get(label) ?? [];
       out.push({
         key: `label:${label}`,
         brand: "custom",
         label,
         provider: "custom",
-        baseUrl: models[0]?.baseUrl ?? "",
+        // Prefer the authoritative providers.json base URL so an edited endpoint
+        // routes newly picked models correctly; fall back to a saved model's URL
+        // only for orphan records whose stored base URL is blank.
+        baseUrl: storedBaseUrl || models[0]?.baseUrl || "",
         keyEnv,
         providerLabel: label,
         models,
       });
     }
     return out;
-  }, [libModels, env, t]);
+  }, [libModels, customProviders, env, t]);
 
   const activeProvider =
     pickerProviders.find((p) => p.key === pickGroupKey) ?? null;
@@ -549,8 +567,12 @@ function Providers({
   }, [modelPickerOpen, pickModelOptions, modelName]);
 
   async function openModelPicker(): Promise<void> {
-    const all = (await window.hermesAPI.listModels()) as LibModel[];
+    const [all, customs] = await Promise.all([
+      window.hermesAPI.listModels() as Promise<LibModel[]>,
+      window.hermesAPI.listCustomProviders(profile).catch(() => []),
+    ]);
     setLibModels(all);
+    setCustomProviders(customs);
     setModelPickerOpen(true);
   }
 
@@ -753,6 +775,7 @@ function Providers({
                   onBlur={handleBlur}
                   onToggleVisibility={toggleVisibility}
                   onRemove={handleRemove}
+                  profile={profile}
                 />
               </div>
             ) : null;

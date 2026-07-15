@@ -22,10 +22,12 @@
 ### Task 1: Shared authenticated remote API client
 
 **Files:**
+
 - Create: `src/main/remote-api.ts`
 - Create: `src/main/remote-api.test.ts`
 
 **Interfaces:**
+
 - Produces: `remoteDashboardRequestJson<T>(connection, path, options, profile?)` and `RemoteDashboardApiError`.
 - Consumes: `dashboardApiUrl`, `remoteRequestJson`, and `requestRemoteOAuthJson`.
 
@@ -37,6 +39,7 @@
 ### Task 2: Skills and Toolsets parity
 
 **Files:**
+
 - Modify: `src/main/remote-skills.ts`
 - Modify: `src/main/remote-skills.test.ts`
 - Create: `src/main/remote-toolsets.ts`
@@ -46,6 +49,7 @@
 - Modify: `src/renderer/src/screens/Tools/Tools.tsx`
 
 **Interfaces:**
+
 - Skills operations consume explicit `ConnectionConfig`.
 - Toolsets produce `ToolsetInfo[]` and boolean toggle result.
 
@@ -58,6 +62,7 @@
 ### Task 3: Profiles parity
 
 **Files:**
+
 - Create: `src/main/remote-profiles.ts`
 - Create: `src/main/remote-profiles.test.ts`
 - Modify: `src/main/ipc/register.ts`
@@ -65,6 +70,7 @@
 - Modify profile screen components only where local-only controls need explicit Remote-mode hiding.
 
 **Interfaces:**
+
 - Produces remote list/create/delete/activate/Soul operations using existing `ProfileInfo` and `CreateProfileResult` contracts.
 
 - [x] Write failing response-mapping, CRUD, active-profile, and Soul tests.
@@ -76,6 +82,7 @@
 ### Task 4: Gateway parity
 
 **Files:**
+
 - Create: `src/main/remote-gateway.ts`
 - Create: `src/main/remote-gateway.test.ts`
 - Modify: `src/main/ipc/register.ts`
@@ -83,6 +90,7 @@
 - Modify Gateway screen only where local-only key/filesystem controls require hiding.
 
 **Interfaces:**
+
 - Produces status/start/stop/restart operations; lifecycle mutations report accepted request and renderer refreshes authoritative status.
 
 - [x] Write failing profile-scoped status and lifecycle endpoint tests.
@@ -94,11 +102,13 @@
 ### Task 5: Fallthrough regression guards and documentation
 
 **Files:**
+
 - Create or modify focused IPC routing tests.
 - Create: `lat.md/remote-management.md`
 - Add `@lat:` references beside relevant source tests.
 
 **Interfaces:**
+
 - Documents authenticated boundary, feature adapters, unsupported-version behavior, and no-local-fallback invariant.
 
 - [ ] Add negative IPC tests proving direct Remote mode does not call local Skills, Toolsets, Profiles, or Gateway implementations.
