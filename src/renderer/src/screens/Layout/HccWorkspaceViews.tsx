@@ -9,6 +9,7 @@ import RegistryManager from "../RegistryManager/RegistryManager";
 import GraphCenter from "../GraphCenter/GraphCenter";
 import CloneRemixStudio from "../CloneRemix/CloneRemixStudio";
 import OpportunityRadar from "../OpportunityRadar/OpportunityRadar";
+import LearningEngine from "../LearningEngine/LearningEngine";
 
 export type HccWorkspaceView =
   | "war-room"
@@ -21,7 +22,8 @@ export type HccWorkspaceView =
   | "registry-manager"
   | "graph-center"
   | "clone-remix"
-  | "opportunity-radar";
+  | "opportunity-radar"
+  | "learning-engine";
 
 interface HccWorkspaceViewsProps {
   activeView: string;
@@ -44,6 +46,7 @@ const HCC_VIEWS = new Set<string>([
   "graph-center",
   "clone-remix",
   "opportunity-radar",
+  "learning-engine",
 ]);
 
 function HccWorkspaceViews({
@@ -95,6 +98,9 @@ function HccWorkspaceViews({
       break;
     case "opportunity-radar":
       content = <OpportunityRadar />;
+      break;
+    case "learning-engine":
+      content = <LearningEngine />;
       break;
     case "war-room":
     default:

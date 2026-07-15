@@ -73,9 +73,12 @@ import {
 } from "./config";
 import {
   actOnHccOpportunity,
+  appendHccLearningEvent,
   compareHccClonedApp,
   createHccClonedApp,
+  createHccLearningTopic,
   materializeHccClonedApp,
+  promoteHccLearningRecommendation,
   createHccGraphEdge,
   createHccRegistryEntity,
   deleteHccGraphEdge,
@@ -87,6 +90,7 @@ import {
   fetchHccMemoryCapsules,
   fetchHccMemoryPacket,
   fetchHccOpportunities,
+  fetchHccLearning,
   fetchHccProjectDetail,
   fetchHccProjects,
   fetchHccRegistryResource,
@@ -527,6 +531,18 @@ function setupIPC(): void {
     "act-hcc-opportunity",
     (_event, candidateId: string, action: "capture" | "dismiss" | "promote", rationale?: string) =>
       actOnHccOpportunity(candidateId, action, rationale),
+  );
+  ipcMain.handle("get-hcc-learning", () => fetchHccLearning());
+  ipcMain.handle("create-hcc-learning-topic", (_event, payload: Record<string, unknown>) =>
+    createHccLearningTopic(payload),
+  );
+  ipcMain.handle(
+    "append-hcc-learning-event",
+    (_event, topicId: string, eventType: string, payload: Record<string, unknown>) =>
+      appendHccLearningEvent(topicId, eventType, payload),
+  );
+  ipcMain.handle("promote-hcc-learning-recommendation", (_event, recommendationId: string) =>
+    promoteHccLearningRecommendation(recommendationId),
   );
   ipcMain.handle("get-hcc-governance-proposals", (_event, status?: string) => fetchHccGovernanceProposals(status));
   ipcMain.handle("act-hcc-governance-proposal", (_event, proposalId: string, action: "approve" | "apply" | "reject" | "rollback", actor?: string) => actOnHccGovernanceProposal(proposalId, action, actor));

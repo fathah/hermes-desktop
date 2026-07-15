@@ -116,6 +116,10 @@ interface HermesAPI {
     action: "capture" | "dismiss" | "promote",
     rationale?: string,
   ) => Promise<unknown>;
+  getHccLearning: () => Promise<unknown>;
+  createHccLearningTopic: (payload: Record<string, unknown>) => Promise<unknown>;
+  appendHccLearningEvent: (topicId: string, eventType: string, payload: Record<string, unknown>) => Promise<unknown>;
+  promoteHccLearningRecommendation: (recommendationId: string) => Promise<unknown>;
   getHccGovernanceProposals: (status?: string) => Promise<unknown>;
   actOnHccGovernanceProposal: (proposalId: string, action: "approve" | "apply" | "reject" | "rollback", actor?: string) => Promise<unknown>;
   stageHccReviewIntervention: (interventionId: string, actor?: string) => Promise<unknown>;

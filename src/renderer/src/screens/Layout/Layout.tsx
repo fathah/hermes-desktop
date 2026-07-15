@@ -53,6 +53,7 @@ type View =
   | "graph-center"
   | "clone-remix"
   | "opportunity-radar"
+  | "learning-engine"
   | "chat"
   | "sessions"
   | "agents"
@@ -201,6 +202,7 @@ const STORAGE_KEYS = {
 const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; label?: string; eyebrow: string }[] = [
   { view: "war-room", icon: Download, labelKey: "navigation.chat", label: "War Room", eyebrow: "HCC" },
   { view: "opportunity-radar", icon: Sparkles, labelKey: "navigation.office", label: "Opportunities", eyebrow: "Leverage" },
+  { view: "learning-engine", icon: Brain, labelKey: "navigation.memory", label: "Learning", eyebrow: "Progression" },
   { view: "projects", icon: Building, labelKey: "navigation.office", label: "Projects", eyebrow: "Build" },
   { view: "domains", icon: Brain, labelKey: "navigation.memory", label: "Domains", eyebrow: "State" },
   { view: "hcc-memory", icon: Brain, labelKey: "navigation.memory", label: "Memory", eyebrow: "Context" },
@@ -234,6 +236,7 @@ const HCC_WORKSPACE_VIEWS = new Set<View>([
   "graph-center",
   "clone-remix",
   "opportunity-radar",
+  "learning-engine",
 ]);
 
 function readStoredView(): View {

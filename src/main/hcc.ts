@@ -134,6 +134,35 @@ export async function actOnHccOpportunity(
   });
 }
 
+export async function fetchHccLearning(): Promise<unknown> {
+  return fetchJson("/api/hcc/learning");
+}
+
+export async function createHccLearningTopic(payload: Record<string, unknown>): Promise<unknown> {
+  return fetchJson("/api/hcc/learning/topics", {
+    method: "POST",
+    body: JSON.stringify({ ...payload, actor: "hermes-desktop" }),
+  });
+}
+
+export async function appendHccLearningEvent(
+  topicId: string,
+  eventType: string,
+  payload: Record<string, unknown>,
+): Promise<unknown> {
+  return fetchJson(`/api/hcc/learning/topics/${encodeURIComponent(topicId)}/events`, {
+    method: "POST",
+    body: JSON.stringify({ eventType, payload, actor: "hermes-desktop" }),
+  });
+}
+
+export async function promoteHccLearningRecommendation(recommendationId: string): Promise<unknown> {
+  return fetchJson(`/api/hcc/learning/recommendations/${encodeURIComponent(recommendationId)}/promote`, {
+    method: "POST",
+    body: JSON.stringify({ actor: "hermes-desktop", rationale: "Promoted from native Learning Engine" }),
+  });
+}
+
 export async function stageHccReviewIntervention(interventionId: string, actor = "operator"): Promise<unknown> {
   return fetchJson(`/api/hcc/reviews/interventions/${encodeURIComponent(interventionId)}/stage`, {
     method: "POST",

@@ -65,6 +65,10 @@ describe("New IPC handlers from v0.8/v0.9 features", () => {
     "run-hermes-dump",
     "list-mcp-servers",
     "discover-memory-providers",
+    "get-hcc-learning",
+    "create-hcc-learning-topic",
+    "append-hcc-learning-event",
+    "promote-hcc-learning-recommendation",
   ];
 
   for (const ch of newChannels) {

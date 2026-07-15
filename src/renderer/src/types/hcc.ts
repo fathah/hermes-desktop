@@ -206,6 +206,57 @@ export interface HccOpportunityRadar {
   };
 }
 
+export type HccLearningStage = "discovered" | "studying" | "applying" | "demonstrated";
+
+export interface HccMissionLearning {
+  category: "success" | "failure" | "optimization";
+  text: string;
+  demonstratesOutcome: boolean;
+  missionRef: { type: "conductor_job"; id: string; title: string; status?: string };
+  runRef?: { type: "run"; id: string } | null;
+  projectId?: string | null;
+  artifactRefs: Array<{ type: string; id: string }>;
+}
+
+export interface HccLearningTopic {
+  id: string;
+  title: string;
+  summary: string;
+  targetOutcome: string;
+  stage: HccLearningStage;
+  projectIds: string[];
+  domainIds: string[];
+  sourceCount: number;
+  synthesisCount: number;
+  evidenceCount: number;
+  missionLearningCount: number;
+  missionLearnings: HccMissionLearning[];
+  synthesisDebt: number;
+  progressScore: number;
+}
+
+export interface HccLearningRecommendation {
+  id: string;
+  topicId: string;
+  type: string;
+  title: string;
+  rationale: string;
+  score: number;
+  evidence: Array<{ signal: string; value: unknown }>;
+}
+
+export interface HccLearningDashboard {
+  hero: { title: string; subtitle: string };
+  items: HccLearningTopic[];
+  recommendations: HccLearningRecommendation[];
+  summary: { topics: number; synthesisDebt: number; applying: number; demonstrated: number };
+  methodology: {
+    version: string;
+    progression: HccLearningStage[];
+    mutationPolicy: "append_only_proposal_gated";
+  };
+}
+
 export interface HccWarRoomSummary {
   hero: {
     title: string;

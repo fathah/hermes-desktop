@@ -223,6 +223,13 @@ const hermesAPI = {
     action: "capture" | "dismiss" | "promote",
     rationale?: string,
   ): Promise<unknown> => ipcRenderer.invoke("act-hcc-opportunity", candidateId, action, rationale),
+  getHccLearning: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-learning"),
+  createHccLearningTopic: (payload: Record<string, unknown>): Promise<unknown> =>
+    ipcRenderer.invoke("create-hcc-learning-topic", payload),
+  appendHccLearningEvent: (topicId: string, eventType: string, payload: Record<string, unknown>): Promise<unknown> =>
+    ipcRenderer.invoke("append-hcc-learning-event", topicId, eventType, payload),
+  promoteHccLearningRecommendation: (recommendationId: string): Promise<unknown> =>
+    ipcRenderer.invoke("promote-hcc-learning-recommendation", recommendationId),
   getHccGovernanceProposals: (status?: string): Promise<unknown> => ipcRenderer.invoke("get-hcc-governance-proposals", status),
   actOnHccGovernanceProposal: (proposalId: string, action: "approve" | "apply" | "reject" | "rollback", actor?: string): Promise<unknown> =>
     ipcRenderer.invoke("act-hcc-governance-proposal", proposalId, action, actor),
