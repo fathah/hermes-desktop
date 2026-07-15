@@ -52,6 +52,7 @@ type View =
   | "registry-manager"
   | "graph-center"
   | "clone-remix"
+  | "opportunity-radar"
   | "chat"
   | "sessions"
   | "agents"
@@ -206,6 +207,7 @@ const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; label?: strin
   { view: "registry-manager", icon: SettingsIcon, labelKey: "navigation.settings", label: "Registry", eyebrow: "Governance" },
   { view: "graph-center", icon: Layers, labelKey: "navigation.memory", label: "Graph", eyebrow: "Relations" },
   { view: "clone-remix", icon: Download, labelKey: "navigation.office", label: "Clone / Remix", eyebrow: "Studio" },
+  { view: "opportunity-radar", icon: Sparkles, labelKey: "navigation.office", label: "Opportunities", eyebrow: "Leverage" },
   { view: "chat", icon: ChatBubble, labelKey: "navigation.chat", eyebrow: "Live" },
   { view: "sessions", icon: Clock, labelKey: "navigation.sessions", eyebrow: "Recall" },
   { view: "agents", icon: Users, labelKey: "navigation.agents", eyebrow: "Profiles" },
@@ -231,6 +233,7 @@ const HCC_WORKSPACE_VIEWS = new Set<View>([
   "registry-manager",
   "graph-center",
   "clone-remix",
+  "opportunity-radar",
 ]);
 
 function readStoredView(): View {

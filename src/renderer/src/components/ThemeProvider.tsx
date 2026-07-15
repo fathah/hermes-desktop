@@ -74,6 +74,8 @@ export function ThemeProvider({
   );
 }
 
+// Co-locate the hook with its private context; splitting would expose implementation detail.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useTheme(): ThemeContextValue {
   return useContext(ThemeContext);
 }

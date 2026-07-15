@@ -163,6 +163,49 @@ export interface HccReviewCenter {
   };
 }
 
+export interface HccOpportunityEvidence {
+  signal: string;
+  value: unknown;
+}
+
+export interface HccOpportunityCandidate {
+  id: string;
+  category: "domain_recovery" | "project_acceleration" | "reference_leverage";
+  title: string;
+  summary: string;
+  target: { type: "domain" | "project" | "reference"; id: string };
+  sourceRefs: Array<{ type: string; id: string }>;
+  evidence: HccOpportunityEvidence[];
+  strategicFit: number;
+  urgency: number;
+  confidence: number;
+  effort: number;
+  risk: number;
+  score: number;
+  recommendedAction: string;
+  status: "new" | "captured" | "proposed" | "dismissed";
+  lastRationale?: string;
+}
+
+export interface HccOpportunityRadar {
+  hero: { title: string; subtitle: string };
+  items: HccOpportunityCandidate[];
+  summary: {
+    total: number;
+    new: number;
+    captured: number;
+    proposed: number;
+    dismissedIncluded: number;
+    highConfidence: number;
+  };
+  methodology: {
+    version: string;
+    formula: string;
+    sources: string[];
+    mutationPolicy: "proposal_only";
+  };
+}
+
 export interface HccWarRoomSummary {
   hero: {
     title: string;

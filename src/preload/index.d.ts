@@ -110,6 +110,12 @@ interface HermesAPI {
   getHccMemoryCapsules: () => Promise<unknown>;
   getHccMemoryPacket: (packetType: string) => Promise<unknown>;
   getHccReviewCenter: () => Promise<unknown>;
+  getHccOpportunities: (includeDismissed?: boolean) => Promise<unknown>;
+  actOnHccOpportunity: (
+    candidateId: string,
+    action: "capture" | "dismiss" | "promote",
+    rationale?: string,
+  ) => Promise<unknown>;
   getHccGovernanceProposals: (status?: string) => Promise<unknown>;
   actOnHccGovernanceProposal: (proposalId: string, action: "approve" | "apply" | "reject" | "rollback", actor?: string) => Promise<unknown>;
   stageHccReviewIntervention: (interventionId: string, actor?: string) => Promise<unknown>;

@@ -216,6 +216,13 @@ const hermesAPI = {
   getHccMemoryPacket: (packetType: string): Promise<unknown> =>
     ipcRenderer.invoke("get-hcc-memory-packet", packetType),
   getHccReviewCenter: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-review-center"),
+  getHccOpportunities: (includeDismissed?: boolean): Promise<unknown> =>
+    ipcRenderer.invoke("get-hcc-opportunities", includeDismissed),
+  actOnHccOpportunity: (
+    candidateId: string,
+    action: "capture" | "dismiss" | "promote",
+    rationale?: string,
+  ): Promise<unknown> => ipcRenderer.invoke("act-hcc-opportunity", candidateId, action, rationale),
   getHccGovernanceProposals: (status?: string): Promise<unknown> => ipcRenderer.invoke("get-hcc-governance-proposals", status),
   actOnHccGovernanceProposal: (proposalId: string, action: "approve" | "apply" | "reject" | "rollback", actor?: string): Promise<unknown> =>
     ipcRenderer.invoke("act-hcc-governance-proposal", proposalId, action, actor),

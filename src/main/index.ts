@@ -72,6 +72,7 @@ import {
   setPlatformEnabled,
 } from "./config";
 import {
+  actOnHccOpportunity,
   compareHccClonedApp,
   createHccClonedApp,
   materializeHccClonedApp,
@@ -85,6 +86,7 @@ import {
   fetchHccGraph,
   fetchHccMemoryCapsules,
   fetchHccMemoryPacket,
+  fetchHccOpportunities,
   fetchHccProjectDetail,
   fetchHccProjects,
   fetchHccRegistryResource,
@@ -518,6 +520,14 @@ function setupIPC(): void {
   ipcMain.handle("get-hcc-memory-capsules", () => fetchHccMemoryCapsules());
   ipcMain.handle("get-hcc-memory-packet", (_event, packetType: string) => fetchHccMemoryPacket(packetType));
   ipcMain.handle("get-hcc-review-center", () => fetchHccReviewCenter());
+  ipcMain.handle("get-hcc-opportunities", (_event, includeDismissed?: boolean) =>
+    fetchHccOpportunities(Boolean(includeDismissed)),
+  );
+  ipcMain.handle(
+    "act-hcc-opportunity",
+    (_event, candidateId: string, action: "capture" | "dismiss" | "promote", rationale?: string) =>
+      actOnHccOpportunity(candidateId, action, rationale),
+  );
   ipcMain.handle("get-hcc-governance-proposals", (_event, status?: string) => fetchHccGovernanceProposals(status));
   ipcMain.handle("act-hcc-governance-proposal", (_event, proposalId: string, action: "approve" | "apply" | "reject" | "rollback", actor?: string) => actOnHccGovernanceProposal(proposalId, action, actor));
   ipcMain.handle("stage-hcc-review-intervention", (_event, interventionId: string, actor?: string) => stageHccReviewIntervention(interventionId, actor));

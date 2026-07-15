@@ -42,13 +42,16 @@ function Office({ visible }: { visible?: boolean }): React.JSX.Element {
   const logRef = useRef<HTMLDivElement>(null);
   const webviewRef = useRef<HTMLWebViewElement>(null);
 
-  // Refs to avoid restarting the poll interval on every state change
+  // Refs keep polling callbacks current without restarting the interval.
   const startingRef = useRef(starting);
   const runningRef = useRef(running);
   const errorRef = useRef(error);
-  startingRef.current = starting;
-  runningRef.current = running;
-  errorRef.current = error;
+
+  useEffect(() => {
+    startingRef.current = starting;
+    runningRef.current = running;
+    errorRef.current = error;
+  }, [starting, running, error]);
 
   const checkStatus = useCallback(async (): Promise<void> => {
     setState("checking");

@@ -119,6 +119,21 @@ export async function fetchHccReviewCenter(): Promise<unknown> {
   return fetchJson("/api/hcc/reviews/center");
 }
 
+export async function fetchHccOpportunities(includeDismissed = false): Promise<unknown> {
+  return fetchJson(`/api/hcc/opportunities?includeDismissed=${includeDismissed}`);
+}
+
+export async function actOnHccOpportunity(
+  candidateId: string,
+  action: "capture" | "dismiss" | "promote",
+  rationale = "",
+): Promise<unknown> {
+  return fetchJson(`/api/hcc/opportunities/${encodeURIComponent(candidateId)}/actions`, {
+    method: "POST",
+    body: JSON.stringify({ action, actor: "hermes-desktop", rationale }),
+  });
+}
+
 export async function stageHccReviewIntervention(interventionId: string, actor = "operator"): Promise<unknown> {
   return fetchJson(`/api/hcc/reviews/interventions/${encodeURIComponent(interventionId)}/stage`, {
     method: "POST",
