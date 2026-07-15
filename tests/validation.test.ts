@@ -43,6 +43,79 @@ afterEach(() => {
 });
 
 describe("validateChatReadiness", () => {
+  it("uses the Chat session routing identity when the persisted model is empty", async () => {
+    writeConfig(
+      [
+        "model:",
+        "  provider: openrouter",
+        "  default: ''",
+        "  base_url: https://openrouter.ai/api/v1",
+        "",
+      ].join("\n"),
+    );
+    writeEnv("DEEPSEEK_API_KEY=sk-deepseek-test\n");
+    const { validateChatReadiness } = await freshValidation(TEST_DIR);
+
+    expect(
+      validateChatReadiness(undefined, {
+        provider: "deepseek",
+        model: "deepseek-chat",
+        baseUrl: "https://api.deepseek.com/v1",
+      }),
+    ).toEqual({ ok: true });
+  });
+
+  it("skips Desktop credential probes when credentials belong to a remote host", async () => {
+    writeConfig(
+      [
+        "model:",
+        "  provider: ollama-cloud",
+        "  default: minimax-m3",
+        "  base_url: https://ollama.com/v1",
+        "",
+      ].join("\n"),
+    );
+    const { validateChatReadiness } = await freshValidation(TEST_DIR);
+
+    expect(
+      validateChatReadiness(
+        undefined,
+        {
+          provider: "ollama-cloud",
+          model: "minimax-m3",
+          baseUrl: "https://ollama.com/v1",
+        },
+        { checkCredentials: false },
+      ),
+    ).toEqual({ ok: true });
+  });
+
+  it("still rejects an empty effective model when credential probes are remote", async () => {
+    writeConfig(
+      [
+        "model:",
+        "  provider: openrouter",
+        "  default: openai/gpt-4o",
+        "  base_url: https://openrouter.ai/api/v1",
+        "",
+      ].join("\n"),
+    );
+    writeEnv("OPENROUTER_API_KEY=sk-openrouter-test\n");
+    const { validateChatReadiness } = await freshValidation(TEST_DIR);
+
+    const result = validateChatReadiness(
+      undefined,
+      {
+        provider: "custom",
+        model: "",
+        baseUrl: "https://example.test/v1",
+      },
+      { checkCredentials: false },
+    );
+
+    expect(result.code).toBe("NO_ACTIVE_MODEL");
+  });
+
   it("returns ok for auto provider (key check makes no sense)", async () => {
     writeConfig(["model:", "  provider: auto", "  default: ''", ""].join("\n"));
     const { validateChatReadiness } = await freshValidation(TEST_DIR);

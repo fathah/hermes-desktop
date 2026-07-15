@@ -24,6 +24,7 @@ import {
 } from "./config";
 import { expectedEnvKeyForModel } from "./installer";
 import { isLocalBaseUrl } from "../shared/url-key-map";
+import type { SessionModelOverride } from "../shared/model-override";
 
 export type ChatReadinessCode =
   | "NO_ACTIVE_MODEL"
@@ -43,6 +44,11 @@ export interface ChatReadiness {
   fixLocation?: FixLocation;
   /** Env var name the user is expected to populate, if applicable. */
   expectedEnvKey?: string;
+}
+
+export interface ChatReadinessOptions {
+  /** Probe credentials only when they live in this Desktop's Hermes home. */
+  checkCredentials?: boolean;
 }
 
 const OK: ChatReadiness = { ok: true };
@@ -79,11 +85,16 @@ const NO_KEY_PROVIDERS = new Set(["auto"]);
  * Synchronous readiness check against the desktop's own config —
  * no network calls. Fast (single readEnv + getModelConfig).
  *
- * `profile` defaults to the active profile.
+ * `profile` defaults to the active profile. `modelOverride` is the effective
+ * routing identity selected for this conversation.
  */
-export function validateChatReadiness(profile?: string): ChatReadiness {
+export function validateChatReadiness(
+  profile?: string,
+  modelOverride?: SessionModelOverride,
+  options: ChatReadinessOptions = {},
+): ChatReadiness {
   try {
-    const mc = getModelConfig(profile);
+    const mc = modelOverride ?? getModelConfig(profile);
     const provider = (mc.provider || "").trim().toLowerCase();
     const model = (mc.model || "").trim();
     const baseUrl = (mc.baseUrl || "").trim();
@@ -101,6 +112,11 @@ export function validateChatReadiness(profile?: string): ChatReadiness {
         fixLocation: "models",
       };
     }
+
+    // Remote and SSH credentials live on the other host. Desktop cannot prove
+    // their absence, so retain model validation and fail open before probing
+    // local .env/auth.json state.
+    if (options.checkCredentials === false) return OK;
 
     if (OAUTH_PROVIDERS.has(provider) || NO_KEY_PROVIDERS.has(provider)) {
       // OAuth/no-key providers — skip the env-var check; the gateway's

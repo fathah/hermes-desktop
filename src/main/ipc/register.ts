@@ -895,9 +895,15 @@ export function registerIpcHandlers(context: IpcContext): void {
   // Pre-send chat readiness — answers "if Send is clicked right now,
   // will it work?". Fail-open semantics: any uncertain state returns
   // `ok: true`, so the renderer never false-blocks a Send.
-  ipcMain.handle("validate-chat-readiness", (_event, profile?: string) => {
-    return validateChatReadiness(profile);
-  });
+  ipcMain.handle(
+    "validate-chat-readiness",
+    (_event, profile?: string, modelOverride?: SessionModelOverride) => {
+      const connection = getConnectionConfig();
+      return validateChatReadiness(profile, modelOverride, {
+        checkCredentials: connection.mode === "local",
+      });
+    },
+  );
 
   // Config-health audit + per-issue auto-fix. The renderer renders a
   // dismissible banner above the chat input and a full report in the

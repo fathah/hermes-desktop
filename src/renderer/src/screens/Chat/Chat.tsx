@@ -394,7 +394,11 @@ function Chat({
     let cancelled = false;
     (async (): Promise<void> => {
       try {
-        const r = await window.hermesAPI.validateChatReadiness(profile);
+        const r = await window.hermesAPI.validateChatReadiness(profile, {
+          provider: chatCurrentProvider,
+          model: chatCurrentModel,
+          baseUrl: chatCurrentBaseUrl,
+        });
         if (!cancelled) setReadiness(r);
       } catch {
         // Fail open on IPC error — never block Send on validation failure
