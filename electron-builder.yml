@@ -4,6 +4,9 @@ directories:
   buildResources: build
 files:
   - "!**/.vscode/*"
+  - "!**/.claude/**"
+  - "!**/.hermes/**"
+  - "!tests/**"
   - "!src/*"
   - "!electron.vite.config.{js,ts,mjs,cjs}"
   - "!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}"
@@ -13,6 +16,7 @@ asarUnpack:
   - resources/**
 win:
   executableName: hermes-agent
+  signAndEditExecutable: false
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

@@ -139,6 +139,8 @@ button:active {
 .sidebar-brand-mark {
   width: 54px;
   height: 54px;
+  flex: 0 0 54px;
+  overflow: hidden;
   border-radius: 20px;
   display: grid;
   place-items: center;
@@ -152,6 +154,13 @@ button:active {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
+}
+
+.sidebar-brand-mark img {
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
 }
 
 .sidebar-brand-subtitle {
@@ -1412,6 +1421,763 @@ button:active {
 .boot-sequence-copy {
   color: var(--text-secondary);
   font-size: 13px;
+}
+
+/* War Room */
+.hcc-workspace-view {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  overflow: auto;
+  min-width: 0;
+}
+
+.war-room-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px;
+  min-height: 100%;
+  color: #f8fafc;
+}
+
+.war-room-hero-card,
+.war-room-stat-card,
+.war-room-panel,
+.war-room-error-card {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.82), rgba(15, 23, 42, 0.64));
+  border-radius: 20px;
+  box-shadow: 0 18px 60px rgba(2, 6, 23, 0.28);
+}
+
+.war-room-hero-card {
+  padding: 22px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.war-room-card-kicker {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.82);
+  margin-bottom: 10px;
+}
+
+.war-room-title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.war-room-subtitle,
+.war-room-error-copy,
+.war-room-item-meta,
+.war-room-memory-meta,
+.war-room-inline-action,
+.war-room-stat-label {
+  color: rgba(191, 219, 254, 0.76);
+}
+
+.war-room-subtitle {
+  margin: 8px 0 0;
+  max-width: 760px;
+  line-height: 1.55;
+}
+
+.war-room-hero-grid,
+.war-room-grid,
+.war-room-grid-bottom,
+.war-room-memory-columns {
+  display: grid;
+  gap: 16px;
+}
+
+.war-room-hero-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.war-room-grid,
+.war-room-grid-bottom {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.war-room-stat-card,
+.war-room-panel,
+.war-room-error-card {
+  padding: 18px;
+}
+
+.war-room-stat-value {
+  font-size: 26px;
+  font-weight: 700;
+  margin-top: 6px;
+}
+
+.war-room-panel-title,
+.war-room-memory-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+
+.war-room-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.war-room-list-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.48);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.war-room-list-item-stack {
+  flex-direction: column;
+}
+
+.war-room-list-button,
+.war-room-panel-button {
+  width: 100%;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.war-room-list-button {
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.war-room-list-button:hover,
+.war-room-panel-button:hover {
+  border-color: rgba(125, 211, 252, 0.42);
+  background: rgba(30, 41, 59, 0.72);
+}
+
+.war-room-list-button:disabled {
+  cursor: default;
+  opacity: 0.68;
+}
+
+.war-room-panel-button {
+  appearance: none;
+}
+
+.war-room-item-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.war-room-pill {
+  align-self: flex-start;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(59, 130, 246, 0.18);
+  color: rgba(191, 219, 254, 0.96);
+}
+
+.war-room-pill.tone-healthy {
+  background: rgba(34, 197, 94, 0.18);
+  color: rgba(187, 247, 208, 0.96);
+}
+
+.war-room-pill.tone-watch {
+  background: rgba(250, 204, 21, 0.18);
+  color: rgba(254, 240, 138, 0.96);
+}
+
+.war-room-pill.tone-risk {
+  background: rgba(248, 113, 113, 0.18);
+  color: rgba(254, 202, 202, 0.96);
+}
+
+.war-room-refresh-btn {
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(30, 41, 59, 0.88);
+  color: #e2e8f0;
+  border-radius: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+.war-room-refresh-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.war-room-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.war-room-input {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.82);
+  color: #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  outline: none;
+}
+
+.war-room-input:focus {
+  border-color: rgba(34, 211, 238, 0.55);
+  box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.1);
+}
+
+.war-room-memory-columns {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.war-room-memory-item {
+  padding: 10px 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.war-room-loading {
+  padding: 28px;
+  color: rgba(191, 219, 254, 0.88);
+}
+
+@media (max-width: 1100px) {
+  .war-room-hero-grid,
+  .war-room-grid,
+  .war-room-grid-bottom,
+  .war-room-memory-columns,
+  .hcc-projects-grid,
+  .hcc-domains-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.hcc-projects-screen,
+.hcc-project-detail-screen,
+.hcc-domains-screen,
+.hcc-domain-detail-screen,
+.hcc-memory-screen,
+.hcc-review-screen,
+.hcc-registry-screen,
+.hcc-graph-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px;
+  min-height: 100%;
+  color: #f8fafc;
+}
+
+.hcc-projects-grid,
+.hcc-domains-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.hcc-project-card,
+.hcc-domain-card {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.82), rgba(15, 23, 42, 0.64));
+  border-radius: 20px;
+  box-shadow: 0 18px 60px rgba(2, 6, 23, 0.28);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: #e2e8f0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hcc-project-card.active,
+.hcc-domain-card.active {
+  border-color: rgba(125, 211, 252, 0.52);
+  box-shadow: 0 0 0 1px rgba(125, 211, 252, 0.24), 0 18px 60px rgba(2, 6, 23, 0.32);
+}
+
+.hcc-project-title {
+  font-size: 18px;
+}
+
+.hcc-project-card-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hcc-memory-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.hcc-memory-packet-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hcc-memory-packet-grid,
+.hcc-memory-capsule-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.hcc-memory-capsule {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.hcc-memory-capsule.compact {
+  padding: 14px;
+}
+
+.hcc-registry-tabs,
+.hcc-registry-actions,
+.hcc-registry-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hcc-registry-panel-header {
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.hcc-registry-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.8fr) minmax(360px, 1.2fr);
+  gap: 18px;
+}
+
+.hcc-registry-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.hcc-registry-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.hcc-registry-field input,
+.hcc-registry-field textarea {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.62);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  font: inherit;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.hcc-registry-field textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+.hcc-registry-field input:focus,
+.hcc-registry-field textarea:focus {
+  outline: none;
+  border-color: rgba(125, 211, 252, 0.58);
+}
+
+.hcc-registry-delete {
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  border-radius: 9px;
+  background: rgba(127, 29, 29, 0.16);
+  color: #fca5a5;
+  padding: 9px 12px;
+  cursor: pointer;
+}
+
+.hcc-registry-delete.armed {
+  background: rgba(185, 28, 28, 0.72);
+  color: white;
+}
+
+.hcc-graph-canvas-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.hcc-graph-canvas {
+  position: relative;
+  height: 560px;
+  overflow: hidden;
+  border: 1px solid rgba(125, 211, 252, 0.16);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at center, rgba(14, 116, 144, 0.11), transparent 55%),
+    linear-gradient(rgba(148, 163, 184, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.045) 1px, transparent 1px),
+    rgba(2, 6, 23, 0.72);
+  background-size: auto, 28px 28px, 28px 28px, auto;
+  cursor: grab;
+  user-select: none;
+}
+
+.hcc-graph-canvas.dragging { cursor: grabbing; }
+.hcc-graph-canvas:focus-visible {
+  outline: 2px solid rgba(56, 189, 248, 0.8);
+  outline-offset: 2px;
+}
+.hcc-graph-canvas svg { width: 100%; height: 100%; }
+.hcc-canvas-edge { cursor: pointer; }
+.hcc-canvas-edge line {
+  stroke: rgba(100, 116, 139, 0.42);
+  stroke-width: 1.2;
+  transition: stroke 120ms ease, stroke-width 120ms ease;
+}
+.hcc-canvas-edge.active line { stroke: #38bdf8; stroke-width: 2.4; }
+.hcc-canvas-edge text {
+  fill: #bae6fd;
+  font-size: 10px;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: #020617;
+  stroke-width: 3px;
+}
+.hcc-graph-canvas marker path { fill: #64748b; }
+.hcc-canvas-node { cursor: pointer; }
+.hcc-canvas-node circle {
+  fill: #111827;
+  stroke: #94a3b8;
+  stroke-width: 2;
+  transition: r 120ms ease, filter 120ms ease;
+}
+.hcc-canvas-node:hover circle,
+.hcc-canvas-node:focus-visible circle,
+.hcc-canvas-node.active circle { filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.65)); }
+.hcc-canvas-node:focus { outline: none; }
+.hcc-canvas-node.type-domain circle { stroke: #38bdf8; }
+.hcc-canvas-node.type-project circle { stroke: #a78bfa; }
+.hcc-canvas-node.type-tool circle { stroke: #34d399; }
+.hcc-canvas-node.type-reference circle { stroke: #fbbf24; }
+.hcc-canvas-node.type-memory circle { stroke: #fb7185; }
+.hcc-canvas-node.type-gateway circle { stroke: #94a3b8; }
+.hcc-canvas-node-label {
+  fill: #e2e8f0;
+  font-size: 10px;
+  font-weight: 600;
+  text-anchor: middle;
+}
+.hcc-canvas-node-type {
+  fill: #64748b;
+  font-size: 8px;
+  text-anchor: middle;
+  text-transform: uppercase;
+}
+.hcc-graph-canvas-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-secondary);
+}
+
+.hcc-graph-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+  gap: 18px;
+}
+
+.hcc-graph-sync-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.hcc-graph-integrity-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hcc-graph-presets {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.hcc-graph-preset-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.hcc-graph-preset {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.6);
+  color: #cbd5e1;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.hcc-graph-preset.active {
+  border-color: rgba(56, 189, 248, 0.65);
+  background: rgba(14, 116, 144, 0.24);
+  color: #e0f2fe;
+}
+
+.hcc-graph-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.2fr) repeat(3, minmax(0, 0.7fr)) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.hcc-graph-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.hcc-graph-metric-panel {
+  min-width: 0;
+}
+
+.hcc-graph-metric-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: #e0f2fe;
+}
+
+.hcc-graph-metric-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.hcc-graph-metric-list span {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.1);
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.hcc-graph-search,
+.hcc-graph-filter-bar select {
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 9px;
+  background: rgba(15, 23, 42, 0.72);
+  color: var(--text-primary);
+  padding: 10px;
+}
+
+.hcc-graph-type-badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hcc-graph-guidance-panel,
+.hcc-graph-edge-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.44);
+}
+
+.hcc-graph-edge-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hcc-graph-edge-row {
+  cursor: pointer;
+}
+
+.hcc-graph-edge-row.active {
+  border-radius: 12px;
+  box-shadow: 0 0 0 1px rgba(125, 211, 252, 0.24);
+  background: rgba(14, 116, 144, 0.12);
+}
+
+.hcc-graph-weight-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #cbd5e1;
+}
+
+.hcc-graph-weight-field input {
+  flex: 1;
+}
+
+.integrity-healthy {
+  color: #4ade80;
+}
+
+.integrity-warning {
+  color: #fbbf24;
+}
+
+.integrity-critical {
+  color: #f87171;
+}
+
+.hcc-graph-node-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  max-height: 520px;
+  overflow: auto;
+}
+
+.hcc-graph-node {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  min-width: 0;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.56);
+  color: var(--text-primary);
+  padding: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hcc-graph-node span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hcc-graph-node small {
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.hcc-graph-node.active {
+  border-color: rgba(125, 211, 252, 0.7);
+  background: rgba(14, 116, 144, 0.18);
+}
+
+.hcc-graph-node.type-domain { border-left: 3px solid #38bdf8; }
+.hcc-graph-node.type-project { border-left: 3px solid #a78bfa; }
+.hcc-graph-node.type-tool { border-left: 3px solid #34d399; }
+.hcc-graph-node.type-reference { border-left: 3px solid #fbbf24; }
+.hcc-graph-node.type-memory { border-left: 3px solid #fb7185; }
+.hcc-graph-node.type-gateway { border-left: 3px solid #94a3b8; }
+
+.hcc-graph-edge-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.hcc-graph-edge-form select {
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 9px;
+  background: rgba(15, 23, 42, 0.72);
+  color: var(--text-primary);
+  padding: 10px;
+}
+
+@media (max-width: 1100px) {
+  .hcc-graph-layout {
+    grid-template-columns: 1fr;
+  }
+  .hcc-graph-filter-bar,
+  .hcc-graph-metrics-grid,
+  .hcc-graph-node-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .hcc-graph-canvas { height: 420px; }
+  .hcc-graph-canvas-panel .hcc-registry-panel-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .hcc-graph-presets {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .hcc-graph-preset-list {
+    justify-content: flex-start;
+  }
+  .hcc-graph-filter-bar,
+  .hcc-graph-metrics-grid,
+  .hcc-graph-node-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1100px) {
+  .hcc-registry-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.hcc-memory-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: rgba(148, 163, 184, 0.82);
+  font-size: 11px;
+}
+
+.hcc-memory-links span {
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.1);
+}
+
+@media (max-width: 1100px) {
+  .hcc-memory-packet-grid,
+  .hcc-memory-capsule-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hcc-memory-toolbar {
+    flex-direction: column;
+  }
 }
 
 @keyframes bootSweep {

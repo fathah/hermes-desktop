@@ -190,6 +190,51 @@ const hermesAPI = {
   startGateway: (): Promise<boolean> => ipcRenderer.invoke("start-gateway"),
   stopGateway: (): Promise<boolean> => ipcRenderer.invoke("stop-gateway"),
   gatewayStatus: (): Promise<boolean> => ipcRenderer.invoke("gateway-status"),
+  getHccWarRoomSummary: (): Promise<unknown> =>
+    ipcRenderer.invoke("get-hcc-war-room-summary"),
+  getHccReality: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-reality"),
+  updateHccOperatingProfile: (payload: unknown): Promise<unknown> =>
+    ipcRenderer.invoke("update-hcc-operating-profile", payload),
+  stageHccIntervention: (interventionId: string, actor?: string): Promise<unknown> =>
+    ipcRenderer.invoke("stage-hcc-intervention", interventionId, actor),
+  getHccProjects: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-projects"),
+  getHccProjectDetail: (projectId: string): Promise<unknown> =>
+    ipcRenderer.invoke("get-hcc-project-detail", projectId),
+  transitionHccProject: (projectId: string, toStatus: string, note?: string): Promise<unknown> =>
+    ipcRenderer.invoke("transition-hcc-project", projectId, toStatus, note),
+  getHccClonedApps: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-cloned-apps"),
+  createHccClonedApp: (payload: Record<string, unknown>): Promise<unknown> =>
+    ipcRenderer.invoke("create-hcc-cloned-app", payload),
+  compareHccClonedApp: (appId: string, payload?: Record<string, unknown>): Promise<unknown> =>
+    ipcRenderer.invoke("compare-hcc-cloned-app", appId, payload || {}),
+  materializeHccClonedApp: (appId: string): Promise<unknown> => ipcRenderer.invoke("materialize-hcc-cloned-app", appId),
+  getHccDomains: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-domains"),
+  getHccLifeDomainSummary: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-life-domain-summary"),
+  getHccDomainDetail: (domainId: string): Promise<unknown> =>
+    ipcRenderer.invoke("get-hcc-domain-detail", domainId),
+  getHccMemoryCapsules: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-memory-capsules"),
+  getHccMemoryPacket: (packetType: string): Promise<unknown> =>
+    ipcRenderer.invoke("get-hcc-memory-packet", packetType),
+  getHccReviewCenter: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-review-center"),
+  getHccGovernanceProposals: (status?: string): Promise<unknown> => ipcRenderer.invoke("get-hcc-governance-proposals", status),
+  actOnHccGovernanceProposal: (proposalId: string, action: "approve" | "apply" | "reject" | "rollback", actor?: string): Promise<unknown> =>
+    ipcRenderer.invoke("act-hcc-governance-proposal", proposalId, action, actor),
+  stageHccReviewIntervention: (interventionId: string, actor?: string): Promise<unknown> =>
+    ipcRenderer.invoke("stage-hcc-review-intervention", interventionId, actor),
+  getHccRegistryResource: (resource: "domains" | "tools" | "references"): Promise<unknown> =>
+    ipcRenderer.invoke("get-hcc-registry-resource", resource),
+  createHccRegistryEntity: (resource: "domains" | "tools" | "references", payload: unknown): Promise<unknown> =>
+    ipcRenderer.invoke("create-hcc-registry-entity", resource, payload),
+  updateHccRegistryEntity: (resource: "domains" | "tools" | "references", entityId: string, payload: unknown): Promise<unknown> =>
+    ipcRenderer.invoke("update-hcc-registry-entity", resource, entityId, payload),
+  deleteHccRegistryEntity: (resource: "domains" | "tools" | "references", entityId: string): Promise<unknown> =>
+    ipcRenderer.invoke("delete-hcc-registry-entity", resource, entityId),
+  getHccGraph: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-graph"),
+  createHccGraphEdge: (payload: unknown): Promise<unknown> => ipcRenderer.invoke("create-hcc-graph-edge", payload),
+  updateHccGraphEdge: (edgeId: string, payload: unknown): Promise<unknown> => ipcRenderer.invoke("update-hcc-graph-edge", edgeId, payload),
+  deleteHccGraphEdge: (edgeId: string): Promise<unknown> => ipcRenderer.invoke("delete-hcc-graph-edge", edgeId),
+  syncHccGraph: (): Promise<unknown> => ipcRenderer.invoke("sync-hcc-graph"),
+  repairHccGraphIntegrity: (): Promise<unknown> => ipcRenderer.invoke("repair-hcc-graph-integrity"),
 
   // Platform toggles
   getPlatformEnabled: (profile?: string): Promise<Record<string, boolean>> =>

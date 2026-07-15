@@ -71,6 +71,39 @@ import {
   getPlatformEnabled,
   setPlatformEnabled,
 } from "./config";
+import {
+  compareHccClonedApp,
+  createHccClonedApp,
+  materializeHccClonedApp,
+  createHccGraphEdge,
+  createHccRegistryEntity,
+  deleteHccGraphEdge,
+  deleteHccRegistryEntity,
+  fetchHccClonedApps,
+  fetchHccDomainDetail,
+  fetchHccDomains,
+  fetchHccGraph,
+  fetchHccMemoryCapsules,
+  fetchHccMemoryPacket,
+  fetchHccProjectDetail,
+  fetchHccProjects,
+  fetchHccRegistryResource,
+  fetchHccReality,
+  fetchHccReviewCenter,
+  fetchHccGovernanceProposals,
+  actOnHccGovernanceProposal,
+  stageHccReviewIntervention,
+  fetchHccLifeDomainSummary,
+  fetchHccWarRoomSummary,
+  repairHccGraphIntegrity,
+  stageHccIntervention,
+  syncHccGraph,
+  transitionHccProject,
+  updateHccGraphEdge,
+  updateHccOperatingProfile,
+  updateHccRegistryEntity,
+  type HccRegistryResource,
+} from "./hcc";
 import { listSessions, getSessionMessages, searchSessions } from "./sessions";
 import {
   syncSessionCache,
@@ -464,6 +497,46 @@ function setupIPC(): void {
     return true;
   });
   ipcMain.handle("gateway-status", () => isGatewayRunning());
+  ipcMain.handle("get-hcc-war-room-summary", () => fetchHccWarRoomSummary());
+  ipcMain.handle("get-hcc-reality", () => fetchHccReality());
+  ipcMain.handle("update-hcc-operating-profile", (_event, payload: unknown) => updateHccOperatingProfile(payload));
+  ipcMain.handle("stage-hcc-intervention", (_event, interventionId: string, actor?: string) =>
+    stageHccIntervention(interventionId, actor),
+  );
+  ipcMain.handle("get-hcc-projects", () => fetchHccProjects());
+  ipcMain.handle("get-hcc-project-detail", (_event, projectId: string) => fetchHccProjectDetail(projectId));
+  ipcMain.handle("transition-hcc-project", (_event, projectId: string, toStatus: string, note?: string) =>
+    transitionHccProject(projectId, toStatus, note),
+  );
+  ipcMain.handle("get-hcc-cloned-apps", () => fetchHccClonedApps());
+  ipcMain.handle("create-hcc-cloned-app", (_event, payload: Record<string, unknown>) => createHccClonedApp(payload));
+  ipcMain.handle("compare-hcc-cloned-app", (_event, appId: string, payload: Record<string, unknown>) => compareHccClonedApp(appId, payload));
+  ipcMain.handle("materialize-hcc-cloned-app", (_event, appId: string) => materializeHccClonedApp(appId));
+  ipcMain.handle("get-hcc-domains", () => fetchHccDomains());
+  ipcMain.handle("get-hcc-life-domain-summary", () => fetchHccLifeDomainSummary());
+  ipcMain.handle("get-hcc-domain-detail", (_event, domainId: string) => fetchHccDomainDetail(domainId));
+  ipcMain.handle("get-hcc-memory-capsules", () => fetchHccMemoryCapsules());
+  ipcMain.handle("get-hcc-memory-packet", (_event, packetType: string) => fetchHccMemoryPacket(packetType));
+  ipcMain.handle("get-hcc-review-center", () => fetchHccReviewCenter());
+  ipcMain.handle("get-hcc-governance-proposals", (_event, status?: string) => fetchHccGovernanceProposals(status));
+  ipcMain.handle("act-hcc-governance-proposal", (_event, proposalId: string, action: "approve" | "apply" | "reject" | "rollback", actor?: string) => actOnHccGovernanceProposal(proposalId, action, actor));
+  ipcMain.handle("stage-hcc-review-intervention", (_event, interventionId: string, actor?: string) => stageHccReviewIntervention(interventionId, actor));
+  ipcMain.handle("get-hcc-registry-resource", (_event, resource: HccRegistryResource) => fetchHccRegistryResource(resource));
+  ipcMain.handle("create-hcc-registry-entity", (_event, resource: HccRegistryResource, payload: unknown) =>
+    createHccRegistryEntity(resource, payload),
+  );
+  ipcMain.handle("update-hcc-registry-entity", (_event, resource: HccRegistryResource, entityId: string, payload: unknown) =>
+    updateHccRegistryEntity(resource, entityId, payload),
+  );
+  ipcMain.handle("delete-hcc-registry-entity", (_event, resource: HccRegistryResource, entityId: string) =>
+    deleteHccRegistryEntity(resource, entityId),
+  );
+  ipcMain.handle("get-hcc-graph", () => fetchHccGraph());
+  ipcMain.handle("create-hcc-graph-edge", (_event, payload: unknown) => createHccGraphEdge(payload));
+  ipcMain.handle("update-hcc-graph-edge", (_event, edgeId: string, payload: unknown) => updateHccGraphEdge(edgeId, payload));
+  ipcMain.handle("delete-hcc-graph-edge", (_event, edgeId: string) => deleteHccGraphEdge(edgeId));
+  ipcMain.handle("sync-hcc-graph", () => syncHccGraph());
+  ipcMain.handle("repair-hcc-graph-integrity", () => repairHccGraphIntegrity());
 
   // Platform toggles
   ipcMain.handle("get-platform-enabled", (_event, profile?: string) =>

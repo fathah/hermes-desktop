@@ -11,6 +11,7 @@ import Gateway from "../Gateway/Gateway";
 import Office from "../Office/Office";
 import Models from "../Models/Models";
 import Schedules from "../Schedules/Schedules";
+import HccWorkspaceViews from "./HccWorkspaceViews";
 import RemoteNotice from "../../components/RemoteNotice";
 import Spotlight from "../../components/Spotlight";
 import HomeDashboard from "../../components/HomeDashboard";
@@ -41,6 +42,16 @@ import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 
 type View =
+  | "war-room"
+  | "projects"
+  | "project-detail"
+  | "domains"
+  | "domain-detail"
+  | "hcc-memory"
+  | "review-center"
+  | "registry-manager"
+  | "graph-center"
+  | "clone-remix"
   | "chat"
   | "sessions"
   | "agents"
@@ -186,7 +197,15 @@ const STORAGE_KEYS = {
   lastWorkflow: "hcc-os-shell-last-workflow",
 } as const;
 
-const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; eyebrow: string }[] = [
+const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; label?: string; eyebrow: string }[] = [
+  { view: "war-room", icon: Download, labelKey: "navigation.chat", label: "War Room", eyebrow: "HCC" },
+  { view: "projects", icon: Building, labelKey: "navigation.office", label: "Projects", eyebrow: "Build" },
+  { view: "domains", icon: Brain, labelKey: "navigation.memory", label: "Domains", eyebrow: "State" },
+  { view: "hcc-memory", icon: Brain, labelKey: "navigation.memory", label: "Memory", eyebrow: "Context" },
+  { view: "review-center", icon: Clock, labelKey: "navigation.sessions", label: "Review", eyebrow: "Steering" },
+  { view: "registry-manager", icon: SettingsIcon, labelKey: "navigation.settings", label: "Registry", eyebrow: "Governance" },
+  { view: "graph-center", icon: Layers, labelKey: "navigation.memory", label: "Graph", eyebrow: "Relations" },
+  { view: "clone-remix", icon: Download, labelKey: "navigation.office", label: "Clone / Remix", eyebrow: "Studio" },
   { view: "chat", icon: ChatBubble, labelKey: "navigation.chat", eyebrow: "Live" },
   { view: "sessions", icon: Clock, labelKey: "navigation.sessions", eyebrow: "Recall" },
   { view: "agents", icon: Users, labelKey: "navigation.agents", eyebrow: "Profiles" },
@@ -201,14 +220,27 @@ const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; eyebrow: stri
   { view: "settings", icon: SettingsIcon, labelKey: "navigation.settings", eyebrow: "Config" },
 ];
 
+const HCC_WORKSPACE_VIEWS = new Set<View>([
+  "war-room",
+  "projects",
+  "project-detail",
+  "domains",
+  "domain-detail",
+  "hcc-memory",
+  "review-center",
+  "registry-manager",
+  "graph-center",
+  "clone-remix",
+]);
+
 function readStoredView(): View {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEYS.shellView);
-    if (!raw) return "chat";
+    if (!raw) return "war-room";
     const valid = NAV_ITEMS.some((item) => item.view === raw);
-    return valid ? (raw as View) : "chat";
+    return valid ? (raw as View) : "war-room";
   } catch {
-    return "chat";
+    return "war-room";
   }
 }
 
@@ -468,6 +500,8 @@ function Layout(): React.JSX.Element {
   const [view, setView] = useState<View>(() => readStoredView());
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedDomainId, setSelectedDomainId] = useState<string | null>(null);
   const [activeProfile, setActiveProfile] = useState(() => readStoredProfile());
   const [officeVisited, setOfficeVisited] = useState(() => readStoredView() === "office");
   const [remoteMode, setRemoteMode] = useState(false);
@@ -922,6 +956,16 @@ function Layout(): React.JSX.Element {
     setView("sessions");
   }, [pushEvent, rememberAction]);
 
+  const handleOpenProject = useCallback((projectId: string) => {
+    setSelectedProjectId(projectId);
+    setView("project-detail");
+  }, []);
+
+  const handleOpenDomain = useCallback((domainId: string) => {
+    setSelectedDomainId(domainId);
+    setView("domain-detail");
+  }, []);
+
   const handleSnapWindow = useCallback(async () => {
     rememberAction("action:snap-window");
     pushEvent("Window snapped", "HCC OS aligned the shell to the nearest screen edge", "info");
@@ -951,6 +995,11 @@ function Layout(): React.JSX.Element {
     },
     [activeProfile, pushEvent, rememberAction],
   );
+
+  useEffect(() => {
+    const initialBootTimer = window.setTimeout(() => setBooting(false), 2200);
+    return () => window.clearTimeout(initialBootTimer);
+  }, []);
 
   useEffect(() => {
     const cleanupNewChat = window.hermesAPI.onMenuNewChat(() => {
@@ -1336,7 +1385,8 @@ function Layout(): React.JSX.Element {
     [connectionMode, platformEnabled, toggleConnectionMode, togglePlatform],
   );
 
-  const currentViewLabel = NAV_ITEMS.find((item) => item.view === view)?.labelKey;
+  const currentNavItem = NAV_ITEMS.find((item) => item.view === view);
+  const currentViewLabel = currentNavItem?.label ?? (currentNavItem ? t(currentNavItem.labelKey) : "Hermes");
 
   return (
     <div className="layout-shell">
@@ -1363,7 +1413,7 @@ function Layout(): React.JSX.Element {
           </button>
 
           <nav className="sidebar-nav">
-            {NAV_ITEMS.map(({ view: v, icon: Icon, labelKey, eyebrow }) => (
+            {NAV_ITEMS.map(({ view: v, icon: Icon, labelKey, label, eyebrow }) => (
               <button
                 key={v}
                 className={`sidebar-nav-item ${view === v ? "active" : ""}`}
@@ -1375,7 +1425,7 @@ function Layout(): React.JSX.Element {
                   <Icon size={16} />
                 </span>
                 <span className="sidebar-nav-item-copy">
-                  <span className="sidebar-nav-item-label">{t(labelKey)}</span>
+                  <span className="sidebar-nav-item-label">{label ?? t(labelKey)}</span>
                   <span className="sidebar-nav-item-eyebrow">{eyebrow}</span>
                 </span>
               </button>
@@ -1411,9 +1461,7 @@ function Layout(): React.JSX.Element {
           <div className="content-topbar">
             <div className="content-topbar-copy">
               <div className="content-topbar-kicker">HCC OS native shell</div>
-              <div className="content-topbar-title">
-                {currentViewLabel ? t(currentViewLabel) : "Hermes"}
-              </div>
+              <div className="content-topbar-title">{currentViewLabel}</div>
               <div className="content-topbar-subtitle">
                 Operator workspace with glass-native routing, workflows, and continuity.
               </div>
@@ -1499,7 +1547,7 @@ function Layout(): React.JSX.Element {
             </div>
           )}
 
-          {sectionOrder.map((sectionKey) => {
+          {!HCC_WORKSPACE_VIEWS.has(view) && sectionOrder.map((sectionKey) => {
             switch (sectionKey) {
               case "presets":
                 return sectionPrefs.presets ? (
@@ -1677,6 +1725,14 @@ function Layout(): React.JSX.Element {
               </div>
             )}
 
+            <HccWorkspaceViews
+              activeView={view}
+              selectedProjectId={selectedProjectId}
+              selectedDomainId={selectedDomainId}
+              onOpenProject={handleOpenProject}
+              onOpenDomain={handleOpenDomain}
+              onOpenMemory={() => setView("hcc-memory")}
+            />
             <div
               style={{
                 display: view === "chat" ? "flex" : "none",

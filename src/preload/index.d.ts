@@ -93,6 +93,36 @@ interface HermesAPI {
   startGateway: () => Promise<boolean>;
   stopGateway: () => Promise<boolean>;
   gatewayStatus: () => Promise<boolean>;
+  getHccWarRoomSummary: () => Promise<unknown>;
+  getHccReality: () => Promise<unknown>;
+  updateHccOperatingProfile: (payload: unknown) => Promise<unknown>;
+  stageHccIntervention: (interventionId: string, actor?: string) => Promise<unknown>;
+  getHccProjects: () => Promise<unknown>;
+  getHccProjectDetail: (projectId: string) => Promise<unknown>;
+  transitionHccProject: (projectId: string, toStatus: string, note?: string) => Promise<unknown>;
+  getHccClonedApps: () => Promise<unknown>;
+  createHccClonedApp: (payload: Record<string, unknown>) => Promise<unknown>;
+  compareHccClonedApp: (appId: string, payload?: Record<string, unknown>) => Promise<unknown>;
+  materializeHccClonedApp: (appId: string) => Promise<unknown>;
+  getHccDomains: () => Promise<unknown>;
+  getHccLifeDomainSummary: () => Promise<unknown>;
+  getHccDomainDetail: (domainId: string) => Promise<unknown>;
+  getHccMemoryCapsules: () => Promise<unknown>;
+  getHccMemoryPacket: (packetType: string) => Promise<unknown>;
+  getHccReviewCenter: () => Promise<unknown>;
+  getHccGovernanceProposals: (status?: string) => Promise<unknown>;
+  actOnHccGovernanceProposal: (proposalId: string, action: "approve" | "apply" | "reject" | "rollback", actor?: string) => Promise<unknown>;
+  stageHccReviewIntervention: (interventionId: string, actor?: string) => Promise<unknown>;
+  getHccRegistryResource: (resource: "domains" | "tools" | "references") => Promise<unknown>;
+  createHccRegistryEntity: (resource: "domains" | "tools" | "references", payload: unknown) => Promise<unknown>;
+  updateHccRegistryEntity: (resource: "domains" | "tools" | "references", entityId: string, payload: unknown) => Promise<unknown>;
+  deleteHccRegistryEntity: (resource: "domains" | "tools" | "references", entityId: string) => Promise<unknown>;
+  getHccGraph: () => Promise<unknown>;
+  createHccGraphEdge: (payload: unknown) => Promise<unknown>;
+  updateHccGraphEdge: (edgeId: string, payload: unknown) => Promise<unknown>;
+  deleteHccGraphEdge: (edgeId: string) => Promise<unknown>;
+  syncHccGraph: () => Promise<unknown>;
+  repairHccGraphIntegrity: () => Promise<unknown>;
 
   // Platform toggles
   getPlatformEnabled: (profile?: string) => Promise<Record<string, boolean>>;
