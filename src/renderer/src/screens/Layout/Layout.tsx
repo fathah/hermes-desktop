@@ -200,6 +200,7 @@ const STORAGE_KEYS = {
 
 const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; label?: string; eyebrow: string }[] = [
   { view: "war-room", icon: Download, labelKey: "navigation.chat", label: "War Room", eyebrow: "HCC" },
+  { view: "opportunity-radar", icon: Sparkles, labelKey: "navigation.office", label: "Opportunities", eyebrow: "Leverage" },
   { view: "projects", icon: Building, labelKey: "navigation.office", label: "Projects", eyebrow: "Build" },
   { view: "domains", icon: Brain, labelKey: "navigation.memory", label: "Domains", eyebrow: "State" },
   { view: "hcc-memory", icon: Brain, labelKey: "navigation.memory", label: "Memory", eyebrow: "Context" },
@@ -207,7 +208,6 @@ const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; label?: strin
   { view: "registry-manager", icon: SettingsIcon, labelKey: "navigation.settings", label: "Registry", eyebrow: "Governance" },
   { view: "graph-center", icon: Layers, labelKey: "navigation.memory", label: "Graph", eyebrow: "Relations" },
   { view: "clone-remix", icon: Download, labelKey: "navigation.office", label: "Clone / Remix", eyebrow: "Studio" },
-  { view: "opportunity-radar", icon: Sparkles, labelKey: "navigation.office", label: "Opportunities", eyebrow: "Leverage" },
   { view: "chat", icon: ChatBubble, labelKey: "navigation.chat", eyebrow: "Live" },
   { view: "sessions", icon: Clock, labelKey: "navigation.sessions", eyebrow: "Recall" },
   { view: "agents", icon: Users, labelKey: "navigation.agents", eyebrow: "Profiles" },
