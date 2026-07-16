@@ -121,6 +121,7 @@ interface HermesAPI {
   spawnHccConductor: (goal: string, maxParallel?: number, supervised?: boolean) => Promise<unknown>;
   stopHccConductor: (taskId: string) => Promise<unknown>;
   getHccMissionEvidencePack: (jobId: string) => Promise<unknown>;
+  getHccContextInspector: (entityType: string, entityId: string) => Promise<unknown>;
   getHccSwarmOverview: () => Promise<unknown>;
   createHccLearningTopic: (payload: Record<string, unknown>) => Promise<unknown>;
   appendHccLearningEvent: (topicId: string, eventType: string, payload: Record<string, unknown>) => Promise<unknown>;

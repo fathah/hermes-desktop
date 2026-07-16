@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, Bot, FileCheck2, Play, RefreshCw, Square, Workflow, X } from "lucide-react";
+import { Activity, Bot, PanelRightOpen, Play, RefreshCw, Square, Workflow } from "lucide-react";
+import ContextInspectorRail from "../../components/inspector/ContextInspectorRail";
 import type {
   HccControlPlaneData,
   HccMission,
-  HccMissionEvidencePack,
 } from "../../types/hcc";
 
 type ControlTab = "missions" | "swarm";
@@ -12,7 +12,7 @@ function ControlPlane(): React.JSX.Element {
   const [tab, setTab] = useState<ControlTab>("missions");
   const [data, setData] = useState<HccControlPlaneData | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [evidence, setEvidence] = useState<HccMissionEvidencePack | null>(null);
+  const [inspectorMissionId, setInspectorMissionId] = useState<string | null>(null);
   const [goal, setGoal] = useState("");
   const [parallel, setParallel] = useState(3);
   const [supervised, setSupervised] = useState(true);
@@ -77,17 +77,6 @@ function ControlPlane(): React.JSX.Element {
     }
   };
 
-  const openEvidence = async (missionId: string): Promise<void> => {
-    setBusy(`evidence:${missionId}`);
-    try {
-      setEvidence(await window.hermesAPI.getHccMissionEvidencePack(missionId) as HccMissionEvidencePack);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Evidence Pack unavailable");
-    } finally {
-      setBusy(null);
-    }
-  };
-
   const workers = data?.swarm.workers.workers ?? [];
   const runs = data?.swarm.runs.runs ?? [];
   const activeMissions = data?.missions.filter((mission) => ["running", "active"].includes(mission.status)).length ?? 0;
@@ -127,7 +116,7 @@ function ControlPlane(): React.JSX.Element {
           <aside className="control-mission-list">
             <div className="control-section-title">Missions</div>
             {data?.missions.map((mission) => (
-              <button key={mission.id} className={selectedId === mission.id ? "active" : ""} onClick={() => { setSelectedId(mission.id); setEvidence(null); }}>
+              <button key={mission.id} className={selectedId === mission.id ? "active" : ""} onClick={() => { setSelectedId(mission.id); setInspectorMissionId(null); }}>
                 <span className={`mission-state state-${mission.status}`} />
                 <span><strong>{mission.name}</strong><small>{mission.status} · {mission.workers.length} workers</small></span>
               </button>
@@ -148,7 +137,7 @@ function ControlPlane(): React.JSX.Element {
                 <div className="mission-detail-heading">
                   <div><span className={`mission-badge state-${selected.status}`}>{selected.status}</span><h2>{selected.name}</h2><p>{selected.goal || selected.description || "No goal recorded."}</p></div>
                   <div className="mission-actions">
-                    <button onClick={() => void openEvidence(selected.id)} disabled={busy === `evidence:${selected.id}`}><FileCheck2 size={15} />Evidence</button>
+                    <button onClick={() => setInspectorMissionId(selected.id)}><PanelRightOpen size={15} />Inspect context</button>
                     {["running", "active"].includes(selected.status) && <button className="danger" onClick={() => void stopMission(selected)}><Square size={14} />Stop</button>}
                   </div>
                 </div>
@@ -157,29 +146,7 @@ function ControlPlane(): React.JSX.Element {
                   <div><dt>Project</dt><dd>{selected.kanban_board || "Not linked"}</dd></div>
                   <div><dt>Workers</dt><dd>{selected.workers.join(", ") || "None"}</dd></div>
                 </dl>
-                {evidence && (
-                  <aside className="evidence-inspector" aria-label="Mission Evidence Pack">
-                    <header>
-                      <div>
-                        <span>Evidence Pack</span>
-                        <code>{evidence.schemaVersion}</code>
-                      </div>
-                      <button aria-label="Close Evidence Pack" onClick={() => setEvidence(null)}>
-                        <X size={17} />
-                      </button>
-                    </header>
-                    <div className="evidence-mission-name">{evidence.mission.name}</div>
-                    <div className="evidence-grid">
-                      {Object.entries(evidence.sections).map(([name, section]) => (
-                        <div key={name}>
-                          <strong>{name}</strong>
-                          <span>{section.items?.length ?? section.status ?? "recorded"}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <footer>{evidence.provenance.policy}</footer>
-                  </aside>
-                )}
+
               </div>
             ) : <div className="control-empty large">Select a mission or start a new one.</div>}
           </section>
@@ -189,6 +156,14 @@ function ControlPlane(): React.JSX.Element {
           <section><div className="control-section-title">Workers</div><div className="worker-table"><div className="table-head"><span>Worker</span><span>Role</span><span>Status</span><span>Current task</span></div>{workers.map((worker) => <div key={worker.id}><strong>{worker.profile || worker.id}</strong><span>{worker.role || "worker"}</span><span className={`worker-status state-${worker.status || "unknown"}`}>{worker.status || "unknown"}</span><span>{worker.current_task_id || "—"}</span></div>)}</div></section>
           <section><div className="control-section-title">Recent runs</div><div className="run-list">{runs.map((run) => <div key={run.id}><Activity size={15} /><span><strong>{run.task_title || run.id}</strong><small>{run.profile || "unassigned"}</small></span><em>{run.status || "unknown"}</em></div>)}{!runs.length && <div className="control-empty">No swarm runs.</div>}</div></section>
         </div>
+      )}
+
+      {inspectorMissionId && (
+        <ContextInspectorRail
+          entityType="mission"
+          entityId={inspectorMissionId}
+          onClose={() => setInspectorMissionId(null)}
+        />
       )}
     </main>
   );

@@ -278,6 +278,22 @@ export interface HccMissionEvidencePack {
   provenance: { sourceRefs: Array<{ type: string; id: string }>; topicIds: string[]; policy: string };
 }
 
+export type HccInspectorTabName = "evidence" | "artifacts" | "files" | "memory" | "skills" | "logs" | "approvals";
+
+export interface HccInspectorTab {
+  status: "recorded" | "not_recorded" | string;
+  count: number;
+  items: Array<Record<string, unknown>>;
+}
+
+export interface HccContextInspector {
+  schemaVersion: "context-inspector-v1";
+  generatedAt: number;
+  context: { entityType: string; entityId: string; title: string; status: string };
+  tabs: Record<HccInspectorTabName, HccInspectorTab>;
+  provenance: { sourceRefs: Array<{ type: string; id: string }>; topicIds: string[]; policy: string };
+}
+
 export interface HccSwarmWorker {
   id: string;
   profile?: string;

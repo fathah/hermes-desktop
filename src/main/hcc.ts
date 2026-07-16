@@ -248,6 +248,11 @@ export async function fetchHccMissionEvidencePack(jobId: string): Promise<unknow
   return fetchJson(`/api/conductor/jobs/${encodeURIComponent(jobId)}/evidence-pack`);
 }
 
+export async function fetchHccContextInspector(entityType: string, entityId: string): Promise<unknown> {
+  const query = new URLSearchParams({ entityType, entityId });
+  return fetchJson(`/api/hcc/context/inspect?${query.toString()}`);
+}
+
 export async function fetchHccSwarmOverview(): Promise<unknown> {
   const safeFetch = async (path: string, fallback: unknown): Promise<unknown> => {
     try {

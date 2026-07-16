@@ -85,6 +85,7 @@ import {
   deleteHccRegistryEntity,
   fetchHccClonedApps,
   fetchHccConductorJobs,
+  fetchHccContextInspector,
   fetchHccMissionEvidencePack,
   fetchHccSwarmOverview,
   fetchHccDomainDetail,
@@ -544,6 +545,9 @@ function setupIPC(): void {
   );
   ipcMain.handle("stop-hcc-conductor", (_event, taskId: string) => stopHccConductor(taskId));
   ipcMain.handle("get-hcc-mission-evidence-pack", (_event, jobId: string) => fetchHccMissionEvidencePack(jobId));
+  ipcMain.handle("get-hcc-context-inspector", (_event, entityType: string, entityId: string) =>
+    fetchHccContextInspector(entityType, entityId),
+  );
   ipcMain.handle("get-hcc-swarm-overview", () => fetchHccSwarmOverview());
   ipcMain.handle("create-hcc-learning-topic", (_event, payload: Record<string, unknown>) =>
     createHccLearningTopic(payload),
