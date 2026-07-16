@@ -57,6 +57,7 @@ type View =
   | "learning-engine"
   | "gateway-map"
   | "intelligence-fabric"
+  | "execution-center"
   | "chat"
   | "sessions"
   | "agents"
@@ -207,6 +208,7 @@ const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; label?: strin
   { view: "control-plane", icon: Users, labelKey: "navigation.agents", label: "Control Plane", eyebrow: "Missions" },
   { view: "gateway-map", icon: Signal, labelKey: "navigation.gateway", label: "Gateway Map", eyebrow: "Fabric" },
   { view: "intelligence-fabric", icon: Layers, labelKey: "navigation.gateway", label: "Intelligence", eyebrow: "Attention" },
+  { view: "execution-center", icon: Wrench, labelKey: "navigation.tools", label: "Executions", eyebrow: "Approvals" },
   { view: "opportunity-radar", icon: Sparkles, labelKey: "navigation.office", label: "Opportunities", eyebrow: "Leverage" },
   { view: "learning-engine", icon: Brain, labelKey: "navigation.memory", label: "Learning", eyebrow: "Progression" },
   { view: "projects", icon: Building, labelKey: "navigation.office", label: "Projects", eyebrow: "Build" },

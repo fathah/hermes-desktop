@@ -13,6 +13,7 @@ import OpportunityRadar from "../OpportunityRadar/OpportunityRadar";
 import LearningEngine from "../LearningEngine/LearningEngine";
 import GatewayCapabilityMap from "../GatewayCapabilityMap/GatewayCapabilityMap";
 import IntelligenceFabric from "../IntelligenceFabric/IntelligenceFabric";
+import ExecutionCenter from "../ExecutionCenter/ExecutionCenter";
 
 export type HccWorkspaceView =
   | "war-room"
@@ -29,7 +30,8 @@ export type HccWorkspaceView =
   | "opportunity-radar"
   | "learning-engine"
   | "gateway-map"
-  | "intelligence-fabric";
+  | "intelligence-fabric"
+  | "execution-center";
 
 interface HccWorkspaceViewsProps {
   activeView: string;
@@ -56,6 +58,7 @@ const HCC_VIEWS = new Set<string>([
   "learning-engine",
   "gateway-map",
   "intelligence-fabric",
+  "execution-center",
 ]);
 
 function HccWorkspaceViews({
@@ -119,6 +122,9 @@ function HccWorkspaceViews({
       break;
     case "intelligence-fabric":
       content = <IntelligenceFabric />;
+      break;
+    case "execution-center":
+      content = <ExecutionCenter />;
       break;
     case "war-room":
     default:

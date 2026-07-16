@@ -98,6 +98,13 @@ import {
   fetchHccGraph,
   fetchHccGatewayCapabilityMap,
   fetchHccIntelligence,
+  fetchHccExecutors,
+  fetchHccExecutions,
+  createHccExecution,
+  decideHccExecution,
+  refreshHccExecution,
+  retryHccExecution,
+  rollbackHccExecution,
   decideHccRetrievalQualityProposal,
   stageHccRetrievalPolicyExecution,
   applyHccRetrievalPolicyExecution,
@@ -523,6 +530,13 @@ function setupIPC(): void {
   ipcMain.handle("gateway-status", () => isGatewayRunning());
   ipcMain.handle("get-hcc-gateway-capability-map", () => fetchHccGatewayCapabilityMap());
   ipcMain.handle("get-hcc-intelligence", (_event, contextPackId?: string, tokenBudget?: number) => fetchHccIntelligence(contextPackId, tokenBudget));
+  ipcMain.handle("get-hcc-executors", () => fetchHccExecutors());
+  ipcMain.handle("get-hcc-executions", (_event, status?: string, limit?: number) => fetchHccExecutions(status, limit));
+  ipcMain.handle("create-hcc-execution", (_event, payload: Record<string, unknown>) => createHccExecution(payload));
+  ipcMain.handle("decide-hcc-execution", (_event, executionId: string, decision: "approve" | "deny", actor?: string, note?: string) => decideHccExecution(executionId, decision, actor, note));
+  ipcMain.handle("refresh-hcc-execution", (_event, executionId: string, actor?: string) => refreshHccExecution(executionId, actor));
+  ipcMain.handle("retry-hcc-execution", (_event, executionId: string, actor?: string) => retryHccExecution(executionId, actor));
+  ipcMain.handle("rollback-hcc-execution", (_event, executionId: string, actor?: string, note?: string) => rollbackHccExecution(executionId, actor, note));
   ipcMain.handle("decide-hcc-retrieval-quality-proposal", (_event, proposalId: string, decision: "approved" | "rejected", actor?: string, note?: string) => decideHccRetrievalQualityProposal(proposalId, decision, actor, note));
   ipcMain.handle("stage-hcc-retrieval-policy-execution", (_event, proposalId: string, actor?: string) => stageHccRetrievalPolicyExecution(proposalId, actor));
   ipcMain.handle("apply-hcc-retrieval-policy-execution", (_event, executionId: string, actor?: string, note?: string) => applyHccRetrievalPolicyExecution(executionId, actor, note));

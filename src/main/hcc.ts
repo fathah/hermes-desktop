@@ -47,6 +47,48 @@ export async function fetchHccIntelligence(contextPackId = "hcc-os", tokenBudget
   return fetchJson(`/api/os/intelligence?${query.toString()}`);
 }
 
+export async function fetchHccExecutors(): Promise<unknown> {
+  return fetchJson("/api/os/executors");
+}
+
+export async function fetchHccExecutions(status?: string, limit = 100): Promise<unknown> {
+  const query = new URLSearchParams({ limit: String(limit) });
+  if (status) query.set("status", status);
+  return fetchJson(`/api/os/executions?${query.toString()}`);
+}
+
+export async function createHccExecution(payload: Record<string, unknown>): Promise<unknown> {
+  return fetchJson("/api/os/executions", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function decideHccExecution(executionId: string, decision: "approve" | "deny", actor = "desktop-operator", note = ""): Promise<unknown> {
+  return fetchJson(`/api/os/executions/${encodeURIComponent(executionId)}/${decision}`, {
+    method: "POST",
+    body: JSON.stringify({ actor, note }),
+  });
+}
+
+export async function refreshHccExecution(executionId: string, actor = "desktop-operator"): Promise<unknown> {
+  return fetchJson(`/api/os/executions/${encodeURIComponent(executionId)}/refresh`, {
+    method: "POST",
+    body: JSON.stringify({ actor }),
+  });
+}
+
+export async function retryHccExecution(executionId: string, actor = "desktop-operator"): Promise<unknown> {
+  return fetchJson(`/api/os/executions/${encodeURIComponent(executionId)}/retry`, {
+    method: "POST",
+    body: JSON.stringify({ actor }),
+  });
+}
+
+export async function rollbackHccExecution(executionId: string, actor = "desktop-operator", note = ""): Promise<unknown> {
+  return fetchJson(`/api/os/executions/${encodeURIComponent(executionId)}/rollback`, {
+    method: "POST",
+    body: JSON.stringify({ actor, note }),
+  });
+}
+
 export async function decideHccRetrievalQualityProposal(
   proposalId: string,
   decision: "approved" | "rejected",

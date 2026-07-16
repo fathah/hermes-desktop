@@ -95,6 +95,13 @@ interface HermesAPI {
   gatewayStatus: () => Promise<boolean>;
   getHccGatewayCapabilityMap: () => Promise<unknown>;
   getHccIntelligence: (contextPackId?: string, tokenBudget?: number) => Promise<unknown>;
+  getHccExecutors: () => Promise<unknown>;
+  getHccExecutions: (status?: string, limit?: number) => Promise<unknown>;
+  createHccExecution: (payload: Record<string, unknown>) => Promise<unknown>;
+  decideHccExecution: (executionId: string, decision: "approve" | "deny", actor?: string, note?: string) => Promise<unknown>;
+  refreshHccExecution: (executionId: string, actor?: string) => Promise<unknown>;
+  retryHccExecution: (executionId: string, actor?: string) => Promise<unknown>;
+  rollbackHccExecution: (executionId: string, actor?: string, note?: string) => Promise<unknown>;
   decideHccRetrievalQualityProposal: (proposalId: string, decision: "approved" | "rejected", actor?: string, note?: string) => Promise<unknown>;
   stageHccRetrievalPolicyExecution: (proposalId: string, actor?: string) => Promise<unknown>;
   applyHccRetrievalPolicyExecution: (executionId: string, actor?: string, note?: string) => Promise<unknown>;

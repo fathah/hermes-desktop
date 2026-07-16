@@ -568,3 +568,67 @@ export interface HccGatewayCapabilityMap {
     mutationPolicy: "inspection_only" | string;
   };
 }
+
+export type HccExecutionStatus = "pending_approval" | "approved" | "dispatching" | "running" | "succeeded" | "failed" | "denied" | "rolled_back" | "rollback_not_applicable" | "cancelled";
+
+export interface HccExecutionAuditEvent {
+  id: string;
+  event_type: string;
+  actor: string;
+  note: string;
+  payload: Record<string, unknown>;
+  created_at: number;
+}
+
+export interface HccExecutionArtifact {
+  id: string;
+  kind: string;
+  name: string;
+  content: Record<string, unknown>;
+  created_at: number;
+}
+
+export interface HccExecution {
+  id: string;
+  kind: string;
+  action: string;
+  sourceGateway: string | null;
+  targetGateway: string;
+  requestedBy: string;
+  approvedBy: string | null;
+  riskLevel: "low" | "medium" | "high";
+  requiresApproval: boolean;
+  status: HccExecutionStatus;
+  transport: string;
+  endpoint: string;
+  remoteRunId: string | null;
+  idempotencyKey: string;
+  attemptCount: number;
+  maxAttempts: number;
+  linkedCommandId: string | null;
+  linkedHandoffId: string | null;
+  payload: Record<string, unknown>;
+  result: Record<string, unknown> | null;
+  error: string | null;
+  createdAt: number;
+  updatedAt: number;
+  audit: HccExecutionAuditEvent[];
+  artifacts: HccExecutionArtifact[];
+}
+
+export interface HccExecutionList {
+  items: HccExecution[];
+  count: number;
+  pendingApproval: number;
+  active: number;
+  failed: number;
+}
+
+export interface HccExecutor {
+  gatewayId: string;
+  displayName: string;
+  endpoint: string | null;
+  transport: string;
+  controlActions: string[];
+  available: boolean;
+}

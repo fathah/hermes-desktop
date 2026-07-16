@@ -1,5 +1,6 @@
 import "./assets/main.css";
 import "./assets/control-plane.css";
+import "./assets/execution-center.css";
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
