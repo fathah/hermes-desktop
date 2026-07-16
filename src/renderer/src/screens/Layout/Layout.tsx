@@ -43,6 +43,7 @@ import { useI18n } from "../../components/useI18n";
 
 type View =
   | "war-room"
+  | "control-plane"
   | "projects"
   | "project-detail"
   | "domains"
@@ -200,7 +201,8 @@ const STORAGE_KEYS = {
 } as const;
 
 const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; label?: string; eyebrow: string }[] = [
-  { view: "war-room", icon: Download, labelKey: "navigation.chat", label: "War Room", eyebrow: "HCC" },
+  { view: "war-room", icon: Download, labelKey: "navigation.chat", label: "Home", eyebrow: "Overview" },
+  { view: "control-plane", icon: Users, labelKey: "navigation.agents", label: "Control Plane", eyebrow: "Missions" },
   { view: "opportunity-radar", icon: Sparkles, labelKey: "navigation.office", label: "Opportunities", eyebrow: "Leverage" },
   { view: "learning-engine", icon: Brain, labelKey: "navigation.memory", label: "Learning", eyebrow: "Progression" },
   { view: "projects", icon: Building, labelKey: "navigation.office", label: "Projects", eyebrow: "Build" },
@@ -226,6 +228,7 @@ const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; label?: strin
 
 const HCC_WORKSPACE_VIEWS = new Set<View>([
   "war-room",
+  "control-plane",
   "projects",
   "project-detail",
   "domains",
@@ -1406,7 +1409,7 @@ function Layout(): React.JSX.Element {
             <div className="sidebar-brand-copy">
               <div className="sidebar-brand-kicker">HCC OS</div>
               <div className="sidebar-brand-name">Hermes Desktop</div>
-              <div className="sidebar-brand-subtitle">Glass operator shell</div>
+              <div className="sidebar-brand-subtitle">Native control center</div>
             </div>
           </div>
 
@@ -1464,21 +1467,20 @@ function Layout(): React.JSX.Element {
         </aside>
 
         <main className={shellContentClassName}>
-          <div className="content-topbar">
-            <div className="content-topbar-copy">
-              <div className="content-topbar-kicker">HCC OS native shell</div>
-              <div className="content-topbar-title">{currentViewLabel}</div>
-              <div className="content-topbar-subtitle">
-                Operator workspace with glass-native routing, workflows, and continuity.
+          {!HCC_WORKSPACE_VIEWS.has(view) && (
+            <div className="content-topbar">
+              <div className="content-topbar-copy">
+                <div className="content-topbar-kicker">Hermes</div>
+                <div className="content-topbar-title">{currentViewLabel}</div>
+              </div>
+              <div className="content-topbar-badges">
+                <span className="content-badge">{remoteMode ? "Remote" : "Local"}</span>
+                <span className="content-badge">{activeProfile}</span>
               </div>
             </div>
-            <div className="content-topbar-badges">
-              <span className="content-badge">{remoteMode ? "Remote mode" : "Local mode"}</span>
-              <span className="content-badge">Profile {activeProfile}</span>
-              <span className="content-badge">HCC OS theme</span>
-            </div>
-          </div>
+          )}
 
+          {!HCC_WORKSPACE_VIEWS.has(view) && (
           <div className="content-dashboard-toolbar">
             {DASHBOARD_WIDGETS.map((widget) => (
               <button
@@ -1537,8 +1539,9 @@ function Layout(): React.JSX.Element {
               save preset
             </button>
           </div>
+          )}
 
-          {quickSettingsOpen && (
+          {!HCC_WORKSPACE_VIEWS.has(view) && quickSettingsOpen && (
             <div className="content-quick-settings">
               {quickToggles.map((toggle) => (
                 <button

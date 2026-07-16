@@ -1,4 +1,5 @@
 import WarRoom from "../WarRoom/WarRoom";
+import ControlPlane from "../ControlPlane/ControlPlane";
 import Projects from "../Projects/Projects";
 import ProjectDetail from "../Projects/ProjectDetail";
 import Domains from "../Domains/Domains";
@@ -13,6 +14,7 @@ import LearningEngine from "../LearningEngine/LearningEngine";
 
 export type HccWorkspaceView =
   | "war-room"
+  | "control-plane"
   | "projects"
   | "project-detail"
   | "domains"
@@ -36,6 +38,7 @@ interface HccWorkspaceViewsProps {
 
 const HCC_VIEWS = new Set<string>([
   "war-room",
+  "control-plane",
   "projects",
   "project-detail",
   "domains",
@@ -63,6 +66,9 @@ function HccWorkspaceViews({
 
   let content: React.JSX.Element;
   switch (activeView as HccWorkspaceView) {
+    case "control-plane":
+      content = <ControlPlane />;
+      break;
     case "projects":
       content = <Projects selectedProjectId={selectedProjectId} onSelectProject={onOpenProject} />;
       break;

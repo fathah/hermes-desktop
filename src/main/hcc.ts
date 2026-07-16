@@ -225,3 +225,42 @@ export async function syncHccGraph(): Promise<unknown> {
 export async function repairHccGraphIntegrity(): Promise<unknown> {
   return fetchJson("/api/hcc/graph/integrity/repair", { method: "POST" });
 }
+
+export async function fetchHccConductorJobs(): Promise<unknown> {
+  return fetchJson("/api/conductor/jobs");
+}
+
+export async function spawnHccConductor(goal: string, maxParallel = 3, supervised = true): Promise<unknown> {
+  return fetchJson("/api/conductor-spawn", {
+    method: "POST",
+    body: JSON.stringify({ goal, maxParallel, supervised }),
+  });
+}
+
+export async function stopHccConductor(taskId: string): Promise<unknown> {
+  return fetchJson("/api/conductor-stop", {
+    method: "POST",
+    body: JSON.stringify({ taskId }),
+  });
+}
+
+export async function fetchHccMissionEvidencePack(jobId: string): Promise<unknown> {
+  return fetchJson(`/api/conductor/jobs/${encodeURIComponent(jobId)}/evidence-pack`);
+}
+
+export async function fetchHccSwarmOverview(): Promise<unknown> {
+  const safeFetch = async (path: string, fallback: unknown): Promise<unknown> => {
+    try {
+      return await fetchJson(path);
+    } catch {
+      return fallback;
+    }
+  };
+  const [status, workers, runs, activity] = await Promise.all([
+    safeFetch("/api/swarm/status", { status: "offline", active: false, active_runs: 0, total_workers: 0 }),
+    safeFetch("/api/swarm/workers", { workers: [] }),
+    safeFetch("/api/swarm/runs", { runs: [] }),
+    safeFetch("/api/swarm/activity?limit=30", { activity: [] }),
+  ]);
+  return { status, workers, runs, activity };
+}

@@ -224,6 +224,13 @@ const hermesAPI = {
     rationale?: string,
   ): Promise<unknown> => ipcRenderer.invoke("act-hcc-opportunity", candidateId, action, rationale),
   getHccLearning: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-learning"),
+  getHccConductorJobs: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-conductor-jobs"),
+  spawnHccConductor: (goal: string, maxParallel?: number, supervised?: boolean): Promise<unknown> =>
+    ipcRenderer.invoke("spawn-hcc-conductor", goal, maxParallel, supervised),
+  stopHccConductor: (taskId: string): Promise<unknown> => ipcRenderer.invoke("stop-hcc-conductor", taskId),
+  getHccMissionEvidencePack: (jobId: string): Promise<unknown> =>
+    ipcRenderer.invoke("get-hcc-mission-evidence-pack", jobId),
+  getHccSwarmOverview: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-swarm-overview"),
   createHccLearningTopic: (payload: Record<string, unknown>): Promise<unknown> =>
     ipcRenderer.invoke("create-hcc-learning-topic", payload),
   appendHccLearningEvent: (topicId: string, eventType: string, payload: Record<string, unknown>): Promise<unknown> =>

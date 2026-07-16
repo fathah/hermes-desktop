@@ -84,6 +84,9 @@ import {
   deleteHccGraphEdge,
   deleteHccRegistryEntity,
   fetchHccClonedApps,
+  fetchHccConductorJobs,
+  fetchHccMissionEvidencePack,
+  fetchHccSwarmOverview,
   fetchHccDomainDetail,
   fetchHccDomains,
   fetchHccGraph,
@@ -102,7 +105,9 @@ import {
   fetchHccLifeDomainSummary,
   fetchHccWarRoomSummary,
   repairHccGraphIntegrity,
+  spawnHccConductor,
   stageHccIntervention,
+  stopHccConductor,
   syncHccGraph,
   transitionHccProject,
   updateHccGraphEdge,
@@ -533,6 +538,13 @@ function setupIPC(): void {
       actOnHccOpportunity(candidateId, action, rationale),
   );
   ipcMain.handle("get-hcc-learning", () => fetchHccLearning());
+  ipcMain.handle("get-hcc-conductor-jobs", () => fetchHccConductorJobs());
+  ipcMain.handle("spawn-hcc-conductor", (_event, goal: string, maxParallel?: number, supervised?: boolean) =>
+    spawnHccConductor(goal, maxParallel, supervised),
+  );
+  ipcMain.handle("stop-hcc-conductor", (_event, taskId: string) => stopHccConductor(taskId));
+  ipcMain.handle("get-hcc-mission-evidence-pack", (_event, jobId: string) => fetchHccMissionEvidencePack(jobId));
+  ipcMain.handle("get-hcc-swarm-overview", () => fetchHccSwarmOverview());
   ipcMain.handle("create-hcc-learning-topic", (_event, payload: Record<string, unknown>) =>
     createHccLearningTopic(payload),
   );

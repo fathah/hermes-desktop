@@ -257,6 +257,57 @@ export interface HccLearningDashboard {
   };
 }
 
+export interface HccMission {
+  id: string;
+  name: string;
+  description?: string;
+  goal?: string;
+  status: string;
+  workers: string[];
+  kanban_board?: string;
+  created_at?: number;
+  updated_at?: number;
+  completed_at?: number;
+}
+
+export interface HccMissionEvidencePack {
+  schemaVersion: string;
+  generatedAt: number;
+  mission: { id: string; name: string; description?: string; goal?: string; status: string; projectId?: string };
+  sections: Record<string, { status?: string; items?: unknown[]; summary?: Record<string, number> }>;
+  provenance: { sourceRefs: Array<{ type: string; id: string }>; topicIds: string[]; policy: string };
+}
+
+export interface HccSwarmWorker {
+  id: string;
+  profile?: string;
+  role?: string;
+  status?: string;
+  current_task_id?: string | null;
+  last_active?: string | null;
+}
+
+export interface HccSwarmRun {
+  id: string;
+  task_id?: string;
+  task_title?: string;
+  profile?: string;
+  status?: string;
+  outcome?: string | null;
+  summary?: string | null;
+  started?: string | null;
+}
+
+export interface HccControlPlaneData {
+  missions: HccMission[];
+  swarm: {
+    status: { status?: string; active?: boolean; active_runs?: number; total_workers?: number; total_tasks?: number };
+    workers: { workers: HccSwarmWorker[] };
+    runs: { runs: HccSwarmRun[] };
+    activity: { activity: Array<Record<string, unknown>> };
+  };
+}
+
 export interface HccWarRoomSummary {
   hero: {
     title: string;
