@@ -97,8 +97,8 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .control-tabs button.active { border-bottom-color: #62aef5; color: #f3f7fb; background: #11161d; }
 .control-error { margin-bottom: 14px; padding: 10px 12px; border-left: 3px solid #ef6d72; background: #2b171b; color: #ffc4c7; font-size: 13px; }
 
-.control-mission-layout { display: grid; grid-template-columns: 320px minmax(0, 1fr); min-height: 620px; border: 1px solid #222934; border-radius: 9px; overflow: hidden; background: #0e1217; }
-.control-mission-list { border-right: 1px solid #222934; background: #0c1015; }
+.control-mission-layout { display: grid; grid-template-columns: 320px minmax(0, 1fr); height: calc(100vh - 390px); min-height: 480px; border: 1px solid #222934; border-radius: 9px; overflow: hidden; background: #0e1217; }
+.control-mission-list { overflow-y: auto; border-right: 1px solid #222934; background: #0c1015; }
 .control-section-title { padding: 14px 16px; color: #778393; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; border-bottom: 1px solid #222934; }
 .control-mission-list > button { width: 100%; display: grid; grid-template-columns: 8px 1fr; gap: 11px; padding: 14px 16px; border: 0; border-bottom: 1px solid #1b212a; background: transparent; color: #dce3ea; text-align: left; cursor: pointer; }
 .control-mission-list > button:hover { background: #121820; }
@@ -110,7 +110,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .state-failed, .state-error { color: #ff9a9f !important; background-color: #e55c64 !important; }
 .state-pending, .state-queued { color: #f3c66f !important; background-color: #c7953d !important; }
 
-.control-mission-detail { min-width: 0; }
+.control-mission-detail { min-width: 0; min-height: 0; overflow-y: auto; }
 .control-launch-row { gap: 10px; padding: 14px; border-bottom: 1px solid #222934; background: #10151b; }
 .control-launch-row > input[type="text"] { min-width: 220px; flex: 1; height: 38px; padding: 9px 11px; border: 1px solid #2a313b; border-radius: 6px; outline: none; background: #0b0f14; color: #e7edf4; }
 .control-launch-row > input[type="text"]:focus { border-color: #4d8fca; }
@@ -132,6 +132,37 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .mission-facts > div:last-child { border: 0; }
 .mission-facts dt { margin-bottom: 7px; color: #707d8d; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
 .mission-facts dd { margin: 0; overflow: hidden; color: #cdd5de; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; text-overflow: ellipsis; }
+
+.inline-approvals { margin-top: 18px; overflow: hidden; border: 1px solid #29323d; border-radius: 8px; background: #0c1116; }
+.inline-approvals > header { display: flex; align-items: center; justify-content: space-between; padding: 11px 13px; border-bottom: 1px solid #252e38; background: #11171e; }
+.inline-approvals > header > div { display: flex; align-items: center; gap: 8px; }
+.inline-approvals > header svg { color: #77a5d5; }
+.inline-approvals > header span { color: #8ba0b5; font-size: 9px; font-weight: 800; letter-spacing: .12em; }
+.inline-approvals > header strong { padding: 2px 6px; border-radius: 3px; color: #d8e6f5; background: #1e3348; font-size: 9px; }
+.inline-approvals > header button { display: grid; width: 26px; height: 26px; border: 0; color: #7f8d9b; background: transparent; place-items: center; }
+.inline-approval-list { display: grid; }
+.inline-approval-item { padding: 13px; border-bottom: 1px solid #202831; }
+.inline-approval-item:last-child { border-bottom: 0; }
+.inline-approval-item-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
+.inline-approval-item-head > span { color: #6f9aca; font-size: 8px; font-weight: 800; letter-spacing: .14em; }
+.inline-approval-item-head em { padding: 2px 6px; border-radius: 3px; color: #a5b3c1; background: #242d37; font-size: 8px; font-style: normal; text-transform: uppercase; }
+.inline-approval-item-head .status-proposed, .inline-approval-item-head .status-pending { color: #f0cc82; background: #372d19; }
+.inline-approval-item-head .status-approved { color: #90d6b1; background: #173426; }
+.inline-approval-item-head .status-rejected { color: #e9a0a4; background: #3a2023; }
+.inline-approval-item > strong { display: block; color: #d9e0e7; font-size: 12px; text-transform: capitalize; }
+.inline-approval-item p { margin: 5px 0; color: #909ca8; font-size: 10px; line-height: 1.45; }
+.inline-approval-item small { color: #637181; font-size: 9px; }
+.inline-approval-warning { display: flex; align-items: center; gap: 6px; margin-top: 9px; padding: 7px 8px; border-left: 2px solid #d09b43; color: #d7b97d; background: #241f16; font-size: 9px; }
+.inline-approval-actions { display: grid; grid-template-columns: minmax(180px, 1fr) auto auto; gap: 7px; margin-top: 10px; }
+.inline-approval-actions input { min-width: 0; height: 32px; padding: 0 9px; border: 1px solid #303a45; border-radius: 4px; outline: none; color: #d7dfe7; background: #090d12; font-size: 10px; }
+.inline-approval-actions input:focus { border-color: #537ba3; }
+.inline-approval-actions button { display: flex; align-items: center; justify-content: center; gap: 5px; min-height: 32px; padding: 0 10px; border: 1px solid #36526d; border-radius: 4px; color: #bcd4eb; background: #18293a; font-size: 9px; font-weight: 700; }
+.inline-approval-actions button:disabled { opacity: .35; }
+.inline-approval-actions .approval-confirm { border-color: #47785e; color: #c3e8d2; background: #193326; }
+.inline-approval-actions .approval-reject { border-color: #5e3439; color: #e4b7ba; background: #2d1b1e; }
+.inline-approval-empty, .inline-approval-loading { padding: 16px; color: #687584; font-size: 10px; }
+.inline-approval-message { padding: 8px 13px; border-top: 1px solid #24303b; color: #9eb2c5; font-size: 9px; }
+.inline-approvals > footer { padding: 8px 13px; border-top: 1px solid #202831; color: #566575; font-size: 8px; letter-spacing: .08em; text-transform: uppercase; }
 
 .context-inspector {
   position: fixed;

@@ -294,6 +294,31 @@ export interface HccContextInspector {
   provenance: { sourceRefs: Array<{ type: string; id: string }>; topicIds: string[]; policy: string };
 }
 
+export interface HccInlineApprovalItem {
+  id: string;
+  approvalDomain: "governance_proposal" | "run_request";
+  status: string;
+  title: string;
+  actionType?: string;
+  targetId?: string;
+  runId?: string;
+  reason?: string;
+  riskLevel?: string;
+  requestedAt?: number;
+  resolutionMode: "approve_stages_only" | "approve_executes_guarded_action";
+  allowedDecisions: Array<"approve" | "reject">;
+  requiresApproval: boolean;
+  appliedAt?: number | null;
+}
+
+export interface HccInlineApprovals {
+  schemaVersion: "inline-approvals-v1";
+  context: { missionId: string; title: string; status: string };
+  summary: { total: number; pending: number; approved: number; rejected: number };
+  items: HccInlineApprovalItem[];
+  provenance: { sourceRefs: Array<{ type: string; id: string }>; policy: string };
+}
+
 export interface HccRunSummary {
   id: string;
   title: string;

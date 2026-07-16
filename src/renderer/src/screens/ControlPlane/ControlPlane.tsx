@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Activity, Bot, GitCompareArrows, PanelRightOpen, Play, RefreshCw, Square, Workflow } from "lucide-react";
 import ContextInspectorRail from "../../components/inspector/ContextInspectorRail";
+import InlineApprovalCard from "../../components/approvals/InlineApprovalCard";
 import RunComparison from "./RunComparison";
 import type {
   HccControlPlaneData,
@@ -148,6 +149,7 @@ function ControlPlane(): React.JSX.Element {
                   <div><dt>Project</dt><dd>{selected.kanban_board || "Not linked"}</dd></div>
                   <div><dt>Workers</dt><dd>{selected.workers.join(", ") || "None"}</dd></div>
                 </dl>
+                <InlineApprovalCard missionId={selected.id} />
 
               </div>
             ) : <div className="control-empty large">Select a mission or start a new one.</div>}

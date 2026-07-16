@@ -230,6 +230,9 @@ const hermesAPI = {
   stopHccConductor: (taskId: string): Promise<unknown> => ipcRenderer.invoke("stop-hcc-conductor", taskId),
   getHccMissionEvidencePack: (jobId: string): Promise<unknown> =>
     ipcRenderer.invoke("get-hcc-mission-evidence-pack", jobId),
+  getHccInlineApprovals: (jobId: string): Promise<unknown> => ipcRenderer.invoke("get-hcc-inline-approvals", jobId),
+  decideHccInlineApproval: (jobId: string, approvalDomain: string, approvalId: string, decision: "approve" | "reject", actor?: string, note?: string): Promise<unknown> =>
+    ipcRenderer.invoke("decide-hcc-inline-approval", jobId, approvalDomain, approvalId, decision, actor, note),
   getHccContextInspector: (entityType: string, entityId: string): Promise<unknown> =>
     ipcRenderer.invoke("get-hcc-context-inspector", entityType, entityId),
   getHccRuns: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-runs"),

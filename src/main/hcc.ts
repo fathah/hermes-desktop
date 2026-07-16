@@ -248,6 +248,24 @@ export async function fetchHccMissionEvidencePack(jobId: string): Promise<unknow
   return fetchJson(`/api/conductor/jobs/${encodeURIComponent(jobId)}/evidence-pack`);
 }
 
+export async function fetchHccInlineApprovals(jobId: string): Promise<unknown> {
+  return fetchJson(`/api/conductor/jobs/${encodeURIComponent(jobId)}/inline-approvals`);
+}
+
+export async function decideHccInlineApproval(
+  jobId: string,
+  approvalDomain: string,
+  approvalId: string,
+  decision: "approve" | "reject",
+  actor = "desktop-operator",
+  note = "",
+): Promise<unknown> {
+  return fetchJson(
+    `/api/conductor/jobs/${encodeURIComponent(jobId)}/inline-approvals/${encodeURIComponent(approvalDomain)}/${encodeURIComponent(approvalId)}/decision`,
+    { method: "POST", body: JSON.stringify({ decision, actor, note }) },
+  );
+}
+
 export async function fetchHccContextInspector(entityType: string, entityId: string): Promise<unknown> {
   const query = new URLSearchParams({ entityType, entityId });
   return fetchJson(`/api/hcc/context/inspect?${query.toString()}`);
