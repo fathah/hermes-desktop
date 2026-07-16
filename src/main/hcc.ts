@@ -10,7 +10,7 @@ function getApiBaseUrl(): string {
   if (conn.mode === "remote" && conn.remoteUrl) {
     return conn.remoteUrl.replace(/\/+$/, "");
   }
-  return "http://127.0.0.1:9201";
+  return "http://127.0.0.1:9200";
 }
 
 function getAuthHeaders(): Record<string, string> {
