@@ -11,6 +11,8 @@ import GraphCenter from "../GraphCenter/GraphCenter";
 import CloneRemixStudio from "../CloneRemix/CloneRemixStudio";
 import OpportunityRadar from "../OpportunityRadar/OpportunityRadar";
 import LearningEngine from "../LearningEngine/LearningEngine";
+import GatewayCapabilityMap from "../GatewayCapabilityMap/GatewayCapabilityMap";
+import IntelligenceFabric from "../IntelligenceFabric/IntelligenceFabric";
 
 export type HccWorkspaceView =
   | "war-room"
@@ -25,7 +27,9 @@ export type HccWorkspaceView =
   | "graph-center"
   | "clone-remix"
   | "opportunity-radar"
-  | "learning-engine";
+  | "learning-engine"
+  | "gateway-map"
+  | "intelligence-fabric";
 
 interface HccWorkspaceViewsProps {
   activeView: string;
@@ -50,6 +54,8 @@ const HCC_VIEWS = new Set<string>([
   "clone-remix",
   "opportunity-radar",
   "learning-engine",
+  "gateway-map",
+  "intelligence-fabric",
 ]);
 
 function HccWorkspaceViews({
@@ -107,6 +113,12 @@ function HccWorkspaceViews({
       break;
     case "learning-engine":
       content = <LearningEngine />;
+      break;
+    case "gateway-map":
+      content = <GatewayCapabilityMap />;
+      break;
+    case "intelligence-fabric":
+      content = <IntelligenceFabric />;
       break;
     case "war-room":
     default:

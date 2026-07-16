@@ -190,6 +190,13 @@ const hermesAPI = {
   startGateway: (): Promise<boolean> => ipcRenderer.invoke("start-gateway"),
   stopGateway: (): Promise<boolean> => ipcRenderer.invoke("stop-gateway"),
   gatewayStatus: (): Promise<boolean> => ipcRenderer.invoke("gateway-status"),
+  getHccGatewayCapabilityMap: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-gateway-capability-map"),
+  getHccIntelligence: (contextPackId?: string, tokenBudget?: number): Promise<unknown> => ipcRenderer.invoke("get-hcc-intelligence", contextPackId, tokenBudget),
+  decideHccRetrievalQualityProposal: (proposalId: string, decision: "approved" | "rejected", actor?: string, note?: string): Promise<unknown> => ipcRenderer.invoke("decide-hcc-retrieval-quality-proposal", proposalId, decision, actor, note),
+  stageHccRetrievalPolicyExecution: (proposalId: string, actor?: string): Promise<unknown> => ipcRenderer.invoke("stage-hcc-retrieval-policy-execution", proposalId, actor),
+  applyHccRetrievalPolicyExecution: (executionId: string, actor?: string, note?: string): Promise<unknown> => ipcRenderer.invoke("apply-hcc-retrieval-policy-execution", executionId, actor, note),
+  verifyHccRetrievalPolicyExecution: (executionId: string, actor?: string): Promise<unknown> => ipcRenderer.invoke("verify-hcc-retrieval-policy-execution", executionId, actor),
+  rollbackHccRetrievalPolicyExecution: (executionId: string, actor?: string, note?: string): Promise<unknown> => ipcRenderer.invoke("rollback-hcc-retrieval-policy-execution", executionId, actor, note),
   getHccWarRoomSummary: (): Promise<unknown> =>
     ipcRenderer.invoke("get-hcc-war-room-summary"),
   getHccReality: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-reality"),

@@ -38,6 +38,55 @@ async function fetchJson(path: string, init: RequestInit = {}): Promise<unknown>
   return response.json();
 }
 
+export async function fetchHccGatewayCapabilityMap(): Promise<unknown> {
+  return fetchJson("/api/gateway-capabilities");
+}
+
+export async function fetchHccIntelligence(contextPackId = "hcc-os", tokenBudget = 1200): Promise<unknown> {
+  const query = new URLSearchParams({ context_pack_id: contextPackId, token_budget: String(tokenBudget) });
+  return fetchJson(`/api/os/intelligence?${query.toString()}`);
+}
+
+export async function decideHccRetrievalQualityProposal(
+  proposalId: string,
+  decision: "approved" | "rejected",
+  actor = "desktop-operator",
+  note = "",
+): Promise<unknown> {
+  return fetchJson(`/api/os/retrieval-quality-proposals/${encodeURIComponent(proposalId)}/decision`, {
+    method: "POST",
+    body: JSON.stringify({ decision, actor, note }),
+  });
+}
+
+export async function stageHccRetrievalPolicyExecution(proposalId: string, actor = "desktop-operator"): Promise<unknown> {
+  return fetchJson(`/api/os/retrieval-policy-executions/stage/${encodeURIComponent(proposalId)}`, {
+    method: "POST",
+    body: JSON.stringify({ actor }),
+  });
+}
+
+export async function applyHccRetrievalPolicyExecution(executionId: string, actor = "desktop-operator", note = ""): Promise<unknown> {
+  return fetchJson(`/api/os/retrieval-policy-executions/${encodeURIComponent(executionId)}/apply`, {
+    method: "POST",
+    body: JSON.stringify({ actor, note }),
+  });
+}
+
+export async function verifyHccRetrievalPolicyExecution(executionId: string, actor = "desktop-operator"): Promise<unknown> {
+  return fetchJson(`/api/os/retrieval-policy-executions/${encodeURIComponent(executionId)}/verify`, {
+    method: "POST",
+    body: JSON.stringify({ actor }),
+  });
+}
+
+export async function rollbackHccRetrievalPolicyExecution(executionId: string, actor = "desktop-operator", note = ""): Promise<unknown> {
+  return fetchJson(`/api/os/retrieval-policy-executions/${encodeURIComponent(executionId)}/rollback`, {
+    method: "POST",
+    body: JSON.stringify({ actor, note }),
+  });
+}
+
 export async function fetchHccWarRoomSummary(): Promise<unknown> {
   return fetchJson("/api/hcc/war-room/summary");
 }

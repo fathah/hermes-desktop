@@ -96,6 +96,13 @@ import {
   fetchHccDomainDetail,
   fetchHccDomains,
   fetchHccGraph,
+  fetchHccGatewayCapabilityMap,
+  fetchHccIntelligence,
+  decideHccRetrievalQualityProposal,
+  stageHccRetrievalPolicyExecution,
+  applyHccRetrievalPolicyExecution,
+  verifyHccRetrievalPolicyExecution,
+  rollbackHccRetrievalPolicyExecution,
   fetchHccMemoryCapsules,
   fetchHccMemoryPacket,
   fetchHccOpportunities,
@@ -514,6 +521,13 @@ function setupIPC(): void {
     return true;
   });
   ipcMain.handle("gateway-status", () => isGatewayRunning());
+  ipcMain.handle("get-hcc-gateway-capability-map", () => fetchHccGatewayCapabilityMap());
+  ipcMain.handle("get-hcc-intelligence", (_event, contextPackId?: string, tokenBudget?: number) => fetchHccIntelligence(contextPackId, tokenBudget));
+  ipcMain.handle("decide-hcc-retrieval-quality-proposal", (_event, proposalId: string, decision: "approved" | "rejected", actor?: string, note?: string) => decideHccRetrievalQualityProposal(proposalId, decision, actor, note));
+  ipcMain.handle("stage-hcc-retrieval-policy-execution", (_event, proposalId: string, actor?: string) => stageHccRetrievalPolicyExecution(proposalId, actor));
+  ipcMain.handle("apply-hcc-retrieval-policy-execution", (_event, executionId: string, actor?: string, note?: string) => applyHccRetrievalPolicyExecution(executionId, actor, note));
+  ipcMain.handle("verify-hcc-retrieval-policy-execution", (_event, executionId: string, actor?: string) => verifyHccRetrievalPolicyExecution(executionId, actor));
+  ipcMain.handle("rollback-hcc-retrieval-policy-execution", (_event, executionId: string, actor?: string, note?: string) => rollbackHccRetrievalPolicyExecution(executionId, actor, note));
   ipcMain.handle("get-hcc-war-room-summary", () => fetchHccWarRoomSummary());
   ipcMain.handle("get-hcc-reality", () => fetchHccReality());
   ipcMain.handle("update-hcc-operating-profile", (_event, payload: unknown) => updateHccOperatingProfile(payload));

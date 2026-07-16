@@ -516,3 +516,52 @@ export interface HccWarRoomSummary {
     integrityHealth: "healthy" | "warning" | "critical";
   };
 }
+
+export interface HccGatewayCapabilityEvidence {
+  profileExists: boolean;
+  pidFileExists: boolean;
+  pid: number | null;
+  pidAlive: boolean;
+  configExists: boolean;
+  pidObservedAt: number | null;
+}
+
+export interface HccGatewayCapability {
+  id: string;
+  displayName: string;
+  runtimeStatus: "running" | "stopped" | "unavailable" | string;
+  health: "active" | "degraded" | "unavailable" | string;
+  stale: boolean;
+  missingManifest: boolean;
+  platform: string | null;
+  profiles: string[];
+  capabilities: string[];
+  linkedApps: string[];
+  eventTypes: string[];
+  controlActions: string[];
+  degradedReason: string | null;
+  confidence: string;
+  evidence: HccGatewayCapabilityEvidence;
+  counts: { capabilities: number; linkedApps: number; eventTypes: number; controlActions: number };
+}
+
+export interface HccGatewayCapabilityMap {
+  schemaVersion: "gateway-capability-map-v1";
+  generatedAt: number;
+  gateways: HccGatewayCapability[];
+  summary: {
+    total: number;
+    running: number;
+    degraded: number;
+    unavailable: number;
+    staleDeclarations: number;
+    capabilities: number;
+    linkedApps: number;
+  };
+  provenance: {
+    manifestSource: string;
+    runtimeSource: string;
+    healthPolicy: string;
+    mutationPolicy: "inspection_only" | string;
+  };
+}
