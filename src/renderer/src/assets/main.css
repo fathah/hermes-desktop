@@ -2458,6 +2458,92 @@ button:active {
 .learning-mission-row { display: flex; align-items: flex-start; gap: 10px; padding-top: 8px; border-top: 1px solid var(--glass-border); }
 .learning-mission-row p { margin: 3px 0; color: var(--text-muted); font-size: 12px; }
 .learning-mission-row small { color: #93c5fd; }
+
+/* macOS 26 Liquid Glass: large surfaces + Spotlight only. */
+.spotlight-overlay {
+  background: rgba(10, 10, 12, .52);
+  -webkit-backdrop-filter: blur(30px) saturate(155%);
+  backdrop-filter: blur(30px) saturate(155%);
+}
+.spotlight-panel {
+  width: min(680px, 100%);
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 18px;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,.16), rgba(255,255,255,.035) 46%, rgba(106,139,191,.08)),
+    rgba(30,30,32,.72);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.24),
+    0 22px 70px rgba(0,0,0,.34),
+    0 10px 30px rgba(0,0,0,.2);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  backdrop-filter: blur(40px) saturate(180%);
+}
+.spotlight-panel::before {
+  position: absolute;
+  z-index: 2;
+  top: 1px;
+  right: 12%;
+  left: 12%;
+  height: 1px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.36), transparent);
+  content: "";
+  pointer-events: none;
+}
+.spotlight-panel-glow { opacity: .28; }
+.spotlight-header { padding: 16px; border-bottom-color: rgba(255,255,255,.1); }
+.spotlight-search-shell {
+  height: 46px;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 12px;
+  background: rgba(255,255,255,.1);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.1);
+}
+.spotlight-search-icon-wrap { width: 30px; height: 30px; border-radius: 9px; background: rgba(255,255,255,.14); }
+.spotlight-quick-action,
+.spotlight-recent-pill,
+.spotlight-result {
+  border-color: rgba(255,255,255,.12);
+  border-radius: 14px;
+  background: rgba(255,255,255,.07);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+}
+.spotlight-top-hit { border-radius: 15px; background: linear-gradient(145deg, rgba(255,255,255,.17), rgba(98,153,224,.1)); }
+.spotlight-result { min-height: 52px; padding: 10px 12px; }
+.spotlight-result:hover,
+.spotlight-result.active { background: linear-gradient(145deg, rgba(255,255,255,.15), rgba(73,146,242,.16)); border-color: rgba(152,207,255,.3); }
+.content-topbar-title { font-weight: 600; letter-spacing: -.026em; }
+.content-dashboard-card,
+.content-health-card,
+.content-quick-toggle,
+.content-pinned-card,
+.content-recent-card,
+.content-launcher-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 18px;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,.12), rgba(255,255,255,.025) 48%, rgba(105,150,211,.055)),
+    rgba(255,255,255,.035);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 8px 26px rgba(0,0,0,.12);
+}
+.content-dashboard-card::before,
+.content-health-card::before,
+.content-pinned-card::before,
+.content-recent-card::before,
+.content-launcher-card::before {
+  position: absolute;
+  top: 0;
+  right: 16%;
+  left: 16%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.2), transparent);
+  content: "";
+  pointer-events: none;
+}
+
 .learning-category { min-width: 76px; padding: 3px 6px; border-radius: 999px; font-size: 10px; font-weight: 700; text-align: center; text-transform: uppercase; }
 .learning-category.success { color: #6ee7b7; background: rgba(16, 185, 129, 0.14); }
 .learning-category.failure { color: #fca5a5; background: rgba(239, 68, 68, 0.14); }
