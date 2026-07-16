@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Activity, Bot, GitCompareArrows, PanelRightOpen, Play, RefreshCw, Square, Workflow } from "lucide-react";
 import ContextInspectorRail from "../../components/inspector/ContextInspectorRail";
 import InlineApprovalCard from "../../components/approvals/InlineApprovalCard";
+import MissionCostAttribution from "../../components/economics/MissionCostAttribution";
 import RunComparison from "./RunComparison";
 import type {
   HccControlPlaneData,
@@ -15,6 +16,7 @@ function ControlPlane(): React.JSX.Element {
   const [data, setData] = useState<HccControlPlaneData | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [inspectorMissionId, setInspectorMissionId] = useState<string | null>(null);
+  const [compareRunIds, setCompareRunIds] = useState<[string, string] | null>(null);
   const [goal, setGoal] = useState("");
   const [parallel, setParallel] = useState(3);
   const [supervised, setSupervised] = useState(true);
@@ -149,6 +151,13 @@ function ControlPlane(): React.JSX.Element {
                   <div><dt>Project</dt><dd>{selected.kanban_board || "Not linked"}</dd></div>
                   <div><dt>Workers</dt><dd>{selected.workers.join(", ") || "None"}</dd></div>
                 </dl>
+                <MissionCostAttribution
+                  missionId={selected.id}
+                  onCompareRuns={(runIds) => {
+                    setCompareRunIds(runIds);
+                    setTab("compare");
+                  }}
+                />
                 <InlineApprovalCard missionId={selected.id} />
 
               </div>
@@ -161,7 +170,7 @@ function ControlPlane(): React.JSX.Element {
           <section><div className="control-section-title">Recent runs</div><div className="run-list">{runs.map((run) => <div key={run.id}><Activity size={15} /><span><strong>{run.task_title || run.id}</strong><small>{run.profile || "unassigned"}</small></span><em>{run.status || "unknown"}</em></div>)}{!runs.length && <div className="control-empty">No swarm runs.</div>}</div></section>
         </div>
       ) : (
-        <RunComparison />
+        <RunComparison initialRunIds={compareRunIds} />
       )}
 
       {inspectorMissionId && (

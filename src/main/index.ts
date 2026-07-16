@@ -88,6 +88,7 @@ import {
   fetchHccConductorJobs,
   fetchHccContextInspector,
   fetchHccInlineApprovals,
+  fetchHccMissionCostAttribution,
   fetchHccMissionEvidencePack,
   fetchHccRunComparison,
   fetchHccRuns,
@@ -550,6 +551,7 @@ function setupIPC(): void {
   ipcMain.handle("stop-hcc-conductor", (_event, taskId: string) => stopHccConductor(taskId));
   ipcMain.handle("get-hcc-mission-evidence-pack", (_event, jobId: string) => fetchHccMissionEvidencePack(jobId));
   ipcMain.handle("get-hcc-inline-approvals", (_event, jobId: string) => fetchHccInlineApprovals(jobId));
+  ipcMain.handle("get-hcc-mission-cost-attribution", (_event, jobId: string) => fetchHccMissionCostAttribution(jobId));
   ipcMain.handle("decide-hcc-inline-approval", (_event, jobId: string, approvalDomain: string, approvalId: string, decision: "approve" | "reject", actor?: string, note?: string) =>
     decideHccInlineApproval(jobId, approvalDomain, approvalId, decision, actor, note),
   );

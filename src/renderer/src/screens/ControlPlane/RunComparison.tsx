@@ -36,10 +36,14 @@ function deltaText(comparison: HccRunComparison, key?: string): string {
   return `${delta.value > 0 ? "+" : ""}${delta.value}`;
 }
 
-function RunComparison(): React.JSX.Element {
+interface RunComparisonProps {
+  initialRunIds?: [string, string] | null;
+}
+
+function RunComparison({ initialRunIds = null }: RunComparisonProps): React.JSX.Element {
   const [runs, setRuns] = useState<HccRunSummary[]>([]);
-  const [leftId, setLeftId] = useState("");
-  const [rightId, setRightId] = useState("");
+  const [leftId, setLeftId] = useState(initialRunIds?.[0] ?? "");
+  const [rightId, setRightId] = useState(initialRunIds?.[1] ?? "");
   const [comparison, setComparison] = useState<HccRunComparison | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

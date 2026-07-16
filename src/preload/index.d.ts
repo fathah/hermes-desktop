@@ -122,6 +122,7 @@ interface HermesAPI {
   stopHccConductor: (taskId: string) => Promise<unknown>;
   getHccMissionEvidencePack: (jobId: string) => Promise<unknown>;
   getHccInlineApprovals: (jobId: string) => Promise<unknown>;
+  getHccMissionCostAttribution: (jobId: string) => Promise<unknown>;
   decideHccInlineApproval: (jobId: string, approvalDomain: string, approvalId: string, decision: "approve" | "reject", actor?: string, note?: string) => Promise<unknown>;
   getHccContextInspector: (entityType: string, entityId: string) => Promise<unknown>;
   getHccRuns: () => Promise<unknown>;

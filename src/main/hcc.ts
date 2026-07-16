@@ -252,6 +252,10 @@ export async function fetchHccInlineApprovals(jobId: string): Promise<unknown> {
   return fetchJson(`/api/conductor/jobs/${encodeURIComponent(jobId)}/inline-approvals`);
 }
 
+export async function fetchHccMissionCostAttribution(jobId: string): Promise<unknown> {
+  return fetchJson(`/api/conductor/jobs/${encodeURIComponent(jobId)}/cost-attribution`);
+}
+
 export async function decideHccInlineApproval(
   jobId: string,
   approvalDomain: string,

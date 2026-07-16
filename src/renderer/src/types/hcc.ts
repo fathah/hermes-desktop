@@ -319,6 +319,69 @@ export interface HccInlineApprovals {
   provenance: { sourceRefs: Array<{ type: string; id: string }>; policy: string };
 }
 
+export interface HccMissionUsageMetric {
+  status: "recorded" | "not_recorded";
+  input: number | null;
+  output: number | null;
+  total: number | null;
+}
+
+export interface HccMissionCostMetric {
+  status: "recorded" | "not_recorded";
+  value: number | null;
+  currency: "USD";
+}
+
+export interface HccMissionCostBreakdown {
+  runCount: number;
+  tokens: HccMissionUsageMetric;
+  cost: HccMissionCostMetric;
+  verifiedOutcomeCount: number;
+  costPerVerifiedOutcome: HccMissionCostMetric & { denominator: number };
+}
+
+export interface HccMissionCostAttribution {
+  schemaVersion: "mission-cost-attribution-v1";
+  mission: { id: string; name: string; status: string; projectId?: string | null };
+  summary: {
+    linkedRunCount: number;
+    usageRecordedRunCount: number;
+    tokens: HccMissionUsageMetric;
+    cost: HccMissionCostMetric;
+    outcomeQuality: { status: "recorded" | "not_recorded"; average: number | null; recordedRunCount: number };
+    verifiedOutcomeCount: number;
+    costPerVerifiedOutcome: HccMissionCostMetric & { denominator: number };
+    evidence: { artifactCount: number; verificationStepCount: number };
+  };
+  breakdowns: {
+    runs: Array<{
+      runId: string;
+      title?: string;
+      status: string;
+      workerId?: string;
+      tokens?: HccMissionUsageMetric;
+      cost?: HccMissionCostMetric;
+      outcomeQuality?: { status: string; value: number | null };
+      evidence?: { artifactCount: number; verificationStepCount: number };
+      verifiedOutcome?: boolean;
+      reason?: string;
+    }>;
+    workers: Array<HccMissionCostBreakdown & { workerId: string }>;
+    models: Array<HccMissionCostBreakdown & { provider: string; model: string }>;
+  };
+  budget: {
+    status: "configured" | "not_configured";
+    state: "within" | "alert" | "exceeded" | "not_recorded" | "not_configured";
+    limitTokens?: number | null;
+    limitCost?: number | null;
+    alertThreshold?: number;
+    utilization?: number | null;
+    requiresApproval: boolean;
+    policy?: string;
+  };
+  provenance: { sourceRefs: Array<{ type: string; id: string }>; sources: string[]; runLinkPolicy: string; policy: string };
+}
+
 export interface HccRunSummary {
   id: string;
   title: string;
