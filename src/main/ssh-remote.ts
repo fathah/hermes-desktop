@@ -3343,6 +3343,7 @@ known = {
     "holographic": {"description": "memory.providers.holographic", "envVars": []},
     "openviking": {"description": "memory.providers.openviking", "envVars": ["OPENVIKING_ENDPOINT", "OPENVIKING_API_KEY"]},
     "byterover": {"description": "memory.providers.byterover", "envVars": ["BRV_API_KEY"]},
+    "graphnosis": {"description": "memory.providers.graphnosis", "envVars": []},
 }
 roots = [
     os.path.expanduser("~/.hermes/plugins/memory"),

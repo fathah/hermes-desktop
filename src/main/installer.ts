@@ -1385,6 +1385,10 @@ export function discoverMemoryProviders(
       description: "memory.providers.byterover",
       envVars: ["BRV_API_KEY"],
     },
+    graphnosis: {
+      description: "memory.providers.graphnosis",
+      envVars: [],
+    },
   };
 
   const results: MemoryProviderInfo[] = [];
