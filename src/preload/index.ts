@@ -232,6 +232,9 @@ const hermesAPI = {
     ipcRenderer.invoke("get-hcc-mission-evidence-pack", jobId),
   getHccContextInspector: (entityType: string, entityId: string): Promise<unknown> =>
     ipcRenderer.invoke("get-hcc-context-inspector", entityType, entityId),
+  getHccRuns: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-runs"),
+  getHccRunComparison: (leftRunId: string, rightRunId: string): Promise<unknown> =>
+    ipcRenderer.invoke("get-hcc-run-comparison", leftRunId, rightRunId),
   getHccSwarmOverview: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-swarm-overview"),
   createHccLearningTopic: (payload: Record<string, unknown>): Promise<unknown> =>
     ipcRenderer.invoke("create-hcc-learning-topic", payload),

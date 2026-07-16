@@ -87,6 +87,8 @@ import {
   fetchHccConductorJobs,
   fetchHccContextInspector,
   fetchHccMissionEvidencePack,
+  fetchHccRunComparison,
+  fetchHccRuns,
   fetchHccSwarmOverview,
   fetchHccDomainDetail,
   fetchHccDomains,
@@ -547,6 +549,10 @@ function setupIPC(): void {
   ipcMain.handle("get-hcc-mission-evidence-pack", (_event, jobId: string) => fetchHccMissionEvidencePack(jobId));
   ipcMain.handle("get-hcc-context-inspector", (_event, entityType: string, entityId: string) =>
     fetchHccContextInspector(entityType, entityId),
+  );
+  ipcMain.handle("get-hcc-runs", () => fetchHccRuns());
+  ipcMain.handle("get-hcc-run-comparison", (_event, leftRunId: string, rightRunId: string) =>
+    fetchHccRunComparison(leftRunId, rightRunId),
   );
   ipcMain.handle("get-hcc-swarm-overview", () => fetchHccSwarmOverview());
   ipcMain.handle("create-hcc-learning-topic", (_event, payload: Record<string, unknown>) =>

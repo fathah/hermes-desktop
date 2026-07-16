@@ -294,6 +294,50 @@ export interface HccContextInspector {
   provenance: { sourceRefs: Array<{ type: string; id: string }>; topicIds: string[]; policy: string };
 }
 
+export interface HccRunSummary {
+  id: string;
+  title: string;
+  status: string;
+  outcome?: string | null;
+  summary?: string;
+  project_id?: string | null;
+  worker_id?: string | null;
+  started_at?: string | null;
+  ended_at?: string | null;
+}
+
+export interface HccRecordedMetric {
+  status: "recorded" | "not_recorded";
+  value: number | null;
+  unit?: string;
+  currency?: string;
+}
+
+export interface HccRunComparisonSnapshot {
+  id: string;
+  title: string;
+  status: string;
+  outcome?: string | null;
+  projectId?: string | null;
+  workerId?: string | null;
+  metrics: {
+    duration: HccRecordedMetric;
+    tokens: { status: string; input: number | null; output: number | null; total: number | null };
+    cost: HccRecordedMetric;
+    retries: HccRecordedMetric;
+    outcomeQuality: HccRecordedMetric;
+    evidence: { status: string; artifactCount: number; verificationStepCount: number };
+    governanceInterventions: HccRecordedMetric;
+  };
+}
+
+export interface HccRunComparison {
+  schemaVersion: "run-comparison-v1";
+  runs: [HccRunComparisonSnapshot, HccRunComparisonSnapshot];
+  deltas: Record<string, { status: string; value: number | null }>;
+  provenance: { sourceRefs: Array<{ type: string; id: string }>; sources: string[]; policy: string };
+}
+
 export interface HccSwarmWorker {
   id: string;
   profile?: string;

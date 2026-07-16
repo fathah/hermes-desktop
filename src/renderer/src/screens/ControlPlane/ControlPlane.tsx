@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, Bot, PanelRightOpen, Play, RefreshCw, Square, Workflow } from "lucide-react";
+import { Activity, Bot, GitCompareArrows, PanelRightOpen, Play, RefreshCw, Square, Workflow } from "lucide-react";
 import ContextInspectorRail from "../../components/inspector/ContextInspectorRail";
+import RunComparison from "./RunComparison";
 import type {
   HccControlPlaneData,
   HccMission,
 } from "../../types/hcc";
 
-type ControlTab = "missions" | "swarm";
+type ControlTab = "missions" | "swarm" | "compare";
 
 function ControlPlane(): React.JSX.Element {
   const [tab, setTab] = useState<ControlTab>("missions");
@@ -107,6 +108,7 @@ function ControlPlane(): React.JSX.Element {
       <nav className="control-tabs" aria-label="Control Plane sections">
         <button className={tab === "missions" ? "active" : ""} onClick={() => setTab("missions")}><Workflow size={16} />Missions</button>
         <button className={tab === "swarm" ? "active" : ""} onClick={() => setTab("swarm")}><Bot size={16} />Swarm</button>
+        <button className={tab === "compare" ? "active" : ""} onClick={() => setTab("compare")}><GitCompareArrows size={16} />Compare</button>
       </nav>
 
       {error && <div className="control-error">{error}</div>}
@@ -151,11 +153,13 @@ function ControlPlane(): React.JSX.Element {
             ) : <div className="control-empty large">Select a mission or start a new one.</div>}
           </section>
         </div>
-      ) : (
+      ) : tab === "swarm" ? (
         <div className="control-swarm-layout">
           <section><div className="control-section-title">Workers</div><div className="worker-table"><div className="table-head"><span>Worker</span><span>Role</span><span>Status</span><span>Current task</span></div>{workers.map((worker) => <div key={worker.id}><strong>{worker.profile || worker.id}</strong><span>{worker.role || "worker"}</span><span className={`worker-status state-${worker.status || "unknown"}`}>{worker.status || "unknown"}</span><span>{worker.current_task_id || "—"}</span></div>)}</div></section>
           <section><div className="control-section-title">Recent runs</div><div className="run-list">{runs.map((run) => <div key={run.id}><Activity size={15} /><span><strong>{run.task_title || run.id}</strong><small>{run.profile || "unassigned"}</small></span><em>{run.status || "unknown"}</em></div>)}{!runs.length && <div className="control-empty">No swarm runs.</div>}</div></section>
         </div>
+      ) : (
+        <RunComparison />
       )}
 
       {inspectorMissionId && (

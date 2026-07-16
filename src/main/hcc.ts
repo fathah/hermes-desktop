@@ -253,6 +253,15 @@ export async function fetchHccContextInspector(entityType: string, entityId: str
   return fetchJson(`/api/hcc/context/inspect?${query.toString()}`);
 }
 
+export async function fetchHccRuns(): Promise<unknown> {
+  return fetchJson("/api/runs");
+}
+
+export async function fetchHccRunComparison(leftRunId: string, rightRunId: string): Promise<unknown> {
+  const query = new URLSearchParams({ leftRunId, rightRunId });
+  return fetchJson(`/api/runs/compare?${query.toString()}`);
+}
+
 export async function fetchHccSwarmOverview(): Promise<unknown> {
   const safeFetch = async (path: string, fallback: unknown): Promise<unknown> => {
     try {
