@@ -533,6 +533,8 @@ export interface HccGatewayCapability {
   health: "active" | "degraded" | "unavailable" | string;
   stale: boolean;
   missingManifest: boolean;
+  manifestStatus: "present" | "missing" | string;
+  capabilityStatus: "declared" | "undocumented" | string;
   platform: string | null;
   profiles: string[];
   capabilities: string[];
@@ -554,6 +556,7 @@ export interface HccGatewayCapabilityMap {
     running: number;
     degraded: number;
     unavailable: number;
+    missingManifests: number;
     staleDeclarations: number;
     capabilities: number;
     linkedApps: number;

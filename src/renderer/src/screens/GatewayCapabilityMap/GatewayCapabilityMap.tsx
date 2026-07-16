@@ -57,6 +57,7 @@ function GatewayCapabilityMap(): React.JSX.Element {
         <Summary value={data.summary.degraded} label="degraded" alert={data.summary.degraded > 0} />
         <Summary value={data.summary.capabilities} label="capabilities" />
         <Summary value={data.summary.linkedApps} label="app links" />
+        <Summary value={data.summary.missingManifests} label="missing manifests" alert={data.summary.missingManifests > 0} />
         <Summary value={data.summary.staleDeclarations} label="stale declarations" alert={data.summary.staleDeclarations > 0} />
       </section>
 
@@ -79,6 +80,7 @@ function GatewayCapabilityMap(): React.JSX.Element {
                 <strong>{gateway.displayName}</strong>
                 <span>{gateway.platform || "platform not recorded"} · {gateway.runtimeStatus}</span>
                 {gateway.degradedReason && <small>{gateway.degradedReason}</small>}
+                {!gateway.degradedReason && gateway.missingManifest && <small>Capability manifest missing</small>}
               </span>
               <span className={`gateway-health-label ${gateway.health}`}>{gateway.health}</span>
             </button>
@@ -114,6 +116,7 @@ function GatewayDetail({ gateway }: { gateway: HccGatewayCapability }): React.JS
       </header>
 
       {gateway.degradedReason && <div className="gateway-map-warning"><strong>Runtime evidence conflict</strong><span>{gateway.degradedReason}</span></div>}
+      {!gateway.degradedReason && gateway.missingManifest && <div className="gateway-map-warning"><strong>Capability documentation gap</strong><span>Runtime is active, but no capability manifest is declared.</span></div>}
 
       <div className="gateway-evidence-grid">
         <Evidence label="Process" value={gateway.evidence.pidAlive ? `PID ${gateway.evidence.pid}` : "not observed"} ok={gateway.evidence.pidAlive} />
