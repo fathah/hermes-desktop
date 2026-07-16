@@ -1,9 +1,32 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConnectionConfig } from "./config";
 
-const remoteDashboardRequestJson = vi.hoisted(() => vi.fn());
+const { remoteDashboardRequestJson, RemoteDashboardApiError } = vi.hoisted(
+  () => {
+    class TestRemoteDashboardApiError extends Error {
+      readonly unsupported: boolean;
 
-vi.mock("./remote-api", () => ({ remoteDashboardRequestJson }));
+      constructor(
+        message: string,
+        readonly statusCode?: number,
+      ) {
+        super(message);
+        this.name = "RemoteDashboardApiError";
+        this.unsupported = statusCode === 404;
+      }
+    }
+
+    return {
+      remoteDashboardRequestJson: vi.fn(),
+      RemoteDashboardApiError: TestRemoteDashboardApiError,
+    };
+  },
+);
+
+vi.mock("./remote-api", () => ({
+  remoteDashboardRequestJson,
+  RemoteDashboardApiError,
+}));
 
 import {
   REMOTE_SKILL_PREFIX,
@@ -58,11 +81,19 @@ describe("remote skills routing", () => {
     );
   });
 
-  it("returns empty list when remote is unreachable", async () => {
+  // @lat: [[remote-management#Test specifications#Feature compatibility failures]]
+  it("returns an empty list when the remote Agent lacks the skills API", async () => {
     remoteDashboardRequestJson.mockImplementationOnce(async () => {
-      throw new Error("ECONNREFUSED");
+      throw new RemoteDashboardApiError("Not found", 404);
     });
     await expect(remoteListInstalledSkills(connection)).resolves.toEqual([]);
+  });
+
+  it("surfaces network failures instead of reporting an empty skill list", async () => {
+    const error = new Error("ECONNREFUSED");
+    remoteDashboardRequestJson.mockRejectedValueOnce(error);
+
+    await expect(remoteListInstalledSkills(connection)).rejects.toBe(error);
   });
 
   it("fetches content using marker profile and encoded skill name", async () => {

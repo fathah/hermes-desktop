@@ -26,6 +26,7 @@ const connection = {
 beforeEach(() => remoteDashboardRequestJson.mockReset());
 
 describe("remote profiles routing", () => {
+  // @lat: [[remote-management#Test specifications#Feature adapter contracts]]
   it("maps Agent rows and server active profile", async () => {
     remoteDashboardRequestJson
       .mockResolvedValueOnce({

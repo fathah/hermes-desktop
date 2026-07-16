@@ -28,6 +28,7 @@ beforeEach(() => {
 });
 
 describe("remote metadata authentication", () => {
+  // @lat: [[remote-management#Test specifications#Authentication routing]]
   it("uses the cookie-aware boundary for direct OAuth", async () => {
     dashboardRequest.mockResolvedValue({
       version: "0.18.2",

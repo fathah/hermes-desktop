@@ -36,6 +36,8 @@ Missing or incompatible Agent endpoints fail within affected feature and never s
 
 OAuth authentication failures retain reauthentication semantics from [[remote-dashboard-oauth#Failure behavior]]. Network and server errors surface through existing feature error states.
 
+Feature adapters may degrade only a structured 404 unsupported response. For example, [[src/main/remote-skills.ts#remoteListInstalledSkills]] maps an absent Skills API to an empty feature state but rethrows authentication, network, and server failures.
+
 Remote status metadata uses [[src/main/remote-metadata.ts#remoteGetHermesHome]] through the same cookie-aware boundary, while SSH dashboard bridges retain token transport.
 
 ## Test specifications
@@ -53,3 +55,11 @@ Skills, Toolsets, Profiles, Gateway, and messaging tests verify endpoint, method
 ### Renderer feature gates
 
 Completed remote features render normally while unfinished features retain scoped notices and local-only controls remain unavailable.
+
+### Feature compatibility failures
+
+An older Agent's missing endpoint degrades only the affected feature, while authentication, network, and server failures remain actionable rather than appearing as empty data.
+
+### No local fallthrough
+
+Direct Remote IPC handlers return remote adapters before local implementations for Skills, Toolsets, Profiles, and Gateway state.

@@ -1,5 +1,8 @@
 import type { ConnectionConfig } from "./config";
-import { remoteDashboardRequestJson } from "./remote-api";
+import {
+  RemoteDashboardApiError,
+  remoteDashboardRequestJson,
+} from "./remote-api";
 import type { InstalledSkill, SkillCliResult } from "./skills";
 
 // Remote (HTTP) mode routing for the Skills screen. The skills IPC handlers
@@ -63,10 +66,13 @@ export async function remoteListInstalledSkills(
         description: s.description || "",
         path: remoteSkillPath(s.name as string, profile),
       }));
-  } catch {
-    // Unreachable remote — an empty list beats a renderer error toast here,
-    // matching sshListInstalledSkills' behavior.
-    return [];
+  } catch (error) {
+    // Older Agent versions may not expose this feature. Treat that scoped
+    // compatibility miss as unavailable, while preserving auth, network, and
+    // server failures so the renderer does not report false empty state.
+    if (error instanceof RemoteDashboardApiError && error.unsupported)
+      return [];
+    throw error;
   }
 }
 

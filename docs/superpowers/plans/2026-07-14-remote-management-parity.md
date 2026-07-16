@@ -111,8 +111,8 @@
 
 - Documents authenticated boundary, feature adapters, unsupported-version behavior, and no-local-fallback invariant.
 
-- [ ] Add negative IPC tests proving direct Remote mode does not call local Skills, Toolsets, Profiles, or Gateway implementations.
+- [x] Add negative IPC tests proving direct Remote mode does not call local Skills, Toolsets, Profiles, or Gateway implementations.
 - [x] Add lat.md architecture and test specifications with code references.
 - [x] Run focused tests and both typechecks.
 - [x] Run build, `lat check`, and `git diff --check`.
-- [ ] Run full suite; distinguish new failures from recorded baseline failures.
+- [x] Run full suite; distinguish new failures from recorded baseline failures.
