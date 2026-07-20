@@ -29,15 +29,13 @@ describe("Electron main process hardening", () => {
 
   it("keeps a production diagnostics path for renderer DevTools", () => {
     expect(mainSrc).toContain("HERMES_OPEN_DEVTOOLS");
-    expect(mainSrc).toContain("openDevTools({ mode: \"detach\" })");
+    expect(mainSrc).toContain('openDevTools({ mode: "detach" })');
     expect(menuSrc).toContain("Toggle Developer Tools");
     expect(menuSrc).toContain("toggleDevTools()");
   });
 
   it("loads the packaged renderer next to the bundled main output", () => {
-    expect(mainSrc).toContain(
-      'join(__dirname, "../renderer/index.html")',
-    );
+    expect(mainSrc).toContain('join(__dirname, "../renderer/index.html")');
     expect(mainSrc).not.toContain(
       'join(__dirname, "../../renderer/index.html")',
     );

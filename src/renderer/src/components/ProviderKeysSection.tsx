@@ -427,17 +427,20 @@ export function ProviderKeysSection({
     () => items.filter((f) => f.key !== CUSTOM_API_KEY_ENV),
     [items],
   );
-  const isSet = (k: string) => !!(env[k] && env[k].trim());
+  const isSet = useCallback(
+    (k: string): boolean => !!(env[k] && env[k].trim()),
+    [env],
+  );
   const configured = useMemo(
     () => keyItems.filter((f) => isSet(f.key)),
-    [keyItems, env],
+    [keyItems, isSet],
   );
   const available = useMemo(() => {
     const q = search.trim().toLowerCase();
     return keyItems.filter(
       (f) => !isSet(f.key) && (!q || t(f.label).toLowerCase().includes(q)),
     );
-  }, [keyItems, env, search, t]);
+  }, [keyItems, isSet, search, t]);
 
   // Load configured custom providers: the authoritative `providers.json` records
   // (so a keyed provider shows even with zero models), unioned with legacy
@@ -503,24 +506,27 @@ export function ProviderKeysSection({
     return list;
   }, [storedProviders, env]);
 
-  function openConfig(field: FieldDef) {
+  function openConfig(field: FieldDef): void {
     setPickerOpen(false);
     setEditing(field);
   }
 
-  function openCustom(name: string, baseUrl: string) {
+  function openCustom(name: string, baseUrl: string): void {
     setPickerOpen(false);
     setCustomEditing({ name, baseUrl });
   }
 
-  async function removeAndClose(field: FieldDef) {
+  async function removeAndClose(field: FieldDef): Promise<void> {
     await onRemove(field.key);
     setEditing(null);
   }
 
   // Remove a custom provider: delete its models (matched by label, or base URL
   // for legacy unlabeled ones), drop its identity record, then clear its key.
-  async function removeCustomAndClose(name: string, baseUrl: string) {
+  async function removeCustomAndClose(
+    name: string,
+    baseUrl: string,
+  ): Promise<void> {
     const all = (await window.hermesAPI.listModels()) as LibModel[];
     const target = normUrl(baseUrl);
     for (const m of all) {
@@ -772,7 +778,7 @@ export function ProviderKeysSection({
           const keyType = !visibleKeys.has(keyEnv) ? "password" : "text";
           // Persist the provider's identity (name + base URL) to providers.json
           // so its card survives even with no models added, then refresh + close.
-          const close = () => {
+          const close = (): void => {
             const finish = (): Promise<void> =>
               loadStored().then(() => setCustomEditing(null));
             if (ready) {

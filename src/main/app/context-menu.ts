@@ -32,7 +32,8 @@ export function showChatContextMenu(
     { type: "separator" },
     {
       label: "Copy entire chat (text)",
-      click: () => mainWindow?.webContents.send("context-menu-copy-chat", "text"),
+      click: () =>
+        mainWindow?.webContents.send("context-menu-copy-chat", "text"),
     },
     {
       label: "Copy entire chat (Markdown)",

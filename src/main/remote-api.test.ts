@@ -6,31 +6,31 @@ const {
   probeRemoteAuthMode,
   RemoteOAuthError,
 } = vi.hoisted(() => {
-    class TestRemoteOAuthError extends Error {
-      readonly needsOAuthLogin: boolean;
+  class TestRemoteOAuthError extends Error {
+    readonly needsOAuthLogin: boolean;
 
-      constructor(
-        message: string,
-        readonly code:
-          | "oauth_cancelled"
-          | "oauth_connection_changed"
-          | "oauth_login_required"
-          | "oauth_request_failed",
-        readonly statusCode?: number,
-      ) {
-        super(message);
-        this.name = "RemoteOAuthError";
-        this.needsOAuthLogin = code === "oauth_login_required";
-      }
+    constructor(
+      message: string,
+      readonly code:
+        | "oauth_cancelled"
+        | "oauth_connection_changed"
+        | "oauth_login_required"
+        | "oauth_request_failed",
+      readonly statusCode?: number,
+    ) {
+      super(message);
+      this.name = "RemoteOAuthError";
+      this.needsOAuthLogin = code === "oauth_login_required";
     }
+  }
 
-    return {
-      remoteRequestJson: vi.fn(),
-      requestRemoteOAuthJson: vi.fn(),
-      probeRemoteAuthMode: vi.fn(),
-      RemoteOAuthError: TestRemoteOAuthError,
-    };
-  });
+  return {
+    remoteRequestJson: vi.fn(),
+    requestRemoteOAuthJson: vi.fn(),
+    probeRemoteAuthMode: vi.fn(),
+    RemoteOAuthError: TestRemoteOAuthError,
+  };
+});
 
 vi.mock("./remote-sessions", () => ({
   dashboardApiUrl: (
