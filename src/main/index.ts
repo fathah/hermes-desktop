@@ -83,15 +83,20 @@ import {
   finalizeHccCloneLearning,
   linkHccCloneProject,
   recordHccCloneTaste,
+  recordHccRelationshipInteraction,
   recordHccDecisionOutcome,
   recordHccOpportunityOutcome,
   rollbackHccProjectGenome,
+  stageHccRelationshipFollowup,
   stageHccCapture,
   stageHccOpportunityIntervention,
   stageHccProjectGenomeProposal,
   createHccLearningTopic,
+  createHccRelationshipCommitment,
+  createHccRelationshipContact,
   createHccTimeBlock,
   cancelHccTimeBlock,
+  decideHccRelationshipFollowup,
   decideHccTradeoff,
   stageHccRecoveryAction,
   decideHccInlineApproval,
@@ -143,6 +148,7 @@ import {
   fetchHccProjects,
   fetchHccRegistryResource,
   fetchHccReality,
+  fetchHccRelationships,
   fetchHccReviewCenter,
   fetchHccGovernanceProposals,
   actOnHccGovernanceProposal,
@@ -154,6 +160,7 @@ import {
   stageHccIntervention,
   stopHccConductor,
   syncHccGraph,
+  transitionHccRelationshipCommitment,
   transitionHccProject,
   updateHccGraphEdge,
   updateHccOperatingProfile,
@@ -588,6 +595,13 @@ function setupIPC(): void {
   ipcMain.handle("stage-hcc-intervention", (_event, interventionId: string, actor?: string) =>
     stageHccIntervention(interventionId, actor),
   );
+  ipcMain.handle("get-hcc-relationships", () => fetchHccRelationships());
+  ipcMain.handle("create-hcc-relationship-contact", (_event, payload: Record<string, unknown>) => createHccRelationshipContact(payload));
+  ipcMain.handle("record-hcc-relationship-interaction", (_event, contactId: string, payload: Record<string, unknown>) => recordHccRelationshipInteraction(contactId, payload));
+  ipcMain.handle("create-hcc-relationship-commitment", (_event, contactId: string, payload: Record<string, unknown>) => createHccRelationshipCommitment(contactId, payload));
+  ipcMain.handle("transition-hcc-relationship-commitment", (_event, commitmentId: string, status: string, evidence: Array<Record<string, unknown>>) => transitionHccRelationshipCommitment(commitmentId, status, evidence));
+  ipcMain.handle("stage-hcc-relationship-followup", (_event, contactId: string, payload: Record<string, unknown>) => stageHccRelationshipFollowup(contactId, payload));
+  ipcMain.handle("decide-hcc-relationship-followup", (_event, followupId: string, decision: "approve" | "reject", note?: string) => decideHccRelationshipFollowup(followupId, decision, note));
   ipcMain.handle("get-hcc-decisions", () => fetchHccDecisions());
   ipcMain.handle("create-hcc-decision", (_event, payload: Record<string, unknown>) => createHccDecision(payload));
   ipcMain.handle("evaluate-hcc-decision", (_event, decisionId: string) => evaluateHccDecision(decisionId));

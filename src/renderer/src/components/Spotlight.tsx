@@ -149,6 +149,7 @@ function Spotlight({
       ["learning-engine", "Open Learning Engine", "Track learning loops and progression", "HCC Workspace"],
       ["capture-inbox", "Open Capture Inbox", "Capture, classify, and govern routing into canonical HCC objects", "HCC Workspace"],
       ["decision-center", "Open Decision Center", "Evaluate options against evidence, values, and hard constraints", "HCC Workspace"],
+      ["relationship-center", "Open Relationship Center", "Manage private contacts, commitments, evidence, and governed follow-up", "HCC Workspace"],
       ["chat", "Open Chat", "Jump into the active conversation workspace", "Workspace"],
       ["sessions", "Open Sessions", "Browse and resume session history", "Workspace"],
       ["agents", "Open Agents", "Switch or manage Hermes profiles", "Profiles"],

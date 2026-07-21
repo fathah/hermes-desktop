@@ -220,6 +220,13 @@ const hermesAPI = {
     ipcRenderer.invoke("stage-hcc-recovery-action", actionId),
   stageHccIntervention: (interventionId: string, actor?: string): Promise<unknown> =>
     ipcRenderer.invoke("stage-hcc-intervention", interventionId, actor),
+  getHccRelationships: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-relationships"),
+  createHccRelationshipContact: (payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("create-hcc-relationship-contact", payload),
+  recordHccRelationshipInteraction: (contactId: string, payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("record-hcc-relationship-interaction", contactId, payload),
+  createHccRelationshipCommitment: (contactId: string, payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("create-hcc-relationship-commitment", contactId, payload),
+  transitionHccRelationshipCommitment: (commitmentId: string, status: string, evidence: Array<Record<string, unknown>>): Promise<unknown> => ipcRenderer.invoke("transition-hcc-relationship-commitment", commitmentId, status, evidence),
+  stageHccRelationshipFollowup: (contactId: string, payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("stage-hcc-relationship-followup", contactId, payload),
+  decideHccRelationshipFollowup: (followupId: string, decision: "approve" | "reject", note?: string): Promise<unknown> => ipcRenderer.invoke("decide-hcc-relationship-followup", followupId, decision, note),
   getHccDecisions: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-decisions"),
   createHccDecision: (payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("create-hcc-decision", payload),
   evaluateHccDecision: (decisionId: string): Promise<unknown> => ipcRenderer.invoke("evaluate-hcc-decision", decisionId),

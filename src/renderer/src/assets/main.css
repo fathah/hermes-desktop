@@ -2537,6 +2537,24 @@ textarea.war-room-input {
   font-size: 12px;
 }
 
+.relationship-center-screen { display: grid; gap: 18px; }
+.relationship-contact-create { display: grid; grid-template-columns: 1.2fr 1fr .7fr .5fr auto; gap: 9px; align-items: end; }
+.relationship-contact-create .war-room-panel-title { grid-column: 1/-1; }
+.relationship-primary { border-color: rgba(52,211,153,.38); color: #d1fae5; background: rgba(5,150,105,.14); }
+.relationship-workspace { display: grid; grid-template-columns: minmax(220px,.65fr) minmax(0,2fr); gap: 14px; align-items: start; }
+.relationship-contact-list, .relationship-detail { display: grid; gap: 10px; }
+.relationship-contact-card { display: grid; grid-template-columns: 1fr auto; text-align: left; gap: 4px 10px; padding: 12px; border: 1px solid rgba(148,163,184,.16); border-radius: 12px; background: rgba(15,23,42,.4); color: #e2e8f0; }
+.relationship-contact-card.active { border-color: rgba(52,211,153,.4); background: rgba(6,78,59,.2); }
+.relationship-contact-card span { color: #94a3b8; font-size: 11px; }.relationship-contact-card b { grid-row: 1/3; grid-column: 2; align-self: center; color: #6ee7b7; }
+.relationship-identity, .relationship-followup { display: grid; gap: 12px; }
+.relationship-health-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap: 8px; }
+.relationship-health-grid > div { display: grid; gap: 4px; padding: 10px; border: 1px solid rgba(148,163,184,.14); border-radius: 10px; }.relationship-health-grid b { color: #6ee7b7; }.relationship-health-grid span { color: #94a3b8; font-size: 10px; }
+.relationship-action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }.relationship-action-grid > div { display: grid; gap: 9px; align-content: start; }
+.relationship-ledger-row, .relationship-followup-row { display: flex; justify-content: space-between; gap: 9px; align-items: center; padding: 9px; border: 1px solid rgba(148,163,184,.13); border-radius: 9px; }.relationship-ledger-row button, .relationship-followup-row button { color: #d1fae5; }
+.relationship-followup-row > div:first-child { display: grid; gap: 3px; }.relationship-followup-row span { color: #94a3b8; font-size: 10px; }
+.relationship-timeline-row { display: grid; grid-template-columns: .7fr .45fr 2fr; gap: 8px; padding: 8px 0; border-bottom: 1px solid rgba(148,163,184,.1); font-size: 11px; }.relationship-timeline-row code { overflow-wrap: anywhere; color: #94a3b8; }
+@media (max-width: 1000px) { .relationship-contact-create { grid-template-columns: 1fr 1fr; }.relationship-contact-create .war-room-panel-title { grid-column: 1/-1; }.relationship-workspace,.relationship-action-grid { grid-template-columns: 1fr; } }
+
 .decision-center-screen { display: grid; gap: 18px; }
 .decision-composer { display: grid; gap: 10px; border-color: rgba(244, 114, 182, .24); }
 .decision-composer textarea { min-height: 82px; resize: vertical; }

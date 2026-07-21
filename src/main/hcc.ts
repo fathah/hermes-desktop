@@ -195,6 +195,14 @@ export async function stageHccRecoveryAction(actionId: string): Promise<unknown>
   });
 }
 
+export async function fetchHccRelationships(): Promise<unknown> { return fetchJson("/api/hcc/relationships"); }
+export async function createHccRelationshipContact(payload: Record<string, unknown>): Promise<unknown> { return fetchJson("/api/hcc/relationships/contacts", { method: "POST", body: JSON.stringify({ actor: "hermes-desktop", ...payload }) }); }
+export async function recordHccRelationshipInteraction(contactId: string, payload: Record<string, unknown>): Promise<unknown> { return fetchJson(`/api/hcc/relationships/contacts/${encodeURIComponent(contactId)}/interactions`, { method: "POST", body: JSON.stringify({ actor: "hermes-desktop", ...payload }) }); }
+export async function createHccRelationshipCommitment(contactId: string, payload: Record<string, unknown>): Promise<unknown> { return fetchJson(`/api/hcc/relationships/contacts/${encodeURIComponent(contactId)}/commitments`, { method: "POST", body: JSON.stringify({ actor: "hermes-desktop", ...payload }) }); }
+export async function transitionHccRelationshipCommitment(commitmentId: string, status: string, evidence: Array<Record<string, unknown>>): Promise<unknown> { return fetchJson(`/api/hcc/relationships/commitments/${encodeURIComponent(commitmentId)}/transition`, { method: "POST", body: JSON.stringify({ actor: "hermes-desktop", status, evidence }) }); }
+export async function stageHccRelationshipFollowup(contactId: string, payload: Record<string, unknown>): Promise<unknown> { return fetchJson(`/api/hcc/relationships/contacts/${encodeURIComponent(contactId)}/followups`, { method: "POST", body: JSON.stringify({ actor: "hermes-desktop", ...payload }) }); }
+export async function decideHccRelationshipFollowup(followupId: string, decision: "approve" | "reject", note = ""): Promise<unknown> { return fetchJson(`/api/hcc/relationships/followups/${encodeURIComponent(followupId)}/${decision}`, { method: "POST", body: JSON.stringify({ actor: "hermes-desktop", note }) }); }
+
 export async function fetchHccDecisions(): Promise<unknown> { return fetchJson("/api/hcc/decisions"); }
 export async function createHccDecision(payload: Record<string, unknown>): Promise<unknown> { return fetchJson("/api/hcc/decisions", { method: "POST", body: JSON.stringify({ actor: "hermes-desktop", ...payload }) }); }
 export async function evaluateHccDecision(decisionId: string): Promise<unknown> { return fetchJson(`/api/hcc/decisions/${encodeURIComponent(decisionId)}/evaluate`, { method: "POST", body: JSON.stringify({ actor: "hermes-desktop" }) }); }

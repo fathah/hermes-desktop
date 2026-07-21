@@ -61,6 +61,7 @@ type View =
   | "execution-center"
   | "capture-inbox"
   | "decision-center"
+  | "relationship-center"
   | "chat"
   | "sessions"
   | "agents"
@@ -213,6 +214,7 @@ const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; label?: strin
   { view: "execution-center", icon: Wrench, labelKey: "navigation.tools", label: "Executions", eyebrow: "Approvals" },
   { view: "capture-inbox", icon: Download, labelKey: "navigation.chat", label: "Capture", eyebrow: "Ingress" },
   { view: "decision-center", icon: Sparkles, labelKey: "navigation.office", label: "Decisions", eyebrow: "Alignment" },
+  { view: "relationship-center", icon: Users, labelKey: "navigation.agents", label: "Relationships", eyebrow: "Care" },
   { view: "gateway-map", icon: Signal, labelKey: "navigation.gateway", label: "Gateway Map", eyebrow: "Fabric" },
   { view: "opportunity-radar", icon: Sparkles, labelKey: "navigation.office", label: "Opportunities", eyebrow: "Leverage" },
   { view: "learning-engine", icon: Brain, labelKey: "navigation.memory", label: "Learning", eyebrow: "Progression" },
@@ -256,6 +258,7 @@ const HCC_WORKSPACE_VIEWS = new Set<View>([
   "execution-center",
   "capture-inbox",
   "decision-center",
+  "relationship-center",
 ]);
 
 function readStoredView(): View {
