@@ -616,10 +616,10 @@ export const FONT_OPTIONS: FontOption[] = [
       '"Cairo", "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   },
   {
-    value: "system",
-    label: "settings.font.system",
+    value: "gsans",
+    label: "settings.font.gsans",
     stack:
-      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, Cantarell, "Helvetica Neue", sans-serif',
+      '"Google Sans", "Google Sans Text", "Product Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, Cantarell, "Helvetica Neue", sans-serif',
   },
 ];
 

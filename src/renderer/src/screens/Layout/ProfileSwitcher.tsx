@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { ChevronDown, Settings } from "../../assets/icons";
+import { useState, useEffect, useCallback } from "react";
+import { Settings, Users, Check } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
 import ProfileAvatar from "../../components/common/ProfileAvatar";
 import { useProfileModal } from "../../components/profile/ProfileModalContext";
@@ -28,8 +28,10 @@ interface ProfileSwitcherProps {
 }
 
 /**
- * Sidebar footer control: shows the active profile and, on click, opens a
- * popover to switch between profiles or jump to the management screen.
+ * Sidebar-footer profile control, split into two affordances: the chip (avatar
+ * + name) opens the current profile's edit modal, and a dedicated switch button
+ * opens a modal to change the active profile. Collapsed, the single avatar opens
+ * the switch modal.
  */
 export default function ProfileSwitcher({
   activeProfile,
@@ -39,9 +41,8 @@ export default function ProfileSwitcher({
 }: ProfileSwitcherProps): React.JSX.Element {
   const { t } = useI18n();
   const { openProfile } = useProfileModal();
-  const [open, setOpen] = useState(false);
+  const [switchOpen, setSwitchOpen] = useState(false);
   const [profiles, setProfiles] = useState<ProfileInfo[]>([]);
-  const rootRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(() => {
     window.hermesAPI
@@ -52,36 +53,25 @@ export default function ProfileSwitcher({
       });
   }, []);
 
-  // Load once on mount so the sidebar trigger shows the correct gateway
-  // status immediately, without requiring the user to open the menu first.
+  // Load once on mount so the chip shows the correct name/avatar immediately.
   useEffect(() => {
     load();
   }, [load]);
 
-  // Refresh the list each time the menu opens — model/skill counts and the
-  // gateway-running dot can change while the app is open.
+  // Refresh when the switch modal opens — counts and the gateway dot drift.
   useEffect(() => {
-    if (open) load();
-  }, [open, load]);
+    if (switchOpen) load();
+  }, [switchOpen, load]);
 
-  // Dismiss on outside click or Escape.
+  // Escape closes the switch modal.
   useEffect(() => {
-    if (!open) return;
-    function onPointerDown(e: MouseEvent): void {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
+    if (!switchOpen) return;
     function onKey(e: KeyboardEvent): void {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") setSwitchOpen(false);
     }
-    document.addEventListener("mousedown", onPointerDown);
     document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [switchOpen]);
 
   const activeInfo = profiles.find((p) => p.id === activeProfile);
   const hasDefaultFallbackName =
@@ -93,8 +83,12 @@ export default function ProfileSwitcher({
         ? t("common.appName")
         : activeProfile;
 
+  function editCurrent(): void {
+    openProfile(activeProfile, { onChanged: load });
+  }
+
   async function handleSelect(name: string): Promise<void> {
-    setOpen(false);
+    setSwitchOpen(false);
     if (name === activeProfile) return;
     try {
       await window.hermesAPI.setActiveProfile(name);
@@ -105,146 +99,114 @@ export default function ProfileSwitcher({
   }
 
   return (
-    <div
-      className={`profile-switcher ${compact ? "compact" : ""}`}
-      ref={rootRef}
-    >
-      {open && (
-        <div className="profile-menu" role="menu">
-          {(() => {
-            const active = profiles.find((p) => p.id === activeProfile);
-            const others = profiles.filter((p) => p.id !== activeProfile);
-            return (
-              <>
-                {active && (
+    <>
+      <div className={`profile-switcher ${compact ? "compact" : ""}`}>
+        <button
+          className="profile-switcher-trigger"
+          onClick={compact ? () => setSwitchOpen(true) : editCurrent}
+          title={
+            compact
+              ? t("agents.switchProfile")
+              : t("agents.editAppearanceFor", { name: label })
+          }
+        >
+          <ProfileAvatar
+            name={activeProfile}
+            color={activeInfo?.color}
+            avatar={activeInfo?.avatar}
+            size={compact ? 22 : 18}
+          />
+          {!compact && <span className="profile-switcher-name">{label}</span>}
+        </button>
+        {!compact && (
+          <button
+            className="profile-switch-btn"
+            onClick={() => setSwitchOpen(true)}
+            title={t("agents.switchProfile")}
+            aria-label={t("agents.switchProfile")}
+          >
+            <Users size={16} />
+          </button>
+        )}
+      </div>
+
+      {switchOpen && (
+        <div
+          className="profile-switch-overlay"
+          onClick={() => setSwitchOpen(false)}
+        >
+          <div
+            className="profile-switch-modal"
+            role="dialog"
+            aria-label={t("agents.switchProfile")}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="profile-switch-title">
+              {t("agents.switchProfile")}
+            </div>
+            <div className="profile-switch-list">
+              {profiles.map((p) => {
+                const isActive = p.id === activeProfile;
+                return (
                   <button
-                    type="button"
-                    className="profile-menu-active-section"
-                    role="menuitem"
-                    title={t("agents.editAppearanceFor", {
-                      name: active.name,
-                    })}
-                    onClick={() => {
-                      setOpen(false);
-                      openProfile(active.id, { onChanged: load });
-                    }}
+                    key={p.id}
+                    className={`profile-menu-item ${isActive ? "active" : ""}`}
+                    role="menuitemradio"
+                    aria-checked={isActive}
+                    onClick={() => handleSelect(p.id)}
                   >
                     <div className="profile-menu-avatar">
                       <ProfileAvatar
-                        name={active.id}
-                        color={active.color}
-                        avatar={active.avatar}
-                        size={32}
+                        name={p.id}
+                        color={p.color}
+                        avatar={p.avatar}
+                        size={28}
                       />
-                      {active.gatewayRunning && (
-                        <span className="profile-menu-avatar-dot" />
-                      )}
                     </div>
                     <span className="profile-menu-info">
                       <span className="profile-menu-name">
-                        {active.name}
-                        {active.isDefault && (
+                        {p.name}
+                        {p.isDefault && (
                           <span className="profile-menu-tag">
                             {t("agents.defaultTag")}
                           </span>
                         )}
-                        {active.id !== active.name && (
-                          <span className="profile-menu-tag">{active.id}</span>
+                        {p.id !== p.name && (
+                          <span className="profile-menu-tag">{p.id}</span>
                         )}
+                        <span
+                          className={`profile-menu-gateway ${
+                            p.gatewayRunning ? "active" : ""
+                          }`}
+                        />
                       </span>
                       <span className="profile-menu-meta">
                         {[
-                          active.model || t("agents.noModel"),
-                          t("agents.skillsCount", { count: active.skillCount }),
+                          p.model || t("agents.noModel"),
+                          t("agents.skillsCount", { count: p.skillCount }),
                         ].join(" · ")}
                       </span>
                     </span>
+                    {isActive && (
+                      <Check size={16} className="profile-menu-check" />
+                    )}
                   </button>
-                )}
-                {others.length > 0 && (
-                  <>
-                    <div className="profile-menu-divider" />
-                    <div className="profile-menu-list">
-                      {others.map((p) => (
-                        <button
-                          key={p.id}
-                          className="profile-menu-item"
-                          role="menuitemradio"
-                          aria-checked={false}
-                          onClick={() => handleSelect(p.id)}
-                        >
-                          <ProfileAvatar
-                            name={p.id}
-                            color={p.color}
-                            avatar={p.avatar}
-                            size={20}
-                          />
-                          <span className="profile-menu-info">
-                            <span className="profile-menu-name">
-                              {p.name}
-                              {p.isDefault && (
-                                <span className="profile-menu-tag">
-                                  {t("agents.defaultTag")}
-                                </span>
-                              )}
-                              {p.id !== p.name && (
-                                <span className="profile-menu-tag">{p.id}</span>
-                              )}
-                              <span
-                                className={`profile-menu-gateway ${
-                                  p.gatewayRunning ? "active" : ""
-                                }`}
-                              />
-                            </span>
-                            <span className="profile-menu-meta">
-                              {[
-                                p.model || t("agents.noModel"),
-                                t("agents.skillsCount", {
-                                  count: p.skillCount,
-                                }),
-                              ].join(" · ")}
-                            </span>
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </>
-            );
-          })()}
-          <button
-            className="profile-menu-manage"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              onManage();
-            }}
-          >
-            <Settings size={14} />
-            {t("agents.manageProfiles")}
-          </button>
+                );
+              })}
+            </div>
+            <button
+              className="profile-menu-manage"
+              onClick={() => {
+                setSwitchOpen(false);
+                onManage();
+              }}
+            >
+              <Settings size={14} />
+              {t("agents.manageProfiles")}
+            </button>
+          </div>
         </div>
       )}
-
-      <button
-        className={`profile-switcher-trigger ${open ? "open" : ""}`}
-        onClick={() => setOpen((o) => !o)}
-        title={`${t("agents.switchProfile")}: ${label}`}
-        aria-haspopup="menu"
-        aria-expanded={open}
-      >
-        <ProfileAvatar
-          name={activeProfile}
-          color={activeInfo?.color}
-          avatar={activeInfo?.avatar}
-          size={compact ? 22 : 18}
-        />
-        {!compact && <span className="profile-switcher-name">{label}</span>}
-        {!compact && (
-          <ChevronDown size={14} className="profile-switcher-chevron" />
-        )}
-      </button>
-    </div>
+    </>
   );
 }

@@ -55,6 +55,10 @@ export default {
   showroomCardColor: "لون الطلاء",
   showroomCardHint: "تجوّل في المعرض — شراء السيارات لوكلائك قادم قريبًا.",
   // Space representatives (bank teller interaction menu)
+  walkMode: "التجول",
+  walkModeExit: "إنهاء التجول (Esc)",
+  walkHint: "WASD / الأسهم للتحرك · Shift للركض · Esc للخروج",
+  you: "أنت",
   repBankTeller: "موظف البنك",
   spaceBank: "البنك",
   repPanelAgentLabel: "الوكيل",
@@ -67,11 +71,13 @@ export default {
   repLoading: "جارٍ العمل…",
   repErrorGeneric: "حدث خطأ ما. حاول مرة أخرى.",
   repStatusSignedOut: "سجّل الدخول إلى حساب Hermes لاستخدام البنك.",
-  repStatusUnlinked: "هذا الوكيل غير مرتبط بوكيل سحابي بعد. سجّل الدخول وحاول مرة أخرى.",
+  repStatusUnlinked:
+    "هذا الوكيل غير مرتبط بوكيل سحابي بعد. سجّل الدخول وحاول مرة أخرى.",
   repWalletsNone: "لا توجد حسابات بعد — أنشئ حساباً للبدء.",
   repBadgeTransactable: "قابل للتحويل",
   repBadgeReceiveOnly: "استقبال فقط",
-  repBalanceNoTransactable: "لا يملك هذا الوكيل حساباً قابلاً للتحويل بعد — أنشئ حساباً أولاً.",
+  repBalanceNoTransactable:
+    "لا يملك هذا الوكيل حساباً قابلاً للتحويل بعد — أنشئ حساباً أولاً.",
   repBalanceEmpty: "لا توجد أرصدة رموز بعد.",
   repBalanceTotal: "الإجمالي",
   repCreateSuccess: "تم إنشاء الحساب",

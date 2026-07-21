@@ -6,22 +6,26 @@ interface MenuDeps {
   openExternalUrl: (rawUrl: unknown) => void;
 }
 
-export function buildMenu({
-  getMainWindow,
-  openExternalUrl,
-}: MenuDeps): void {
+export function buildMenu({ getMainWindow, openExternalUrl }: MenuDeps): void {
   const isMac = process.platform === "darwin";
   const template = [
     ...(isMac
-      ? [{
-          label: app.name,
-          submenu: [
-            { role: "about" }, { type: "separator" },
-            { role: "services" }, { type: "separator" },
-            { role: "hide" }, { role: "hideOthers" }, { role: "unhide" },
-            { type: "separator" }, { role: "quit" },
-          ],
-        }]
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              { role: "about" },
+              { type: "separator" },
+              { role: "services" },
+              { type: "separator" },
+              { role: "hide" },
+              { role: "hideOthers" },
+              { role: "unhide" },
+              { type: "separator" },
+              { role: "quit" },
+            ],
+          },
+        ]
       : []),
     {
       label: "Chat",
@@ -43,16 +47,23 @@ export function buildMenu({
     {
       label: "Edit",
       submenu: [
-        { role: "undo" }, { role: "redo" }, { type: "separator" },
-        { role: "cut" }, { role: "copy" }, { role: "paste" },
+        { role: "undo" },
+        { role: "redo" },
+        { type: "separator" },
+        { role: "cut" },
+        { role: "copy" },
+        { role: "paste" },
         { role: "selectAll" },
       ],
     },
     {
       label: "View",
       submenu: [
-        { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" },
-        { type: "separator" }, { role: "togglefullscreen" },
+        { role: "resetZoom" },
+        { role: "zoomIn" },
+        { role: "zoomOut" },
+        { type: "separator" },
+        { role: "togglefullscreen" },
         ...(is.dev
           ? [
               { type: "separator" as const },
@@ -65,7 +76,8 @@ export function buildMenu({
     {
       label: "Window",
       submenu: [
-        { role: "minimize" }, { role: "zoom" },
+        { role: "minimize" },
+        { role: "zoom" },
         ...(isMac
           ? [{ type: "separator" as const }, { role: "front" as const }]
           : [{ role: "close" as const }]),

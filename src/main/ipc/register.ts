@@ -5,6 +5,7 @@ import {
   ipcMain,
   Menu,
   Notification,
+  nativeTheme,
   dialog,
   clipboard,
 } from "electron";
@@ -78,6 +79,7 @@ import {
 } from "../hermes-agent-compat";
 import {
   addMcpServer,
+  updateMcpServer,
   installMcpCatalogEntry,
   listMcpCatalog,
   listMcpServers,
@@ -1715,6 +1717,18 @@ export function registerIpcHandlers(context: IpcContext): void {
     return isGatewayRunning();
   });
 
+  // Keep the native window appearance in step with the app's theme so the
+  // macOS sidebar vibrancy material is dark under a dark theme (and light under
+  // a light one) instead of following the system appearance — which is what
+  // made a dark theme on a light-mode Mac render a milky sidebar. "system" is
+  // passed through for the "System" theme so its `prefers-color-scheme` still
+  // tracks the OS. See the renderer's ThemeProvider.
+  ipcMain.handle("set-native-appearance", (_event, source: unknown) => {
+    if (source === "dark" || source === "light" || source === "system") {
+      nativeTheme.themeSource = source;
+    }
+  });
+
   // Dashboard/WebSocket transport probe. This is intentionally separate from
   // the current chat path while we validate the ordered event stream.
   ipcMain.handle("dashboard-status", (_event, profile?: string) =>
@@ -2910,6 +2924,11 @@ export function registerIpcHandlers(context: IpcContext): void {
     "add-mcp-server",
     (_event, input: McpServerInput, profile?: string) =>
       addMcpServer(input, profile),
+  );
+  ipcMain.handle(
+    "update-mcp-server",
+    (_event, originalName: string, input: McpServerInput, profile?: string) =>
+      updateMcpServer(originalName, input, profile),
   );
   ipcMain.handle(
     "remove-mcp-server",

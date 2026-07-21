@@ -314,8 +314,8 @@ export default function ProfileModal({
       overlayClassName="profile-modal-overlay"
       labelledBy="profile-modal-title"
     >
-      <div className="profile-modal-header">
-        <div className="profile-modal-header-main">
+      <aside className="profile-modal-sidebar">
+        <div className="profile-modal-sidebar-head">
           {profile && (
             <ProfileAvatar
               name={profile.id}
@@ -331,18 +331,7 @@ export default function ProfileModal({
             {agentName}
           </AppModalTitle>
         </div>
-        <button
-          type="button"
-          className="profile-modal-close"
-          onClick={onClose}
-          aria-label={t("common.cancel")}
-        >
-          <X size={18} />
-        </button>
-      </div>
-
-      {profile ? (
-        <div className="profile-modal-layout">
+        {profile && (
           <nav className="profile-modal-nav" aria-label={t("agents.title")}>
             {PROFILE_SECTIONS.map((s) => (
               <button
@@ -358,7 +347,22 @@ export default function ProfileModal({
               </button>
             ))}
           </nav>
+        )}
+      </aside>
 
+      <div className="profile-modal-main">
+        <div className="profile-modal-topbar">
+          <button
+            type="button"
+            className="profile-modal-close"
+            onClick={onClose}
+            aria-label={t("common.cancel")}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {profile ? (
           <div className="profile-modal-content">
             {section === "profile" && (
               <div className="profile-modal-pane">
@@ -565,17 +569,17 @@ export default function ProfileModal({
               </div>
             )}
           </div>
-        </div>
-      ) : (
-        <div className="profile-modal-loading">
-          <div className="loading-spinner" />
-        </div>
-      )}
+        ) : (
+          <div className="profile-modal-loading">
+            <div className="loading-spinner" />
+          </div>
+        )}
 
-      <div className="profile-modal-footer">
-        <button className="btn btn-primary btn-sm" onClick={onClose}>
-          {t("common.done")}
-        </button>
+        <div className="profile-modal-footer">
+          <button className="btn btn-primary btn-sm" onClick={onClose}>
+            {t("common.done")}
+          </button>
+        </div>
       </div>
 
       <input

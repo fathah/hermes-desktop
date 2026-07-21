@@ -300,7 +300,9 @@ describe("selectSshProfiles", () => {
     // live state (correct HERMES_HOME, real gateway status), not the stale scan.
     const launcher = {
       present: true,
-      profiles: [profile("default", { gatewayRunning: true, model: "gpt-5.5" })],
+      profiles: [
+        profile("default", { gatewayRunning: true, model: "gpt-5.5" }),
+      ],
     };
     const scanned = [profile("default", { gatewayRunning: false })];
 

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, session, shell } from "electron";
+import { app, BrowserWindow, nativeTheme, session, shell } from "electron";
 import { join } from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import icon from "../../../resources/icon.png?asset";
@@ -71,23 +71,37 @@ export function startMainProcess(): void {
     });
 
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-      callback({
-        responseHeaders: {
-          ...details.responseHeaders,
-          "Content-Security-Policy": [
-            "default-src 'self'; " +
-              "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; " +
-              "style-src 'self' 'unsafe-inline'; " +
-              "img-src 'self' data: blob: file: https:; " +
-              "media-src 'self' data: blob: file: https:; " +
-              "connect-src 'self' blob: http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:* https: wss:; " +
-              "font-src 'self' data:; " +
-              "frame-src 'self' https: http://127.0.0.1:* http://localhost:*; " +
-              "object-src 'none'; " +
-              "base-uri 'self';",
-          ],
-        },
-      });
+      const responseHeaders: Record<string, string[]> = {
+        ...details.responseHeaders,
+        "Content-Security-Policy": [
+          "default-src 'self'; " +
+            "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; " +
+            "style-src 'self' 'unsafe-inline'; " +
+            "img-src 'self' data: blob: file: https:; " +
+            "media-src 'self' data: blob: file: https:; " +
+            "connect-src 'self' blob: http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:* https: wss:; " +
+            "font-src 'self' data:; " +
+            "frame-src 'self' https: http://127.0.0.1:* http://localhost:*; " +
+            "object-src 'none'; " +
+            "base-uri 'self';",
+        ],
+      };
+      // Registry MCP icons are immutable, content-addressed SVGs. Rewrite their
+      // Cache-Control to a year (immutable ⇒ no revalidation) so each is fetched
+      // at most once and served from the on-disk HTTP cache thereafter.
+      if (
+        details.url.startsWith("https://registry.hermesone.org/registry-icon/")
+      ) {
+        for (const key of Object.keys(responseHeaders)) {
+          if (key.toLowerCase() === "cache-control") {
+            delete responseHeaders[key];
+          }
+        }
+        responseHeaders["Cache-Control"] = [
+          "public, max-age=31536000, immutable",
+        ];
+      }
+      callback({ responseHeaders });
     });
 
     createWindow();
@@ -143,6 +157,10 @@ function openExternalUrl(rawUrl: unknown): void {
 
 function createWindow(): void {
   const rendererHtmlPath = join(__dirname, "../renderer/index.html");
+  // Default the vibrancy material to dark (the app's default theme) so the
+  // first paint isn't a light, milky frost; the renderer overrides this to
+  // match the stored theme as soon as ThemeProvider mounts.
+  nativeTheme.themeSource = "dark";
   mainWindow = new BrowserWindow({
     width: 1100,
     height: 850,
@@ -152,8 +170,17 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : undefined,
+    // macOS: translucent window material so the sidebar reads as frosted glass.
+    // The material's light/dark tone follows `nativeTheme.themeSource`, which
+    // the renderer keeps in step with the app theme (default dark below) — so a
+    // dark theme never renders a light, milky sidebar.
     ...(process.platform === "darwin"
-      ? { trafficLightPosition: { x: 16, y: 16 } }
+      ? {
+          trafficLightPosition: { x: 16, y: 16 },
+          vibrancy: "under-window" as const,
+          visualEffectState: "active" as const,
+          backgroundColor: "#00000000",
+        }
       : {}),
     ...(process.platform === "linux" ? { icon } : {}),
     webPreferences: {

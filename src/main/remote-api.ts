@@ -1,5 +1,6 @@
 import type { ConnectionConfig } from "./config";
 import {
+  probeRemoteAuthMode,
   RemoteOAuthError,
   requestRemoteOAuthJson,
   type RemoteOAuthRequestOptions,
@@ -70,7 +71,12 @@ export async function remoteDashboardRequestJson<T>(
   };
 
   try {
-    if (connection.remoteAuthMode === "oauth") {
+    const authMode =
+      connection.remoteAuthMode === "auto"
+        ? (await probeRemoteAuthMode(connection.remoteUrl)).authMode
+        : connection.remoteAuthMode;
+
+    if (authMode === "oauth") {
       return (await requestRemoteOAuthJson(
         dashboardApiUrl(config, path),
         options,

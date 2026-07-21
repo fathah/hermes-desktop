@@ -520,6 +520,7 @@ interface HermesAPI {
   stopGateway: (profile?: string) => Promise<boolean>;
   restartGateway: (profile?: string) => Promise<boolean>;
   gatewayStatus: (profile?: string) => Promise<boolean>;
+  setNativeAppearance: (source: "dark" | "light" | "system") => Promise<void>;
   dashboardStatus: (profile?: string) => Promise<DashboardStatus>;
   freshDashboardWsUrl: (profile?: string) => Promise<string>;
   startDashboard: (profile?: string) => Promise<DashboardStatus>;
@@ -1170,6 +1171,19 @@ interface HermesAPI {
     }>
   >;
   addMcpServer: (
+    input: {
+      name: string;
+      type: "http" | "stdio";
+      url?: string;
+      command?: string;
+      args?: string[];
+      env?: Record<string, string>;
+      auth?: string;
+    },
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  updateMcpServer: (
+    originalName: string,
     input: {
       name: string;
       type: "http" | "stdio";

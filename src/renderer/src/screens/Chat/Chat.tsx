@@ -1076,10 +1076,17 @@ function Chat({
                 >
                   <Zap size={14} />
                 </button>
-                <div className="chat-fast-popover">
-                  <strong>
-                    {fastMode ? t("chat.fastModeOn") : t("chat.fastMode")}
-                  </strong>
+                <div
+                  className={`chat-fast-popover ${fastMode ? "chat-fast-active-popover" : ""}`}
+                >
+                  <div className="chat-fast-popover-head">
+                    <span className="chat-fast-popover-icon" aria-hidden="true">
+                      <Zap size={13} />
+                    </span>
+                    <strong>
+                      {fastMode ? t("chat.fastModeOn") : t("chat.fastMode")}
+                    </strong>
+                  </div>
                   <span>
                     {fastMode
                       ? t("chat.fastModeActive")

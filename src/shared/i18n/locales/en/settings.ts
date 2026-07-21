@@ -37,6 +37,7 @@ export default {
     system: "System",
     light: "Light",
     dark: "Dark",
+    more: "{{count}} more…",
   },
   roundedCorners: {
     label: "Rounded corners",
@@ -45,7 +46,7 @@ export default {
   font: {
     label: "Font",
     manrope: "Manrope",
-    system: "System",
+    gsans: "G Sans",
     hint: "Choose the interface font",
   },
   hardwareAcceleration: {
@@ -53,7 +54,7 @@ export default {
     auto: "Auto",
     on: "Always on",
     off: "Always off",
-    hint: "Auto uses the GPU and falls back to software rendering for 24 hours after a GPU crash. Always on retries the GPU every launch; Always off keeps software rendering (the 3D office will be slow).",
+    hint: "Use the GPU for rendering when available.",
     envOverride:
       "Overridden by the HERMES_DISABLE_GPU environment variable — this setting will have no effect until it is removed.",
     restartToApply: "Takes effect after a restart.",

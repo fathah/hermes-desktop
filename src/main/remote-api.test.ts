@@ -1,31 +1,36 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { remoteRequestJson, requestRemoteOAuthJson, RemoteOAuthError } =
-  vi.hoisted(() => {
-    class TestRemoteOAuthError extends Error {
-      readonly needsOAuthLogin: boolean;
+const {
+  remoteRequestJson,
+  requestRemoteOAuthJson,
+  probeRemoteAuthMode,
+  RemoteOAuthError,
+} = vi.hoisted(() => {
+  class TestRemoteOAuthError extends Error {
+    readonly needsOAuthLogin: boolean;
 
-      constructor(
-        message: string,
-        readonly code:
-          | "oauth_cancelled"
-          | "oauth_connection_changed"
-          | "oauth_login_required"
-          | "oauth_request_failed",
-        readonly statusCode?: number,
-      ) {
-        super(message);
-        this.name = "RemoteOAuthError";
-        this.needsOAuthLogin = code === "oauth_login_required";
-      }
+    constructor(
+      message: string,
+      readonly code:
+        | "oauth_cancelled"
+        | "oauth_connection_changed"
+        | "oauth_login_required"
+        | "oauth_request_failed",
+      readonly statusCode?: number,
+    ) {
+      super(message);
+      this.name = "RemoteOAuthError";
+      this.needsOAuthLogin = code === "oauth_login_required";
     }
+  }
 
-    return {
-      remoteRequestJson: vi.fn(),
-      requestRemoteOAuthJson: vi.fn(),
-      RemoteOAuthError: TestRemoteOAuthError,
-    };
-  });
+  return {
+    remoteRequestJson: vi.fn(),
+    requestRemoteOAuthJson: vi.fn(),
+    probeRemoteAuthMode: vi.fn(),
+    RemoteOAuthError: TestRemoteOAuthError,
+  };
+});
 
 vi.mock("./remote-sessions", () => ({
   dashboardApiUrl: (
@@ -42,6 +47,7 @@ vi.mock("./remote-sessions", () => ({
 }));
 
 vi.mock("./remote-oauth", () => ({
+  probeRemoteAuthMode,
   requestRemoteOAuthJson,
   RemoteOAuthError,
 }));
@@ -49,7 +55,9 @@ vi.mock("./remote-oauth", () => ({
 import { remoteDashboardRequestJson } from "./remote-api";
 import type { ConnectionConfig } from "./config";
 
-function remoteConnection(remoteAuthMode: "token" | "oauth"): ConnectionConfig {
+function remoteConnection(
+  remoteAuthMode: ConnectionConfig["remoteAuthMode"],
+): ConnectionConfig {
   return {
     mode: "remote",
     remoteUrl: "https://remote.example:9119",
@@ -71,6 +79,7 @@ function remoteConnection(remoteAuthMode: "token" | "oauth"): ConnectionConfig {
 beforeEach(() => {
   remoteRequestJson.mockReset();
   requestRemoteOAuthJson.mockReset();
+  probeRemoteAuthMode.mockReset();
 });
 
 describe("remote dashboard API client", () => {
@@ -96,6 +105,7 @@ describe("remote dashboard API client", () => {
       { method: "PUT", body: { enabled: true } },
     );
     expect(requestRemoteOAuthJson).not.toHaveBeenCalled();
+    expect(probeRemoteAuthMode).not.toHaveBeenCalled();
   });
 
   it("uses cookie-authenticated OAuth transport with scoped URL", async () => {
@@ -115,6 +125,89 @@ describe("remote dashboard API client", () => {
       {},
     );
     expect(remoteRequestJson).not.toHaveBeenCalled();
+    expect(probeRemoteAuthMode).not.toHaveBeenCalled();
+  });
+
+  it("resolves auto authentication to OAuth before selecting transport", async () => {
+    // @lat: [[remote-dashboard-oauth#Test specifications#Management authentication routing]]
+    probeRemoteAuthMode.mockResolvedValue({
+      authMode: "oauth",
+      version: "1.2.3",
+    });
+    requestRemoteOAuthJson.mockResolvedValue({ profiles: [] });
+
+    await expect(
+      remoteDashboardRequestJson(
+        remoteConnection("auto"),
+        "/api/profiles",
+        {},
+        "research",
+      ),
+    ).resolves.toEqual({ profiles: [] });
+
+    expect(probeRemoteAuthMode).toHaveBeenCalledOnce();
+    expect(probeRemoteAuthMode).toHaveBeenCalledWith(
+      "https://remote.example:9119",
+    );
+    expect(requestRemoteOAuthJson).toHaveBeenCalledWith(
+      "https://remote.example:9119/api/profiles?profile=research",
+      {},
+    );
+    expect(remoteRequestJson).not.toHaveBeenCalled();
+  });
+
+  it("resolves auto authentication to token before selecting transport", async () => {
+    probeRemoteAuthMode.mockResolvedValue({ authMode: "token", version: null });
+    remoteRequestJson.mockResolvedValue({ ok: true });
+
+    await expect(
+      remoteDashboardRequestJson(
+        remoteConnection("auto"),
+        "/api/tools/toolsets",
+        { method: "PUT", body: { enabled: true } },
+        "research",
+      ),
+    ).resolves.toEqual({ ok: true });
+
+    expect(probeRemoteAuthMode).toHaveBeenCalledOnce();
+    expect(probeRemoteAuthMode).toHaveBeenCalledWith(
+      "https://remote.example:9119",
+    );
+    expect(remoteRequestJson).toHaveBeenCalledWith(
+      {
+        remoteUrl: "https://remote.example:9119",
+        apiKey: "secret",
+        profile: "research",
+      },
+      "/api/tools/toolsets",
+      { method: "PUT", body: { enabled: true } },
+    );
+    expect(requestRemoteOAuthJson).not.toHaveBeenCalled();
+  });
+
+  it("normalizes auto authentication probe failures before selecting transport", async () => {
+    probeRemoteAuthMode.mockRejectedValue(
+      new RemoteOAuthError(
+        "Remote OAuth probe failed (404).",
+        "oauth_request_failed",
+        404,
+      ),
+    );
+
+    await expect(
+      remoteDashboardRequestJson(
+        remoteConnection("auto"),
+        "/api/tools/toolsets",
+      ),
+    ).rejects.toMatchObject({
+      name: "RemoteDashboardApiError",
+      statusCode: 404,
+      unsupported: true,
+    });
+
+    expect(probeRemoteAuthMode).toHaveBeenCalledOnce();
+    expect(remoteRequestJson).not.toHaveBeenCalled();
+    expect(requestRemoteOAuthJson).not.toHaveBeenCalled();
   });
 
   it("omits default profile query parameter", async () => {
@@ -141,6 +234,7 @@ describe("remote dashboard API client", () => {
     ).rejects.toThrow("direct Remote mode");
     expect(remoteRequestJson).not.toHaveBeenCalled();
     expect(requestRemoteOAuthJson).not.toHaveBeenCalled();
+    expect(probeRemoteAuthMode).not.toHaveBeenCalled();
   });
 
   it("normalizes token HTTP failures with a structured status", async () => {
@@ -183,7 +277,6 @@ describe("remote dashboard API client", () => {
   });
 
   it("preserves OAuth login-required errors for reauthentication", async () => {
-    // @lat: [[remote-dashboard-oauth#Test specifications#Management authentication routing]]
     const loginRequired = new RemoteOAuthError(
       "Remote OAuth session expired. Sign in again.",
       "oauth_login_required",

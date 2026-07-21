@@ -4,6 +4,8 @@ Enterable building interiors on the Office tab: click the office, bank, or car s
 
 The feature spans the screen shell ([[src/renderer/src/screens/Office/Office.tsx]] owns the location state and DOM overlays) and the scene ([[src/renderer/src/screens/Office/office3d/Office3D.tsx]] mounts layers per location).
 
+The same location state is also driven by [[office-3d-walk-mode|walk mode]], where the user's avatar enters buildings by walking through their doorways instead of click + Enter; the buildings additionally wear [[office-3d-walk-mode#Glass roofs|glass roofs]] in the city view.
+
 ## Locations & conditional rendering
 
 `OfficeLocation` ("city" | "office" | "bank" | "showroom") lives in `office3d/core/locations.ts` with per-location camera presets, orbit clamps, and shadow centres. Buildings never move — entering only flies the camera and changes what's mounted.
@@ -47,6 +49,8 @@ Each pedestrian tracks a `place` ("outside" | "bank" | "showroom") from its curr
 ## Collision
 
 People never pass through walls, furniture, or each other: a crowd registry separates overlapping people, and per-place static colliders (wall boxes with door gaps, furniture circles) push walkers out. Buildings are entered through doorways only.
+
+Crowd separation is radial plus a tangential bias with fixed world handedness ([[src/renderer/src/screens/Office/office3d/core/collision.ts#applyCrowdSeparation]]): a purely radial push deadlocks two head-on walkers — separation shoves them apart, goal pull shoves them back, and the pair vibrates in place (the sidewalk-glitch bug). The tangent makes an approaching pair sidestep in opposite world directions, so both "pass on the right" and spiral past each other.
 
 Everything lives in [[src/renderer/src/screens/Office/office3d/core/collision.ts]] and works in world coordinates; the office simulation converts its canvas positions at the boundary. Wall colliders mirror the visible geometry including every door gap — the office's south wall gained a real doorway (`OFFICE_DOOR_X` in cityPlan.ts, east of the HQ logo) that trips now walk through instead of phasing the wall. Seats (chairs, beanbags) are deliberately not colliders so agents can reach them, and desk boxes cover only the desk body away from the seat side.
 
