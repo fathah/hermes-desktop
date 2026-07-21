@@ -395,11 +395,11 @@ export interface HccInspectorTab {
 }
 
 export interface HccContextInspector {
-  schemaVersion: "context-inspector-v1";
+  schemaVersion: "context-inspector-v1" | "context-inspector-v2";
   generatedAt: number;
   context: { entityType: string; entityId: string; title: string; status: string };
   tabs: Record<HccInspectorTabName, HccInspectorTab>;
-  provenance: { sourceRefs: Array<{ type: string; id: string }>; topicIds: string[]; policy: string };
+  provenance: { sourceRefs: Array<{ type: string; id: string }>; topicIds?: string[]; policy: string; readerScope?: string; omissions?: Array<{ id: string; reason: string; sensitivity?: string }> };
 }
 
 export interface HccInlineApprovalItem {

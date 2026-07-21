@@ -75,13 +75,14 @@ function ContextInspectorRail({
 }: ContextInspectorRailProps): React.JSX.Element {
   const [activeTab, setActiveTab] = useState<HccInspectorTabName>(initialTab);
   const [inspector, setInspector] = useState<HccContextInspector | null>(null);
+  const [readerScope, setReaderScope] = useState("owner");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setInspector(null);
     setError(null);
-    void window.hermesAPI.getHccContextInspector(entityType, entityId)
+    void window.hermesAPI.getHccContextInspector(entityType, entityId, readerScope)
       .then((payload) => {
         if (!cancelled) setInspector(payload as HccContextInspector);
       })
@@ -89,7 +90,7 @@ function ContextInspectorRail({
         if (!cancelled) setError(reason instanceof Error ? reason.message : "Inspector unavailable");
       });
     return () => { cancelled = true; };
-  }, [entityId, entityType]);
+  }, [entityId, entityType, readerScope]);
 
   const active = inspector?.tabs[activeTab] ?? null;
   const sourceLabel = useMemo(
@@ -107,6 +108,8 @@ function ContextInspectorRail({
         </div>
         <button aria-label="Close Context Inspector" onClick={onClose}><X size={17} /></button>
       </header>
+
+      <div className="context-inspector-reader"><span>Reader policy</span><select aria-label="Inspector reader scope" value={readerScope} onChange={(event)=>setReaderScope(event.target.value)}><option value="owner">Owner</option><option value="operator">Operator</option><option value="tool">Tool</option><option value="delegation">Delegation</option><option value="export">Export</option></select>{inspector?.provenance.omissions?.length ? <em>{inspector.provenance.omissions.length} omitted by policy</em> : <em>No policy omissions</em>}</div>
 
       <nav className="context-inspector-tabs" aria-label="Inspector sections">
         {TABS.map(({ id, label, icon: Icon }) => {

@@ -3,6 +3,8 @@ import type { HccMemoryCapsule, HccMemoryPacket } from "../../types/hcc";
 
 const PACKET_TYPES = ["tiny", "context", "review", "deep"] as const;
 type PacketType = (typeof PACKET_TYPES)[number];
+interface MemoryCase { id: string; capsuleId: string; issueType: string; status: string; evidence: Array<Record<string, unknown>>; decision?: string; note?: string }
+interface MemoryGovernance { items: MemoryCase[]; summary: { pending: number; resolved: number; contradictions: number; stale: number; sensitive: number; neverPromote: number } }
 
 function capsuleLinkLabels(capsule: HccMemoryCapsule): string[] {
   const labels = [
@@ -18,6 +20,8 @@ function capsuleLinkLabels(capsule: HccMemoryCapsule): string[] {
 function MemoryCenter(): React.JSX.Element {
   const [capsules, setCapsules] = useState<HccMemoryCapsule[]>([]);
   const [packet, setPacket] = useState<HccMemoryPacket | null>(null);
+  const [governance, setGovernance] = useState<MemoryGovernance | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
   const [packetType, setPacketType] = useState<PacketType>("tiny");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -26,13 +30,15 @@ function MemoryCenter(): React.JSX.Element {
     setLoading(true);
     setError(null);
     try {
-      const [capsulePayload, packetPayload] = await Promise.all([
+      const [capsulePayload, packetPayload, governancePayload] = await Promise.all([
         window.hermesAPI.getHccMemoryCapsules(),
         window.hermesAPI.getHccMemoryPacket(nextPacketType),
+        window.hermesAPI.getHccMemoryGovernance(),
       ]);
       const capsuleData = capsulePayload as { items?: HccMemoryCapsule[] };
       setCapsules(Array.isArray(capsuleData.items) ? capsuleData.items : []);
       setPacket(packetPayload as HccMemoryPacket);
+      setGovernance(governancePayload as MemoryGovernance);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load HCC memory");
     } finally {
@@ -58,6 +64,13 @@ function MemoryCenter(): React.JSX.Element {
 
   const selectPacket = (next: PacketType): void => {
     setPacketType(next);
+  };
+
+  const decideCase = async (item: MemoryCase, decision: string): Promise<void> => {
+    setBusy(item.id); setError(null);
+    try { await window.hermesAPI.decideHccMemoryGovernanceCase(item.id, decision, `${decision} from native Memory Center`); await loadMemory(); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Memory governance decision failed"); }
+    finally { setBusy(null); }
   };
 
   if (loading && capsules.length === 0) {
@@ -157,6 +170,12 @@ function MemoryCenter(): React.JSX.Element {
             <div className="war-room-item-meta">No capsules matched this packet policy.</div>
           )}
         </div>
+      </section>
+
+      <section className="war-room-panel memory-governance-panel">
+        <div><div className="war-room-card-kicker">Audited human decisions</div><div className="war-room-panel-title">Memory governance queue</div></div>
+        <div className="learning-metrics">{[["Pending",governance?.summary.pending||0],["Resolved",governance?.summary.resolved||0],["Contradictions",governance?.summary.contradictions||0],["Stale",governance?.summary.stale||0],["Never promote",governance?.summary.neverPromote||0]].map(([label,value])=><div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
+        <div className="memory-governance-list">{(governance?.items||[]).map((item)=><article key={item.id} className="memory-governance-row"><div><strong>{item.issueType} · {item.capsuleId}</strong><span>{item.status}{item.decision ? ` · ${item.decision}` : ""}</span><code>{item.evidence.length} evidence reference(s)</code></div>{item.status==="pending"&&<div className="war-room-action-row"><button disabled={busy===item.id} onClick={()=>void decideCase(item,item.issueType==="promotion"?"promote":item.issueType==="contradiction"?"dispute":item.issueType==="sensitivity"?"mark_sensitive":item.issueType==="stale"?"refresh":"archive")}>Apply governed decision</button><button disabled={busy===item.id} onClick={()=>void decideCase(item,"keep")}>Keep</button></div>}</article>)}</div>
       </section>
 
       <section className="war-room-panel">

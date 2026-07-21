@@ -112,6 +112,9 @@ import {
   fetchHccClonedApps,
   fetchHccConductorJobs,
   fetchHccContextInspector,
+  fetchHccMemoryGovernance,
+  createHccMemoryGovernanceCase,
+  decideHccMemoryGovernanceCase,
   fetchHccInlineApprovals,
   fetchHccMissionCostAttribution,
   fetchHccMissionEvidencePack,
@@ -672,8 +675,11 @@ function setupIPC(): void {
   ipcMain.handle("decide-hcc-inline-approval", (_event, jobId: string, approvalDomain: string, approvalId: string, decision: "approve" | "reject", actor?: string, note?: string) =>
     decideHccInlineApproval(jobId, approvalDomain, approvalId, decision, actor, note),
   );
-  ipcMain.handle("get-hcc-context-inspector", (_event, entityType: string, entityId: string) =>
-    fetchHccContextInspector(entityType, entityId),
+  ipcMain.handle("get-hcc-memory-governance", () => fetchHccMemoryGovernance());
+  ipcMain.handle("create-hcc-memory-governance-case", (_event, payload: Record<string, unknown>) => createHccMemoryGovernanceCase(payload));
+  ipcMain.handle("decide-hcc-memory-governance-case", (_event, caseId: string, decision: string, note?: string) => decideHccMemoryGovernanceCase(caseId, decision, note));
+  ipcMain.handle("get-hcc-context-inspector", (_event, entityType: string, entityId: string, readerScope?: string) =>
+    fetchHccContextInspector(entityType, entityId, readerScope),
   );
   ipcMain.handle("get-hcc-runs", () => fetchHccRuns());
   ipcMain.handle("get-hcc-run-comparison", (_event, leftRunId: string, rightRunId: string) =>

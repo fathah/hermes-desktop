@@ -147,6 +147,7 @@ function Spotlight({
       ["clone-remix", "Open Clone Remix", "Run clone/remix studio workflows", "HCC Workspace"],
       ["opportunity-radar", "Open Opportunity Radar", "Surface leverage and opportunity signals", "HCC Workspace"],
       ["learning-engine", "Open Learning Engine", "Track learning loops and progression", "HCC Workspace"],
+      ["hcc-memory", "Open Memory Center", "Inspect governed memory, retrieval packets, privacy, and contradictions", "HCC Workspace"],
       ["capture-inbox", "Open Capture Inbox", "Capture, classify, and govern routing into canonical HCC objects", "HCC Workspace"],
       ["decision-center", "Open Decision Center", "Evaluate options against evidence, values, and hard constraints", "HCC Workspace"],
       ["relationship-center", "Open Relationship Center", "Manage private contacts, commitments, evidence, and governed follow-up", "HCC Workspace"],

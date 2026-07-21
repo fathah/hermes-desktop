@@ -2537,6 +2537,12 @@ textarea.war-room-input {
   font-size: 12px;
 }
 
+.memory-governance-panel,.memory-governance-list { display:grid; gap:12px; }
+.memory-governance-row { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:11px; border:1px solid rgba(148,163,184,.15); border-radius:10px; }
+.memory-governance-row > div:first-child { display:grid; gap:3px; }.memory-governance-row span,.memory-governance-row code { color:#94a3b8; font-size:10px; }
+.context-inspector-reader { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid rgba(148,163,184,.12); font-size:10px; color:#94a3b8; }
+.context-inspector-reader select { background:rgba(15,23,42,.8); color:#e2e8f0; border:1px solid rgba(148,163,184,.2); border-radius:7px; padding:4px 7px; }.context-inspector-reader em { margin-left:auto; font-style:normal; color:#fbbf24; }
+
 .learning-intelligence-panel { display: grid; gap: 14px; }
 .learning-pattern-grid,.learning-promotion-list { display: grid; gap: 10px; }
 .learning-pattern-card { display: grid; gap: 9px; padding: 12px; border: 1px solid rgba(56,189,248,.2); border-radius: 12px; background: rgba(2,132,199,.08); }

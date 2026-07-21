@@ -516,8 +516,12 @@ export async function decideHccInlineApproval(
   );
 }
 
-export async function fetchHccContextInspector(entityType: string, entityId: string): Promise<unknown> {
-  const query = new URLSearchParams({ entityType, entityId });
+export async function fetchHccMemoryGovernance(): Promise<unknown> { return fetchJson("/api/hcc/memory/governance"); }
+export async function createHccMemoryGovernanceCase(payload: Record<string, unknown>): Promise<unknown> { return fetchJson("/api/hcc/memory/governance/cases", { method: "POST", body: JSON.stringify({ actor: "hermes-desktop", ...payload }) }); }
+export async function decideHccMemoryGovernanceCase(caseId: string, decision: string, note = ""): Promise<unknown> { return fetchJson(`/api/hcc/memory/governance/cases/${encodeURIComponent(caseId)}/decide`, { method: "POST", body: JSON.stringify({ actor: "hermes-desktop", decision, note }) }); }
+
+export async function fetchHccContextInspector(entityType: string, entityId: string, readerScope = "owner"): Promise<unknown> {
+  const query = new URLSearchParams({ entityType, entityId, readerScope });
   return fetchJson(`/api/hcc/context/inspect?${query.toString()}`);
 }
 

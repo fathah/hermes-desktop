@@ -16,6 +16,8 @@ describe("MemoryCenter", () => {
       value: {
         getHccMemoryCapsules: vi.fn().mockResolvedValue({ items: [capsule], total: 1, scopeSummary: { project: 1 } }),
         getHccMemoryPacket: vi.fn().mockResolvedValue({ packet_type: "tiny", summary: { count: 1, availableMatches: 1, elapsedMs: 1 }, items: [capsule] }),
+        getHccMemoryGovernance: vi.fn().mockResolvedValue({ items: [{ id: "case.1", capsuleId: "mem.1", issueType: "contradiction", status: "pending", evidence: [{ type: "fact", id: "counter" }] }], summary: { pending: 1, resolved: 0, contradictions: 1, stale: 0, sensitive: 0, neverPromote: 0 } }),
+        decideHccMemoryGovernanceCase: vi.fn(),
       } as unknown as typeof window.hermesAPI,
     });
   });
@@ -26,5 +28,7 @@ describe("MemoryCenter", () => {
     expect(screen.getByText("Logical scope distribution")).toBeInTheDocument();
     expect(screen.getByText("project 1")).toBeInTheDocument();
     expect(screen.getByText("HCC OS")).toBeInTheDocument();
+    expect(screen.getByText("Memory governance queue")).toBeInTheDocument();
+    expect(screen.getByText("contradiction · mem.1")).toBeInTheDocument();
   });
 });
