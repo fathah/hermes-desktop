@@ -171,6 +171,9 @@ interface HermesAPI {
     metrics: Record<string, unknown>,
     evidence: Record<string, unknown>,
   ) => Promise<unknown>;
+  getHccLearningIntelligence: () => Promise<unknown>;
+  stageHccLearningPromotion: (payload: Record<string, unknown>) => Promise<unknown>;
+  decideHccLearningPromotion: (promotionId: string, decision: "approve" | "reject", note?: string) => Promise<unknown>;
   getHccLearning: () => Promise<unknown>;
   getHccConductorJobs: () => Promise<unknown>;
   spawnHccConductor: (goal: string, maxParallel?: number, supervised?: boolean) => Promise<unknown>;

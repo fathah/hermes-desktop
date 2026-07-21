@@ -2537,6 +2537,15 @@ textarea.war-room-input {
   font-size: 12px;
 }
 
+.learning-intelligence-panel { display: grid; gap: 14px; }
+.learning-pattern-grid,.learning-promotion-list { display: grid; gap: 10px; }
+.learning-pattern-card { display: grid; gap: 9px; padding: 12px; border: 1px solid rgba(56,189,248,.2); border-radius: 12px; background: rgba(2,132,199,.08); }
+.learning-pattern-card > div:first-child,.learning-promotion-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.learning-pattern-card span,.learning-promotion-row span { display: block; color: #94a3b8; font-size: 10px; }
+.learning-pattern-card p { color: #cbd5e1; margin: 0; }
+.learning-promotion-row { padding: 10px; border: 1px solid rgba(148,163,184,.14); border-radius: 10px; }
+.learning-promotion-row > div:first-child { display: grid; gap: 3px; }.learning-promotion-row code { color: #7dd3fc; font-size: 10px; }
+
 .relationship-center-screen { display: grid; gap: 18px; }
 .relationship-contact-create { display: grid; grid-template-columns: 1.2fr 1fr .7fr .5fr auto; gap: 9px; align-items: end; }
 .relationship-contact-create .war-room-panel-title { grid-column: 1/-1; }

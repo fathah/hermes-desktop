@@ -283,6 +283,9 @@ const hermesAPI = {
     metrics: Record<string, unknown>,
     evidence: Record<string, unknown>,
   ): Promise<unknown> => ipcRenderer.invoke("record-hcc-opportunity-outcome", interventionId, status, metrics, evidence),
+  getHccLearningIntelligence: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-learning-intelligence"),
+  stageHccLearningPromotion: (payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("stage-hcc-learning-promotion", payload),
+  decideHccLearningPromotion: (promotionId: string, decision: "approve" | "reject", note?: string): Promise<unknown> => ipcRenderer.invoke("decide-hcc-learning-promotion", promotionId, decision, note),
   getHccLearning: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-learning"),
   getHccConductorJobs: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-conductor-jobs"),
   spawnHccConductor: (goal: string, maxParallel?: number, supervised?: boolean): Promise<unknown> =>

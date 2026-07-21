@@ -87,6 +87,7 @@ import {
   recordHccDecisionOutcome,
   recordHccOpportunityOutcome,
   rollbackHccProjectGenome,
+  stageHccLearningPromotion,
   stageHccRelationshipFollowup,
   stageHccCapture,
   stageHccOpportunityIntervention,
@@ -96,6 +97,7 @@ import {
   createHccRelationshipContact,
   createHccTimeBlock,
   cancelHccTimeBlock,
+  decideHccLearningPromotion,
   decideHccRelationshipFollowup,
   decideHccTradeoff,
   stageHccRecoveryAction,
@@ -153,6 +155,7 @@ import {
   fetchHccGovernanceProposals,
   actOnHccGovernanceProposal,
   stageHccReviewIntervention,
+  fetchHccLearningIntelligence,
   fetchHccLifeDomainSummary,
   fetchHccWarRoomSummary,
   repairHccGraphIntegrity,
@@ -654,6 +657,9 @@ function setupIPC(): void {
     (_event, interventionId: string, status: "positive" | "neutral" | "negative", metrics: Record<string, unknown>, evidence: Record<string, unknown>) =>
       recordHccOpportunityOutcome(interventionId, status, metrics, evidence),
   );
+  ipcMain.handle("get-hcc-learning-intelligence", () => fetchHccLearningIntelligence());
+  ipcMain.handle("stage-hcc-learning-promotion", (_event, payload: Record<string, unknown>) => stageHccLearningPromotion(payload));
+  ipcMain.handle("decide-hcc-learning-promotion", (_event, promotionId: string, decision: "approve" | "reject", note?: string) => decideHccLearningPromotion(promotionId, decision, note));
   ipcMain.handle("get-hcc-learning", () => fetchHccLearning());
   ipcMain.handle("get-hcc-conductor-jobs", () => fetchHccConductorJobs());
   ipcMain.handle("spawn-hcc-conductor", (_event, goal: string, maxParallel?: number, supervised?: boolean) =>

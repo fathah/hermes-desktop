@@ -195,6 +195,10 @@ export async function stageHccRecoveryAction(actionId: string): Promise<unknown>
   });
 }
 
+export async function fetchHccLearningIntelligence(): Promise<unknown> { return fetchJson("/api/hcc/learning/intelligence"); }
+export async function stageHccLearningPromotion(payload: Record<string, unknown>): Promise<unknown> { return fetchJson("/api/hcc/learning/promotions", { method: "POST", body: JSON.stringify({ actor: "hermes-desktop", ...payload }) }); }
+export async function decideHccLearningPromotion(promotionId: string, decision: "approve" | "reject", note = ""): Promise<unknown> { return fetchJson(`/api/hcc/learning/promotions/${encodeURIComponent(promotionId)}/${decision}`, { method: "POST", body: JSON.stringify({ actor: "hermes-desktop", note }) }); }
+
 export async function fetchHccRelationships(): Promise<unknown> { return fetchJson("/api/hcc/relationships"); }
 export async function createHccRelationshipContact(payload: Record<string, unknown>): Promise<unknown> { return fetchJson("/api/hcc/relationships/contacts", { method: "POST", body: JSON.stringify({ actor: "hermes-desktop", ...payload }) }); }
 export async function recordHccRelationshipInteraction(contactId: string, payload: Record<string, unknown>): Promise<unknown> { return fetchJson(`/api/hcc/relationships/contacts/${encodeURIComponent(contactId)}/interactions`, { method: "POST", body: JSON.stringify({ actor: "hermes-desktop", ...payload }) }); }

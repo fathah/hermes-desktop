@@ -12,8 +12,14 @@ const NEXT_STAGE: Partial<Record<HccLearningStage, HccLearningStage>> = {
   applying: "demonstrated",
 };
 
+interface LearningPattern { id: string; signature: string; category: string; projectIds: string[]; projectCount: number; evidenceCount: number; lessons: string[]; eligibleForPromotion: boolean }
+interface LearningPromotion { id: string; patternId: string; targetType: string; targetId: string; lesson: string; status: string; appliedArtifact?: { type: string; id: string } | null }
+interface LearningIntelligence { patterns: LearningPattern[]; promotions: LearningPromotion[]; summary: { patterns: number; crossProject: number; pendingPromotions: number; appliedPromotions: number } }
+
 function LearningEngine(): React.JSX.Element {
   const [dashboard, setDashboard] = useState<HccLearningDashboard | null>(null);
+  const [intelligence, setIntelligence] = useState<LearningIntelligence | null>(null);
+  const [promotionDrafts, setPromotionDrafts] = useState<Record<string, { targetType: string; targetId: string }>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -27,7 +33,9 @@ function LearningEngine(): React.JSX.Element {
     setLoading(true);
     setError(null);
     try {
-      setDashboard(await window.hermesAPI.getHccLearning() as HccLearningDashboard);
+      const [base, deep] = await Promise.all([window.hermesAPI.getHccLearning(), window.hermesAPI.getHccLearningIntelligence()]);
+      setDashboard(base as HccLearningDashboard);
+      setIntelligence(deep as LearningIntelligence);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load Learning Engine.");
     } finally {
@@ -88,6 +96,21 @@ function LearningEngine(): React.JSX.Element {
     } finally { setBusy(null); }
   };
 
+  const stageDeepPromotion = async (pattern: LearningPattern): Promise<void> => {
+    const draft = promotionDrafts[pattern.id] || { targetType: "skill_spec", targetId: pattern.signature };
+    setBusy(`deep:${pattern.id}`);
+    try { await window.hermesAPI.stageHccLearningPromotion({ patternId: pattern.id, targetType: draft.targetType, targetId: draft.targetId, lesson: pattern.lessons[0] }); await load(); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Learning promotion staging failed."); }
+    finally { setBusy(null); }
+  };
+
+  const decideDeepPromotion = async (promotion: LearningPromotion, decision: "approve" | "reject"): Promise<void> => {
+    setBusy(`decide:${promotion.id}`);
+    try { await window.hermesAPI.decideHccLearningPromotion(promotion.id, decision, `${decision} from native Learning Engine`); await load(); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Learning promotion decision failed."); }
+    finally { setBusy(null); }
+  };
+
   if (loading && !dashboard) return <div className="war-room-loading">Replaying the learning event log…</div>;
 
   return (
@@ -122,9 +145,9 @@ function LearningEngine(): React.JSX.Element {
             <div className="learning-metrics">{[["Sources", topic.sourceCount], ["Syntheses", topic.synthesisCount], ["Mission", topic.missionLearningCount || 0], ["Debt", topic.synthesisDebt]].map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
             {topic.missionLearnings?.length > 0 && <div className="learning-mission-provenance">
               <div className="war-room-card-kicker">Mission provenance</div>
-              {topic.missionLearnings.slice(-3).map((learning, index) => <div className="learning-mission-row" key={`${learning.missionRef.id}:${index}`}>
+              {topic.missionLearnings.slice(-3).map((learning, index) => <div className="learning-mission-row" key={`${learning.missionRef?.id || topic.id}:${index}`}>
                 <span className={`learning-category ${learning.category}`}>{learning.category}</span>
-                <div><strong>{learning.missionRef.title}</strong><p>{learning.text}</p>{learning.runRef?.id && <small>Run {learning.runRef.id}</small>}</div>
+                <div><strong>{learning.missionRef?.title || learning.projectId || "Learning event"}</strong><p>{learning.text}</p>{learning.runRef?.id && <small>Run {learning.runRef.id}</small>}</div>
               </div>)}
             </div>}
             <div className="learning-inline-action"><input className="war-room-input" value={syntheses[topic.id] || ""} onChange={(event) => setSyntheses((current) => ({ ...current, [topic.id]: event.target.value }))} placeholder="Synthesis title / artifact" /><button className="war-room-refresh-btn" disabled={!syntheses[topic.id]?.trim() || Boolean(busy)} onClick={() => void appendEvent(topic, "synthesis_recorded", { title: syntheses[topic.id].trim(), artifactRef: { type: "note", id: `note.${Date.now()}` } })}>Record</button></div>
@@ -134,6 +157,13 @@ function LearningEngine(): React.JSX.Element {
           </article>;
         })}
         {!dashboard?.items.length && <div className="war-room-panel"><div className="war-room-panel-title">No learning topics</div><div className="war-room-subtitle">Capture an outcome-driven topic to start the append-only learning loop.</div></div>}
+      </section>
+
+      <section className="war-room-panel learning-intelligence-panel">
+        <div><div className="war-room-card-kicker">Cross-project intelligence</div><div className="war-room-panel-title">Verified patterns and governed promotion</div></div>
+        <div className="learning-metrics">{[["Patterns", intelligence?.summary.patterns || 0], ["Cross-project", intelligence?.summary.crossProject || 0], ["Pending", intelligence?.summary.pendingPromotions || 0], ["Applied", intelligence?.summary.appliedPromotions || 0]].map(([label,value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
+        <div className="learning-pattern-grid">{(intelligence?.patterns || []).map((pattern) => { const draft=promotionDrafts[pattern.id] || { targetType:"skill_spec",targetId:pattern.signature }; return <article key={pattern.id} className="learning-pattern-card"><div><strong>{pattern.signature}</strong><span>{pattern.projectCount} projects · {pattern.evidenceCount} evidence</span></div><p>{pattern.lessons[0]}</p><div className="learning-inline-action"><select className="war-room-input" value={draft.targetType} onChange={(e)=>setPromotionDrafts({...promotionDrafts,[pattern.id]:{...draft,targetType:e.target.value}})}><option value="skill_spec">Skill spec</option><option value="execution_policy">Execution policy</option><option value="memory_capsule">Memory capsule</option><option value="project_genome">Project genome proposal</option></select><input className="war-room-input" aria-label={`Promotion target ${pattern.signature}`} value={draft.targetId} onChange={(e)=>setPromotionDrafts({...promotionDrafts,[pattern.id]:{...draft,targetId:e.target.value}})}/><button className="war-room-refresh-btn learning-primary" disabled={!pattern.eligibleForPromotion || Boolean(busy)} onClick={()=>void stageDeepPromotion(pattern)}>Stage promotion</button></div></article>; })}</div>
+        <div className="learning-promotion-list">{(intelligence?.promotions || []).map((promotion)=><div key={promotion.id} className="learning-promotion-row"><div><strong>{promotion.targetType} · {promotion.targetId}</strong><span>{promotion.status} · {promotion.lesson}</span>{promotion.appliedArtifact && <code>{promotion.appliedArtifact.type}:{promotion.appliedArtifact.id}</code>}</div>{promotion.status==="pending_approval" && <div className="war-room-action-row"><button onClick={()=>void decideDeepPromotion(promotion,"approve")}>Approve and apply</button><button onClick={()=>void decideDeepPromotion(promotion,"reject")}>Reject</button></div>}</div>)}</div>
       </section>
 
       <section className="war-room-panel learning-policy"><div><div className="war-room-card-kicker">Governed progression</div><div className="war-room-panel-title">Every state is replayed from evidence</div></div><span className="war-room-pill tone-healthy">{dashboard?.methodology.mutationPolicy || "append-only"}</span></section>
