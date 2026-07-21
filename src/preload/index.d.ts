@@ -118,6 +118,10 @@ interface HermesAPI {
   stageHccIntervention: (interventionId: string, actor?: string) => Promise<unknown>;
   getHccProjects: () => Promise<unknown>;
   getHccProjectDetail: (projectId: string) => Promise<unknown>;
+  getHccProjectGenome: (projectId: string) => Promise<unknown>;
+  stageHccProjectGenomeProposal: (projectId: string, payload: Record<string, unknown>) => Promise<unknown>;
+  decideHccProjectGenomeProposal: (projectId: string, proposalId: string, decision: "approve" | "reject", note?: string) => Promise<unknown>;
+  rollbackHccProjectGenome: (projectId: string, targetVersion: number, rationale: string) => Promise<unknown>;
   transitionHccProject: (projectId: string, toStatus: string, note?: string) => Promise<unknown>;
   getHccClonedApps: () => Promise<unknown>;
   createHccClonedApp: (payload: Record<string, unknown>) => Promise<unknown>;

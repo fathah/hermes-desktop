@@ -2537,6 +2537,28 @@ textarea.war-room-input {
   font-size: 12px;
 }
 
+.project-genome-center { margin-top: 18px; display: grid; gap: 18px; border-color: rgba(167, 139, 250, 0.26); }
+.project-genome-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.project-genome-message { padding: 11px 13px; border: 1px solid rgba(52, 211, 153, 0.28); border-radius: 11px; color: #a7f3d0; background: rgba(6, 78, 59, 0.18); }
+.project-genome-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 14px; }
+.project-genome-contract, .project-genome-lists, .project-genome-editor, .project-genome-proposals, .project-genome-history { display: grid; gap: 10px; }
+.project-genome-contract > div, .project-genome-lists > div { display: grid; gap: 6px; padding: 12px; border: 1px solid rgba(167, 139, 250, 0.15); border-radius: 12px; background: rgba(30, 27, 75, 0.18); }
+.project-genome-contract span, .project-genome-lists span { color: rgba(196, 181, 253, 0.76); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+.project-genome-contract strong, .project-genome-lists strong { color: #e2e8f0; font-size: 12px; line-height: 1.45; }
+.project-genome-lists em { color: #64748b; font-size: 11px; }
+.project-genome-editor { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.project-genome-editor .war-room-panel-title, .project-genome-editor button { grid-column: 1 / -1; }
+.project-genome-editor textarea { min-height: 76px; resize: vertical; }
+.project-genome-proposal { display: grid; gap: 10px; padding: 13px; border: 1px solid rgba(148, 163, 184, 0.18); border-radius: 12px; background: rgba(15, 23, 42, .45); }
+.project-genome-proposal > div:first-child { display: flex; justify-content: space-between; gap: 12px; }
+.project-genome-proposal > div:first-child span { color: #94a3b8; font-size: 11px; }
+.project-genome-proposal.status-pending_approval { border-color: rgba(250, 204, 21, .28); }
+.project-genome-diff { display: grid; gap: 8px; }
+.project-genome-diff > div { display: grid; grid-template-columns: 140px 1fr 1fr; gap: 9px; font-size: 11px; }
+.project-genome-diff del { color: #fca5a5; overflow-wrap: anywhere; }
+.project-genome-diff ins { color: #86efac; overflow-wrap: anywhere; text-decoration: none; }
+@media (max-width: 1000px) { .project-genome-grid, .project-genome-editor { grid-template-columns: 1fr; } .project-genome-editor > * { grid-column: 1; } }
+
 .opportunity-impact-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -82,7 +82,9 @@ import {
   linkHccCloneProject,
   recordHccCloneTaste,
   recordHccOpportunityOutcome,
+  rollbackHccProjectGenome,
   stageHccOpportunityIntervention,
+  stageHccProjectGenomeProposal,
   createHccLearningTopic,
   createHccTimeBlock,
   cancelHccTimeBlock,
@@ -126,7 +128,9 @@ import {
   fetchHccMemoryPacket,
   fetchHccOpportunities,
   fetchHccLearning,
+  decideHccProjectGenomeProposal,
   fetchHccProjectDetail,
+  fetchHccProjectGenome,
   fetchHccProjects,
   fetchHccRegistryResource,
   fetchHccReality,
@@ -577,6 +581,10 @@ function setupIPC(): void {
   );
   ipcMain.handle("get-hcc-projects", () => fetchHccProjects());
   ipcMain.handle("get-hcc-project-detail", (_event, projectId: string) => fetchHccProjectDetail(projectId));
+  ipcMain.handle("get-hcc-project-genome", (_event, projectId: string) => fetchHccProjectGenome(projectId));
+  ipcMain.handle("stage-hcc-project-genome-proposal", (_event, projectId: string, payload: Record<string, unknown>) => stageHccProjectGenomeProposal(projectId, payload));
+  ipcMain.handle("decide-hcc-project-genome-proposal", (_event, projectId: string, proposalId: string, decision: "approve" | "reject", note?: string) => decideHccProjectGenomeProposal(projectId, proposalId, decision, note));
+  ipcMain.handle("rollback-hcc-project-genome", (_event, projectId: string, targetVersion: number, rationale: string) => rollbackHccProjectGenome(projectId, targetVersion, rationale));
   ipcMain.handle("transition-hcc-project", (_event, projectId: string, toStatus: string, note?: string) =>
     transitionHccProject(projectId, toStatus, note),
   );

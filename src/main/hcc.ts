@@ -203,6 +203,28 @@ export async function fetchHccProjectDetail(projectId: string): Promise<unknown>
   return fetchJson(`/api/hcc/projects/${encodeURIComponent(projectId)}`);
 }
 
+export async function fetchHccProjectGenome(projectId: string): Promise<unknown> {
+  return fetchJson(`/api/projects/${encodeURIComponent(projectId)}/genome`);
+}
+
+export async function stageHccProjectGenomeProposal(projectId: string, payload: Record<string, unknown>): Promise<unknown> {
+  return fetchJson(`/api/projects/${encodeURIComponent(projectId)}/genome/proposals`, {
+    method: "POST", body: JSON.stringify({ actor: "hermes-desktop", ...payload }),
+  });
+}
+
+export async function decideHccProjectGenomeProposal(projectId: string, proposalId: string, decision: "approve" | "reject", note = ""): Promise<unknown> {
+  return fetchJson(`/api/projects/${encodeURIComponent(projectId)}/genome/proposals/${encodeURIComponent(proposalId)}/${decision}`, {
+    method: "POST", body: JSON.stringify({ actor: "hermes-desktop", note }),
+  });
+}
+
+export async function rollbackHccProjectGenome(projectId: string, targetVersion: number, rationale: string): Promise<unknown> {
+  return fetchJson(`/api/projects/${encodeURIComponent(projectId)}/genome/rollback`, {
+    method: "POST", body: JSON.stringify({ actor: "hermes-desktop", targetVersion, rationale, evidence: { source: "native-project-genome-center" } }),
+  });
+}
+
 export async function transitionHccProject(
   projectId: string,
   toStatus: string,

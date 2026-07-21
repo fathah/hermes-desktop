@@ -223,6 +223,10 @@ const hermesAPI = {
   getHccProjects: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-projects"),
   getHccProjectDetail: (projectId: string): Promise<unknown> =>
     ipcRenderer.invoke("get-hcc-project-detail", projectId),
+  getHccProjectGenome: (projectId: string): Promise<unknown> => ipcRenderer.invoke("get-hcc-project-genome", projectId),
+  stageHccProjectGenomeProposal: (projectId: string, payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("stage-hcc-project-genome-proposal", projectId, payload),
+  decideHccProjectGenomeProposal: (projectId: string, proposalId: string, decision: "approve" | "reject", note?: string): Promise<unknown> => ipcRenderer.invoke("decide-hcc-project-genome-proposal", projectId, proposalId, decision, note),
+  rollbackHccProjectGenome: (projectId: string, targetVersion: number, rationale: string): Promise<unknown> => ipcRenderer.invoke("rollback-hcc-project-genome", projectId, targetVersion, rationale),
   transitionHccProject: (projectId: string, toStatus: string, note?: string): Promise<unknown> =>
     ipcRenderer.invoke("transition-hcc-project", projectId, toStatus, note),
   getHccClonedApps: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-cloned-apps"),

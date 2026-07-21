@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { HccProject } from "../../types/hcc";
+import type { HccProject, HccProjectGenomeCenter } from "../../types/hcc";
 
 interface ProjectDetailProps {
   projectId: string | null;
@@ -18,6 +18,10 @@ const PROJECT_TRANSITIONS: Record<string, string[]> = {
 
 function ProjectDetail({ projectId }: ProjectDetailProps): React.JSX.Element {
   const [project, setProject] = useState<HccProject | null>(null);
+  const [genome, setGenome] = useState<HccProjectGenomeCenter | null>(null);
+  const [genomeDraft, setGenomeDraft] = useState({ strategicThesis: "", definitionOfDone: "", principles: "", nonNegotiables: "", constraints: "", rationale: "" });
+  const [genomeBusy, setGenomeBusy] = useState<string | null>(null);
+  const [genomeMessage, setGenomeMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [transitioning, setTransitioning] = useState<string | null>(null);
@@ -30,8 +34,12 @@ function ProjectDetail({ projectId }: ProjectDetailProps): React.JSX.Element {
     setLoading(true);
     setError(null);
     try {
-      const payload = (await window.hermesAPI.getHccProjectDetail(projectId)) as HccProject;
-      setProject(payload);
+      const [projectPayload, genomePayload] = await Promise.all([
+        window.hermesAPI.getHccProjectDetail(projectId),
+        window.hermesAPI.getHccProjectGenome(projectId),
+      ]);
+      setProject(projectPayload as HccProject);
+      setGenome(genomePayload as HccProjectGenomeCenter);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load project detail");
     } finally {
@@ -60,6 +68,51 @@ function ProjectDetail({ projectId }: ProjectDetailProps): React.JSX.Element {
     } finally {
       setTransitioning(null);
     }
+  };
+
+  const stageGenomeMutation = async (): Promise<void> => {
+    if (!projectId || !genome) return;
+    const split = (value: string): string[] => value.split("\n").map((item) => item.trim()).filter(Boolean);
+    const patch: Record<string, unknown> = {};
+    if (genomeDraft.strategicThesis.trim()) patch.strategicThesis = genomeDraft.strategicThesis.trim();
+    if (genomeDraft.definitionOfDone.trim()) patch.definitionOfDone = genomeDraft.definitionOfDone.trim();
+    if (genomeDraft.principles.trim()) patch.principles = split(genomeDraft.principles);
+    if (genomeDraft.nonNegotiables.trim()) patch.nonNegotiables = split(genomeDraft.nonNegotiables);
+    if (genomeDraft.constraints.trim()) patch.constraints = split(genomeDraft.constraints);
+    if (!Object.keys(patch).length || !genomeDraft.rationale.trim()) {
+      setError("Genome mutation needs at least one changed field and an evidence rationale.");
+      return;
+    }
+    setGenomeBusy("stage"); setError(null); setGenomeMessage(null);
+    try {
+      await window.hermesAPI.stageHccProjectGenomeProposal(projectId, { baseVersion: genome.currentVersion, patch, rationale: genomeDraft.rationale.trim(), evidence: { source: "native-project-detail", projectStatus: project?.status } });
+      setGenomeMessage("Genome mutation staged. Current version remains unchanged until approval.");
+      setGenomeDraft({ strategicThesis: "", definitionOfDone: "", principles: "", nonNegotiables: "", constraints: "", rationale: "" });
+      await loadProject();
+    } catch (err) { setError(err instanceof Error ? err.message : "Genome staging failed"); }
+    finally { setGenomeBusy(null); }
+  };
+
+  const decideGenome = async (proposalId: string, decision: "approve" | "reject"): Promise<void> => {
+    if (!projectId) return;
+    setGenomeBusy(`${decision}:${proposalId}`); setError(null);
+    try {
+      await window.hermesAPI.decideHccProjectGenomeProposal(projectId, proposalId, decision, `${decision} from native Project Genome Center`);
+      setGenomeMessage(decision === "approve" ? "Genome mutation approved as a new immutable version." : "Genome mutation rejected; current genome unchanged.");
+      await loadProject();
+    } catch (err) { setError(err instanceof Error ? err.message : `Genome ${decision} failed`); }
+    finally { setGenomeBusy(null); }
+  };
+
+  const rollbackGenome = async (targetVersion: number): Promise<void> => {
+    if (!projectId) return;
+    setGenomeBusy(`rollback:${targetVersion}`); setError(null);
+    try {
+      await window.hermesAPI.rollbackHccProjectGenome(projectId, targetVersion, `Restore verified genome v${targetVersion}`);
+      setGenomeMessage(`Rollback to v${targetVersion} staged for explicit approval. History remains immutable.`);
+      await loadProject();
+    } catch (err) { setError(err instanceof Error ? err.message : "Genome rollback staging failed"); }
+    finally { setGenomeBusy(null); }
   };
 
   if (!projectId) {
@@ -235,6 +288,67 @@ function ProjectDetail({ projectId }: ProjectDetailProps): React.JSX.Element {
           </div>
         </div>
       </div>
+
+      {genome && (
+        <section className="war-room-panel project-genome-center">
+          <div className="project-genome-head">
+            <div>
+              <div className="war-room-card-kicker">Project Genome / Runtime identity</div>
+              <div className="war-room-panel-title">Version {genome.currentVersion} · {genome.contentHash.slice(0, 12)}</div>
+              <div className="war-room-item-meta">Immutable history · evidence-backed mutations · execution provenance</div>
+            </div>
+            <div className="war-room-action-row">
+              <span className="war-room-pill">{genome.summary.pendingProposals} pending</span>
+              <span className="war-room-pill">{genome.summary.alignmentCount} alignments</span>
+            </div>
+          </div>
+          {genomeMessage && <div className="project-genome-message">{genomeMessage}</div>}
+          <div className="project-genome-grid">
+            <div className="project-genome-contract">
+              <div><span>Purpose</span><strong>{genome.genome.purpose || "Not established"}</strong></div>
+              <div><span>Strategic thesis</span><strong>{genome.genome.strategicThesis || "Not established"}</strong></div>
+              <div><span>Definition of done</span><strong>{genome.genome.definitionOfDone || "Not established"}</strong></div>
+              <div><span>Latest alignment</span><strong>{genome.latestAlignment ? `${genome.latestAlignment.overallScore}% · ${genome.latestAlignment.executionId}` : "No explicit alignment evidence"}</strong></div>
+            </div>
+            <div className="project-genome-lists">
+              {([['Principles', genome.genome.principles], ['Non-negotiables', genome.genome.nonNegotiables], ['Constraints', genome.genome.constraints], ['Risk boundaries', genome.genome.riskBoundaries], ['Execution heuristics', genome.genome.executionHeuristics]] as Array<[string, string[]]>).map(([label, items]) => (
+                <div key={label}><span>{label}</span>{items.length ? items.map((item) => <strong key={item}>{item}</strong>) : <em>None established</em>}</div>
+              ))}
+            </div>
+          </div>
+
+          <div className="project-genome-editor">
+            <div className="war-room-panel-title">Stage evidence-backed mutation</div>
+            <input aria-label="Genome strategic thesis" className="war-room-input" placeholder="Strategic thesis" value={genomeDraft.strategicThesis} onChange={(event) => setGenomeDraft({ ...genomeDraft, strategicThesis: event.target.value })} />
+            <input aria-label="Genome definition of done" className="war-room-input" placeholder="Definition of done" value={genomeDraft.definitionOfDone} onChange={(event) => setGenomeDraft({ ...genomeDraft, definitionOfDone: event.target.value })} />
+            <textarea aria-label="Genome principles" className="war-room-input" placeholder="Principles · one per line" value={genomeDraft.principles} onChange={(event) => setGenomeDraft({ ...genomeDraft, principles: event.target.value })} />
+            <textarea aria-label="Genome non-negotiables" className="war-room-input" placeholder="Non-negotiables · one per line" value={genomeDraft.nonNegotiables} onChange={(event) => setGenomeDraft({ ...genomeDraft, nonNegotiables: event.target.value })} />
+            <textarea aria-label="Genome constraints" className="war-room-input" placeholder="Constraints · one per line" value={genomeDraft.constraints} onChange={(event) => setGenomeDraft({ ...genomeDraft, constraints: event.target.value })} />
+            <textarea aria-label="Genome evidence rationale" className="war-room-input" placeholder="Evidence rationale · required" value={genomeDraft.rationale} onChange={(event) => setGenomeDraft({ ...genomeDraft, rationale: event.target.value })} />
+            <button className="war-room-refresh-btn" disabled={Boolean(genomeBusy)} onClick={() => void stageGenomeMutation()}>Stage mutation · no apply</button>
+          </div>
+
+          <div className="project-genome-proposals">
+            <div className="war-room-panel-title">Mutation governance</div>
+            {genome.proposals.map((proposal) => (
+              <article key={proposal.id} className={`project-genome-proposal status-${proposal.status}`}>
+                <div><strong>{proposal.mode.replaceAll("_", " ")} · {proposal.status}</strong><span>base v{proposal.baseVersion} · {proposal.diff.changedFields.join(", ") || "no changes"}</span></div>
+                <div className="project-genome-diff">{proposal.diff.changes.map((change) => <div key={change.field}><span>{change.field}</span><del>{JSON.stringify(change.before)}</del><ins>{JSON.stringify(change.after)}</ins></div>)}</div>
+                {proposal.status === "pending_approval" && <div className="war-room-action-row">
+                  <button className="war-room-refresh-btn" disabled={Boolean(genomeBusy)} onClick={() => void decideGenome(proposal.id, "approve")}>Approve as v{genome.currentVersion + 1}</button>
+                  <button className="war-room-refresh-btn" disabled={Boolean(genomeBusy)} onClick={() => void decideGenome(proposal.id, "reject")}>Reject</button>
+                </div>}
+              </article>
+            ))}
+            {!genome.proposals.length && <div className="war-room-item-meta">No mutation proposals.</div>}
+          </div>
+
+          <div className="project-genome-history">
+            <div className="war-room-panel-title">Immutable version history</div>
+            {genome.versions.map((version) => <div key={version.version} className="war-room-list-item"><div><strong>v{version.version}</strong><div className="war-room-item-meta">{version.source} · {version.actor} · {version.contentHash.slice(0, 12)}</div></div>{version.version !== genome.currentVersion && <button className="war-room-refresh-btn" disabled={Boolean(genomeBusy)} onClick={() => void rollbackGenome(version.version)}>Stage rollback</button>}</div>)}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

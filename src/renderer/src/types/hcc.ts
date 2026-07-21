@@ -208,6 +208,50 @@ export interface HccReviewCenter {
   };
 }
 
+export interface HccProjectGenomeContract {
+  purpose: string;
+  strategicThesis: string;
+  definitionOfDone: string;
+  principles: string[];
+  nonNegotiables: string[];
+  successMetrics: string[];
+  constraints: string[];
+  riskBoundaries: string[];
+  preferredPatterns: string[];
+  rejectedPatterns: string[];
+  referenceIds: string[];
+  decisionRecords: Array<Record<string, unknown>>;
+  skillGrowth: Record<string, unknown>;
+  executionHeuristics: string[];
+  verifiedOutcomes: Array<Record<string, unknown>>;
+  failureLessons: Array<Record<string, unknown>>;
+}
+
+export interface HccProjectGenomeProposal {
+  id: string;
+  projectId: string;
+  baseVersion: number;
+  mode: string;
+  status: "pending_approval" | "approved" | "rejected";
+  patch: Partial<HccProjectGenomeContract>;
+  evidence: Record<string, unknown>;
+  rationale: string;
+  diff: { changeCount: number; changedFields: string[]; changes: Array<{ field: string; before: unknown; after: unknown }> };
+}
+
+export interface HccProjectGenomeCenter {
+  projectId: string;
+  currentVersion: number;
+  contentHash: string;
+  genome: HccProjectGenomeContract;
+  source: string;
+  versions: Array<{ version: number; contentHash: string; source: string; actor: string; createdAt: number; genome: HccProjectGenomeContract }>;
+  proposals: HccProjectGenomeProposal[];
+  alignments: Array<{ id: string; executionId: string; genomeVersion: number; genomeHash: string; overallScore: number; dimensions: Record<string, number>; evidence: Record<string, unknown> }>;
+  latestAlignment?: { overallScore: number; executionId: string } | null;
+  summary: { versionCount: number; pendingProposals: number; alignmentCount: number };
+}
+
 export interface HccOpportunityEvidence {
   signal: string;
   value: unknown;
