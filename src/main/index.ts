@@ -74,12 +74,15 @@ import {
 } from "./config";
 import {
   actOnHccOpportunity,
+  approveHccOpportunityIntervention,
   appendHccLearningEvent,
   compareHccClonedApp,
   createHccClonedApp,
   finalizeHccCloneLearning,
   linkHccCloneProject,
   recordHccCloneTaste,
+  recordHccOpportunityOutcome,
+  stageHccOpportunityIntervention,
   createHccLearningTopic,
   createHccTimeBlock,
   cancelHccTimeBlock,
@@ -595,8 +598,21 @@ function setupIPC(): void {
   );
   ipcMain.handle(
     "act-hcc-opportunity",
-    (_event, candidateId: string, action: "capture" | "dismiss" | "promote", rationale?: string) =>
+    (_event, candidateId: string, action: "capture" | "dismiss" | "defer" | "promote", rationale?: string) =>
       actOnHccOpportunity(candidateId, action, rationale),
+  );
+  ipcMain.handle(
+    "stage-hcc-opportunity-intervention",
+    (_event, candidateId: string, mode: "convert_project" | "create_tasks" | "stage_execution", rationale?: string, payload?: Record<string, unknown>) =>
+      stageHccOpportunityIntervention(candidateId, mode, rationale, payload),
+  );
+  ipcMain.handle("approve-hcc-opportunity-intervention", (_event, interventionId: string) =>
+    approveHccOpportunityIntervention(interventionId),
+  );
+  ipcMain.handle(
+    "record-hcc-opportunity-outcome",
+    (_event, interventionId: string, status: "positive" | "neutral" | "negative", metrics: Record<string, unknown>, evidence: Record<string, unknown>) =>
+      recordHccOpportunityOutcome(interventionId, status, metrics, evidence),
   );
   ipcMain.handle("get-hcc-learning", () => fetchHccLearning());
   ipcMain.handle("get-hcc-conductor-jobs", () => fetchHccConductorJobs());

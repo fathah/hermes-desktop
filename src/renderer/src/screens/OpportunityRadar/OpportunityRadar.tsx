@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   HccOpportunityCandidate,
+  HccOpportunityIntervention,
   HccOpportunityRadar,
 } from "../../types/hcc";
 
-type OpportunityAction = "capture" | "dismiss" | "promote";
+type OpportunityAction = "capture" | "dismiss" | "defer" | "promote";
+type InterventionMode = "convert_project" | "create_tasks" | "stage_execution";
 type CategoryFilter = "all" | HccOpportunityCandidate["category"];
 
 function evidenceValue(value: unknown): string {
@@ -22,6 +24,8 @@ function OpportunityRadar(): React.JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [rationale, setRationale] = useState("");
   const [acting, setActing] = useState<string | null>(null);
+  const [intervention, setIntervention] = useState<HccOpportunityIntervention | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   const load = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -64,6 +68,64 @@ function OpportunityRadar(): React.JSX.Element {
     }
   };
 
+  const stage = async (candidate: HccOpportunityCandidate, mode: InterventionMode): Promise<void> => {
+    setActing(`${candidate.id}:${mode}`);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await window.hermesAPI.stageHccOpportunityIntervention(
+        candidate.id,
+        mode,
+        selectedId === candidate.id ? rationale.trim() : "",
+        mode === "convert_project" ? { projectName: candidate.title } : {},
+      );
+      setIntervention(result as HccOpportunityIntervention);
+      setMessage("Intervention staged. Canonical state unchanged until explicit approval.");
+      await load();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "Intervention staging failed.");
+    } finally {
+      setActing(null);
+    }
+  };
+
+  const approve = async (): Promise<void> => {
+    if (!intervention) return;
+    setActing(`approve:${intervention.id}`);
+    setError(null);
+    try {
+      const result = await window.hermesAPI.approveHccOpportunityIntervention(intervention.id);
+      setIntervention(result as HccOpportunityIntervention);
+      setMessage("Intervention approved. Project/tasks or pending execution created with audit evidence.");
+      await load();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "Intervention approval failed.");
+    } finally {
+      setActing(null);
+    }
+  };
+
+  const recordOutcome = async (status: "positive" | "neutral" | "negative"): Promise<void> => {
+    if (!intervention) return;
+    setActing(`outcome:${intervention.id}`);
+    setError(null);
+    try {
+      await window.hermesAPI.recordHccOpportunityOutcome(
+        intervention.id,
+        status,
+        { operatorAssessment: status },
+        { projectId: intervention.projectId, executionId: intervention.executionId },
+      );
+      setMessage("Outcome measured. Reflective lesson persisted into private HCC memory.");
+      setIntervention({ ...intervention, status: "measured" });
+      await load();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "Outcome recording failed.");
+    } finally {
+      setActing(null);
+    }
+  };
+
   if (loading && !radar) {
     return <div className="war-room-loading">Scanning canonical HCC signals…</div>;
   }
@@ -86,6 +148,25 @@ function OpportunityRadar(): React.JSX.Element {
       </section>
 
       {error && <div className="war-room-error-card"><div className="war-room-item-title">Radar error</div><div className="war-room-error-copy">{error}</div></div>}
+      {message && <div className="war-room-panel opportunity-message">{message}</div>}
+      {intervention && (
+        <section className="war-room-panel opportunity-intervention-panel">
+          <div>
+            <div className="war-room-card-kicker">Human-gated intervention</div>
+            <div className="war-room-panel-title">{intervention.mode.replaceAll("_", " ")} · {intervention.status}</div>
+            <div className="war-room-subtitle">{intervention.plan.mutationPreview}</div>
+            <div className="war-room-item-meta">{intervention.plan.rollbackHint}</div>
+          </div>
+          <div className="war-room-action-row">
+            {intervention.status === "pending_approval" && <button className="war-room-refresh-btn opportunity-promote" disabled={Boolean(acting)} onClick={() => void approve()}>Approve intervention</button>}
+            {intervention.status === "approved" && <>
+              <button className="war-room-refresh-btn" disabled={Boolean(acting)} onClick={() => void recordOutcome("positive")}>Outcome positive</button>
+              <button className="war-room-refresh-btn" disabled={Boolean(acting)} onClick={() => void recordOutcome("neutral")}>Outcome neutral</button>
+              <button className="war-room-refresh-btn" disabled={Boolean(acting)} onClick={() => void recordOutcome("negative")}>Outcome negative</button>
+            </>}
+          </div>
+        </section>
+      )}
 
       <section className="war-room-hero-grid">
         <article className="war-room-stat-card"><div className="war-room-stat-label">Visible signals</div><div className="war-room-stat-value">{radar?.summary.total || 0}</div></article>
@@ -155,6 +236,12 @@ function OpportunityRadar(): React.JSX.Element {
                 <span>Recommended</span>
                 <strong>{candidate.recommendedAction}</strong>
               </div>
+              <div className="opportunity-impact-grid">
+                <div><span>Why now</span><strong>{candidate.whyNow}</strong></div>
+                <div><span>Expected upside</span><strong>{candidate.expectedUpside}</strong></div>
+                <div><span>Opportunity cost</span><strong>{candidate.opportunityCost}</strong></div>
+                <div><span>Execution readiness</span><strong>{candidate.executionReadiness}%</strong></div>
+              </div>
 
               {selected && (
                 <textarea
@@ -173,8 +260,10 @@ function OpportunityRadar(): React.JSX.Element {
                 <div className="war-room-action-row">
                   <button className="war-room-refresh-btn" onClick={() => setSelectedId(selected ? null : candidate.id)}>Rationale</button>
                   <button className="war-room-refresh-btn" disabled={Boolean(acting)} onClick={() => void act(candidate, "capture")}>Capture</button>
+                  <button className="war-room-refresh-btn" disabled={Boolean(acting)} onClick={() => void act(candidate, "defer")}>Defer</button>
                   <button className="war-room-refresh-btn" disabled={Boolean(acting)} onClick={() => void act(candidate, "dismiss")}>Dismiss</button>
-                  <button className="war-room-refresh-btn opportunity-promote" disabled={Boolean(acting)} onClick={() => void act(candidate, "promote")}>Promote for approval</button>
+                  <button className="war-room-refresh-btn" disabled={Boolean(acting)} onClick={() => void stage(candidate, candidate.target.type === "project" ? "create_tasks" : "convert_project")}>{candidate.target.type === "project" ? "Stage tasks" : "Stage project"}</button>
+                  <button className="war-room-refresh-btn opportunity-promote" disabled={Boolean(acting)} onClick={() => void stage(candidate, "stage_execution")}>Stage execution</button>
                 </div>
               </div>
             </article>

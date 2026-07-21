@@ -246,9 +246,23 @@ const hermesAPI = {
     ipcRenderer.invoke("get-hcc-opportunities", includeDismissed),
   actOnHccOpportunity: (
     candidateId: string,
-    action: "capture" | "dismiss" | "promote",
+    action: "capture" | "dismiss" | "defer" | "promote",
     rationale?: string,
   ): Promise<unknown> => ipcRenderer.invoke("act-hcc-opportunity", candidateId, action, rationale),
+  stageHccOpportunityIntervention: (
+    candidateId: string,
+    mode: "convert_project" | "create_tasks" | "stage_execution",
+    rationale?: string,
+    payload?: Record<string, unknown>,
+  ): Promise<unknown> => ipcRenderer.invoke("stage-hcc-opportunity-intervention", candidateId, mode, rationale, payload),
+  approveHccOpportunityIntervention: (interventionId: string): Promise<unknown> =>
+    ipcRenderer.invoke("approve-hcc-opportunity-intervention", interventionId),
+  recordHccOpportunityOutcome: (
+    interventionId: string,
+    status: "positive" | "neutral" | "negative",
+    metrics: Record<string, unknown>,
+    evidence: Record<string, unknown>,
+  ): Promise<unknown> => ipcRenderer.invoke("record-hcc-opportunity-outcome", interventionId, status, metrics, evidence),
   getHccLearning: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-learning"),
   getHccConductorJobs: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-conductor-jobs"),
   spawnHccConductor: (goal: string, maxParallel?: number, supervised?: boolean): Promise<unknown> =>

@@ -284,12 +284,43 @@ export async function fetchHccOpportunities(includeDismissed = false): Promise<u
 
 export async function actOnHccOpportunity(
   candidateId: string,
-  action: "capture" | "dismiss" | "promote",
+  action: "capture" | "dismiss" | "defer" | "promote",
   rationale = "",
 ): Promise<unknown> {
   return fetchJson(`/api/hcc/opportunities/${encodeURIComponent(candidateId)}/actions`, {
     method: "POST",
     body: JSON.stringify({ action, actor: "hermes-desktop", rationale }),
+  });
+}
+
+export async function stageHccOpportunityIntervention(
+  candidateId: string,
+  mode: "convert_project" | "create_tasks" | "stage_execution",
+  rationale = "",
+  payload: Record<string, unknown> = {},
+): Promise<unknown> {
+  return fetchJson(`/api/hcc/opportunities/${encodeURIComponent(candidateId)}/interventions`, {
+    method: "POST",
+    body: JSON.stringify({ mode, actor: "hermes-desktop", rationale, payload }),
+  });
+}
+
+export async function approveHccOpportunityIntervention(interventionId: string): Promise<unknown> {
+  return fetchJson(`/api/hcc/opportunities/interventions/${encodeURIComponent(interventionId)}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ actor: "hermes-desktop" }),
+  });
+}
+
+export async function recordHccOpportunityOutcome(
+  interventionId: string,
+  status: "positive" | "neutral" | "negative",
+  metrics: Record<string, unknown>,
+  evidence: Record<string, unknown>,
+): Promise<unknown> {
+  return fetchJson(`/api/hcc/opportunities/interventions/${encodeURIComponent(interventionId)}/outcomes`, {
+    method: "POST",
+    body: JSON.stringify({ status, metrics, evidence, actor: "hermes-desktop" }),
   });
 }
 

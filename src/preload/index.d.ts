@@ -135,8 +135,21 @@ interface HermesAPI {
   getHccOpportunities: (includeDismissed?: boolean) => Promise<unknown>;
   actOnHccOpportunity: (
     candidateId: string,
-    action: "capture" | "dismiss" | "promote",
+    action: "capture" | "dismiss" | "defer" | "promote",
     rationale?: string,
+  ) => Promise<unknown>;
+  stageHccOpportunityIntervention: (
+    candidateId: string,
+    mode: "convert_project" | "create_tasks" | "stage_execution",
+    rationale?: string,
+    payload?: Record<string, unknown>,
+  ) => Promise<unknown>;
+  approveHccOpportunityIntervention: (interventionId: string) => Promise<unknown>;
+  recordHccOpportunityOutcome: (
+    interventionId: string,
+    status: "positive" | "neutral" | "negative",
+    metrics: Record<string, unknown>,
+    evidence: Record<string, unknown>,
   ) => Promise<unknown>;
   getHccLearning: () => Promise<unknown>;
   getHccConductorJobs: () => Promise<unknown>;

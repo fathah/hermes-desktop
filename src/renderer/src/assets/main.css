@@ -2537,6 +2537,24 @@ textarea.war-room-input {
   font-size: 12px;
 }
 
+.opportunity-impact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+.opportunity-impact-grid > div {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid rgba(125, 211, 252, 0.14);
+  border-radius: 11px;
+  background: rgba(8, 47, 73, 0.2);
+}
+.opportunity-impact-grid span { color: rgba(125, 211, 252, 0.72); font-size: 10px; text-transform: uppercase; }
+.opportunity-impact-grid strong { color: rgba(226, 232, 240, 0.9); font-size: 12px; line-height: 1.45; }
+.opportunity-intervention-panel { display: flex; align-items: center; justify-content: space-between; gap: 18px; border-color: rgba(250, 204, 21, 0.28); }
+.opportunity-message { color: #a7f3d0; border-color: rgba(52, 211, 153, 0.28); }
+
 .opportunity-rationale { min-height: 74px; resize: vertical; }
 .opportunity-promote {
   border-color: rgba(192, 132, 252, 0.46);

@@ -228,8 +228,27 @@ export interface HccOpportunityCandidate {
   risk: number;
   score: number;
   recommendedAction: string;
-  status: "new" | "captured" | "proposed" | "dismissed";
+  whyNow: string;
+  expectedUpside: string;
+  opportunityCost: string;
+  executionReadiness: number;
+  linkedDomainIds: string[];
+  linkedProjectIds: string[];
+  status: "new" | "captured" | "deferred" | "proposed" | "activated" | "measured" | "dismissed";
   lastRationale?: string;
+}
+
+export interface HccOpportunityIntervention {
+  id: string;
+  candidateId: string;
+  mode: "convert_project" | "create_tasks" | "stage_execution";
+  status: "pending_approval" | "approved" | "measured";
+  actor: string;
+  plan: { requiresApproval: boolean; mutationPreview: string; rollbackHint: string; rationale?: string };
+  projectId?: string | null;
+  executionId?: string | null;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface HccOpportunityRadar {
