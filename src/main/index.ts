@@ -76,11 +76,14 @@ import {
   actOnHccOpportunity,
   approveHccOpportunityIntervention,
   appendHccLearningEvent,
+  commitHccDecision,
   compareHccClonedApp,
+  createHccDecision,
   createHccClonedApp,
   finalizeHccCloneLearning,
   linkHccCloneProject,
   recordHccCloneTaste,
+  recordHccDecisionOutcome,
   recordHccOpportunityOutcome,
   rollbackHccProjectGenome,
   stageHccCapture,
@@ -108,6 +111,7 @@ import {
   fetchHccRunComparison,
   fetchHccRuns,
   fetchHccSwarmOverview,
+  fetchHccDecisions,
   fetchHccDomainDetail,
   fetchHccDomains,
   fetchHccGraph,
@@ -119,6 +123,7 @@ import {
   createHccExecution,
   decideHccCaptureRoute,
   decideHccExecution,
+  evaluateHccDecision,
   executeHccRecommendation,
   refreshHccExecution,
   retryHccExecution,
@@ -583,6 +588,11 @@ function setupIPC(): void {
   ipcMain.handle("stage-hcc-intervention", (_event, interventionId: string, actor?: string) =>
     stageHccIntervention(interventionId, actor),
   );
+  ipcMain.handle("get-hcc-decisions", () => fetchHccDecisions());
+  ipcMain.handle("create-hcc-decision", (_event, payload: Record<string, unknown>) => createHccDecision(payload));
+  ipcMain.handle("evaluate-hcc-decision", (_event, decisionId: string) => evaluateHccDecision(decisionId));
+  ipcMain.handle("commit-hcc-decision", (_event, decisionId: string, optionId: string, rationale: string, overrideRationale?: string) => commitHccDecision(decisionId, optionId, rationale, overrideRationale));
+  ipcMain.handle("record-hcc-decision-outcome", (_event, decisionId: string, payload: Record<string, unknown>) => recordHccDecisionOutcome(decisionId, payload));
   ipcMain.handle("get-hcc-captures", () => fetchHccCaptures());
   ipcMain.handle("create-hcc-capture", (_event, payload: Record<string, unknown>) => createHccCapture(payload));
   ipcMain.handle("stage-hcc-capture", (_event, captureId: string, targetType?: string, targetId?: string) => stageHccCapture(captureId, targetType, targetId));

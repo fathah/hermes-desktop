@@ -15,6 +15,7 @@ import GatewayCapabilityMap from "../GatewayCapabilityMap/GatewayCapabilityMap";
 import IntelligenceFabric from "../IntelligenceFabric/IntelligenceFabric";
 import ExecutionCenter from "../ExecutionCenter/ExecutionCenter";
 import CaptureInbox from "../CaptureInbox/CaptureInbox";
+import DecisionCenter from "../DecisionCenter/DecisionCenter";
 
 export type HccWorkspaceView =
   | "war-room"
@@ -33,7 +34,8 @@ export type HccWorkspaceView =
   | "gateway-map"
   | "intelligence-fabric"
   | "execution-center"
-  | "capture-inbox";
+  | "capture-inbox"
+  | "decision-center";
 
 interface HccWorkspaceViewsProps {
   activeView: string;
@@ -63,6 +65,7 @@ const HCC_VIEWS = new Set<string>([
   "intelligence-fabric",
   "execution-center",
   "capture-inbox",
+  "decision-center",
 ]);
 
 function HccWorkspaceViews({
@@ -127,6 +130,9 @@ function HccWorkspaceViews({
       break;
     case "intelligence-fabric":
       content = <IntelligenceFabric onOpenExecutionCenter={() => onNavigateHccView?.("execution-center")} />;
+      break;
+    case "decision-center":
+      content = <DecisionCenter />;
       break;
     case "capture-inbox":
       content = <CaptureInbox />;

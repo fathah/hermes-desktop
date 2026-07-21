@@ -220,6 +220,11 @@ const hermesAPI = {
     ipcRenderer.invoke("stage-hcc-recovery-action", actionId),
   stageHccIntervention: (interventionId: string, actor?: string): Promise<unknown> =>
     ipcRenderer.invoke("stage-hcc-intervention", interventionId, actor),
+  getHccDecisions: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-decisions"),
+  createHccDecision: (payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("create-hcc-decision", payload),
+  evaluateHccDecision: (decisionId: string): Promise<unknown> => ipcRenderer.invoke("evaluate-hcc-decision", decisionId),
+  commitHccDecision: (decisionId: string, optionId: string, rationale: string, overrideRationale?: string): Promise<unknown> => ipcRenderer.invoke("commit-hcc-decision", decisionId, optionId, rationale, overrideRationale),
+  recordHccDecisionOutcome: (decisionId: string, payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("record-hcc-decision-outcome", decisionId, payload),
   getHccCaptures: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-captures"),
   createHccCapture: (payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("create-hcc-capture", payload),
   stageHccCapture: (captureId: string, targetType?: string, targetId?: string): Promise<unknown> => ipcRenderer.invoke("stage-hcc-capture", captureId, targetType, targetId),

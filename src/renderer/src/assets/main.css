@@ -2537,6 +2537,26 @@ textarea.war-room-input {
   font-size: 12px;
 }
 
+.decision-center-screen { display: grid; gap: 18px; }
+.decision-composer { display: grid; gap: 10px; border-color: rgba(244, 114, 182, .24); }
+.decision-composer textarea { min-height: 82px; resize: vertical; }
+.decision-option-draft { display: grid; grid-template-columns: .8fr 1.2fr 1fr; gap: 9px; }
+.decision-primary { border-color: rgba(244, 114, 182, .38); color: #fce7f3; background: rgba(190, 24, 93, .14); }
+.decision-list { display: grid; gap: 14px; }
+.decision-card { display: grid; gap: 13px; }
+.decision-head, .decision-option > div:first-child { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.decision-profile { display: flex; flex-wrap: wrap; gap: 7px; }
+.decision-profile span, .decision-score-row code { border: 1px solid rgba(148,163,184,.16); border-radius: 8px; padding: 5px 8px; color: #cbd5e1; font-size: 10px; }
+.decision-recommendation, .decision-record { display: grid; gap: 6px; padding: 12px; border: 1px solid rgba(244,114,182,.24); border-radius: 12px; background: rgba(131,24,67,.12); }
+.decision-recommendation span, .decision-record span { color: #cbd5e1; font-size: 11px; }
+.decision-options { display: grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap: 10px; }
+.decision-option { display: grid; gap: 9px; padding: 12px; border: 1px solid rgba(148,163,184,.17); border-radius: 12px; background: rgba(15,23,42,.42); }
+.decision-option.ineligible { border-color: rgba(248,113,113,.28); opacity: .78; }
+.decision-score-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.decision-outcome { display: flex; flex-wrap: wrap; gap: 8px; color: #a7f3d0; font-size: 11px; }
+.decision-outcome span { color: #94a3b8; }
+@media (max-width: 900px) { .decision-option-draft { grid-template-columns: 1fr; } }
+
 .capture-inbox-screen { display: grid; gap: 18px; }
 .capture-composer { display: grid; gap: 12px; border-color: rgba(34, 211, 238, .24); }
 .capture-composer textarea { min-height: 116px; resize: vertical; }

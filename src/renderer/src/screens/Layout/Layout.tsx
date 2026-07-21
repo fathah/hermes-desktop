@@ -60,6 +60,7 @@ type View =
   | "intelligence-fabric"
   | "execution-center"
   | "capture-inbox"
+  | "decision-center"
   | "chat"
   | "sessions"
   | "agents"
@@ -211,6 +212,7 @@ const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; label?: strin
   { view: "intelligence-fabric", icon: Layers, labelKey: "navigation.gateway", label: "Intelligence", eyebrow: "Attention" },
   { view: "execution-center", icon: Wrench, labelKey: "navigation.tools", label: "Executions", eyebrow: "Approvals" },
   { view: "capture-inbox", icon: Download, labelKey: "navigation.chat", label: "Capture", eyebrow: "Ingress" },
+  { view: "decision-center", icon: Sparkles, labelKey: "navigation.office", label: "Decisions", eyebrow: "Alignment" },
   { view: "gateway-map", icon: Signal, labelKey: "navigation.gateway", label: "Gateway Map", eyebrow: "Fabric" },
   { view: "opportunity-radar", icon: Sparkles, labelKey: "navigation.office", label: "Opportunities", eyebrow: "Leverage" },
   { view: "learning-engine", icon: Brain, labelKey: "navigation.memory", label: "Learning", eyebrow: "Progression" },
@@ -253,6 +255,7 @@ const HCC_WORKSPACE_VIEWS = new Set<View>([
   "intelligence-fabric",
   "execution-center",
   "capture-inbox",
+  "decision-center",
 ]);
 
 function readStoredView(): View {

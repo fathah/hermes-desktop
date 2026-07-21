@@ -116,6 +116,11 @@ interface HermesAPI {
   decideHccTradeoff: (conflictId: string, optionId: string, rationale: string) => Promise<unknown>;
   stageHccRecoveryAction: (actionId: string) => Promise<unknown>;
   stageHccIntervention: (interventionId: string, actor?: string) => Promise<unknown>;
+  getHccDecisions: () => Promise<unknown>;
+  createHccDecision: (payload: Record<string, unknown>) => Promise<unknown>;
+  evaluateHccDecision: (decisionId: string) => Promise<unknown>;
+  commitHccDecision: (decisionId: string, optionId: string, rationale: string, overrideRationale?: string) => Promise<unknown>;
+  recordHccDecisionOutcome: (decisionId: string, payload: Record<string, unknown>) => Promise<unknown>;
   getHccCaptures: () => Promise<unknown>;
   createHccCapture: (payload: Record<string, unknown>) => Promise<unknown>;
   stageHccCapture: (captureId: string, targetType?: string, targetId?: string) => Promise<unknown>;

@@ -195,6 +195,12 @@ export async function stageHccRecoveryAction(actionId: string): Promise<unknown>
   });
 }
 
+export async function fetchHccDecisions(): Promise<unknown> { return fetchJson("/api/hcc/decisions"); }
+export async function createHccDecision(payload: Record<string, unknown>): Promise<unknown> { return fetchJson("/api/hcc/decisions", { method: "POST", body: JSON.stringify({ actor: "hermes-desktop", ...payload }) }); }
+export async function evaluateHccDecision(decisionId: string): Promise<unknown> { return fetchJson(`/api/hcc/decisions/${encodeURIComponent(decisionId)}/evaluate`, { method: "POST", body: JSON.stringify({ actor: "hermes-desktop" }) }); }
+export async function commitHccDecision(decisionId: string, optionId: string, rationale: string, overrideRationale?: string): Promise<unknown> { return fetchJson(`/api/hcc/decisions/${encodeURIComponent(decisionId)}/commit`, { method: "POST", body: JSON.stringify({ actor: "hermes-desktop", optionId, rationale, overrideRationale }) }); }
+export async function recordHccDecisionOutcome(decisionId: string, payload: Record<string, unknown>): Promise<unknown> { return fetchJson(`/api/hcc/decisions/${encodeURIComponent(decisionId)}/outcomes`, { method: "POST", body: JSON.stringify({ actor: "hermes-desktop", ...payload }) }); }
+
 export async function fetchHccCaptures(): Promise<unknown> {
   return fetchJson("/api/hcc/capture");
 }
