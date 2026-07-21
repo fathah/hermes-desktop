@@ -123,6 +123,9 @@ interface HermesAPI {
   createHccClonedApp: (payload: Record<string, unknown>) => Promise<unknown>;
   compareHccClonedApp: (appId: string, payload?: Record<string, unknown>) => Promise<unknown>;
   materializeHccClonedApp: (appId: string) => Promise<unknown>;
+  recordHccCloneTaste: (appId: string, signals: Array<Record<string, unknown>>) => Promise<unknown>;
+  linkHccCloneProject: (appId: string, payload: Record<string, unknown>) => Promise<unknown>;
+  finalizeHccCloneLearning: (appId: string) => Promise<unknown>;
   getHccDomains: () => Promise<unknown>;
   getHccLifeDomainSummary: () => Promise<unknown>;
   getHccDomainDetail: (domainId: string) => Promise<unknown>;

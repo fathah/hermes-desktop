@@ -233,6 +233,27 @@ export async function compareHccClonedApp(appId: string, payload: Record<string,
   });
 }
 
+export async function recordHccCloneTaste(appId: string, signals: Array<Record<string, unknown>>): Promise<unknown> {
+  return fetchJson(`/api/cloned-apps/${encodeURIComponent(appId)}/taste`, {
+    method: "POST",
+    body: JSON.stringify({ actor: "desktop-operator", signals }),
+  });
+}
+
+export async function linkHccCloneProject(appId: string, payload: Record<string, unknown> = {}): Promise<unknown> {
+  return fetchJson(`/api/cloned-apps/${encodeURIComponent(appId)}/project`, {
+    method: "POST",
+    body: JSON.stringify({ actor: "desktop-operator", ...payload }),
+  });
+}
+
+export async function finalizeHccCloneLearning(appId: string): Promise<unknown> {
+  return fetchJson(`/api/cloned-apps/${encodeURIComponent(appId)}/finalize`, {
+    method: "POST",
+    body: JSON.stringify({ actor: "desktop-operator" }),
+  });
+}
+
 export async function fetchHccDomains(): Promise<unknown> {
   return fetchJson("/api/hcc/domains");
 }

@@ -77,6 +77,9 @@ import {
   appendHccLearningEvent,
   compareHccClonedApp,
   createHccClonedApp,
+  finalizeHccCloneLearning,
+  linkHccCloneProject,
+  recordHccCloneTaste,
   createHccLearningTopic,
   createHccTimeBlock,
   cancelHccTimeBlock,
@@ -578,6 +581,9 @@ function setupIPC(): void {
   ipcMain.handle("create-hcc-cloned-app", (_event, payload: Record<string, unknown>) => createHccClonedApp(payload));
   ipcMain.handle("compare-hcc-cloned-app", (_event, appId: string, payload: Record<string, unknown>) => compareHccClonedApp(appId, payload));
   ipcMain.handle("materialize-hcc-cloned-app", (_event, appId: string) => materializeHccClonedApp(appId));
+  ipcMain.handle("record-hcc-clone-taste", (_event, appId: string, signals: Array<Record<string, unknown>>) => recordHccCloneTaste(appId, signals));
+  ipcMain.handle("link-hcc-clone-project", (_event, appId: string, payload: Record<string, unknown>) => linkHccCloneProject(appId, payload));
+  ipcMain.handle("finalize-hcc-clone-learning", (_event, appId: string) => finalizeHccCloneLearning(appId));
   ipcMain.handle("get-hcc-domains", () => fetchHccDomains());
   ipcMain.handle("get-hcc-life-domain-summary", () => fetchHccLifeDomainSummary());
   ipcMain.handle("get-hcc-domain-detail", (_event, domainId: string) => fetchHccDomainDetail(domainId));

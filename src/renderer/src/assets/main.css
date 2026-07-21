@@ -2900,3 +2900,28 @@ textarea.war-room-input {
   .learning-policy,
   .learning-inline-action { align-items: stretch; flex-direction: column; }
 }
+
+.clone-studio-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.clone-success-panel { border-color: rgba(110, 231, 183, 0.4); color: #a7f3d0; }
+.clone-workflow-panel { overflow: hidden; }
+.clone-stage-row { display: grid; grid-template-columns: repeat(6, minmax(130px, 1fr)); gap: 9px; margin-top: 14px; overflow-x: auto; padding-bottom: 4px; }
+.clone-stage-row button { min-height: 48px; padding: 9px 12px; border: 1px solid rgba(125, 211, 252, 0.2); border-radius: 12px; background: rgba(14, 116, 144, 0.13); color: #dff7ff; font-size: 11px; font-weight: 750; }
+.clone-stage-row button:hover:not(:disabled) { border-color: rgba(125, 211, 252, 0.55); background: rgba(14, 116, 144, 0.25); }
+.clone-stage-row button:disabled { opacity: 0.48; }
+.clone-evidence-grid,
+.clone-score-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.clone-evidence-grid > div,
+.clone-score-grid > div { display: grid; gap: 4px; padding: 10px; border: 1px solid rgba(148, 163, 184, 0.14); border-radius: 10px; background: rgba(15, 23, 42, 0.4); }
+.clone-evidence-grid span,
+.clone-score-grid span { color: rgba(203, 213, 225, 0.65); font-size: 10px; text-transform: uppercase; }
+.clone-evidence-grid strong,
+.clone-score-grid strong { color: #f8fafc; font-size: 14px; overflow-wrap: anywhere; }
+.clone-token-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.clone-token-row span { width: 28px; height: 28px; border: 2px solid rgba(255,255,255,0.22); border-radius: 999px; box-shadow: 0 6px 18px rgba(0,0,0,0.28); }
+.clone-taste-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.clone-taste-columns > div { display: flex; flex-direction: column; gap: 6px; min-height: 90px; padding: 10px; border-radius: 12px; background: rgba(15, 23, 42, 0.36); }
+.clone-taste-columns strong { color: #f8fafc; font-size: 11px; text-transform: uppercase; }
+.clone-taste-columns span { color: rgba(226, 232, 240, 0.76); font-size: 12px; }
+.war-room-list-button.selected { border-color: rgba(56, 189, 248, 0.55); background: rgba(14, 165, 233, 0.14); }
+@media (max-width: 1100px) { .clone-studio-grid { grid-template-columns: 1fr; } .clone-stage-row { grid-template-columns: repeat(3, minmax(140px, 1fr)); } }
+@media (max-width: 720px) { .clone-evidence-grid, .clone-score-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .clone-stage-row { grid-template-columns: 1fr; } }

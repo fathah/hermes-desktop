@@ -231,6 +231,9 @@ const hermesAPI = {
   compareHccClonedApp: (appId: string, payload?: Record<string, unknown>): Promise<unknown> =>
     ipcRenderer.invoke("compare-hcc-cloned-app", appId, payload || {}),
   materializeHccClonedApp: (appId: string): Promise<unknown> => ipcRenderer.invoke("materialize-hcc-cloned-app", appId),
+  recordHccCloneTaste: (appId: string, signals: Array<Record<string, unknown>>): Promise<unknown> => ipcRenderer.invoke("record-hcc-clone-taste", appId, signals),
+  linkHccCloneProject: (appId: string, payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("link-hcc-clone-project", appId, payload),
+  finalizeHccCloneLearning: (appId: string): Promise<unknown> => ipcRenderer.invoke("finalize-hcc-clone-learning", appId),
   getHccDomains: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-domains"),
   getHccLifeDomainSummary: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-life-domain-summary"),
   getHccDomainDetail: (domainId: string): Promise<unknown> =>
