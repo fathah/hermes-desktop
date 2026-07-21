@@ -21,7 +21,12 @@ const execution = {
   maxAttempts: 3,
   linkedCommandId: null,
   linkedHandoffId: "handoff_1",
-  payload: { task: "Return a verified result" },
+  payload: {
+    task: "Return a verified result",
+    recommendationLabel: "Inspect retrieval",
+    recommendationActionType: "retrieval.refresh",
+    operatorIntent: "refresh retrieval context pack and verify grounded coverage",
+  },
   result: null,
   error: null,
   createdAt: 1,
@@ -64,6 +69,8 @@ describe("ExecutionCenter", () => {
     render(<ExecutionCenter />);
     expect(await screen.findByText("Execution Center")).toBeInTheDocument();
     expect(screen.getAllByText("Return a verified result")).toHaveLength(2);
+    expect(screen.getByText(/Source recommendation: Inspect retrieval/)).toBeInTheDocument();
+    expect(screen.getByText(/Original action: retrieval.refresh/)).toBeInTheDocument();
     expect(screen.getByText("awaiting approval")).toBeInTheDocument();
 
     await act(async () => {
@@ -84,5 +91,24 @@ describe("ExecutionCenter", () => {
     expect(await screen.findByText("real artifact")).toBeInTheDocument();
     expect(screen.getByText("Gateway output")).toBeInTheDocument();
     expect(screen.getByText("execution.proposed")).toBeInTheDocument();
+  });
+
+  it("focuses a staged execution when briefing dispatches an execution-focus event", async () => {
+    getHccExecutions.mockResolvedValue({
+      items: [execution, { ...execution, id: "exec_2", targetGateway: "coding-gateway", action: "coding.test", payload: { recommendationLabel: "Inspect retrieval", recommendationActionType: "retrieval.refresh", operatorIntent: "refresh retrieval context pack and verify grounded coverage" } }],
+      count: 2,
+      pendingApproval: 2,
+      active: 0,
+      failed: 0,
+    });
+    render(<ExecutionCenter />);
+    expect(await screen.findByText("Execution Center")).toBeInTheDocument();
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent("hcc:execution-focus", { detail: { executionId: "exec_2" } }));
+    });
+
+    await waitFor(() => expect(screen.getByText(/Source recommendation: Inspect retrieval/)).toBeInTheDocument());
+    expect(screen.getAllByText(/refresh retrieval context pack and verify grounded coverage/)).toHaveLength(2);
   });
 });

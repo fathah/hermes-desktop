@@ -12,6 +12,7 @@ import Office from "../Office/Office";
 import Models from "../Models/Models";
 import Schedules from "../Schedules/Schedules";
 import HccWorkspaceViews from "./HccWorkspaceViews";
+import { HCC_VIEW_REQUEST_EVENT } from "../ExecutionCenter/ExecutionCenter";
 import RemoteNotice from "../../components/RemoteNotice";
 import Spotlight from "../../components/Spotlight";
 import HomeDashboard from "../../components/HomeDashboard";
@@ -206,9 +207,9 @@ const STORAGE_KEYS = {
 const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; label?: string; eyebrow: string }[] = [
   { view: "war-room", icon: Download, labelKey: "navigation.chat", label: "Home", eyebrow: "Overview" },
   { view: "control-plane", icon: Users, labelKey: "navigation.agents", label: "Control Plane", eyebrow: "Missions" },
-  { view: "gateway-map", icon: Signal, labelKey: "navigation.gateway", label: "Gateway Map", eyebrow: "Fabric" },
   { view: "intelligence-fabric", icon: Layers, labelKey: "navigation.gateway", label: "Intelligence", eyebrow: "Attention" },
   { view: "execution-center", icon: Wrench, labelKey: "navigation.tools", label: "Executions", eyebrow: "Approvals" },
+  { view: "gateway-map", icon: Signal, labelKey: "navigation.gateway", label: "Gateway Map", eyebrow: "Fabric" },
   { view: "opportunity-radar", icon: Sparkles, labelKey: "navigation.office", label: "Opportunities", eyebrow: "Leverage" },
   { view: "learning-engine", icon: Brain, labelKey: "navigation.memory", label: "Learning", eyebrow: "Progression" },
   { view: "projects", icon: Building, labelKey: "navigation.office", label: "Projects", eyebrow: "Build" },
@@ -248,6 +249,7 @@ const HCC_WORKSPACE_VIEWS = new Set<View>([
   "learning-engine",
   "gateway-map",
   "intelligence-fabric",
+  "execution-center",
 ]);
 
 function readStoredView(): View {
@@ -575,6 +577,8 @@ function Layout(): React.JSX.Element {
       setProviderLabel(modelConfig.provider || "unknown");
       setScheduleCount(cronJobs.length);
       setConnectionMode(connectionConfig.mode);
+      const nextRemoteMode = connectionConfig.mode === "remote";
+      setRemoteMode(nextRemoteMode);
       setPlatformEnabled(platforms);
       setRecentSessions(
         cachedSessions.slice(0, 4).map((session) => ({
@@ -955,8 +959,8 @@ function Layout(): React.JSX.Element {
     window.hermesAPI.abortChat();
     setMessages([]);
     setCurrentSessionId(null);
-    setView("chat");
-  }, [activeProfile, pushEvent, rememberAction]);
+    setView(remoteMode ? "war-room" : "chat");
+  }, [activeProfile, pushEvent, rememberAction, remoteMode]);
 
   const handleNavigate = useCallback(
     (nextView: string) => {
@@ -966,6 +970,15 @@ function Layout(): React.JSX.Element {
     },
     [rememberAction],
   );
+
+  useEffect(() => {
+    const handler = (event: Event): void => {
+      const nextView = (event as CustomEvent<{ view?: string }>).detail?.view;
+      if (typeof nextView === "string") handleNavigate(nextView);
+    };
+    window.addEventListener(HCC_VIEW_REQUEST_EVENT, handler as EventListener);
+    return () => window.removeEventListener(HCC_VIEW_REQUEST_EVENT, handler as EventListener);
+  }, [handleNavigate]);
 
   const handleSearchSessions = useCallback(() => {
     rememberAction("action:search-sessions");
@@ -1064,6 +1077,20 @@ function Layout(): React.JSX.Element {
     };
 
     return [
+      {
+        key: "intelligence-fabric",
+        label: "Open Intelligence",
+        description: "Stage recommendations into governed execution.",
+        rank: rankBoost("view:intelligence-fabric", 90),
+        onClick: () => handleNavigate("intelligence-fabric"),
+      },
+      {
+        key: "execution-center",
+        label: "Open Executions",
+        description: "Approve, dispatch, and verify governed runs.",
+        rank: rankBoost("view:execution-center", 88),
+        onClick: () => handleNavigate("execution-center"),
+      },
       {
         key: "new-chat",
         label: "Start a new chat",
@@ -1429,6 +1456,17 @@ function Layout(): React.JSX.Element {
             <span className="sidebar-launcher-shortcut">⌘/Ctrl + P</span>
           </button>
 
+          <div className="sidebar-priority-links">
+            <button className="sidebar-priority-link" onClick={() => handleNavigate("intelligence-fabric")}>
+              <span className="sidebar-priority-link-label">Intelligence</span>
+              <span className="sidebar-priority-link-eyebrow">Attention</span>
+            </button>
+            <button className="sidebar-priority-link" onClick={() => handleNavigate("execution-center")}>
+              <span className="sidebar-priority-link-label">Executions</span>
+              <span className="sidebar-priority-link-eyebrow">Approvals</span>
+            </button>
+          </div>
+
           <nav className="sidebar-nav">
             {NAV_ITEMS.map(({ view: v, icon: Icon, labelKey, label, eyebrow }) => (
               <button
@@ -1742,14 +1780,6 @@ function Layout(): React.JSX.Element {
               </div>
             )}
 
-            <HccWorkspaceViews
-              activeView={view}
-              selectedProjectId={selectedProjectId}
-              selectedDomainId={selectedDomainId}
-              onOpenProject={handleOpenProject}
-              onOpenDomain={handleOpenDomain}
-              onOpenMemory={() => setView("hcc-memory")}
-            />
             <div
               style={{
                 display: view === "chat" ? "flex" : "none",
@@ -1839,6 +1869,17 @@ function Layout(): React.JSX.Element {
             >
               <Settings profile={activeProfile} visible={view === "settings"} />
             </div>
+            {HCC_WORKSPACE_VIEWS.has(view) && (
+              <HccWorkspaceViews
+                activeView={view}
+                selectedProjectId={selectedProjectId}
+                selectedDomainId={selectedDomainId}
+                onOpenProject={handleOpenProject}
+                onOpenDomain={handleOpenDomain}
+                onOpenMemory={() => handleNavigate("hcc-memory")}
+                onNavigateHccView={(nextView) => handleNavigate(nextView)}
+              />
+            )}
           </div>
         </main>
       </div>

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
+import { HCC_EXECUTION_FOCUS_EVENT, HCC_VIEW_REQUEST_EVENT } from "../ExecutionCenter/ExecutionCenter";
 
 type FabricTab = "briefing" | "retrieval" | "policy" | "flow";
 type JsonRecord = Record<string, any>;
 
-function IntelligenceFabric(): React.JSX.Element {
+function IntelligenceFabric({ onOpenExecutionCenter }: { onOpenExecutionCenter?: () => void } = {}): React.JSX.Element {
   const [data, setData] = useState<JsonRecord | null>(null);
   const [tab, setTab] = useState<FabricTab>("briefing");
   const [loading, setLoading] = useState(true);
@@ -65,7 +66,7 @@ function IntelligenceFabric(): React.JSX.Element {
       </nav>
 
       {error && <div className="fabric-inline-error">{error}</div>}
-      {tab === "briefing" && <Briefing brief={brief} summary={summary} />}
+      {tab === "briefing" && <Briefing brief={brief} summary={summary} actionBusy={actionBusy} runAction={runAction} onJumpToFlow={() => setTab("flow")} onOpenExecutionCenter={onOpenExecutionCenter} />}
       {tab === "retrieval" && <Retrieval retrieval={retrieval} />}
       {tab === "policy" && <Policy governance={governance} actionBusy={actionBusy} runAction={runAction} />}
       {tab === "flow" && <Flow topology={topology} cognitiveMap={data.cognitiveMap || {}} />}
@@ -79,7 +80,26 @@ function IntelligenceFabric(): React.JSX.Element {
   );
 }
 
-function Briefing({ brief, summary }: { brief: JsonRecord; summary: JsonRecord }): React.JSX.Element {
+function Briefing({
+  brief,
+  summary,
+  actionBusy,
+  runAction,
+  onJumpToFlow,
+  onOpenExecutionCenter,
+}: {
+  brief: JsonRecord;
+  summary: JsonRecord;
+  actionBusy: string | null;
+  runAction: (action: () => Promise<unknown>, busyId: string) => Promise<void>;
+  onJumpToFlow: () => void;
+  onOpenExecutionCenter?: () => void;
+}): React.JSX.Element {
+  const runtime = brief.runtimePosture || {};
+  const leadReasoning = brief.leadReasoning || {};
+  const autonomousQueue = brief.autonomousQueue || { items: [] };
+  const recommendations = brief.recommendations || [];
+
   return (
     <section className="fabric-panel">
       <div className="fabric-brief-hero">
@@ -97,10 +117,51 @@ function Briefing({ brief, summary }: { brief: JsonRecord; summary: JsonRecord }
         <Stat value={summary.cognitiveMapEdgeCount || 0} label="graph edges" />
         <Stat value={summary.contextPressureCount || 0} label="context pressure" alert={summary.contextPressureCount > 0} />
       </div>
+      <div className="fabric-policy-strip">
+        <strong>Runtime posture</strong><span>{runtime.mode || "nominal"}</span>
+        <strong>Primary signal</strong><span>{runtime.primarySignal || brief.topBlocker || "none"}</span>
+        <strong>Queue</strong><span>{autonomousQueue.items?.length || 0} autonomous actions</span>
+      </div>
+      <div className="fabric-section-title">Reasoning focus</div>
+      <div className="fabric-list">
+        {leadReasoning.topEdge && <div className="fabric-list-row"><strong>Top edge</strong><span>{leadReasoning.topEdge.gatewayA} ↔ {leadReasoning.topEdge.gatewayB}</span></div>}
+        {leadReasoning.topHotspot && <div className="fabric-list-row"><strong>Hotspot</strong><span>{leadReasoning.topHotspot.gateway} · {leadReasoning.topHotspot.scopeCount} scope links</span></div>}
+        {leadReasoning.topContextPressure && <div className="fabric-list-row"><strong>Context pressure</strong><span>{leadReasoning.topContextPressure.contextId} · {leadReasoning.topContextPressure.crossGatewayLinks} cross-gateway links</span></div>}
+        {!leadReasoning.topEdge && !leadReasoning.topHotspot && !leadReasoning.topContextPressure && <div className="fabric-empty">No reasoning hotspot recorded.</div>}
+      </div>
       <div className="fabric-section-title">Recommended operator attention</div>
       <div className="fabric-recommendations">
-        {(brief.recommendations || []).map((item: JsonRecord) => <article key={`${item.label}-${item.priority}`}><strong>{item.label}</strong><span>{item.why}</span><small>Priority {item.priority}</small></article>)}
-        {!brief.recommendations?.length && <div className="fabric-empty">No recommendation recorded.</div>}
+        {recommendations.map((item: JsonRecord) => {
+          const actionType = item.action?.type || "unknown";
+          const targetGateway = item.action?.targetGateway || item.action?.toGateway || "project-builder-gateway";
+          const busyId = `rec-${item.label}-${actionType}`;
+          return <article key={`${item.label}-${item.priority}`}>
+            <strong>{item.label}</strong>
+            <span>{item.why}</span>
+            <small>Priority {item.priority} · action {actionType} · target {targetGateway}</small>
+            <div className="fabric-actions">
+              <button disabled={actionBusy === busyId} onClick={() => void runAction(async () => {
+                const response = await window.hermesAPI.executeHccRecommendation(item.label, { ...item.action, targetGateway });
+                const payload = (response && typeof response === "object" && "item" in response ? (response as { item?: JsonRecord }).item : response) as JsonRecord | null;
+                const execution = (payload?.execution || payload?.item?.execution || payload) as JsonRecord | null;
+                const executionId = typeof execution?.id === "string" ? execution.id : null;
+                if (executionId) {
+                  window.dispatchEvent(new CustomEvent(HCC_EXECUTION_FOCUS_EVENT, { detail: { executionId } }));
+                }
+                window.dispatchEvent(new CustomEvent(HCC_VIEW_REQUEST_EVENT, { detail: { view: "execution-center" } }));
+                onOpenExecutionCenter?.();
+                onJumpToFlow();
+              }, busyId)}>Stage in Execution Center</button>
+              <button disabled={actionBusy === busyId} onClick={onJumpToFlow}>View flow</button>
+            </div>
+          </article>;
+        })}
+        {!recommendations.length && <div className="fabric-empty">No recommendation recorded.</div>}
+      </div>
+      <div className="fabric-section-title">Autonomous queue</div>
+      <div className="fabric-list">
+        {(autonomousQueue.items || []).map((item: JsonRecord) => <div key={item.id} className="fabric-policy-row"><div><strong>{item.label}</strong><span>{item.policy?.mode || item.policyMode || "operator review"}</span></div><div className="fabric-actions"><span>{item.status || "pending"}</span></div></div>)}
+        {!autonomousQueue.items?.length && <div className="fabric-empty">No autonomous queue item recorded.</div>}
       </div>
     </section>
   );

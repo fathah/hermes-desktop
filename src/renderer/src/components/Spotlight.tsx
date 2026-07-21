@@ -82,6 +82,20 @@ const ICON_MAP = {
   schedules: Timer,
   gateway: Signal,
   settings: SettingsIcon,
+  "war-room": Sparkles,
+  "control-plane": Users,
+  "gateway-map": Signal,
+  "intelligence-fabric": Layers,
+  "execution-center": Wrench,
+  projects: Building,
+  domains: Brain,
+  "hcc-memory": Brain,
+  "review-center": Clock,
+  "registry-manager": SettingsIcon,
+  "graph-center": Brain,
+  "clone-remix": Building,
+  "opportunity-radar": Sparkles,
+  "learning-engine": Brain,
 } as const;
 
 function Spotlight({
@@ -119,6 +133,20 @@ function Spotlight({
     };
 
     const viewActions: SpotlightAction[] = [
+      ["war-room", "Open War Room", "See HCC overview and operator situation room", "HCC Workspace"],
+      ["control-plane", "Open Control Plane", "Review missions, queues, and governed execution", "HCC Workspace"],
+      ["gateway-map", "Open Gateway Map", "Inspect gateway fabric health and coverage", "HCC Workspace"],
+      ["intelligence-fabric", "Open Intelligence Fabric", "Stage recommendations into governed execution", "HCC Workspace"],
+      ["execution-center", "Open Execution Center", "Approve, dispatch, and verify governed runs", "HCC Workspace"],
+      ["projects", "Open Projects", "Navigate active build missions and project state", "HCC Workspace"],
+      ["domains", "Open Domains", "Inspect operator domains and health state", "HCC Workspace"],
+      ["hcc-memory", "Open HCC Memory", "Review operator memory, continuity, and context", "HCC Workspace"],
+      ["review-center", "Open Review Center", "Steer approvals, checkpoints, and retrospective review", "HCC Workspace"],
+      ["registry-manager", "Open Registry", "Manage registry, governance, and operator configuration", "HCC Workspace"],
+      ["graph-center", "Open Graph", "Explore graph relations and linked knowledge", "HCC Workspace"],
+      ["clone-remix", "Open Clone Remix", "Run clone/remix studio workflows", "HCC Workspace"],
+      ["opportunity-radar", "Open Opportunity Radar", "Surface leverage and opportunity signals", "HCC Workspace"],
+      ["learning-engine", "Open Learning Engine", "Track learning loops and progression", "HCC Workspace"],
       ["chat", "Open Chat", "Jump into the active conversation workspace", "Workspace"],
       ["sessions", "Open Sessions", "Browse and resume session history", "Workspace"],
       ["agents", "Open Agents", "Switch or manage Hermes profiles", "Profiles"],
@@ -136,7 +164,7 @@ function Spotlight({
       hint,
       category,
       match: `${label} ${hint} ${view} ${category}`.toLowerCase(),
-      rank: rankBoost(`view:${view}`, 30 - index),
+      rank: rankBoost(`view:${view}`, 120 - index),
       preview: hint,
       meta: `${category} · ${view}`,
       onSelect: () => {

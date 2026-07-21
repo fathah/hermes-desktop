@@ -248,6 +248,35 @@ button:active {
   color: var(--text-secondary);
 }
 
+.sidebar-priority-links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.sidebar-priority-link {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(135deg, rgba(124, 199, 255, 0.14), rgba(255, 255, 255, 0.08));
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar-priority-link-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sidebar-priority-link-eyebrow {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
 .sidebar-nav {
   flex: 1;
   display: flex;
@@ -1647,6 +1676,31 @@ button:active {
   margin-top: 12px;
 }
 
+.war-room-review-prompts {
+  display: grid;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.war-room-review-prompts span {
+  color: rgba(226, 232, 240, 0.82);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.war-room-review-prompts span::before {
+  content: "?";
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: rgba(59, 130, 246, 0.16);
+  color: rgba(191, 219, 254, 0.96);
+  font-size: 10px;
+}
+
 .war-room-input {
   width: 100%;
   border: 1px solid rgba(148, 163, 184, 0.2);
@@ -1662,8 +1716,137 @@ button:active {
   box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.1);
 }
 
+.war-room-strategic-grid {
+  align-items: start;
+}
+
+.war-room-observability {
+  border-color: rgba(56, 189, 248, 0.2);
+}
+
+.war-room-observability.tone-critical {
+  border-color: rgba(248, 113, 113, 0.48);
+}
+
+.war-room-observability.tone-degraded {
+  border-color: rgba(251, 191, 36, 0.42);
+}
+
+.war-room-observability-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.war-room-observability-grid > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.42);
+}
+
+.war-room-observability-grid span,
+.war-room-observability-grid small {
+  color: rgba(203, 213, 225, 0.72);
+  font-size: 11px;
+}
+
+.war-room-observability-grid strong {
+  color: #f8fafc;
+  font-size: 20px;
+}
+
+.war-room-form-grid,
+.war-room-time-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.war-room-form-grid.textareas {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.war-room-form-grid label,
+.war-room-time-form label {
+  display: grid;
+  gap: 6px;
+  color: rgba(203, 213, 225, 0.8);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+textarea.war-room-input {
+  min-height: 78px;
+  resize: vertical;
+}
+
+.war-room-refresh-btn.compact {
+  padding: 7px 10px;
+  font-size: 11px;
+}
+
+@media (max-width: 1100px) {
+  .war-room-observability-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .war-room-form-grid.textareas,
+  .war-room-form-grid,
+  .war-room-time-form {
+    grid-template-columns: 1fr;
+  }
+}
+
 .war-room-memory-columns {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.war-room-execution-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.war-room-stat-card.compact {
+  min-height: 0;
+  padding: 12px;
+  box-shadow: none;
+}
+
+.war-room-stat-card.compact .war-room-stat-value {
+  font-size: 21px;
+}
+
+.war-room-worker-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.war-room-worker-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(125, 211, 252, 0.16);
+  color: rgba(191, 219, 254, 0.82);
+  font-size: 11px;
+}
+
+.war-room-worker-chip strong {
+  color: #f8fafc;
 }
 
 .war-room-memory-item {

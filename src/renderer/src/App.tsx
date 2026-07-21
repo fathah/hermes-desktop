@@ -22,7 +22,6 @@ function App(): React.JSX.Element {
     try {
       const conn = await window.hermesAPI.getConnectionConfig();
 
-      // Remote mode: verify the remote server is reachable
       if (conn.mode === "remote" && conn.remoteUrl) {
         const ok = await window.hermesAPI.testRemoteConnection(
           conn.remoteUrl,
@@ -39,29 +38,34 @@ function App(): React.JSX.Element {
         return;
       }
 
-      // Local mode: normal install check
       const status = await window.hermesAPI.checkInstall();
+      const shouldBypassBrokenVerify =
+        conn.mode === "local" && status.installed && status.configured;
+
       if (!status.installed) {
         setNextScreen("welcome");
       } else if (!status.verified) {
-        setInstallError(t("errors.installBroken"));
-        setNextScreen("welcome");
+        if (shouldBypassBrokenVerify) {
+          setNextScreen(status.hasApiKey ? "main" : "setup");
+        } else {
+          setInstallError(t("errors.installBroken"));
+          setNextScreen("welcome");
+        }
       } else if (!status.hasApiKey) {
         setNextScreen("setup");
       } else {
         setNextScreen("main");
       }
     } catch {
-      setNextScreen("welcome");
+      setInstallError(null);
+      setNextScreen("main");
     }
   }, [t]);
 
-  // Run install check during splash
   useEffect(() => {
     runInstallCheck();
   }, [runInstallCheck]);
 
-  // Transition away from splash when both animation and install check are done
   useEffect(() => {
     if (splashDone && nextScreen) {
       setScreen(nextScreen);
@@ -105,6 +109,7 @@ function App(): React.JSX.Element {
             error={installError}
             onStart={handleRetryInstall}
             onRecheck={handleRecheck}
+            allowSkipToLocal={true}
           />
         );
       case "installing":

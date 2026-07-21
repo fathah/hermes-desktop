@@ -192,6 +192,7 @@ const hermesAPI = {
   gatewayStatus: (): Promise<boolean> => ipcRenderer.invoke("gateway-status"),
   getHccGatewayCapabilityMap: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-gateway-capability-map"),
   getHccIntelligence: (contextPackId?: string, tokenBudget?: number): Promise<unknown> => ipcRenderer.invoke("get-hcc-intelligence", contextPackId, tokenBudget),
+  executeHccRecommendation: (label: string, action: Record<string, unknown>, actor?: string): Promise<unknown> => ipcRenderer.invoke("execute-hcc-recommendation", label, action, actor),
   getHccExecutors: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-executors"),
   getHccExecutions: (status?: string, limit?: number): Promise<unknown> => ipcRenderer.invoke("get-hcc-executions", status, limit),
   createHccExecution: (payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("create-hcc-execution", payload),
@@ -209,6 +210,14 @@ const hermesAPI = {
   getHccReality: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-reality"),
   updateHccOperatingProfile: (payload: unknown): Promise<unknown> =>
     ipcRenderer.invoke("update-hcc-operating-profile", payload),
+  createHccTimeBlock: (payload: Record<string, unknown>): Promise<unknown> =>
+    ipcRenderer.invoke("create-hcc-time-block", payload),
+  cancelHccTimeBlock: (blockId: string): Promise<unknown> =>
+    ipcRenderer.invoke("cancel-hcc-time-block", blockId),
+  decideHccTradeoff: (conflictId: string, optionId: string, rationale: string): Promise<unknown> =>
+    ipcRenderer.invoke("decide-hcc-tradeoff", conflictId, optionId, rationale),
+  stageHccRecoveryAction: (actionId: string): Promise<unknown> =>
+    ipcRenderer.invoke("stage-hcc-recovery-action", actionId),
   stageHccIntervention: (interventionId: string, actor?: string): Promise<unknown> =>
     ipcRenderer.invoke("stage-hcc-intervention", interventionId, actor),
   getHccProjects: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-projects"),

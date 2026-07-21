@@ -96,44 +96,78 @@ function DomainDetail({ domainId }: DomainDetailProps): React.JSX.Element {
         <div className="war-room-panel">
           <div className="war-room-panel-title">Core metrics</div>
           <div className="war-room-list">
-            {(domain.core_metrics || []).map((item) => (
-              <div key={item} className="war-room-list-item">
-                <div className="war-room-item-title">{item}</div>
-              </div>
-            ))}
+            {(domain.core_metrics || []).map((item) => <div key={item} className="war-room-list-item"><div className="war-room-item-title">{item}</div></div>)}
+            {(domain.core_metrics || []).length === 0 && <div className="war-room-item-meta">No metrics configured.</div>}
           </div>
         </div>
 
         <div className="war-room-panel">
           <div className="war-room-panel-title">Obligations</div>
           <div className="war-room-list">
-            {(domain.obligations || []).map((item) => (
-              <div key={item} className="war-room-list-item">
-                <div className="war-room-item-title">{item}</div>
-              </div>
-            ))}
+            {(domain.obligations || []).map((item) => <div key={item} className="war-room-list-item"><div className="war-room-item-title">{item}</div></div>)}
+            {(domain.obligations || []).length === 0 && <div className="war-room-item-meta">No active obligations.</div>}
           </div>
         </div>
 
         <div className="war-room-panel">
           <div className="war-room-panel-title">Active goals</div>
           <div className="war-room-list">
-            {(domain.active_goals || []).map((item) => (
-              <div key={item} className="war-room-list-item">
-                <div className="war-room-item-title">{item}</div>
-              </div>
-            ))}
+            {(domain.active_goals || []).map((item) => <div key={item} className="war-room-list-item"><div className="war-room-item-title">{item}</div></div>)}
+            {(domain.active_goals || []).length === 0 && <div className="war-room-item-meta">No active goals.</div>}
           </div>
         </div>
 
         <div className="war-room-panel">
           <div className="war-room-panel-title">Open loops</div>
           <div className="war-room-list">
-            {(domain.open_loops || []).map((item) => (
-              <div key={item} className="war-room-list-item">
-                <div className="war-room-item-title">{item}</div>
+            {(domain.open_loops || []).map((item) => <div key={item} className="war-room-list-item"><div className="war-room-item-title">{item}</div><span className="war-room-pill tone-watch">open</span></div>)}
+            {(domain.open_loops || []).length === 0 && <div className="war-room-item-meta">No open loops.</div>}
+          </div>
+        </div>
+
+        <div className="war-room-panel">
+          <div className="war-room-panel-title">Alert thresholds</div>
+          <div className="war-room-list">
+            {Object.entries(domain.alert_thresholds || {}).map(([label, value]) => (
+              <div key={label} className="war-room-list-item"><span className="war-room-item-title">{label.replaceAll("_", " ")}</span><strong>{value}</strong></div>
+            ))}
+            {Object.keys(domain.alert_thresholds || {}).length === 0 && <div className="war-room-item-meta">No domain alerts configured.</div>}
+          </div>
+        </div>
+
+        <div className="war-room-panel">
+          <div className="war-room-panel-title">Linked projects</div>
+          <div className="war-room-list">
+            {(domain.linked_projects || []).map((project) => (
+              <div key={project.id} className="war-room-list-item">
+                <div><div className="war-room-item-title">{project.name}</div><div className="war-room-item-meta">{project.status} · momentum {project.momentum_score ?? 0}</div></div>
+                <span className="war-room-pill">risk {project.risk_score ?? 0}</span>
               </div>
             ))}
+            {(domain.linked_projects || []).length === 0 && <div className="war-room-item-meta">No projects linked to this life domain.</div>}
+          </div>
+        </div>
+
+        <div className="war-room-panel">
+          <div className="war-room-panel-title">Operational gateways</div>
+          <div className="war-room-list">
+            {(domain.linked_gateways || []).map((gateway) => (
+              <div key={gateway.id} className="war-room-list-item"><div className="war-room-item-title">{gateway.displayName || gateway.display_name || gateway.name || gateway.id}</div><span className="war-room-pill">gateway</span></div>
+            ))}
+            {(domain.linked_gateways || []).length === 0 && <div className="war-room-item-meta">No gateway lanes linked.</div>}
+          </div>
+        </div>
+
+        <div className="war-room-panel">
+          <div className="war-room-panel-title">Domain memory</div>
+          <div className="war-room-list">
+            {(domain.memory_capsules || []).map((capsule) => (
+              <div key={capsule.id} className="war-room-list-item war-room-list-item-stack">
+                <div className="war-room-item-title">{capsule.summary}</div>
+                <div className="war-room-item-meta">{capsule.kind} · {capsule.importance} · {capsule.promotion_state}</div>
+              </div>
+            ))}
+            {(domain.memory_capsules || []).length === 0 && <div className="war-room-item-meta">No scoped memory capsules linked.</div>}
           </div>
         </div>
       </div>

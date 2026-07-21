@@ -4,6 +4,17 @@ import type { HccMemoryCapsule, HccMemoryPacket } from "../../types/hcc";
 const PACKET_TYPES = ["tiny", "context", "review", "deep"] as const;
 type PacketType = (typeof PACKET_TYPES)[number];
 
+function capsuleLinkLabels(capsule: HccMemoryCapsule): string[] {
+  const labels = [
+    ...(capsule.linked_projects || []).map((item) => item.name),
+    ...(capsule.linked_domains || []).map((item) => item.name),
+    ...(capsule.linked_gateways || []).map((item) => item.displayName || item.display_name || item.name || item.id),
+    ...(capsule.linked_tools || []).map((item) => item.label || item.name || item.id),
+  ];
+  if (labels.length > 0) return labels;
+  return [...capsule.project_ids, ...capsule.domain_ids, ...capsule.gateway_ids, ...capsule.tool_ids];
+}
+
 function MemoryCenter(): React.JSX.Element {
   const [capsules, setCapsules] = useState<HccMemoryCapsule[]>([]);
   const [packet, setPacket] = useState<HccMemoryPacket | null>(null);
@@ -37,7 +48,12 @@ function MemoryCenter(): React.JSX.Element {
     const promoted = capsules.filter((item) => item.promotion_state === "promoted").length;
     const sensitive = capsules.filter((item) => item.sensitivity !== "local").length;
     const contradictions = capsules.filter((item) => item.contradiction_state !== "none").length;
-    return { total: capsules.length, promoted, sensitive, contradictions };
+    const scopes = capsules.reduce<Record<string, number>>((counts, item) => {
+      const key = item.scope_type || "global";
+      counts[key] = (counts[key] || 0) + 1;
+      return counts;
+    }, {});
+    return { total: capsules.length, promoted, sensitive, contradictions, scopes };
   }, [capsules]);
 
   const selectPacket = (next: PacketType): void => {
@@ -97,6 +113,16 @@ function MemoryCenter(): React.JSX.Element {
       </section>
 
       <section className="war-room-panel">
+        <div className="war-room-panel-title">Logical scope distribution</div>
+        <div className="hcc-project-card-row">
+          {Object.entries(stats.scopes).map(([scope, count]) => (
+            <span key={scope} className="war-room-pill">{scope} {count}</span>
+          ))}
+          {Object.keys(stats.scopes).length === 0 && <span className="war-room-item-meta">No logical partitions populated.</span>}
+        </div>
+      </section>
+
+      <section className="war-room-panel">
         <div className="hcc-memory-toolbar">
           <div>
             <div className="war-room-panel-title">Retrieval packet</div>
@@ -150,11 +176,9 @@ function MemoryCenter(): React.JSX.Element {
                 <span className="war-room-pill">{capsule.promotion_state}</span>
               </div>
               <div className="hcc-memory-links">
-                {[...capsule.project_ids, ...capsule.domain_ids, ...capsule.gateway_ids]
-                  .slice(0, 6)
-                  .map((id) => (
-                    <span key={id}>{id}</span>
-                  ))}
+                {capsuleLinkLabels(capsule).slice(0, 6).map((label) => (
+                  <span key={label}>{label}</span>
+                ))}
               </div>
             </article>
           ))}

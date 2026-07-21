@@ -51,6 +51,16 @@ export interface HccDomain extends HccWarRoomDomain {
   linked_gateway_ids?: string[];
   review_cadence?: string;
   notes?: string;
+  alert_thresholds?: Record<string, number>;
+  linked_projects?: HccProject[];
+  linked_gateways?: Array<{ id: string; name?: string; display_name?: string; displayName?: string; status?: string }>;
+  memory_capsules?: HccMemoryCapsule[];
+  relationship_summary?: {
+    projects: number;
+    gateways: number;
+    memoryCapsules: number;
+    openLoops: number;
+  };
 }
 
 export interface HccWarRoomProject {
@@ -70,6 +80,23 @@ export interface HccWarRoomProject {
   dependencyCount?: number;
 }
 
+export interface HccWarRoomExecutionSummary {
+  queued: number;
+  running: number;
+  blocked: number;
+  failed: number;
+  completed: number;
+  cancelled: number;
+  [key: string]: number;
+}
+
+export interface HccWarRoomRun {
+  id: string;
+  status?: string;
+  worker_id?: string;
+  task_title?: string;
+}
+
 export interface HccProject extends HccWarRoomProject {
   purpose?: string;
   type?: string;
@@ -78,6 +105,20 @@ export interface HccProject extends HccWarRoomProject {
   milestones?: string[];
   outputs?: string[];
   review_cadence?: string;
+  reference_ids?: string[];
+  memory_capsule_ids?: string[];
+  linked_domains?: Array<Pick<HccDomain, "id" | "name" | "health_score" | "neglect_risk">>;
+  linked_gateways?: Array<{ id: string; name?: string; display_name?: string; displayName?: string; status?: string }>;
+  linked_tools?: Array<{ id: string; name?: string; label?: string; description?: string }>;
+  references?: Array<{ id: string; name?: string; title?: string; summary?: string; source_url?: string }>;
+  memory_capsules?: HccMemoryCapsule[];
+  relationship_summary?: {
+    domains: number;
+    gateways: number;
+    tools: number;
+    references: number;
+    memoryCapsules: number;
+  };
 }
 
 export interface HccMemoryCapsule {
@@ -98,6 +139,10 @@ export interface HccMemoryCapsule {
   promotion_state: string;
   source_type: string;
   contradiction_state: string;
+  linked_projects?: Array<Pick<HccProject, "id" | "name" | "status">>;
+  linked_domains?: Array<Pick<HccDomain, "id" | "name" | "health_score" | "neglect_risk">>;
+  linked_gateways?: Array<{ id: string; name?: string; display_name?: string; displayName?: string }>;
+  linked_tools?: Array<{ id: string; name?: string; label?: string }>;
   created_at?: number | string | null;
   updated_at?: number | string | null;
 }
@@ -472,18 +517,51 @@ export interface HccWarRoomSummary {
     tiny: HccMemoryPacket;
     review: HccMemoryPacket;
   };
+  execution: {
+    summary: HccWarRoomExecutionSummary;
+    blockedRuns: HccWarRoomRun[];
+    workers: Array<{ worker_id: string; runCount: number }>;
+  };
   reality: {
     profile: {
       energyState: "high" | "normal" | "low" | "depleted";
       operatingMode: "normal" | "watch" | "overload" | "recovery" | "critical_only";
       maxActiveProjects: number;
+      dailyCapacityMinutes?: number;
+      weeklyFocusMinutes?: number;
+      weeklyRecoveryMinutes?: number;
+      values?: string[];
+      principles?: string[];
+      antiGoals?: string[];
+      currentSeason?: string;
+      riskTolerance?: "conservative" | "balanced" | "aggressive";
+      strategicPriorityOrder?: string[];
+      ambitionHorizon?: string;
+      hardConstraints?: Array<string | Record<string, unknown>>;
+      softPreferences?: Array<string | Record<string, unknown>>;
     };
     capacity: {
       weeklyFocusMinutes: number;
       energyAdjustedMinutes: number;
       projectDemandMinutes: number;
+      scheduledMinutes: number;
       loadRatio: number;
       remainingMinutes: number;
+    };
+    schedule: {
+      horizonDays: number;
+      scheduledMinutes: number;
+      blocks: Array<{
+        id: string;
+        title: string;
+        projectId?: string | null;
+        domainId?: string | null;
+        energyRequirement: "high" | "normal" | "low" | "depleted";
+        startAt: number;
+        endAt: number;
+        durationMinutes: number;
+        status: string;
+      }>;
     };
     antiChaos: {
       currentMode: string;
@@ -492,6 +570,46 @@ export interface HccWarRoomSummary {
     };
     conflicts: Array<{ id: string; severity: string; type: string; message: string }>;
     interventions: Array<{ id: string; label: string; reason: string; actionType: string; requiresApproval: boolean }>;
+  };
+  tradeoffs: Array<{
+    id: string;
+    conflict: { id: string; severity: string; type: string; message: string };
+    options: Array<{ id: string; label: string; benefit: number; feasibility: number; risk: number; score: number }>;
+    recommendedOption: string;
+    recommendedScore: number;
+    status: string;
+  }>;
+  recovery: {
+    degraded: boolean;
+    recommendedMode: string;
+    currentMode: string;
+    signals: { critical: number; high: number; energy: string };
+    actions: Array<{ id: string; actionType: string; label: string; reason: string; requiresApproval: boolean }>;
+  };
+  observability: {
+    schemaVersion: "hcc-observability-v1";
+    generatedAt: number;
+    status: "healthy" | "degraded" | "critical";
+    signals: { critical: number; warning: number; conflicts: number; interventions: number };
+    domains: { total: number; stable: number; atRisk: number; averageHealth: number };
+    projects: { total: number; active: number; blocked: number; completed: number; throughputRate: number };
+    execution: { ledgerCount: number; pendingApproval: number; active: number; failed: number; runs: Record<string, number> };
+    capacity: {
+      weeklyFocusMinutes: number;
+      weeklyRecoveryMinutes: number;
+      energyAdjustedMinutes: number;
+      projectDemandMinutes: number;
+      scheduledMinutes: number;
+      loadRatio: number;
+      remainingMinutes: number;
+      currentMode: string;
+      recommendedMode: string;
+      energyState: string;
+    };
+    memory: { status: string; healthScore: number; pendingReviews: number; sensitiveWarnings: number; sensitiveBlocked: number; snapshotAgeHours: number | null };
+    reviews: Record<string, number>;
+    gateways: { total: number; running: number; unavailable: number };
+    privacy: { policyCount: number; retentionPolicyCount: number; accessDeniedCount: number; auditEventCount: number };
   };
   recommendations: HccWarRoomRecommendation[];
   integrity: {
@@ -514,6 +632,8 @@ export interface HccWarRoomSummary {
     elevatedDependencyRiskCount: number;
     integrityIssueCount: number;
     integrityHealth: "healthy" | "warning" | "critical";
+    blockedRunCount: number;
+    runCount: number;
   };
 }
 

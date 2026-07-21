@@ -122,6 +122,9 @@ function ReviewCenter({ onOpenProject, onOpenDomain, onOpenMemory }: ReviewCente
                 <div>
                   <div className="war-room-item-title">{item.label}</div>
                   <div className="war-room-item-meta">{item.scope_type} · {item.review_cadence} · {item.dependency_count} links · graph {item.propagated_risk}</div>
+                  <div className="war-room-review-prompts">
+                    {item.prompts.slice(0, 2).map((prompt) => <span key={prompt}>{prompt}</span>)}
+                  </div>
                 </div>
                 <div className={`war-room-pill tone-${item.urgency === "high" ? "risk" : item.urgency === "medium" ? "watch" : "healthy"}`}>{item.urgency}</div>
               </button>

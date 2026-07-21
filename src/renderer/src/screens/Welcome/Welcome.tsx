@@ -14,12 +14,14 @@ interface WelcomeProps {
   error: string | null;
   onStart: () => void;
   onRecheck: () => void;
+  allowSkipToLocal?: boolean;
 }
 
 function Welcome({
   error,
   onStart,
   onRecheck,
+  allowSkipToLocal = false,
 }: WelcomeProps): React.JSX.Element {
   const { t } = useI18n();
   const [showRemote, setShowRemote] = useState(false);
@@ -176,6 +178,20 @@ function Welcome({
             >
               {t("welcome.recheck")}
             </button>
+
+            {allowSkipToLocal && (
+              <>
+                <div className="welcome-divider">
+                  <span>or</span>
+                </div>
+                <button
+                  className="btn btn-secondary welcome-recheck-btn"
+                  onClick={onRecheck}
+                >
+                  Continue with local Hermes
+                </button>
+              </>
+            )}
 
             <div className="welcome-divider">
               <span>or</span>

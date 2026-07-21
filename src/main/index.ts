@@ -6,6 +6,7 @@ import {
   Menu,
   Notification,
   screen,
+  session,
 } from "electron";
 
 import { join } from "path";
@@ -77,6 +78,10 @@ import {
   compareHccClonedApp,
   createHccClonedApp,
   createHccLearningTopic,
+  createHccTimeBlock,
+  cancelHccTimeBlock,
+  decideHccTradeoff,
+  stageHccRecoveryAction,
   decideHccInlineApproval,
   materializeHccClonedApp,
   promoteHccLearningRecommendation,
@@ -102,6 +107,7 @@ import {
   fetchHccExecutions,
   createHccExecution,
   decideHccExecution,
+  executeHccRecommendation,
   refreshHccExecution,
   retryHccExecution,
   rollbackHccExecution,
@@ -220,6 +226,16 @@ function applySnapToEdge(window: BrowserWindow): void {
 }
 
 function createWindow(): void {
+  if (is.dev) {
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      const headers = details.responseHeaders ?? {};
+      headers["Content-Security-Policy"] = [
+        "default-src 'self' data: file: http://localhost:5173 ws://localhost:5173; script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:5173; style-src 'self' 'unsafe-inline' http://localhost:5173; img-src 'self' data: blob: http://localhost:5173; font-src 'self' data: http://localhost:5173; connect-src 'self' data: blob: http://localhost:5173 ws://localhost:5173 http://127.0.0.1:9200 http://localhost:9200; worker-src 'self' blob:;"
+      ];
+      callback({ responseHeaders: headers });
+    });
+  }
+
   mainWindow = new BrowserWindow({
     width: 1100,
     height: 750,
@@ -530,6 +546,7 @@ function setupIPC(): void {
   ipcMain.handle("gateway-status", () => isGatewayRunning());
   ipcMain.handle("get-hcc-gateway-capability-map", () => fetchHccGatewayCapabilityMap());
   ipcMain.handle("get-hcc-intelligence", (_event, contextPackId?: string, tokenBudget?: number) => fetchHccIntelligence(contextPackId, tokenBudget));
+  ipcMain.handle("execute-hcc-recommendation", (_event, label: string, action: Record<string, unknown>, actor?: string) => executeHccRecommendation(label, action, actor));
   ipcMain.handle("get-hcc-executors", () => fetchHccExecutors());
   ipcMain.handle("get-hcc-executions", (_event, status?: string, limit?: number) => fetchHccExecutions(status, limit));
   ipcMain.handle("create-hcc-execution", (_event, payload: Record<string, unknown>) => createHccExecution(payload));
@@ -545,6 +562,10 @@ function setupIPC(): void {
   ipcMain.handle("get-hcc-war-room-summary", () => fetchHccWarRoomSummary());
   ipcMain.handle("get-hcc-reality", () => fetchHccReality());
   ipcMain.handle("update-hcc-operating-profile", (_event, payload: unknown) => updateHccOperatingProfile(payload));
+  ipcMain.handle("create-hcc-time-block", (_event, payload: Record<string, unknown>) => createHccTimeBlock(payload));
+  ipcMain.handle("cancel-hcc-time-block", (_event, blockId: string) => cancelHccTimeBlock(blockId));
+  ipcMain.handle("decide-hcc-tradeoff", (_event, conflictId: string, optionId: string, rationale: string) => decideHccTradeoff(conflictId, optionId, rationale));
+  ipcMain.handle("stage-hcc-recovery-action", (_event, actionId: string) => stageHccRecoveryAction(actionId));
   ipcMain.handle("stage-hcc-intervention", (_event, interventionId: string, actor?: string) =>
     stageHccIntervention(interventionId, actor),
   );

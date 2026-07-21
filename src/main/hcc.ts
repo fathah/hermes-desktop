@@ -129,6 +129,31 @@ export async function rollbackHccRetrievalPolicyExecution(executionId: string, a
   });
 }
 
+export async function recordHccRecommendationExecution(
+  label: string,
+  action: Record<string, unknown>,
+  outcome: string,
+  resultEntity?: Record<string, string>,
+  error?: string,
+  actor = "desktop-operator",
+): Promise<unknown> {
+  return fetchJson("/api/os/recommendations/executions", {
+    method: "POST",
+    body: JSON.stringify({ label, action, outcome, resultEntity, error, actor }),
+  });
+}
+
+export async function executeHccRecommendation(
+  label: string,
+  action: Record<string, unknown>,
+  actor = "desktop-operator",
+): Promise<unknown> {
+  return fetchJson(`/api/os/recommendations/${encodeURIComponent(label)}/execute`, {
+    method: "POST",
+    body: JSON.stringify({ label, action, outcome: "staged", actor }),
+  });
+}
+
 export async function fetchHccWarRoomSummary(): Promise<unknown> {
   return fetchJson("/api/hcc/war-room/summary");
 }
@@ -141,10 +166,32 @@ export async function updateHccOperatingProfile(payload: unknown): Promise<unkno
   return fetchJson("/api/hcc/reality/profile", { method: "PUT", body: JSON.stringify(payload) });
 }
 
+export async function createHccTimeBlock(payload: Record<string, unknown>): Promise<unknown> {
+  return fetchJson("/api/hcc/reality/time-blocks", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function cancelHccTimeBlock(blockId: string): Promise<unknown> {
+  return fetchJson(`/api/hcc/reality/time-blocks/${encodeURIComponent(blockId)}`, { method: "DELETE" });
+}
+
 export async function stageHccIntervention(interventionId: string, actor = "operator"): Promise<unknown> {
   return fetchJson(`/api/hcc/reality/interventions/${encodeURIComponent(interventionId)}/stage`, {
     method: "POST",
     body: JSON.stringify({ actor }),
+  });
+}
+
+export async function decideHccTradeoff(conflictId: string, optionId: string, rationale: string): Promise<unknown> {
+  return fetchJson(`/api/hcc/reality/tradeoffs/${encodeURIComponent(conflictId)}/decide`, {
+    method: "POST",
+    body: JSON.stringify({ optionId, rationale, actor: "desktop-operator" }),
+  });
+}
+
+export async function stageHccRecoveryAction(actionId: string): Promise<unknown> {
+  return fetchJson(`/api/hcc/recovery/actions/${encodeURIComponent(actionId)}/stage`, {
+    method: "POST",
+    body: JSON.stringify({ actor: "desktop-operator" }),
   });
 }
 

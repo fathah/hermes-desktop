@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { HccExecution, HccExecutionList, HccExecutionStatus, HccExecutor } from "../../types/hcc";
 
+export const HCC_EXECUTION_FOCUS_EVENT = "hcc:execution-focus";
+export const HCC_VIEW_REQUEST_EVENT = "hcc:view-request";
+
 type Filter = "all" | "pending_approval" | "active" | "succeeded" | "failed";
 
 interface ExecutorPayload {
@@ -42,6 +45,16 @@ function ExecutionCenter(): React.JSX.Element {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const handler = (event: Event): void => {
+      const executionId = (event as CustomEvent<{ executionId?: string }>).detail?.executionId;
+      if (!executionId) return;
+      setFilter("all");
+      setSelectedId(executionId);
+    };
+    window.addEventListener(HCC_EXECUTION_FOCUS_EVENT, handler as EventListener);
+    return () => window.removeEventListener(HCC_EXECUTION_FOCUS_EVENT, handler as EventListener);
+  }, []);
   useEffect(() => {
     if (!data?.items.some((item) => ACTIVE_STATUSES.has(item.status))) return;
     const timer = window.setInterval(() => void load(), 5000);
@@ -155,7 +168,7 @@ function ExecutionCenter(): React.JSX.Element {
               <span className="execution-row-copy">
                 <strong>{item.targetGateway}</strong>
                 <span>{item.action} · attempt {item.attemptCount}/{item.maxAttempts}</span>
-                <small>{String(item.payload.task || item.payload.input || "No task recorded")}</small>
+                <small>{describeExecutionTask(item)}</small>
               </span>
               <span className={`execution-status ${item.status}`}>{item.status.replaceAll("_", " ")}</span>
             </button>
@@ -186,7 +199,8 @@ function ExecutionDetail({ item, acting, onAction }: { item: HccExecution; actin
         <Meta label="Remote run" value={item.remoteRunId || "not dispatched"} />
         <Meta label="Requested by" value={item.requestedBy} />
       </div>
-      <section className="execution-task"><span>TASK CONTRACT</span><p>{String(item.payload.task || item.payload.input || "No task recorded")}</p></section>
+      <section className="execution-task"><span>TASK CONTRACT</span><p>{describeExecutionTask(item)}</p></section>
+      {getRecommendationProvenance(item) && <section className="execution-task"><span>RECOMMENDATION PROVENANCE</span><p>{getRecommendationProvenance(item)}</p></section>}
       <div className="execution-actions">
         {item.status === "pending_approval" && <><button className="primary" onClick={() => void onAction("approve")} disabled={Boolean(acting)}>Approve & dispatch</button><button onClick={() => void onAction("deny")} disabled={Boolean(acting)}>Deny</button></>}
         {ACTIVE_STATUSES.has(item.status) && <><button className="primary" onClick={() => void onAction("refresh")} disabled={Boolean(acting)}>Check status</button><button className="danger" onClick={() => void onAction("rollback")} disabled={Boolean(acting)}>Stop execution</button></>}
@@ -205,6 +219,28 @@ function ExecutionDetail({ item, acting, onAction }: { item: HccExecution; actin
 
 function Meta({ label, value }: { label: string; value: string }): React.JSX.Element {
   return <div><span>{label}</span><strong>{value}</strong></div>;
+}
+
+function describeExecutionTask(item: HccExecution): string {
+  const payload = (item.payload || {}) as Record<string, unknown>;
+  return String(
+    payload.task
+    || payload.operatorIntent
+    || payload.input
+    || payload.recommendationLabel
+    || "No task recorded",
+  );
+}
+
+function getRecommendationProvenance(item: HccExecution): string | null {
+  const payload = (item.payload || {}) as Record<string, unknown>;
+  const label = payload.recommendationLabel;
+  const actionType = payload.recommendationActionType;
+  if (!label && !actionType) return null;
+  return [
+    label ? `Source recommendation: ${String(label)}` : null,
+    actionType ? `Original action: ${String(actionType)}` : null,
+  ].filter(Boolean).join(" · ");
 }
 
 export default ExecutionCenter;

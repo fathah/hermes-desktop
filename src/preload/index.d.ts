@@ -95,6 +95,7 @@ interface HermesAPI {
   gatewayStatus: () => Promise<boolean>;
   getHccGatewayCapabilityMap: () => Promise<unknown>;
   getHccIntelligence: (contextPackId?: string, tokenBudget?: number) => Promise<unknown>;
+  executeHccRecommendation: (label: string, action: Record<string, unknown>, actor?: string) => Promise<unknown>;
   getHccExecutors: () => Promise<unknown>;
   getHccExecutions: (status?: string, limit?: number) => Promise<unknown>;
   createHccExecution: (payload: Record<string, unknown>) => Promise<unknown>;
@@ -110,6 +111,10 @@ interface HermesAPI {
   getHccWarRoomSummary: () => Promise<unknown>;
   getHccReality: () => Promise<unknown>;
   updateHccOperatingProfile: (payload: unknown) => Promise<unknown>;
+  createHccTimeBlock: (payload: Record<string, unknown>) => Promise<unknown>;
+  cancelHccTimeBlock: (blockId: string) => Promise<unknown>;
+  decideHccTradeoff: (conflictId: string, optionId: string, rationale: string) => Promise<unknown>;
+  stageHccRecoveryAction: (actionId: string) => Promise<unknown>;
   stageHccIntervention: (interventionId: string, actor?: string) => Promise<unknown>;
   getHccProjects: () => Promise<unknown>;
   getHccProjectDetail: (projectId: string) => Promise<unknown>;

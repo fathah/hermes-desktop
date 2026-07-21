@@ -40,6 +40,7 @@ interface HccWorkspaceViewsProps {
   onOpenProject: (projectId: string) => void;
   onOpenDomain: (domainId: string) => void;
   onOpenMemory: () => void;
+  onNavigateHccView?: (view: HccWorkspaceView) => void;
 }
 
 const HCC_VIEWS = new Set<string>([
@@ -68,6 +69,7 @@ function HccWorkspaceViews({
   onOpenProject,
   onOpenDomain,
   onOpenMemory,
+  onNavigateHccView,
 }: HccWorkspaceViewsProps): React.JSX.Element | null {
   if (!HCC_VIEWS.has(activeView)) {
     return null;
@@ -121,7 +123,7 @@ function HccWorkspaceViews({
       content = <GatewayCapabilityMap />;
       break;
     case "intelligence-fabric":
-      content = <IntelligenceFabric />;
+      content = <IntelligenceFabric onOpenExecutionCenter={() => onNavigateHccView?.("execution-center")} />;
       break;
     case "execution-center":
       content = <ExecutionCenter />;
