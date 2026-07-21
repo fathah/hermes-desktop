@@ -1,0 +1,135 @@
+export default {
+  title: "Инструменты",
+  subtitle:
+    "Включайте или отключайте наборы инструментов, которые агент может использовать во время диалогов",
+  web: {
+    label: "Веб-поиск",
+    description: "Искать в интернете и извлекать содержимое из URL",
+  },
+  x_search: {
+    label: "Поиск в X",
+    description: "Искать посты и контент в X (Twitter)",
+  },
+  browser: {
+    label: "Браузер",
+    description:
+      "Открывать страницы, нажимать, вводить текст и взаимодействовать с веб-страницами",
+  },
+  terminal: {
+    label: "Терминал",
+    description: "Выполнять shell-команды и скрипты",
+  },
+  file: {
+    label: "Операции с файлами",
+    description: "Читать, записывать, искать и управлять файлами",
+  },
+  code_execution: {
+    label: "Выполнение кода",
+    description: "Выполнять Python и shell-код напрямую",
+  },
+  computer_use: {
+    label: "Управление компьютером",
+    description:
+      "Управлять рабочим столом — двигать мышь, нажимать и вводить текст",
+  },
+  vision: {
+    label: "Vision",
+    description: "Анализировать изображения и визуальный контент",
+  },
+  image_gen: {
+    label: "Генерация изображений",
+    description: "Генерировать изображения с DALL-E и другими моделями",
+  },
+  video_gen: {
+    label: "Генерация видео",
+    description: "Генерировать видео по текстовым или графическим промптам",
+  },
+  tts: {
+    label: "Text-to-Speech",
+    description: "Преобразовывать текст в озвученную речь",
+  },
+  skills: {
+    label: "Навыки",
+    description: "Создавать, управлять и выполнять переиспользуемые навыки",
+  },
+  memory: {
+    label: "Память",
+    description: "Сохранять и вспоминать постоянные знания",
+  },
+  session_search: {
+    label: "Поиск по сессиям",
+    description: "Искать по прошлым диалогам",
+  },
+  clarify: {
+    label: "Уточняющие вопросы",
+    description: "Задавать пользователю уточняющие вопросы при необходимости",
+  },
+  delegation: {
+    label: "Делегирование",
+    description: "Запускать субагентов для параллельных задач",
+  },
+  cronjob: {
+    label: "Cron-задачи",
+    description: "Создавать и управлять запланированными задачами",
+  },
+  moa: {
+    label: "Mixture of Agents",
+    description: "Координировать несколько AI-моделей вместе",
+  },
+  todo: {
+    label: "Планирование задач",
+    description: "Создавать и управлять списками задач для сложной работы",
+  },
+  mcpServers: "MCP-серверы",
+  mcpDescription:
+    "Серверы Model Context Protocol, настроенные в config.yaml. Управляйте ими через <code>hermes mcp add/remove</code> в терминале.",
+  http: "HTTP",
+  stdio: "stdio",
+  unknown: "неизвестно",
+  disabled: "отключено",
+  refresh: "Обновить",
+  cancel: "Отмена",
+  close: "Закрыть",
+  mcpAddServer: "Добавить сервер",
+  mcpBrowseCatalog: "Открыть каталог",
+  mcpSearch: "Фильтр MCP-серверов...",
+  mcpNoResults: "Нет MCP-серверов по этому фильтру.",
+  mcpEmptyTitle: "MCP-серверы не настроены",
+  mcpEmptyDescription:
+    "Добавьте свой HTTP или stdio сервер либо установите сервер из каталога Hermes MCP.",
+  mcpLoadFailed: "Не удалось загрузить MCP-серверы.",
+  mcpAddFailed: "Не удалось добавить MCP-сервер.",
+  mcpRemoveFailed: "Не удалось удалить MCP-сервер.",
+  mcpToggleFailed: "Не удалось обновить MCP-сервер.",
+  mcpTestFailed: "Проверка MCP-сервера не прошла.",
+  mcpInstallFailed: "Не удалось установить MCP-сервер.",
+  mcpAdded: "MCP-сервер добавлен.",
+  mcpRemoved: "MCP-сервер удален.",
+  mcpEnabled: "MCP-сервер включен.",
+  mcpDisabled: "MCP-сервер отключен.",
+  mcpInstalled: "MCP-сервер установлен.",
+  mcpInstallStarted: "Установка MCP-сервера запущена в фоне.",
+  mcpTestPassed: "MCP-сервер подключен. Найдено инструментов: {{count}}.",
+  mcpRemoveConfirm: "Удалить MCP-сервер {{name}}?",
+  mcpTest: "Проверить подключение",
+  mcpRemove: "Удалить сервер",
+  mcpEnable: "Включить сервер",
+  mcpDisable: "Отключить сервер",
+  mcpNoDetail: "Нет данных endpoint",
+  mcpName: "Название",
+  mcpTransport: "Transport",
+  mcpUrl: "URL",
+  mcpAuth: "Аутентификация",
+  mcpAuthNone: "Нет",
+  mcpAuthHeader: "Header",
+  mcpCommand: "Команда",
+  mcpArgs: "Аргументы",
+  mcpArgsHint: "Один аргумент на строку.",
+  mcpEnv: "Environment",
+  mcpEnvHint: "Одна пара KEY=VALUE на строку.",
+  mcpCatalogLoading: "Загрузка каталога MCP...",
+  mcpCatalogLoadFailed: "Не удалось загрузить каталог MCP.",
+  mcpCatalogEmpty: "В каталоге нет записей.",
+  mcpInstall: "Установить",
+  mcpInstalledStatus: "Установлено",
+} as const;

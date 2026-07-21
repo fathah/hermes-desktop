@@ -13,6 +13,7 @@ export const APP_LOCALES: AppLocale[] = [
   "pl",
   "pt-BR",
   "pt-PT",
+  "ru",
   "tr",
   "zh-CN",
   "zh-TW",

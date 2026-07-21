@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { t, getLocaleDirection } from "./index";
+import { APP_LOCALES, resources, t, getLocaleDirection } from "./index";
+
+function collectKeys(node: unknown, prefix = ""): string[] {
+  if (!node || typeof node !== "object") return [];
+
+  return Object.entries(node as Record<string, unknown>).flatMap(
+    ([key, value]) => {
+      const path = prefix ? `${prefix}.${key}` : key;
+      return value && typeof value === "object"
+        ? collectKeys(value, path)
+        : [path];
+    },
+  );
+}
 
 describe("shared i18n", () => {
   it("returns English text by default", () => {
@@ -39,6 +52,17 @@ describe("shared i18n", () => {
     expect(getLocaleDirection("en")).toBe("ltr");
   });
 
+  it("returns ru text when available", () => {
+    expect(APP_LOCALES).toContain("ru");
+    expect(t("welcome.title", "ru")).toBe("Добро пожаловать в Hermes");
+  });
+
+  it("keeps ru translation keys aligned with en", () => {
+    expect(collectKeys(resources.ru.translation).sort()).toEqual(
+      collectKeys(resources.en.translation).sort(),
+    );
+  });
+
   it("falls back to en when zh-CN key is missing", () => {
     expect(t("nonExistent.fallbackKey", "zh-CN")).toBe(
       "nonExistent.fallbackKey",
@@ -54,6 +78,12 @@ describe("shared i18n", () => {
   it("preserves interpolation placeholders in pl", () => {
     expect(t("common.updateAvailable", "pl", { version: "1.2.3" })).toBe(
       "Aktualizacja v1.2.3",
+    );
+  });
+
+  it("preserves interpolation placeholders in ru", () => {
+    expect(t("common.updateAvailable", "ru", { version: "1.2.3" })).toBe(
+      "Обновить до v1.2.3",
     );
   });
 });

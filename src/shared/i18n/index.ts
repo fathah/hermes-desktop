@@ -268,6 +268,29 @@ import installAr from "./locales/ar/install";
 import constantsAr from "./locales/ar/constants";
 import kanbanAr from "./locales/ar/kanban";
 import diagnoseAr from "./locales/ar/diagnose";
+import commonRu from "./locales/ru/common";
+import navigationRu from "./locales/ru/navigation";
+import discoverRu from "./locales/ru/discover";
+import welcomeRu from "./locales/ru/welcome";
+import setupRu from "./locales/ru/setup";
+import chatRu from "./locales/ru/chat";
+import settingsRu from "./locales/ru/settings";
+import toolsRu from "./locales/ru/tools";
+import sessionsRu from "./locales/ru/sessions";
+import modelsRu from "./locales/ru/models";
+import providersRu from "./locales/ru/providers";
+import officeRu from "./locales/ru/office";
+import errorsRu from "./locales/ru/errors";
+import schedulesRu from "./locales/ru/schedules";
+import skillsRu from "./locales/ru/skills";
+import gatewayRu from "./locales/ru/gateway";
+import agentsRu from "./locales/ru/agents";
+import soulRu from "./locales/ru/soul";
+import memoryRu from "./locales/ru/memory";
+import installRu from "./locales/ru/install";
+import constantsRu from "./locales/ru/constants";
+import kanbanRu from "./locales/ru/kanban";
+import diagnoseRu from "./locales/ru/diagnose";
 
 export const resources = {
   en: {
@@ -575,6 +598,33 @@ export const resources = {
       constants: constantsAr,
       kanban: kanbanAr,
       diagnose: diagnoseAr,
+    },
+  },
+  ru: {
+    translation: {
+      common: commonRu,
+      navigation: navigationRu,
+      discover: discoverRu,
+      welcome: welcomeRu,
+      setup: setupRu,
+      chat: chatRu,
+      settings: settingsRu,
+      tools: toolsRu,
+      sessions: sessionsRu,
+      models: modelsRu,
+      providers: providersRu,
+      office: officeRu,
+      errors: errorsRu,
+      schedules: schedulesRu,
+      skills: skillsRu,
+      gateway: gatewayRu,
+      agents: agentsRu,
+      soul: soulRu,
+      memory: memoryRu,
+      install: installRu,
+      constants: constantsRu,
+      kanban: kanbanRu,
+      diagnose: diagnoseRu,
     },
   },
 } satisfies Resource;
