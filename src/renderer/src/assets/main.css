@@ -2537,6 +2537,26 @@ textarea.war-room-input {
   font-size: 12px;
 }
 
+.capture-inbox-screen { display: grid; gap: 18px; }
+.capture-composer { display: grid; gap: 12px; border-color: rgba(34, 211, 238, .24); }
+.capture-composer textarea { min-height: 116px; resize: vertical; }
+.capture-controls { display: grid; grid-template-columns: .65fr 1fr 1fr; gap: 10px; }
+.capture-primary { border-color: rgba(34, 211, 238, .42); color: #cffafe; background: rgba(8, 145, 178, .16); }
+.capture-list { display: grid; gap: 14px; }
+.capture-card { display: grid; gap: 13px; }
+.capture-card-head { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
+.capture-content { color: #e2e8f0; font-size: 13px; line-height: 1.6; padding: 12px; border-radius: 12px; background: rgba(15, 23, 42, .44); }
+.capture-route-preview { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.capture-route-preview strong { color: #67e8f9; text-transform: uppercase; font-size: 11px; letter-spacing: .07em; }
+.capture-route-preview span { color: #94a3b8; font-size: 11px; }
+.capture-route-preview code { border: 1px solid rgba(148, 163, 184, .16); background: rgba(15, 23, 42, .5); border-radius: 8px; padding: 5px 8px; color: #cbd5e1; }
+.capture-warning { border: 1px solid rgba(251, 191, 36, .3); background: rgba(120, 53, 15, .16); color: #fde68a; padding: 10px; border-radius: 10px; }
+.capture-governance { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-top: 1px solid rgba(148, 163, 184, .12); padding-top: 12px; }
+.capture-governance > div:first-child { display: grid; gap: 4px; }
+.capture-governance span { color: #94a3b8; font-size: 11px; }
+.capture-card details summary { cursor: pointer; color: #94a3b8; font-size: 11px; }
+@media (max-width: 900px) { .capture-controls { grid-template-columns: 1fr; } .capture-card-head, .capture-governance { align-items: stretch; flex-direction: column; } }
+
 .project-genome-center { margin-top: 18px; display: grid; gap: 18px; border-color: rgba(167, 139, 250, 0.26); }
 .project-genome-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .project-genome-message { padding: 11px 13px; border: 1px solid rgba(52, 211, 153, 0.28); border-radius: 11px; color: #a7f3d0; background: rgba(6, 78, 59, 0.18); }

@@ -83,6 +83,7 @@ import {
   recordHccCloneTaste,
   recordHccOpportunityOutcome,
   rollbackHccProjectGenome,
+  stageHccCapture,
   stageHccOpportunityIntervention,
   stageHccProjectGenomeProposal,
   createHccLearningTopic,
@@ -97,6 +98,7 @@ import {
   createHccRegistryEntity,
   deleteHccGraphEdge,
   deleteHccRegistryEntity,
+  fetchHccCaptures,
   fetchHccClonedApps,
   fetchHccConductorJobs,
   fetchHccContextInspector,
@@ -113,7 +115,9 @@ import {
   fetchHccIntelligence,
   fetchHccExecutors,
   fetchHccExecutions,
+  createHccCapture,
   createHccExecution,
+  decideHccCaptureRoute,
   decideHccExecution,
   executeHccRecommendation,
   refreshHccExecution,
@@ -579,6 +583,10 @@ function setupIPC(): void {
   ipcMain.handle("stage-hcc-intervention", (_event, interventionId: string, actor?: string) =>
     stageHccIntervention(interventionId, actor),
   );
+  ipcMain.handle("get-hcc-captures", () => fetchHccCaptures());
+  ipcMain.handle("create-hcc-capture", (_event, payload: Record<string, unknown>) => createHccCapture(payload));
+  ipcMain.handle("stage-hcc-capture", (_event, captureId: string, targetType?: string, targetId?: string) => stageHccCapture(captureId, targetType, targetId));
+  ipcMain.handle("decide-hcc-capture-route", (_event, routeId: string, decision: "approve" | "reject", note?: string) => decideHccCaptureRoute(routeId, decision, note));
   ipcMain.handle("get-hcc-projects", () => fetchHccProjects());
   ipcMain.handle("get-hcc-project-detail", (_event, projectId: string) => fetchHccProjectDetail(projectId));
   ipcMain.handle("get-hcc-project-genome", (_event, projectId: string) => fetchHccProjectGenome(projectId));

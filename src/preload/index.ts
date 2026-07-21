@@ -220,6 +220,10 @@ const hermesAPI = {
     ipcRenderer.invoke("stage-hcc-recovery-action", actionId),
   stageHccIntervention: (interventionId: string, actor?: string): Promise<unknown> =>
     ipcRenderer.invoke("stage-hcc-intervention", interventionId, actor),
+  getHccCaptures: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-captures"),
+  createHccCapture: (payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("create-hcc-capture", payload),
+  stageHccCapture: (captureId: string, targetType?: string, targetId?: string): Promise<unknown> => ipcRenderer.invoke("stage-hcc-capture", captureId, targetType, targetId),
+  decideHccCaptureRoute: (routeId: string, decision: "approve" | "reject", note?: string): Promise<unknown> => ipcRenderer.invoke("decide-hcc-capture-route", routeId, decision, note),
   getHccProjects: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-projects"),
   getHccProjectDetail: (projectId: string): Promise<unknown> =>
     ipcRenderer.invoke("get-hcc-project-detail", projectId),

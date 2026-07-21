@@ -147,6 +147,7 @@ function Spotlight({
       ["clone-remix", "Open Clone Remix", "Run clone/remix studio workflows", "HCC Workspace"],
       ["opportunity-radar", "Open Opportunity Radar", "Surface leverage and opportunity signals", "HCC Workspace"],
       ["learning-engine", "Open Learning Engine", "Track learning loops and progression", "HCC Workspace"],
+      ["capture-inbox", "Open Capture Inbox", "Capture, classify, and govern routing into canonical HCC objects", "HCC Workspace"],
       ["chat", "Open Chat", "Jump into the active conversation workspace", "Workspace"],
       ["sessions", "Open Sessions", "Browse and resume session history", "Workspace"],
       ["agents", "Open Agents", "Switch or manage Hermes profiles", "Profiles"],
