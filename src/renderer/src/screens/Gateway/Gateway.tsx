@@ -27,7 +27,13 @@ import type {
 type DraftValues = Record<string, Record<string, string>>;
 type PlatformMessage = Record<string, MessagingPlatformTestResponse | null>;
 
-function Gateway({ profile }: { profile?: string }): React.JSX.Element {
+function Gateway({
+  profile,
+  remoteMode = false,
+}: {
+  profile?: string;
+  remoteMode?: boolean;
+}): React.JSX.Element {
   const { t } = useI18n();
   const [gatewayRunning, setGatewayRunning] = useState(false);
   const [gatewayBusy, setGatewayBusy] = useState(false);
@@ -54,7 +60,7 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
     setLoadError(null);
     try {
       const [gwStatus, platforms] = await Promise.all([
-        window.hermesAPI.gatewayStatus(),
+        window.hermesAPI.gatewayStatus(profile),
         window.hermesAPI.getMessagingPlatforms(profile),
       ]);
       setGatewayRunning(gwStatus);
@@ -84,6 +90,7 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
   }, [loadConfig]);
 
   useEffect(() => {
+    if (remoteMode) return;
     let cancelled = false;
     window.hermesAPI
       .getApiServerKeyStatus(profile)
@@ -96,7 +103,7 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [profile]);
+  }, [profile, remoteMode]);
 
   const platforms = catalog?.platforms ?? [];
   const filteredPlatforms = useMemo(() => {
@@ -128,7 +135,7 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
     setGatewayError(null);
     if (gatewayRunning) {
       try {
-        await window.hermesAPI.stopGateway();
+        await window.hermesAPI.stopGateway(profile);
         setGatewayRunning(false);
       } catch (err) {
         setGatewayError(
@@ -139,7 +146,7 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
       }
     } else {
       try {
-        const result = await window.hermesAPI.startGateway();
+        const result = await window.hermesAPI.startGateway(profile);
         setGatewayRunning(result.running);
         if (!result.success) {
           setGatewayError(
@@ -152,7 +159,7 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
         gatewayStatusTimeoutRef.current = setTimeout(() => {
           // Refresh status + platform catalog once the adapters have had a
           // moment to come up; surface an error if it exited immediately.
-          void window.hermesAPI.gatewayStatus().then((status) => {
+          void window.hermesAPI.gatewayStatus(profile).then((status) => {
             setGatewayRunning(status);
             if (status) {
               void loadConfig();
@@ -192,7 +199,7 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
         setGatewayError(t("gateway.restartFailed"));
       } else {
         gatewayStatusTimeoutRef.current = setTimeout(async () => {
-          const status = await window.hermesAPI.gatewayStatus();
+          const status = await window.hermesAPI.gatewayStatus(profile);
           setGatewayRunning(status);
           if (status) {
             void loadConfig();
@@ -402,7 +409,7 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
         {loadError && <div className="gateway-inline-warning">{loadError}</div>}
       </div>
 
-      {apiKeyStatus && (
+      {!remoteMode && apiKeyStatus && (
         <div className="settings-section gateway-api-key-section">
           <div className="settings-field">
             <label className="settings-field-label">

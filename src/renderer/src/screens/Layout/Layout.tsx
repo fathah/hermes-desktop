@@ -916,15 +916,12 @@ function Layout({
 
           {visitedViews.has("agents") && (
             <div style={paneStyle("agents")}>
-              {remoteMode ? (
-                <RemoteNotice feature="Profiles" />
-              ) : (
-                <Agents
-                  activeProfile={activeProfile}
-                  onSelectProfile={handleSelectProfile}
-                  onChatWith={handleChatWithProfile}
-                />
-              )}
+              <Agents
+                activeProfile={activeProfile}
+                onSelectProfile={handleSelectProfile}
+                onChatWith={handleChatWithProfile}
+                remoteMode={remoteMode}
+              />
             </div>
           )}
 
@@ -949,11 +946,7 @@ function Layout({
 
           {visitedViews.has("skills") && (
             <div style={paneStyle("skills")}>
-              {remoteMode ? (
-                <RemoteNotice feature="Skills" />
-              ) : (
-                <Skills profile={activeProfile} />
-              )}
+              <Skills profile={activeProfile} />
             </div>
           )}
 
@@ -971,8 +964,6 @@ function Layout({
             <div style={paneStyle("tools")}>
               <Tools
                 profile={activeProfile}
-                showPlatformToolsets={!remoteMode}
-                remoteMode={remoteMode}
                 visible={view === "tools"}
                 onBrowseSkills={() => focusDiscover("skills")}
                 onBrowseMcps={() => focusDiscover("mcps")}
@@ -998,11 +989,7 @@ function Layout({
 
           {visitedViews.has("gateway") && (
             <div style={paneStyle("gateway")}>
-              {remoteMode ? (
-                <RemoteNotice feature="Gateway" />
-              ) : (
-                <Gateway profile={activeProfile} />
-              )}
+              <Gateway profile={activeProfile} remoteMode={remoteMode} />
             </div>
           )}
         </main>

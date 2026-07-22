@@ -520,10 +520,10 @@ interface HermesAPI {
   respondClarify: (requestId: string, answer: string) => Promise<boolean>;
 
   // Gateway
-  startGateway: () => Promise<GatewayStartResult>;
-  stopGateway: () => Promise<boolean>;
+  startGateway: (profile?: string) => Promise<GatewayStartResult>;
+  stopGateway: (profile?: string) => Promise<boolean>;
   restartGateway: (profile?: string) => Promise<boolean>;
-  gatewayStatus: () => Promise<boolean>;
+  gatewayStatus: (profile?: string) => Promise<boolean>;
   setNativeAppearance: (source: "dark" | "light" | "system") => Promise<void>;
   dashboardStatus: (profile?: string) => Promise<DashboardStatus>;
   freshDashboardWsUrl: (profile?: string) => Promise<string>;

@@ -1,8 +1,31 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ConnectionConfig } from "./config";
 
-vi.mock("./hermes", () => ({
-  getApiUrl: () => "http://remote.example:9119",
-  getRemoteAuthHeader: () => ({ Authorization: "Bearer tok" }),
+const { remoteDashboardRequestJson, RemoteDashboardApiError } = vi.hoisted(
+  () => {
+    class TestRemoteDashboardApiError extends Error {
+      readonly unsupported: boolean;
+
+      constructor(
+        message: string,
+        readonly statusCode?: number,
+      ) {
+        super(message);
+        this.name = "RemoteDashboardApiError";
+        this.unsupported = statusCode === 404;
+      }
+    }
+
+    return {
+      remoteDashboardRequestJson: vi.fn(),
+      RemoteDashboardApiError: TestRemoteDashboardApiError,
+    };
+  },
+);
+
+vi.mock("./remote-api", () => ({
+  remoteDashboardRequestJson,
+  RemoteDashboardApiError,
 }));
 
 import {
@@ -14,44 +37,29 @@ import {
   remoteUninstallSkill,
 } from "./remote-skills";
 
-const fetchMock = vi.fn();
+const connection = {
+  mode: "remote",
+  remoteUrl: "https://remote.example:9119",
+  apiKey: "",
+  remoteAuthMode: "oauth",
+  remoteChatTransport: "auto",
+  sshChatTransport: "auto",
+  ssh: {},
+} as ConnectionConfig;
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    statusText: status === 200 ? "OK" : "Error",
-    json: async () => body,
-  } as unknown as Response;
-}
-
-beforeEach(() => {
-  fetchMock.mockReset();
-  vi.stubGlobal("fetch", fetchMock);
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
+beforeEach(() => remoteDashboardRequestJson.mockReset());
 
 describe("remote skills routing", () => {
-  it("lists installed skills from the remote dashboard, keyed by marker path", async () => {
-    // Remote mode used to fall through to the local CLI, showing the LOCAL
-    // machine's skills while connected to a remote dashboard (#578).
-    fetchMock.mockResolvedValue(
-      jsonResponse([
-        { name: "pdf", category: "docs", description: "PDF tools" },
-        { name: "web", description: "" },
-        { notAName: true },
-      ]),
-    );
+  it("lists remote skills and embeds profile in marker paths", async () => {
+    remoteDashboardRequestJson.mockResolvedValue([
+      { name: "pdf", category: "docs", description: "PDF tools" },
+      { name: "web" },
+      { notAName: true },
+    ]);
 
-    const skills = await remoteListInstalledSkills("research");
-
-    // The path embeds the profile the skill was listed under — the content
-    // lookup has no other channel for it, and resolving to the globally
-    // active profile there would query the wrong profile's API.
-    expect(skills).toEqual([
+    await expect(
+      remoteListInstalledSkills(connection, "research"),
+    ).resolves.toEqual([
       {
         name: "pdf",
         category: "docs",
@@ -65,83 +73,80 @@ describe("remote skills routing", () => {
         path: `${REMOTE_SKILL_PREFIX}research:web`,
       },
     ]);
-    const url = String(fetchMock.mock.calls[0][0]);
-    expect(url).toContain("/api/skills");
-    // Unified-dashboard scoping: named profile rides as ?profile=.
-    expect(url).toContain("profile=research");
-    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe("Bearer tok");
-  });
-
-  it("does not append ?profile= for the default profile", async () => {
-    fetchMock.mockResolvedValue(jsonResponse([]));
-    await remoteListInstalledSkills("default");
-    expect(String(fetchMock.mock.calls[0][0])).not.toContain("profile=");
-  });
-
-  it("returns [] instead of throwing when the remote is unreachable", async () => {
-    fetchMock.mockRejectedValue(new Error("ECONNREFUSED"));
-    await expect(remoteListInstalledSkills()).resolves.toEqual([]);
-  });
-
-  it("fetches content by unwrapping the marker path to profile + name", async () => {
-    fetchMock.mockResolvedValue(
-      jsonResponse({ name: "pdf", content: "# PDF skill" }),
+    expect(remoteDashboardRequestJson).toHaveBeenCalledWith(
+      connection,
+      "/api/skills",
+      {},
+      "research",
     );
-
-    const content = await remoteGetSkillContent(
-      remoteSkillPath("pdf", "research"),
-    );
-
-    expect(content).toBe("# PDF skill");
-    const url = String(fetchMock.mock.calls[0][0]);
-    expect(url).toContain("/api/skills/content?name=pdf");
-    // The profile comes from the path, NOT the globally active profile —
-    // it must match the profile the skill was listed under.
-    expect(url).toContain("profile=research");
   });
 
-  it("scopes a default-profile path with no ?profile= param", async () => {
-    fetchMock.mockResolvedValue(jsonResponse({ content: "x" }));
-    await remoteGetSkillContent(remoteSkillPath("pdf"));
-    expect(String(fetchMock.mock.calls[0][0])).not.toContain("profile=");
-  });
-
-  it("falls back to the given profile for a bare (unprefixed) path", async () => {
-    fetchMock.mockResolvedValue(jsonResponse({ content: "x" }));
-    await remoteGetSkillContent("pdf", "research");
-    const url = String(fetchMock.mock.calls[0][0]);
-    expect(url).toContain("name=pdf");
-    expect(url).toContain("profile=research");
-  });
-
-  it("percent-encodes query params consistently via searchParams", async () => {
-    // Embedding a pre-encoded name in the path then calling
-    // searchParams.set("profile", ...) would re-serialize it (%20 → +) only
-    // when a named profile is present — everything goes through searchParams.
-    fetchMock.mockResolvedValue(jsonResponse({ content: "x" }));
-    await remoteGetSkillContent(remoteSkillPath("my skill", "research"));
-    expect(String(fetchMock.mock.calls[0][0])).toContain("name=my+skill");
-    fetchMock.mockClear();
-    await remoteGetSkillContent(remoteSkillPath("my skill"));
-    expect(String(fetchMock.mock.calls[0][0])).toContain("name=my+skill");
-  });
-
-  it("maps hub install/uninstall spawn results to SkillCliResult", async () => {
-    fetchMock.mockResolvedValue(jsonResponse({ ok: true, pid: 42 }));
-    await expect(remoteInstallSkill("hub/pdf")).resolves.toEqual({
-      success: true,
+  // @lat: [[remote-management#Test specifications#Feature compatibility failures]]
+  it("returns an empty list when the remote Agent lacks the skills API", async () => {
+    remoteDashboardRequestJson.mockImplementationOnce(async () => {
+      throw new RemoteDashboardApiError("Not found", 404);
     });
-    await expect(remoteUninstallSkill("pdf")).resolves.toEqual({
-      success: true,
-    });
+    await expect(remoteListInstalledSkills(connection)).resolves.toEqual([]);
   });
 
-  it("surfaces API error detail on a failed install", async () => {
-    fetchMock.mockResolvedValue(
-      jsonResponse({ detail: "identifier is required" }, 400),
+  it("surfaces network failures instead of reporting an empty skill list", async () => {
+    const error = new Error("ECONNREFUSED");
+    remoteDashboardRequestJson.mockRejectedValueOnce(error);
+
+    await expect(remoteListInstalledSkills(connection)).rejects.toBe(error);
+  });
+
+  it("fetches content using marker profile and encoded skill name", async () => {
+    remoteDashboardRequestJson.mockResolvedValue({ content: "# PDF skill" });
+    await expect(
+      remoteGetSkillContent(
+        connection,
+        remoteSkillPath("my skill", "research"),
+      ),
+    ).resolves.toBe("# PDF skill");
+    expect(remoteDashboardRequestJson).toHaveBeenCalledWith(
+      connection,
+      "/api/skills/content?name=my+skill",
+      {},
+      "research",
     );
-    const result = await remoteInstallSkill("");
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("identifier is required");
+  });
+
+  it("starts remote install and uninstall through authenticated client", async () => {
+    remoteDashboardRequestJson.mockResolvedValue({ ok: true, pid: 42 });
+    await expect(
+      remoteInstallSkill(connection, "hub/pdf", "research"),
+    ).resolves.toEqual({ success: true });
+    await expect(
+      remoteUninstallSkill(connection, "pdf", "research"),
+    ).resolves.toEqual({ success: true });
+    expect(remoteDashboardRequestJson).toHaveBeenNthCalledWith(
+      1,
+      connection,
+      "/api/skills/hub/install",
+      {
+        method: "POST",
+        body: { identifier: "hub/pdf", profile: "research" },
+      },
+      "research",
+    );
+    expect(remoteDashboardRequestJson).toHaveBeenNthCalledWith(
+      2,
+      connection,
+      "/api/skills/hub/uninstall",
+      { method: "POST", body: { name: "pdf", profile: "research" } },
+      "research",
+    );
+  });
+
+  it("surfaces remote API detail on failed mutation", async () => {
+    remoteDashboardRequestJson.mockImplementationOnce(async () => {
+      throw new Error("identifier is required");
+    });
+    const result = await remoteInstallSkill(connection, "");
+    expect(result).toEqual({
+      success: false,
+      error: "identifier is required",
+    });
   });
 });

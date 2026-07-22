@@ -223,6 +223,22 @@ import {
   remoteListInstalledSkills,
   remoteUninstallSkill,
 } from "../remote-skills";
+import { remoteGetToolsets, remoteSetToolsetEnabled } from "../remote-toolsets";
+import {
+  remoteCreateProfile,
+  remoteDeleteProfile,
+  remoteListProfiles,
+  remoteReadSoul,
+  remoteResetSoul,
+  remoteSetActiveProfile,
+  remoteWriteSoul,
+} from "../remote-profiles";
+import {
+  remoteGatewayStatus,
+  remoteRestartGateway,
+  remoteStartGateway,
+  remoteStopGateway,
+} from "../remote-gateway";
 import {
   remoteAddModel,
   remoteGetModelConfig,
@@ -1003,7 +1019,7 @@ export function registerIpcHandlers(context: IpcContext): void {
 
   ipcMain.handle("get-hermes-home", (_event, profile?: string) => {
     const conn = getConnectionConfig();
-    if (conn.mode === "remote") return remoteGetHermesHome(conn);
+    if (conn.mode === "remote") return remoteGetHermesHome(conn, profile);
     if (conn.mode === "ssh" && conn.ssh)
       return withSshDashboardSessions(
         conn,
@@ -1681,34 +1697,25 @@ export function registerIpcHandlers(context: IpcContext): void {
   );
 
   // Gateway
-  ipcMain.handle("start-gateway", async () => {
+  ipcMain.handle("start-gateway", async (_event, profile?: string) => {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh) {
       await sshStartGateway(conn.ssh);
       return { success: true, running: true };
     }
     if (conn.mode === "remote") {
-      // The remote server runs its own gateway; nothing to start locally.
-      // Without this guard we'd fall through to `startGateway()` and
-      // spawn a non-existent local hermes-agent (issue #266).
-      return {
-        success: false,
-        running: false,
-        error:
-          "Remote mode points at an already-running Hermes server. Start or restart the gateway on that remote host.",
-      };
+      return remoteStartGateway(conn, profile);
     }
     return startGatewayDetailed();
   });
-  ipcMain.handle("stop-gateway", async () => {
+  ipcMain.handle("stop-gateway", async (_event, profile?: string) => {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh) {
       await sshStopGateway(conn.ssh);
       return true;
     }
     if (conn.mode === "remote") {
-      // No local gateway to stop in pure remote mode.
-      return true;
+      return remoteStopGateway(conn, profile);
     }
     // No profile argument → stops the active profile's gateway, leaving any
     // other profiles' gateways running.
@@ -1723,13 +1730,14 @@ export function registerIpcHandlers(context: IpcContext): void {
       return sshGatewayStatus(conn.ssh);
     }
     if (conn.mode === "remote") {
-      return false;
+      return remoteRestartGateway(conn, profile);
     }
     return restartGateway(profile);
   });
-  ipcMain.handle("gateway-status", () => {
+  ipcMain.handle("gateway-status", (_event, profile?: string) => {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh) return sshGatewayStatus(conn.ssh);
+    if (conn.mode === "remote") return remoteGatewayStatus(conn, profile);
     return isGatewayRunning();
   });
 
@@ -1789,7 +1797,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     async (_event, profile?: string) => {
       const conn = getConnectionConfig();
       if (conn.mode === "remote") {
-        return fetchRemoteMessagingPlatforms();
+        return fetchRemoteMessagingPlatforms(conn, profile);
       }
       if (conn.mode === "ssh" && conn.ssh) {
         const [envData, enabled, running, platformToolsets] = await Promise.all(
@@ -1823,7 +1831,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     async (_event, platform: string, update, profile?: string) => {
       const conn = getConnectionConfig();
       if (conn.mode === "remote") {
-        return updateRemoteMessagingPlatform(platform, update);
+        return updateRemoteMessagingPlatform(conn, platform, update, profile);
       }
       if (conn.mode === "ssh" && conn.ssh) {
         await applyMessagingPlatformUpdate(
@@ -1868,7 +1876,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     async (_event, platform: string, profile?: string) => {
       const conn = getConnectionConfig();
       if (conn.mode === "remote") {
-        return testRemoteMessagingPlatform(platform);
+        return testRemoteMessagingPlatform(conn, platform, profile);
       }
       if (conn.mode === "ssh" && conn.ssh) {
         const [envData, enabled, running, platformToolsets] = await Promise.all(
@@ -2033,6 +2041,7 @@ export function registerIpcHandlers(context: IpcContext): void {
   // Profiles
   ipcMain.handle("list-profiles", async () => {
     const conn = getConnectionConfig();
+    if (conn.mode === "remote") return remoteListProfiles(conn);
     if (conn.mode === "ssh" && conn.ssh) {
       // The desktop's active profile is the LOCAL selection (persisted in
       // ~/.hermes/active_profile by set-active-profile), not whatever the remote
@@ -2054,6 +2063,8 @@ export function registerIpcHandlers(context: IpcContext): void {
       const conn = getConnectionConfig();
       if (conn.mode === "ssh" && conn.ssh)
         return sshCreateProfile(conn.ssh, name, cloneFrom);
+      if (conn.mode === "remote")
+        return remoteCreateProfile(conn, name, cloneFrom);
       return createProfile(name, cloneFrom);
     },
   );
@@ -2061,9 +2072,16 @@ export function registerIpcHandlers(context: IpcContext): void {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh)
       return sshDeleteProfile(conn.ssh, name);
+    if (conn.mode === "remote") return remoteDeleteProfile(conn, name);
     return deleteProfile(name);
   });
   ipcMain.handle("set-active-profile", async (_event, name: string) => {
+    const conn = getConnectionConfig();
+    if (conn.mode === "remote") {
+      const changed = await remoteSetActiveProfile(conn, name);
+      if (changed) notifyProfileSwitched();
+      return changed;
+    }
     // Persist the selection LOCALLY in every mode (incl. SSH) — the desktop
     // tracks "which profile is active" via the local ~/.hermes/active_profile,
     // so without this an SSH session forgot the choice and reset to `default`
@@ -2073,7 +2091,6 @@ export function registerIpcHandlers(context: IpcContext): void {
     notifyProfileSwitched();
     // Bring the activated profile's own gateway up if it isn't already —
     // without stopping any other profile's gateway (their bots stay online).
-    const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh) {
       // Per-profile gateway lives on the remote; start it over SSH. (Previously
       // SSH was skipped entirely, so selecting/Chatting a profile in the Agents
@@ -2225,17 +2242,20 @@ export function registerIpcHandlers(context: IpcContext): void {
   // Soul
   ipcMain.handle("read-soul", (_event, profile?: string) => {
     const conn = getConnectionConfig();
+    if (conn.mode === "remote") return remoteReadSoul(conn, profile);
     if (conn.mode === "ssh" && conn.ssh) return sshReadSoul(conn.ssh, profile);
     return readSoul(profile);
   });
   ipcMain.handle("write-soul", (_event, content: string, profile?: string) => {
     const conn = getConnectionConfig();
+    if (conn.mode === "remote") return remoteWriteSoul(conn, content, profile);
     if (conn.mode === "ssh" && conn.ssh)
       return sshWriteSoul(conn.ssh, content, profile);
     return writeSoul(content, profile);
   });
   ipcMain.handle("reset-soul", (_event, profile?: string) => {
     const conn = getConnectionConfig();
+    if (conn.mode === "remote") return remoteResetSoul(conn, profile);
     if (conn.mode === "ssh" && conn.ssh) return sshResetSoul(conn.ssh, profile);
     return resetSoul(profile);
   });
@@ -2245,6 +2265,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh)
       return sshGetToolsets(conn.ssh, profile);
+    if (conn.mode === "remote") return remoteGetToolsets(conn, profile);
     return getToolsets(profile);
   });
   ipcMain.handle(
@@ -2253,6 +2274,8 @@ export function registerIpcHandlers(context: IpcContext): void {
       const conn = getConnectionConfig();
       if (conn.mode === "ssh" && conn.ssh)
         return sshSetToolsetEnabled(conn.ssh, key, enabled, profile);
+      if (conn.mode === "remote")
+        return remoteSetToolsetEnabled(conn, key, enabled, profile);
       return setToolsetEnabled(key, enabled, profile);
     },
   );
@@ -2267,7 +2290,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     if (conn.mode === "ssh" && conn.ssh)
       return sshListInstalledSkills(conn.ssh, profile);
     if (conn.mode === "remote")
-      return remoteListInstalledSkills(activeSshProfile(profile));
+      return remoteListInstalledSkills(conn, activeSshProfile(profile));
     return listInstalledSkills(profile);
   });
   ipcMain.handle("list-bundled-skills", () => {
@@ -2280,7 +2303,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     if (conn.mode === "ssh" && conn.ssh)
       return sshGetSkillContent(conn.ssh, skillPath);
     if (conn.mode === "remote")
-      return remoteGetSkillContent(skillPath, activeSshProfile());
+      return remoteGetSkillContent(conn, skillPath, activeSshProfile());
     return getSkillContent(skillPath);
   });
   ipcMain.handle(
@@ -2290,7 +2313,7 @@ export function registerIpcHandlers(context: IpcContext): void {
       if (conn.mode === "ssh" && conn.ssh)
         return sshInstallSkill(conn.ssh, identifier);
       if (conn.mode === "remote")
-        return remoteInstallSkill(identifier, activeSshProfile(_profile));
+        return remoteInstallSkill(conn, identifier, activeSshProfile(_profile));
       return installSkill(identifier, _profile);
     },
   );
@@ -2301,7 +2324,7 @@ export function registerIpcHandlers(context: IpcContext): void {
       if (conn.mode === "ssh" && conn.ssh)
         return sshUninstallSkill(conn.ssh, name);
       if (conn.mode === "remote")
-        return remoteUninstallSkill(name, activeSshProfile(_profile));
+        return remoteUninstallSkill(conn, name, activeSshProfile(_profile));
       return uninstallSkill(name, _profile);
     },
   );

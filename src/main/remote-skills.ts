@@ -1,4 +1,8 @@
-import { getApiUrl, getRemoteAuthHeader } from "./hermes";
+import type { ConnectionConfig } from "./config";
+import {
+  RemoteDashboardApiError,
+  remoteDashboardRequestJson,
+} from "./remote-api";
 import type { InstalledSkill, SkillCliResult } from "./skills";
 
 // Remote (HTTP) mode routing for the Skills screen. The skills IPC handlers
@@ -24,51 +28,35 @@ export function remoteSkillPath(name: string, profile?: string): string {
 }
 
 async function skillsApi<T>(
+  connection: ConnectionConfig,
   path: string,
-  init: RequestInit = {},
+  options: {
+    method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+    body?: unknown;
+  } = {},
   profile?: string,
   query?: Record<string, string>,
 ): Promise<T> {
-  const url = new URL(`${getApiUrl()}${path}`);
-  // All query params go through searchParams so encoding stays consistent —
-  // mixing pre-encoded params in `path` with searchParams.set() would
-  // re-serialize the former (%20 → +) only when a named profile is present.
+  const url = new URL(path, "http://remote.invalid");
   for (const [key, value] of Object.entries(query ?? {})) {
     url.searchParams.set(key, value);
   }
-  // Scope to the requested profile on the unified dashboard; "default" needs
-  // no param (matches dashboardApiUrl's convention in remote-sessions.ts).
-  if (profile && profile !== "default") {
-    url.searchParams.set("profile", profile);
-  }
-  const headers: Record<string, string> = {
-    ...getRemoteAuthHeader(),
-    ...((init.headers as Record<string, string>) || {}),
-  };
-  if (init.body && !headers["Content-Type"]) {
-    headers["Content-Type"] = "application/json";
-  }
-  const response = await fetch(url.toString(), { ...init, headers });
-  if (!response.ok) {
-    let detail = response.statusText;
-    try {
-      const body = (await response.json()) as { detail?: string };
-      if (body?.detail) detail = body.detail;
-    } catch {
-      // non-JSON error body — keep statusText
-    }
-    throw new Error(`Remote skills API ${response.status}: ${detail}`);
-  }
-  return (await response.json()) as T;
+  return remoteDashboardRequestJson<T>(
+    connection,
+    `${url.pathname}${url.search}`,
+    options,
+    profile,
+  );
 }
 
 export async function remoteListInstalledSkills(
+  connection: ConnectionConfig,
   profile?: string,
 ): Promise<InstalledSkill[]> {
   try {
     const skills = await skillsApi<
       Array<{ name?: string; category?: string; description?: string }>
-    >("/api/skills", {}, profile);
+    >(connection, "/api/skills", {}, profile);
     if (!Array.isArray(skills)) return [];
     return skills
       .filter((s) => typeof s?.name === "string" && s.name)
@@ -78,14 +66,18 @@ export async function remoteListInstalledSkills(
         description: s.description || "",
         path: remoteSkillPath(s.name as string, profile),
       }));
-  } catch {
-    // Unreachable remote — an empty list beats a renderer error toast here,
-    // matching sshListInstalledSkills' behavior.
-    return [];
+  } catch (error) {
+    // Older Agent versions may not expose this feature. Treat that scoped
+    // compatibility miss as unavailable, while preserving auth, network, and
+    // server failures so the renderer does not report false empty state.
+    if (error instanceof RemoteDashboardApiError && error.unsupported)
+      return [];
+    throw error;
   }
 }
 
 export async function remoteGetSkillContent(
+  connection: ConnectionConfig,
   skillPath: string,
   fallbackProfile?: string,
 ): Promise<string> {
@@ -103,6 +95,7 @@ export async function remoteGetSkillContent(
     }
   }
   const result = await skillsApi<{ content?: string }>(
+    connection,
     "/api/skills/content",
     {},
     profile,
@@ -116,13 +109,15 @@ export async function remoteGetSkillContent(
 // here means "started", not "completed". The renderer's list refresh picks up
 // the result; a resolution failure surfaces only in the remote's logs.
 export async function remoteInstallSkill(
+  connection: ConnectionConfig,
   identifier: string,
   profile?: string,
 ): Promise<SkillCliResult> {
   try {
     const result = await skillsApi<{ ok?: boolean }>(
+      connection,
       "/api/skills/hub/install",
-      { method: "POST", body: JSON.stringify({ identifier, profile }) },
+      { method: "POST", body: { identifier, profile } },
       profile,
     );
     return result.ok
@@ -137,13 +132,15 @@ export async function remoteInstallSkill(
 }
 
 export async function remoteUninstallSkill(
+  connection: ConnectionConfig,
   name: string,
   profile?: string,
 ): Promise<SkillCliResult> {
   try {
     const result = await skillsApi<{ ok?: boolean }>(
+      connection,
       "/api/skills/hub/uninstall",
-      { method: "POST", body: JSON.stringify({ name, profile }) },
+      { method: "POST", body: { name, profile } },
       profile,
     );
     return result.ok
