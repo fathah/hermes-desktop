@@ -1,28 +1,15 @@
-import { getConnectionConfig } from "./config";
-
-function getApiBaseUrl(): string {
+export function getHccApiBaseUrl(): string {
   const envUrl = process.env.HCC_API_URL?.trim();
-  if (envUrl) {
-    return envUrl.replace(/\/+$/, "");
-  }
-
-  const conn = getConnectionConfig();
-  if (conn.mode === "remote" && conn.remoteUrl) {
-    return conn.remoteUrl.replace(/\/+$/, "");
-  }
-  return "http://127.0.0.1:9200";
+  return (envUrl || "http://127.0.0.1:9200").replace(/\/+$/, "");
 }
 
 function getAuthHeaders(): Record<string, string> {
-  const conn = getConnectionConfig();
-  if (conn.mode === "remote" && conn.apiKey) {
-    return { Authorization: `Bearer ${conn.apiKey}` };
-  }
-  return {};
+  const token = process.env.HCC_AUTH_TOKEN?.trim();
+  return token ? { Authorization: "Bearer " + token } : {};
 }
 
 async function fetchJson(path: string, init: RequestInit = {}): Promise<unknown> {
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+  const response = await fetch(`${getHccApiBaseUrl()}${path}`, {
     ...init,
     headers: {
       Accept: "application/json",

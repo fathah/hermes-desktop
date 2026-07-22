@@ -50,7 +50,9 @@ def click_label(pid: int, window_id: int, label: str) -> None:
 
 def main() -> int:
     windows = call("list_windows", {"on_screen_only": True}).get("windows", [])
-    window = next((item for item in windows if item.get("app_name") == "electron.exe"), None)
+    window = next((item for item in windows if item.get("app_name") == "hermes-agent.exe"), None)
+    if not window:
+        window = next((item for item in windows if item.get("app_name") == "electron.exe"), None)
     if not window:
         raise SystemExit("Hermes desktop window not found")
     pid, window_id = window["pid"], window["window_id"]
