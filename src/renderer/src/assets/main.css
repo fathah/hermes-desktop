@@ -703,15 +703,6 @@ body:has(.shell-vibrant),
   background: var(--bg-primary);
 }
 
-.loading-spinner {
-  width: 28px;
-  height: 28px;
-  border: 2.5px solid var(--border-bright);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -2095,11 +2086,17 @@ body:has(.shell-vibrant),
   z-index: 1000;
   display: flex;
   flex-direction: column;
-  padding: 4px;
-  border: 1px solid var(--border-bright);
-  border-radius: var(--radius-md);
-  background: var(--bg-elevated);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.36);
+  padding: 6px;
+  border-radius: var(--radius-lg);
+  /* Light-based, stroke-free: depth from a frosted material, a top inset
+     highlight, and layered ambient shadow — no hard 1px border. */
+  background: color-mix(in srgb, var(--bg-secondary) 97%, transparent);
+  backdrop-filter: blur(30px) saturate(1.5);
+  -webkit-backdrop-filter: blur(30px) saturate(1.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 24px 60px -18px rgba(0, 0, 0, 0.55),
+    0 8px 24px -14px rgba(0, 0, 0, 0.4);
   font-family: var(--font-sans);
   /* Open animation scales from the anchored top-left corner. */
   transform-origin: top left;
@@ -2131,9 +2128,9 @@ body:has(.shell-vibrant),
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 7px 10px;
+  padding: 8px 10px;
   border: none;
-  border-radius: var(--radius-sm, 6px);
+  border-radius: var(--radius-md);
   background: none;
   color: var(--text-primary);
   cursor: pointer;
@@ -2143,6 +2140,16 @@ body:has(.shell-vibrant),
   transition:
     background var(--transition),
     color var(--transition);
+}
+
+/* Active "Move to project" location: a soft accent fill, not a stroke. */
+.sidebar-session-menu-item.active-project {
+  background: var(--accent-subtle);
+  color: var(--accent-text);
+}
+
+.sidebar-session-menu-item.active-project svg {
+  color: var(--accent-text);
 }
 
 .sidebar-session-menu-item svg {
@@ -2177,8 +2184,9 @@ body:has(.shell-vibrant),
 
 .sidebar-session-menu-divider {
   height: 1px;
-  margin: 4px 6px;
-  background: var(--border-bright);
+  margin: 5px 8px;
+  /* Soft hairline instead of a hard stroke. */
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
 }
 
 .sidebar-session-menu-back {
@@ -2421,11 +2429,10 @@ body:has(.shell-vibrant),
   line-height: 1;
 }
 
-.active-session-chip-spinner {
-  flex-shrink: 0;
-  /* Sits on the profile's colour-filled avatar circle. */
-  color: #fff;
-  animation: spin 0.8s linear infinite;
+/* Loading chips render a transparent, theme-aware thinking orb in the
+   avatar slot instead of the colour-filled circle, so no background here. */
+.active-session-chip-orb {
+  background: none;
 }
 
 .active-session-chip-title {
@@ -2656,16 +2663,21 @@ body:has(.shell-vibrant),
   animation: profileSwitchOverlayIn 0.14s ease;
 }
 .profile-switch-modal {
-  width: 360px;
+  width: 480px;
   max-width: 100%;
-  max-height: 70vh;
+  /* Fixed size: the panel stays the same dimensions whatever the search
+     filters down to — the list scrolls/leaves empty space rather than the
+     modal resizing. Caps to the viewport on short screens. */
+  height: 560px;
+  max-height: 82vh;
   display: flex;
   flex-direction: column;
-  padding: 8px;
-  background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+  overflow: hidden;
+  /* Light-based, stroke-free: no outer border — depth comes from the frosted
+     material, a top inset highlight, and layered ambient shadow. */
+  background: color-mix(in srgb, var(--bg-secondary) 97%, transparent);
   backdrop-filter: blur(30px) saturate(1.5);
   -webkit-backdrop-filter: blur(30px) saturate(1.5);
-  border: 0.5px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
@@ -2673,19 +2685,60 @@ body:has(.shell-vibrant),
     0 8px 24px -12px rgba(0, 0, 0, 0.45);
   animation: profileSwitchModalIn 0.16s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.profile-switch-title {
-  padding: 8px 10px 8px;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+/* Command-palette search header: icon + filter input + the ⌘P/Ctrl+P hint.
+   Separated from the list by a soft light hairline, not a hard stroke. */
+.profile-switch-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 7%, transparent);
+}
+.profile-switch-search-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+.profile-switch-search-input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-family: var(--font-sans);
+}
+.profile-switch-search-input::placeholder {
+  color: var(--text-muted);
+}
+.profile-switch-kbd {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
   color: var(--text-muted);
 }
 .profile-switch-list {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  padding: 8px;
+}
+.profile-switch-group {
+  padding: 12px 12px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.profile-switch-empty {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
 }
 @keyframes profileSwitchOverlayIn {
   from {
@@ -2863,11 +2916,12 @@ body:has(.shell-vibrant),
 }
 
 .profile-menu-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 160px) 1fr auto;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 8px 12px;
   background: none;
   border: none;
   border-radius: var(--radius-md);
@@ -2877,27 +2931,20 @@ body:has(.shell-vibrant),
   transition: background var(--transition);
 }
 
-.profile-menu-item:hover {
+/* Pointer hover and keyboard highlight share one resting tint; the active
+   profile keeps its accent fill and wins when it is also highlighted. */
+.profile-menu-item:hover,
+.profile-menu-item.highlighted {
   background: var(--bg-tertiary);
 }
 
-.profile-menu-item.active {
+.profile-menu-item.active,
+.profile-menu-item.active.highlighted {
   background: var(--accent-subtle);
 }
 
-.profile-menu-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
 .profile-menu-name {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
   overflow: hidden;
@@ -2911,9 +2958,24 @@ body:has(.shell-vibrant),
   color: var(--text-muted);
 }
 
+.profile-menu-model {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-menu-status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
 .profile-menu-gateway {
   flex-shrink: 0;
-  margin-left: auto;
   width: 8px;
   height: 8px;
   border-radius: 50%;
@@ -2942,14 +3004,12 @@ body:has(.shell-vibrant),
 .profile-menu-manage {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
-  margin-top: 6px;
-  padding: 9px 10px;
+  padding: 13px 16px;
   background: none;
   border: none;
-  border-top: 1px solid var(--border);
-  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  border-top: 1px solid color-mix(in srgb, var(--text-primary) 7%, transparent);
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
@@ -3911,7 +3971,7 @@ body:has(.shell-vibrant),
   width: 244px;
   padding: 12px 14px;
   /* Same floating glass material as the pickers. */
-  background: color-mix(in srgb, var(--bg-secondary) 85%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 97%, transparent);
   backdrop-filter: blur(28px) saturate(1.5);
   -webkit-backdrop-filter: blur(28px) saturate(1.5);
   border: 0.5px solid var(--border);
@@ -4207,6 +4267,20 @@ body:has(.shell-vibrant),
 .chat-avatar-agent {
   border-radius: 50px;
   overflow: hidden;
+}
+
+/* While loading, the avatar holds a monochrome thinking orb whose ink can wash
+   out against the near-black page. Back it with an *inverted* circle — light on
+   dark themes, dark on light themes (--text-primary) — and flip the orb ink to
+   match (the `invert` prop on OrbLoader) so it always reads as a dark orb on a
+   white disc (dark theme) or a light orb on a dark disc (light theme). Inset
+   the orb a touch so its dots sit inside the circle rather than clipping. */
+.chat-avatar-orb {
+  background: var(--text-primary);
+}
+
+.chat-avatar-orb canvas {
+  transform: scale(0.82);
 }
 
 .chat-avatar-agent img {
@@ -6417,7 +6491,7 @@ body:has(.shell-vibrant),
   overflow-x: hidden;
   /* Translucent glass: the chat behind blurs through, reading as a floating
      material rather than a flat web panel. */
-  background: color-mix(in srgb, var(--bg-secondary) 85%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 97%, transparent);
   backdrop-filter: blur(28px) saturate(1.5);
   -webkit-backdrop-filter: blur(28px) saturate(1.5);
   /* Depth comes from light, not strokes: one soft ambient shadow lifts the
@@ -6474,7 +6548,7 @@ body:has(.shell-vibrant),
   inset-inline-start: 0;
   margin-bottom: 8px;
   width: 280px;
-  background: color-mix(in srgb, var(--bg-secondary) 85%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 97%, transparent);
   backdrop-filter: blur(28px) saturate(1.5);
   -webkit-backdrop-filter: blur(28px) saturate(1.5);
   border: 0.5px solid var(--border);
@@ -7447,22 +7521,25 @@ body:has(.shell-vibrant),
   width: 560px;
   border-radius: var(--radius-xl);
 }
+/* Header + footer are separated from the body by hairline dividers (reference),
+   so the three zones read as distinct without heavy chrome. */
 .provider-modal .models-modal-header {
-  padding: 28px 32px 0;
-  border-bottom: none;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
 }
 .provider-modal .models-modal-body {
-  padding: 24px 32px 8px;
+  padding: 22px;
   gap: 0;
 }
 .provider-modal .models-modal-footer {
-  padding: 20px 32px 24px;
-  margin-top: 8px;
+  padding: 16px 22px;
+  margin-top: 0;
+  border-top: 1px solid var(--border);
 }
-/* Rounder inputs + buttons inside this modal */
+/* Inputs + buttons inside this modal */
 .provider-modal .input {
-  padding: 13px 16px;
-  border-radius: var(--radius-lg);
+  padding: 11px 14px;
+  border-radius: var(--radius-md);
   font-size: 14px;
 }
 .provider-modal .btn {
@@ -7488,15 +7565,132 @@ body:has(.shell-vibrant),
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
-  border: 1px solid var(--border-bright);
-  border-radius: var(--radius-lg);
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: var(--radius-md);
   background: var(--bg-elevated);
   flex-shrink: 0;
 }
 
-/* Key input row: leading icon + input + Show */
+/* Redesigned branded config-modal header: logo tile + name + status pill. */
+.provider-modal .provider-modal-header {
+  align-items: center;
+}
+.provider-modal-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.provider-modal-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.provider-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.provider-status-pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.provider-status-pill-ok {
+  color: var(--success);
+  background: var(--success-bg);
+}
+.provider-status-pill-loading,
+.provider-status-pill-muted {
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+}
+
+/* Labelled field block (API key). */
+.provider-field-block {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.provider-field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.provider-field-meta {
+  margin: 1px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* API-key field: masked preview (or input) on the left, Show / Replace on the
+   right, inside one inset control — differentiated by fill only, no stroke. */
+.provider-key-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}
+.provider-key-field:focus-within {
+  background: var(--bg-hover);
+}
+.provider-key-input,
+.provider-key-masked {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.provider-key-input {
+  border: none;
+  background: transparent;
+  padding: 0;
+  outline: none;
+}
+.provider-key-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.provider-key-sep {
+  color: var(--border-bright);
+  font-size: 13px;
+}
+.provider-link-btn {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent-text);
+}
+.provider-link-btn:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+/* Custom-provider modal still uses the old leading-icon key row. */
 .provider-key-row {
   display: flex;
   align-items: center;
@@ -7560,22 +7754,26 @@ body:has(.shell-vibrant),
   inset: 0;
   z-index: 10;
 }
+/* Menu is elevation-based (shadow), no stroke; scrolls internally when the
+   provider list is long. */
 .logo-select-menu {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
   right: 0;
   z-index: 11;
-  max-height: 260px;
+  max-height: 240px;
   overflow-y: auto;
   padding: 6px;
   display: flex;
   flex-direction: column;
   gap: 2px;
   background: var(--bg-elevated);
-  border: 1px solid var(--border-bright);
+  border: none;
   border-radius: var(--radius-lg);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 16px 40px -8px rgba(0, 0, 0, 0.55);
 }
 .logo-select-option {
   display: flex;
@@ -7586,7 +7784,7 @@ body:has(.shell-vibrant),
   background: transparent;
   border-radius: var(--radius-md);
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
   text-align: left;
   width: 100%;
@@ -7597,6 +7795,60 @@ body:has(.shell-vibrant),
 .logo-select-option.active {
   background: var(--bg-hover);
   font-weight: 600;
+}
+
+/* ===== "Select default model" picker — light-based (no strokes) ===== */
+.models-modal.model-select-modal {
+  width: 560px;
+  border: none;
+  border-radius: var(--radius-xl);
+  /* Let the provider dropdown extend past the modal instead of being clipped
+     (the base .models-modal has overflow:hidden, which hid the lower rows and
+     killed scrolling). The frosted background keeps its rounded shape. */
+  overflow: visible;
+}
+.model-select-modal .models-modal-header,
+.model-select-modal .models-modal-footer {
+  border: none;
+  padding: 20px 24px;
+}
+.model-select-modal .models-modal-body {
+  padding: 8px 24px 20px;
+  gap: 18px;
+}
+.model-select-title {
+  font-size: 20px;
+  font-weight: 700;
+}
+.model-select-modal .settings-field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 9px;
+  display: block;
+}
+/* Provider trigger + model <select>: filled controls, no borders. */
+.model-select-modal .logo-select-trigger,
+.model-select-modal select.input {
+  border: none;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  font-size: 14px;
+}
+.model-select-modal .logo-select.open .logo-select-trigger,
+.model-select-modal .logo-select-trigger:hover,
+.model-select-modal select.input:hover {
+  background: var(--bg-hover);
+}
+/* No focus stroke — the open/hover fill is the affordance. */
+.model-select-modal .logo-select-trigger:focus,
+.model-select-modal .logo-select-trigger:focus-visible,
+.model-select-modal select.input:focus,
+.model-select-modal select.input:focus-visible {
+  border: none;
+  outline: none;
+  box-shadow: none;
 }
 
 /* Custom-provider modal: base URL + key as one connected control (no gap).
@@ -7652,20 +7904,20 @@ body:has(.shell-vibrant),
 
 /* Models section */
 .provider-models {
-  margin-top: 28px;
+  margin-top: 22px;
 }
 .provider-models-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
+/* Sentence-case label matching the "API key" field label, not an uppercase
+   micro-heading (reference). */
 .provider-models-title {
   font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-weight: 600;
   color: var(--text-secondary);
 }
 .provider-models-hint {
@@ -7678,25 +7930,35 @@ body:has(.shell-vibrant),
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 14px;
+  margin-bottom: 0;
 }
+/* Chips + add/more pills are differentiated by fill only — no strokes, all
+   "light-based" (elevation). */
 .provider-model-chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   max-width: 100%;
-  padding: 3px 6px 3px 10px;
-  border: 1px solid var(--border-bright);
-  border-radius: var(--radius-sm);
+  padding: 5px 7px 5px 11px;
+  border: none;
+  border-radius: var(--radius-md);
   background: var(--bg-elevated);
 }
+/* Chip label doubles as an "edit this model" button — reset button chrome. */
 .provider-model-chip-label {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
   font-family: var(--font-mono, monospace);
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.provider-model-chip-label:hover {
+  color: var(--accent-text);
 }
 .provider-model-chip-del,
 .provider-model-chip-edit {
@@ -7717,21 +7979,49 @@ body:has(.shell-vibrant),
   color: var(--text-primary);
 }
 
-/* Add row */
-.provider-models-add {
-  display: flex;
-  align-items: stretch;
-  gap: 10px;
+/* Inline add + "+N more" — filled ghost pills (no dashed stroke) that read as
+   actions via a lighter fill on hover. */
+.provider-model-add-pill,
+.provider-model-more-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 6px 10px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-elevated) 60%, transparent);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
 }
-.provider-models-add .input {
-  flex: 1;
-  min-width: 0;
+.provider-model-more-pill {
+  padding: 6px 12px;
 }
-.provider-models-add-btn {
+.provider-model-add-pill:hover,
+.provider-model-more-pill:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+.provider-model-chip-input {
+  padding-right: 9px;
+}
+.provider-model-add-input {
+  border: none;
+  background: transparent;
+  outline: none;
+  padding: 0;
+  min-width: 130px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--text-primary);
+}
+.provider-model-chip-busy {
+  color: var(--text-muted);
   flex-shrink: 0;
-  gap: 5px;
-  padding-left: 20px;
-  padding-right: 20px;
 }
 
 .oauth-signin-btn {
@@ -8721,7 +9011,7 @@ body:has(.shell-vibrant),
 .gateway-modal {
   display: flex;
   flex-direction: column;
-  background: color-mix(in srgb, var(--bg-secondary) 85%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 97%, transparent);
   backdrop-filter: blur(30px) saturate(1.5);
   -webkit-backdrop-filter: blur(30px) saturate(1.5);
   border: 0.5px solid var(--border);
@@ -9494,7 +9784,7 @@ body:has(.shell-vibrant),
   max-height: 820px;
   /* Frosted glass — same material language as the pickers: translucent tint +
      blur, lifted on a soft ambient shadow instead of a hard border. */
-  background: color-mix(in srgb, var(--bg-secondary) 85%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 97%, transparent);
   backdrop-filter: blur(30px) saturate(1.5);
   -webkit-backdrop-filter: blur(30px) saturate(1.5);
   border: 0.5px solid var(--border);
@@ -9915,7 +10205,7 @@ body:has(.shell-vibrant),
   max-width: 1000px;
   max-height: 780px;
   /* Frosted glass — same material as the pickers/profile modal. */
-  background: color-mix(in srgb, var(--bg-secondary) 85%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 97%, transparent);
   backdrop-filter: blur(30px) saturate(1.5);
   -webkit-backdrop-filter: blur(30px) saturate(1.5);
   border: 0.5px solid var(--border);
@@ -14205,6 +14495,13 @@ body:has(.shell-vibrant),
   max-width: none;
 }
 
+/* The search box is a direct modal child (between header and body), so give it
+   the same horizontal inset as the header/body — otherwise it runs edge to edge
+   and reads as un-margined against the padded content. */
+.models-registry-modal .models-search {
+  margin: 4px 20px 16px;
+}
+
 .models-registry-body {
   max-height: 60vh;
   overflow-y: auto;
@@ -14312,7 +14609,7 @@ body:has(.shell-vibrant),
 
 .models-modal {
   /* Frosted glass — same material as the profile/settings modals. */
-  background: color-mix(in srgb, var(--bg-secondary) 85%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 97%, transparent);
   backdrop-filter: blur(30px) saturate(1.5);
   -webkit-backdrop-filter: blur(30px) saturate(1.5);
   border: 0.5px solid var(--border);
@@ -15933,7 +16230,7 @@ body:has(.shell-vibrant),
 .follow-us-modal,
 .discover-modal,
 .schedules-modal {
-  background: color-mix(in srgb, var(--bg-secondary) 85%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 97%, transparent);
   backdrop-filter: blur(30px) saturate(1.5);
   -webkit-backdrop-filter: blur(30px) saturate(1.5);
   border: 0.5px solid var(--border);

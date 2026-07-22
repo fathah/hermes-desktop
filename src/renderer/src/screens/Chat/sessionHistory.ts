@@ -4,6 +4,7 @@ import {
   isBubbleMessage,
   normalizeMessageText,
 } from "./chatMessages";
+import { isLossyChunkCopy } from "./lossyText";
 import type { ActiveTurn, ChatMessage, ChatBubbleMessage } from "./types";
 
 /**
@@ -880,7 +881,73 @@ export function reconcileStreamedWithDb(
   // landing *below* any agent content the gateway streamed after the user
   // answered (the reverse of what the user saw live). Re-anchor each card
   // immediately after the streamed message that preceded it.
-  return repositionClarifyCards(dedupeMessageIds(merged), streamed);
+  return repositionClarifyCards(
+    dropLossyStreamedReasoning(dedupeMessageIds(merged)),
+    streamed,
+  );
+}
+
+const normalizeReasoningText = (text: string): string =>
+  (text || "").replace(/\s+/g, " ").trim();
+
+/**
+ * Drop live-streamed reasoning rows that are lossy previews of a canonical DB
+ * reasoning row in the same turn.
+ *
+ * The live reasoning stream is best-effort: dropped delta chunks leave the
+ * streamed row with garbled text (e.g. "moon-k3 … ous" for
+ * "moonshotai/kimi-k3 … nous"), so its text-based reconciliation key never
+ * matches the DB row and both survive the merge — the user sees the corrupt
+ * partial AND the full thought stacked in one Thought block. A dropped-chunks
+ * preview is, by construction, a concatenation of contiguous runs of the
+ * canonical text — matched by [[isLossyChunkCopy]], whose run/length/coverage
+ * guards separate "same thought, chunks missing" (drop) from a genuinely
+ * distinct short reasoning segment whose characters merely embed as scattered
+ * fragments (keep). Scoped per turn (between user rows) so identical thoughts
+ * in different turns can't cross-cancel, and only a strictly shorter streamed
+ * row is dropped — equal text means the key match already handled it.
+ */
+function dropLossyStreamedReasoning(
+  messages: ReadonlyArray<ChatMessage>,
+): ChatMessage[] {
+  const isReasoning = (
+    m: ChatMessage,
+  ): m is Extract<ChatMessage, { kind: "reasoning" }> =>
+    "kind" in m && m.kind === "reasoning";
+
+  const drop = new Set<string>();
+  let turnStart = 0;
+  const scanTurn = (end: number): void => {
+    const canonical: string[] = [];
+    for (let i = turnStart; i < end; i++) {
+      const m = messages[i];
+      if (isReasoning(m) && m.id.startsWith("db-r-")) {
+        canonical.push(normalizeReasoningText(m.text));
+      }
+    }
+    if (canonical.length === 0) return;
+    for (let i = turnStart; i < end; i++) {
+      const m = messages[i];
+      if (!isReasoning(m) || m.id.startsWith("db-r-")) continue;
+      const text = normalizeReasoningText(m.text);
+      if (!text) continue;
+      if (canonical.some((c) => isLossyChunkCopy(text, c))) {
+        drop.add(m.id);
+      }
+    }
+  };
+
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    if (isBubbleMessage(m) && m.role === "user") {
+      scanTurn(i);
+      turnStart = i + 1;
+    }
+  }
+  scanTurn(messages.length);
+
+  if (drop.size === 0) return [...messages];
+  return messages.filter((m) => !drop.has(m.id));
 }
 
 /**

@@ -22,6 +22,7 @@ import {
   RefreshCw,
   Eye,
   EyeOff,
+  Coins,
 } from "lucide-react";
 import { customProviderEnvKey } from "../../../../shared/url-key-map";
 import type { HermesAccount } from "../../../../shared/account";
@@ -205,6 +206,8 @@ function Providers({
   // Hermes account (device login). `account` is the signed-in profile or null.
   const [account, setAccount] = useState<HermesAccount | null>(null);
   const [showAccountModal, setShowAccountModal] = useState(false);
+  // AI-credit balance for the account card (null = signed out / unavailable).
+  const [credits, setCredits] = useState<number | null>(null);
   useEffect(() => {
     let cancelled = false;
     void window.hermesAPI.getAccount(profile).then((a) => {
@@ -214,6 +217,37 @@ function Providers({
       cancelled = true;
     };
   }, [profile]);
+
+  // Hermes One convenience layer: with a signed-in account, surface the
+  // credit balance and make sure the profile has an auto-provisioned
+  // HERMESONE_API_KEY (no-op when one exists; the main process guards
+  // remote/SSH modes). A freshly created key means the env just changed
+  // under us — re-read it so the Hermes One card + picker appear now, not
+  // on the next visit.
+  useEffect(() => {
+    let cancelled = false;
+    if (!account) {
+      setCredits(null);
+      return;
+    }
+    void window.hermesAPI
+      .getHermesOneCredits()
+      .then((r) => {
+        if (!cancelled) setCredits(r.balance);
+      })
+      .catch(() => {});
+    void window.hermesAPI
+      .ensureHermesOneKey(profile)
+      .then(async (r) => {
+        if (r.status !== "created" || cancelled) return;
+        const envData = await window.hermesAPI.getEnv(profile);
+        if (!cancelled) setEnv(envData);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [account, profile]);
 
   // Per-key debounce timers for env auto-save on change. Previously env
   // values were persisted only on input blur, so users who clicked the
@@ -700,6 +734,17 @@ function Providers({
                       <RefreshCw size={11} aria-hidden="true" />
                       {t("providers.hermesAccount.syncOn")}
                     </span>
+                    {credits !== null && (
+                      <span
+                        className="hermes-account-chip"
+                        title={t("providers.hermesAccount.creditsTitle")}
+                      >
+                        <Coins size={11} aria-hidden="true" />
+                        {t("providers.hermesAccount.credits", {
+                          amount: credits.toFixed(2),
+                        })}
+                      </span>
+                    )}
                   </span>
                 </span>
                 <button
@@ -1073,11 +1118,11 @@ function Providers({
               onClick={() => setModelPickerOpen(false)}
             >
               <div
-                className="models-modal provider-modal"
+                className="models-modal model-select-modal"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="models-modal-header">
-                  <h2 className="models-modal-title provider-modal-title">
+                  <h2 className="models-modal-title model-select-title">
                     {t("providers.model.pickerTitle")}
                   </h2>
                   <button

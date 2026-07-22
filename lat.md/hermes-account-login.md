@@ -92,6 +92,32 @@ account" card that opens it; once signed in it renders an identity card —
 avatar (or letter fallback), name/email, a "Connected" status line — with a
 Sign out action.
 
+## Auto-provisioned inference key and credits
+
+Signing in should yield model access without hand-copying keys: the desktop auto-issues a Hermes One Inference gateway key from the account and shows the account's AI-credit balance on the Providers card.
+
+[[src/main/hermesone-provision.ts]] is the convenience layer. `ensureHermesOneApiKey` checks the profile's `.env` for `HERMESONE_API_KEY`; when missing, it POSTs the backend's `/api/credits/keys` (bearer device-login token, key named `Hermes Desktop (<hostname>)` so the console list shows its origin) and persists the one-time raw `hs-live-…` key via `setEnvValue`. Setting that env var **is** what "adds the provider": the Hermes One card ([[provider-setup]]) and the active-model picker both key off it, so no store writes are needed. `fetchHermesOneCredits` GETs `/api/credits/balance` for the USD-denominated balance.
+
+It runs from two places, both idempotent: the `hermes-account-login` IPC handler right after a successful device login, and the Providers screen whenever it loads with a signed-in account (covering users who signed in before this feature). Both are **local-mode only** — the key lands in the local profile `.env`, which remote/SSH chat doesn't read, and provisioning there would strand an orphan backend key per visit. The account card renders a credits chip (`$X.XX credits`, Coins icon) next to Connected/Sync-on, backed by the `hermesone-credits` IPC; a `created` result makes the screen re-read env so the Hermes One card appears immediately.
+
+### Issues a key only when missing
+
+An existing `HERMESONE_API_KEY` is always kept — the backend shows a raw key exactly once, so re-issuing would orphan the old one. No backend call happens at all in that case.
+
+### Provisions and persists a fresh key
+
+With a signed-in account and no local key, one authenticated POST issues the key and it is written to the target profile's `.env` under `HERMESONE_API_KEY`.
+
+### Single-flight provisioning
+
+Concurrent ensure calls (post-login hook + Providers screen mount) coalesce into one backend key issue per profile, preventing orphan keys.
+
+The latch is **per profile** — provisioning writes that profile's `.env`, so a global latch would let profile B piggyback on A's run and report `created` without receiving a key.
+
+### Credits for the account card
+
+The balance endpoint is called with the bearer token and returns the numeric USD credit balance; signed-out or malformed responses yield `null` so the chip simply hides.
+
 ## Tests
 
 Unit tests cover the two pieces that can break silently.

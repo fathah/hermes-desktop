@@ -47,7 +47,7 @@ So `ensureClient` distinguishes two failures: a **genuinely absent** dashboard (
 
 On `message.complete` the desktop reconciles the text streamed via `message.delta` with the turn's `final_response`, because a last-turn-only final would otherwise clobber text streamed before a tool call (#746).
 
-[[src/renderer/src/screens/Chat/dashboardEventAdapter.ts#completeAssistantWithFinalText]] rewrites the last assistant bubble through [[src/renderer/src/screens/Chat/dashboardEventAdapter.ts#mergeStreamedWithFinal]], which compares whitespace-insensitively and: uses the final text when it already contains the streamed text; keeps the streamed text when it contains the final (preserving pre-tool-call content); stitches a re-streamed boundary by dropping the duplicated word-aligned seam (rejecting coincidental mid-word overlaps); replaces a garbled re-stream with the final text when the two converge on a substantial common suffix (a corrupted-prefix delta — e.g. a mangled CJK stream — that ends the same sentence as the clean final, rather than the disjoint pre-tool-call + answer pair); and otherwise concatenates the two with a blank-line separator so segments never run together. On the remote/SSH path deltas are not rendered (`renderAssistantDeltas: false`), so the bubble starts empty and the final text is used verbatim.
+[[src/renderer/src/screens/Chat/dashboardEventAdapter.ts#completeAssistantWithFinalText]] rewrites the last assistant bubble through [[src/renderer/src/screens/Chat/dashboardEventAdapter.ts#mergeStreamedWithFinal]], which compares whitespace-insensitively and: uses the final text when it already contains the streamed text; keeps the streamed text when it contains the final (preserving pre-tool-call content); replaces a **lossy chunk-dropped stream** with the final text when [[src/renderer/src/screens/Chat/lossyText.ts#isLossyChunkCopy]] recognises the streamed content as a chunk-dropped copy of the final (the upstream tagging alternate chunks as `reasoning` leaves the content stream a garbled subset like "! What are we working on?" for "Hey! What are we working on today?"; concatenating stacked the partial above the clean answer in one bubble — the matcher requires contiguous runs of ≥3 chars plus ≥12-char / ≥30%-coverage guards, so a pre-tool-call segment whose characters merely embed as scattered fragments still stacks); stitches a re-streamed boundary by dropping the duplicated word-aligned seam (rejecting coincidental mid-word overlaps); replaces a garbled re-stream with the final text when the two converge on a substantial common suffix (a corrupted-prefix delta — e.g. a mangled CJK stream — that ends the same sentence as the clean final, rather than the disjoint pre-tool-call + answer pair); and otherwise concatenates the two with a blank-line separator so segments never run together. On the remote/SSH path deltas are not rendered (`renderAssistantDeltas: false`), so the bubble starts empty and the final text is used verbatim.
 
 ## Streaming source-of-truth ref
 
@@ -59,7 +59,27 @@ The handler reads the ref, applies a delta, writes the ref back, then calls `set
 
 Streamed reasoning and tool calls are folded into compact, collapsible transcript rows rather than stacked bubbles, so a turn with heavy thinking or many tool calls stays scannable.
 
-[[src/renderer/src/screens/Chat/HistoryRow.tsx#ReasoningRow]] renders the `Thought` / `Thinking…` row and [[src/renderer/src/screens/Chat/HistoryRow.tsx#ToolActivityGroup]] folds a contiguous run of tool calls/results into one row titled by [[src/renderer/src/screens/Chat/HistoryRow.tsx#toolActivityGroupTitle]]. Each row is collapsed by default and borderless (Codex-style): dim at rest, it brightens and reveals an expand chevron beside the title on hover/focus, and clicking toggles the body open. While the turn is still streaming the leading icon is a `Grid` loader (purple for reasoning, blue for tools); once finished it shows the brain/tool glyph.
+[[src/renderer/src/screens/Chat/HistoryRow.tsx#ReasoningRow]] renders the `Thought` / `Thinking…` row and [[src/renderer/src/screens/Chat/HistoryRow.tsx#ToolActivityGroup]] folds a contiguous run of tool calls/results into one row titled by [[src/renderer/src/screens/Chat/HistoryRow.tsx#toolActivityGroupTitle]]. Each row is collapsed by default and borderless (Codex-style): dim at rest, it brightens and reveals an expand chevron beside the title on hover/focus, and clicking toggles the body open. While the turn is still streaming the leading icon is a thinking-orbs [[loading-indicators|OrbLoader]] (`solving` for reasoning, `working` for tools); once finished it shows the brain/tool glyph.
+
+### Reasoning reconciliation
+
+The live reasoning stream is best-effort — dropped delta chunks leave the streamed row garbled — while state.db holds the canonical text. The DB refresh must collapse the two, or the user sees both stacked in one Thought block.
+
+The observed symptom: a Thought block showing "moon-k3 … ous" (lossy live preview) above "moonshotai/kimi-k3 … nous" (canonical DB row) for the same thought.
+
+Because the garbled text can't match the DB row's text-based reconciliation key, [[src/renderer/src/screens/Chat/sessionHistory.ts#reconcileStreamedWithDb]] ends with [[src/renderer/src/screens/Chat/sessionHistory.ts#dropLossyStreamedReasoning]]: a streamed reasoning row is dropped when [[src/renderer/src/screens/Chat/lossyText.ts#isLossyChunkCopy]] recognises it as a chunk-dropped copy of a DB reasoning row (`db-r-…`) in the **same turn**. A dropped-chunks preview is by construction a concatenation of contiguous runs of the canonical text; the matcher's run (≥3 chars) and length/coverage (≥12 chars, ≥30%) guards separate "same thought, chunks missing" from a genuinely distinct short segment whose characters merely embed as scattered fragments.
+
+#### Lossy live preview collapses into the DB row
+
+A streamed reasoning row recognised as a chunk-dropped copy of the same turn's DB reasoning row disappears from the merge; only the canonical DB text renders. A short thought whose characters embed only as scattered fragments is kept.
+
+#### Distinct live segments survive
+
+A second live reasoning segment that is not a lossy duplicate of any DB row in the turn (multi-segment thinking around tool calls) is kept alongside the reconciled first segment.
+
+#### Turn-scoped matching
+
+The chunk-copy check never crosses turns: a live preview in turn 2 is kept even when its text would match turn 1's canonical reasoning, so repeated questions can't cross-cancel live rows.
 
 ## Bubble hover timestamp
 

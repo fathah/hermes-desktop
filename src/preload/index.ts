@@ -22,8 +22,10 @@ import type {
 import type { ChatToolEvent } from "../shared/chat-stream";
 import type {
   DeviceCodeInfo,
+  EnsureHermesOneKeyResult,
   HermesAccount,
   HermesAccountUser,
+  HermesOneCreditsResult,
 } from "../shared/account";
 import type { AgentSyncResult, AgentSyncStatus } from "../shared/agent-sync";
 import type { GpuPreferenceMode, GpuStatus } from "../shared/gpu";
@@ -209,6 +211,13 @@ const hermesAPI = {
     ipcRenderer.invoke("hermes-account-get", profile),
   accountLogout: (profile?: string): Promise<{ success: boolean }> =>
     ipcRenderer.invoke("hermes-account-logout", profile),
+  // Auto-provision a Hermes One Inference key from the signed-in account
+  // (no-op when the profile already has one), and read the account's
+  // AI-credit balance for the Providers account card.
+  ensureHermesOneKey: (profile?: string): Promise<EnsureHermesOneKeyResult> =>
+    ipcRenderer.invoke("hermesone-ensure-key", profile),
+  getHermesOneCredits: (): Promise<HermesOneCreditsResult> =>
+    ipcRenderer.invoke("hermesone-credits"),
 
   // Cloud agent sync (profiles ↔ signed-in Hermes One account)
   syncAgents: (): Promise<AgentSyncResult> =>

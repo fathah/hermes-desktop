@@ -3,17 +3,10 @@ import { useFrame } from "@react-three/fiber";
 import type * as THREE from "three";
 import { AgentModel } from "./agents";
 import { RIGGED_EMPLOYEE_URL, RIGGED_MAN_URL } from "./RiggedCharacter";
-import {
-  REST_SEATS,
-  CEO_OFFICE,
-  CEO_DOOR_Y,
-  DIVIDER_X,
-  DOOR_Y,
-  type Workstation,
-  type Seat,
-} from "../layout";
+import { REST_SEATS, type Workstation, type Seat } from "../layout";
 import { WALK_SPEED } from "../core/constants";
 import { toWorld, worldToCanvas } from "../core/geometry";
+import { routeTarget } from "../core/routing";
 import {
   applyCrowdSeparation,
   buildOfficeColliders,
@@ -29,9 +22,17 @@ import {
   TRIP_DWELL_MS,
   TRIP_WALK_SPEED,
   pickTripRoute,
+  getTripRoute,
+  nearestRouteIdx,
   classifyTripPlace,
   type TripRoute,
 } from "../trips";
+import {
+  emitMissionEvent,
+  onMission,
+  onMissionComplete,
+  type Mission,
+} from "../interactions/missionBus";
 import type { AgentPlace, OfficeAgent, RenderAgent } from "../core/types";
 
 // Walking speed (canvas units / second) and arrival threshold.
@@ -43,9 +44,15 @@ const TRIP_ARRIVE_DISTANCE = 25;
 
 type ControllerMode = "toSeat" | "seated" | "trip";
 
+// How long a mission agent holds at its interaction stop before giving up
+// and walking home: generous while a modal may be open, short for a plain
+// "go there" errand.
+const MISSION_HOLD_MS = 120_000;
+const MISSION_LINGER_MS = 15_000;
+
 interface TripState {
   route: TripRoute;
-  phase: "out" | "wander" | "back";
+  phase: "out" | "wander" | "visit" | "back";
   /** Index into route.points ("out" walks up, "back" walks down). */
   idx: number;
   wanderIdx: number;
@@ -53,6 +60,14 @@ interface TripState {
   dwellUntil: number;
   /** When to head home (set when the wander phase starts). */
   endAt: number;
+  /** Commanded mission driving this trip (random trips leave it unset). */
+  mission?: Mission;
+  /** Mission visit: reached the interaction stop and told the UI. */
+  arrived?: boolean;
+  /** Walk home no later than this, even if the modal never closes. */
+  holdUntil?: number;
+  /** Set via the mission bus when the interaction modal closes. */
+  done?: boolean;
 }
 
 interface ControllerState {
@@ -71,33 +86,6 @@ interface ControllerState {
 
 function randomBetween(min: number, max: number): number {
   return min + Math.random() * (max - min);
-}
-
-// Doorway waypoints just inside each room, so agents pass through the gap in
-// the partition instead of clipping the wall (we have no full pathfinder).
-function routeTarget(
-  ax: number,
-  ay: number,
-  finalX: number,
-  finalY: number,
-): { x: number; y: number } {
-  const onEast = ax > DIVIDER_X;
-  const targetEast = finalX > DIVIDER_X;
-  if (onEast !== targetEast) {
-    return { x: targetEast ? DIVIDER_X + 60 : DIVIDER_X - 60, y: DOOR_Y };
-  }
-  // CEO glass corner office: route through the doorway gap in its east glass
-  // wall when crossing the boundary in either direction.
-  const inCeoOffice = ax < CEO_OFFICE.maxX && ay > CEO_OFFICE.minY;
-  const targetInCeoOffice =
-    finalX < CEO_OFFICE.maxX && finalY > CEO_OFFICE.minY;
-  if (inCeoOffice !== targetInCeoOffice) {
-    return {
-      x: targetInCeoOffice ? CEO_OFFICE.maxX - 60 : CEO_OFFICE.maxX + 60,
-      y: CEO_DOOR_Y,
-    };
-  }
-  return { x: finalX, y: finalY };
 }
 
 function makeRenderAgent(agent: OfficeAgent): RenderAgent {
@@ -253,6 +241,53 @@ export const AgentsLayer = memo(function AgentsLayer({
     }
   }, [agents]);
 
+  // Commanded missions (chat-driven world actions): put the agent on the trip
+  // route to the mission's destination, joining at the nearest waypoint so a
+  // mission can start from a desk, the rest room, or mid-trip anywhere.
+  useLayoutEffect(() => {
+    const offMission = onMission((mission) => {
+      const agent = lookupRef.current.get(mission.agentId);
+      if (!agent) {
+        emitMissionEvent({ type: "ended", mission });
+        return;
+      }
+      let ctrl = controllerRef.current.get(mission.agentId);
+      if (!ctrl) {
+        ctrl = { mode: "toSeat", goalKey: null };
+        controllerRef.current.set(mission.agentId, ctrl);
+      }
+      // A newer mission supersedes a running one for the same agent.
+      const prev = ctrl.trip?.mission;
+      if (prev && prev.id !== mission.id) {
+        emitMissionEvent({ type: "ended", mission: prev });
+      }
+      const route = getTripRoute(mission.dest);
+      const insideDest = (agent.place ?? "office") === mission.dest;
+      ctrl.mode = "trip";
+      ctrl.slide = undefined;
+      ctrl.trip = {
+        route,
+        phase: insideDest ? "visit" : "out",
+        idx: insideDest
+          ? route.points.length
+          : nearestRouteIdx(route, agent.x, agent.y),
+        wanderIdx: 0,
+        dwellUntil: 0,
+        endAt: 0,
+        mission,
+      };
+    });
+    const offComplete = onMissionComplete((missionId) => {
+      for (const ctrl of controllerRef.current.values()) {
+        if (ctrl.trip?.mission?.id === missionId) ctrl.trip.done = true;
+      }
+    });
+    return () => {
+      offMission();
+      offComplete();
+    };
+  }, []);
+
   useFrame((_, delta) => {
     const step = Math.min(delta, 0.05); // clamp big frame gaps
     const now = performance.now();
@@ -403,8 +438,9 @@ export const AgentsLayer = memo(function AgentsLayer({
         const trip = ctrl.trip;
         const { route } = trip;
         // Gateway came up mid-trip: turn around and walk the route home
-        // (never teleport or clip through walls).
-        if (working && trip.phase !== "back") {
+        // (never teleport or clip through walls). Commanded missions are
+        // exempt — being sent on an errand while working is the whole point.
+        if (working && !trip.mission && trip.phase !== "back") {
           trip.idx =
             trip.phase === "wander" ? route.points.length - 1 : trip.idx - 1;
           trip.phase = "back";
@@ -413,14 +449,69 @@ export const AgentsLayer = memo(function AgentsLayer({
         if (trip.phase === "out") {
           agent.place = classifyTripPlace(route, trip.idx);
           const [tx, ty] = route.points[trip.idx];
+          // Missions can start at any desk; legs still inside the office
+          // route through the partition/CEO doorways like seat walks do.
+          if (agent.place === "office") {
+            const wp = routeTarget(agent.x, agent.y, tx, ty);
+            if (wp.x !== tx || wp.y !== ty) {
+              walkStep(wp.x, wp.y, TRIP_WALK_SPEED, TRIP_ARRIVE_DISTANCE);
+              continue;
+            }
+          }
           if (walkStep(tx, ty, TRIP_WALK_SPEED, TRIP_ARRIVE_DISTANCE)) {
             trip.idx += 1;
             if (trip.idx >= route.points.length) {
-              trip.phase = "wander";
-              trip.wanderIdx = 0;
-              trip.dwellUntil = 0;
-              trip.endAt = now + randomBetween(...TRIP_WANDER_MS);
+              if (trip.mission) {
+                trip.phase = "visit";
+              } else {
+                trip.phase = "wander";
+                trip.wanderIdx = 0;
+                trip.dwellUntil = 0;
+                trip.endAt = now + randomBetween(...TRIP_WANDER_MS);
+              }
             }
+          }
+          continue;
+        }
+
+        // Mission visit: walk to the interaction stop, report arrival, then
+        // hold (modal open) until completed or timed out, and head home.
+        if (trip.phase === "visit") {
+          agent.place = route.dest;
+          const mission = trip.mission;
+          if (
+            !mission ||
+            trip.done ||
+            (trip.holdUntil !== undefined && now >= trip.holdUntil)
+          ) {
+            if (mission) emitMissionEvent({ type: "ended", mission });
+            trip.mission = undefined;
+            trip.phase = "back";
+            trip.idx = route.points.length - 1;
+            continue;
+          }
+          const stop =
+            (mission.interaction && route.stops[mission.interaction.repId]) ||
+            route.wander[0] ||
+            route.points[route.points.length - 1];
+          if (!trip.arrived) {
+            if (
+              walkStep(
+                stop[0],
+                stop[1],
+                WALK_UNITS_PER_SEC,
+                TRIP_ARRIVE_DISTANCE,
+              )
+            ) {
+              trip.arrived = true;
+              trip.holdUntil =
+                now +
+                (mission.interaction ? MISSION_HOLD_MS : MISSION_LINGER_MS);
+              emitMissionEvent({ type: "arrived", mission });
+            }
+          } else {
+            agent.state = "standing";
+            resolvePhysics(false);
           }
           continue;
         }

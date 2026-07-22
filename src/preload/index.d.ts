@@ -15,8 +15,10 @@ import type { TokenBalancesResponse } from "../shared/tokens";
 import type { CustomProviderRecord } from "../shared/custom-providers";
 import type {
   DeviceCodeInfo,
+  EnsureHermesOneKeyResult,
   HermesAccount,
   HermesAccountUser,
+  HermesOneCreditsResult,
 } from "../shared/account";
 import type { AgentSyncResult, AgentSyncStatus } from "../shared/agent-sync";
 import type {
@@ -274,6 +276,8 @@ interface HermesAPI {
   onAccountLoginProgress: (callback: (chunk: string) => void) => () => void;
   getAccount: (profile?: string) => Promise<HermesAccount | null>;
   accountLogout: (profile?: string) => Promise<{ success: boolean }>;
+  ensureHermesOneKey: (profile?: string) => Promise<EnsureHermesOneKeyResult>;
+  getHermesOneCredits: () => Promise<HermesOneCreditsResult>;
 
   // Cloud agent sync (profiles ↔ signed-in Hermes One account)
   syncAgents: () => Promise<AgentSyncResult>;

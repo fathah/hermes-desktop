@@ -10,6 +10,7 @@ import {
   Alert,
 } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
+import { OrbLoader } from "../../components/OrbLoader";
 
 const DELIVER_TARGETS = [
   { value: "local", label: "Local" },
@@ -248,7 +249,7 @@ function Schedules({ profile }: SchedulesProps): React.JSX.Element {
     return (
       <div className="schedules-container">
         <div className="schedules-loading">
-          <div className="loading-spinner" />
+          <OrbLoader state="searching" size={64} />
         </div>
       </div>
     );

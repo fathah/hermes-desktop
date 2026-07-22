@@ -17,7 +17,21 @@ import OneChatModal from "./OneChatModal";
 import Office3D from "./office3d/Office3D";
 import RepInteractionPanel from "./RepInteractionPanel";
 import { officeAgentsChanged, profilesToOfficeAgents } from "./office3d/agents";
-import { getRepresentative } from "./office3d/interactions/registry";
+import {
+  getRepresentative,
+  type RepActionId,
+} from "./office3d/interactions/registry";
+import {
+  completeMission,
+  dispatchMission,
+  makeMissionId,
+  onMissionEvent,
+  type Mission,
+} from "./office3d/interactions/missionBus";
+import {
+  planWorldActions,
+  type WorldAction,
+} from "./office3d/interactions/worldActions";
 import type { ShowroomCar } from "./office3d/objects/CarShowroom";
 import type { BuildingId, OfficeLocation } from "./office3d/core/locations";
 import type { AgentPlace, OfficeAgent } from "./office3d/core/types";
@@ -68,6 +82,11 @@ function Office({ visible, profile }: OfficeProps): React.JSX.Element {
   const [carCard, setCarCard] = useState<ShowroomCar | null>(null);
   // Space-representative menu (bank tellers today): which rep's panel is open.
   const [activeRepId, setActiveRepId] = useState<string | null>(null);
+  // Chat-commanded world action in flight: the mission the agent is walking,
+  // and the rep-panel action to auto-run when its modal opens on arrival.
+  const missionRef = useRef<Mission | null>(null);
+  const missionRepOpenRef = useRef(false);
+  const [autoAction, setAutoAction] = useState<RepActionId | null>(null);
   // GTA-style walk mode: the user's avatar walks the city; interiors load by
   // walking through doorways and interactions fire with E near their points.
   const [walkMode, setWalkMode] = useState(false);
@@ -262,6 +281,72 @@ function Office({ visible, profile }: OfficeProps): React.JSX.Element {
 
   const closeRepPanel = useCallback(() => setActiveRepId(null), []);
   const activeRep = getRepresentative(activeRepId);
+
+  // Chat-driven world actions: the agent's reply asked for a physical errand.
+  // Compose a mission, hand it to the 3D simulation, and pull the camera back
+  // to the city so the user watches the walk (walk mode keeps its own camera).
+  const handleWorldActions = useCallback(
+    (agentId: string, actions: WorldAction[]) => {
+      const plan = planWorldActions(actions);
+      if (!plan || !agents.some((a) => a.id === agentId)) return;
+      const mission: Mission = {
+        id: makeMissionId(),
+        agentId,
+        dest: plan.dest,
+        interaction: plan.interaction,
+      };
+      missionRef.current = mission;
+      missionRepOpenRef.current = false;
+      setChatOpen(false);
+      setActiveRepId(null);
+      setAutoAction(null);
+      setCarCard(null);
+      if (!walkMode) {
+        setLocation("city");
+        setFocusedBuilding(null);
+      }
+      dispatchMission(mission);
+    },
+    [agents, walkMode],
+  );
+
+  // Mission progress from the simulation. Arrival flies the camera into the
+  // destination, selects the agent, and opens the rep panel with the
+  // commanded action; "ended" (walked home, superseded, timed out) clears it.
+  useEffect(() => {
+    return onMissionEvent((evt) => {
+      const pending = missionRef.current;
+      if (!pending || evt.mission.id !== pending.id) return;
+      if (evt.type === "arrived") {
+        setSelectedId(pending.agentId);
+        if (!walkMode) setLocation(pending.dest);
+        if (pending.interaction) {
+          missionRepOpenRef.current = true;
+          setAutoAction(pending.interaction.actionId);
+          setActiveRepId(pending.interaction.repId);
+        }
+      } else {
+        missionRef.current = null;
+        // The simulation gave up (interaction hold timed out) while the
+        // panel was still open: close it too, or the UI would keep serving
+        // an interaction whose agent has already walked home.
+        if (missionRepOpenRef.current) {
+          missionRepOpenRef.current = false;
+          setAutoAction(null);
+          setActiveRepId(null);
+        }
+      }
+    });
+  }, [walkMode]);
+
+  // However the mission's modal goes away (close button, Escape, exiting the
+  // interior, walk-mode moves), completing the mission sends the agent home.
+  useEffect(() => {
+    if (activeRepId !== null || !missionRepOpenRef.current) return;
+    missionRepOpenRef.current = false;
+    setAutoAction(null);
+    if (missionRef.current) completeMission(missionRef.current.id);
+  }, [activeRepId]);
 
   // Office desk → select its owner (opens the agent details sidebar).
   const handleDeskActivate = useCallback(
@@ -772,6 +857,7 @@ function Office({ visible, profile }: OfficeProps): React.JSX.Element {
           open={chatOpen}
           onClose={() => setChatOpen(false)}
           agents={positionedAgents}
+          onWorldActions={handleWorldActions}
         />
 
         {activeRep && (
@@ -780,6 +866,7 @@ function Office({ visible, profile }: OfficeProps): React.JSX.Element {
             agents={positionedAgents}
             initialAgentId={selectedId ?? defaultAgentId}
             visible={visible ?? true}
+            autoAction={autoAction}
             onClose={closeRepPanel}
           />
         )}

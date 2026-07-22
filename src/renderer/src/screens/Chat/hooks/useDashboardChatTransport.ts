@@ -526,8 +526,16 @@ export function resolveDashboardProviderForModel(
   );
 
   if (requestedBaseUrl) {
-    const baseMatches = customProviders.filter(
+    // Match ANY provider row on the requested endpoint — named user providers
+    // from config.yaml `providers:` (e.g. the mirrored `hermesone` entry) as
+    // well as legacy `custom:<name>` rows. Falling through to bare "custom"
+    // is the failure mode this avoids: the agent resolves `--provider custom`
+    // against the session's *current* base URL, so a session sitting on
+    // another provider would send this model to the wrong endpoint (the
+    // hermesone-swift → Nous-proxy 404).
+    const baseMatches = providers.filter(
       (provider) =>
+        !!provider.slug &&
         normalizeBaseUrl(providerBaseUrl(provider)) === requestedBaseUrl,
     );
     return (

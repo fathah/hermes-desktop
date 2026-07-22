@@ -150,6 +150,7 @@ export default function RepInteractionPanel({
   agents,
   initialAgentId,
   visible = true,
+  autoAction = null,
   onClose,
 }: {
   rep: SpaceRepresentative;
@@ -159,6 +160,9 @@ export default function RepInteractionPanel({
   // stays mounted while the tab is hidden, so this re-triggers account
   // resolution when the user returns (see the account-scope effect below).
   visible?: boolean;
+  // Mission-driven open (chat world actions): run this action automatically
+  // once the panel is ready, as if the user had clicked its chip.
+  autoAction?: RepActionId | null;
   onClose: () => void;
 }): React.JSX.Element {
   const { t } = useI18n();
@@ -180,22 +184,33 @@ export default function RepInteractionPanel({
   // updates, the cache key changes, and the rehydrate effect misses the previous
   // account's entry instead of surfacing its portfolio.
   const [accountId, setAccountId] = useState<string | null>(null);
+  // Whether the getAccount round-trip has settled (either way). Auto-run
+  // waits for this: firing earlier would race the accountId resolution,
+  // whose cacheKey change bumps requestSeq and drops the in-flight result.
+  const [accountResolved, setAccountResolved] = useState(false);
   useEffect(() => {
     if (!visible) {
       // Hidden: forget the resolved account so a stale balance can never flash
       // on return before we re-check who's signed in. The rehydrate effect
       // falls back to idle while the account is unknown.
       setAccountId(null);
+      setAccountResolved(false);
       return;
     }
     let alive = true;
     void window.hermesAPI
       .getAccount()
       .then((acc) => {
-        if (alive) setAccountId(acc?.user.id ?? null);
+        if (alive) {
+          setAccountId(acc?.user.id ?? null);
+          setAccountResolved(true);
+        }
       })
       .catch(() => {
-        if (alive) setAccountId(null);
+        if (alive) {
+          setAccountId(null);
+          setAccountResolved(true);
+        }
       });
     return () => {
       alive = false;
@@ -422,6 +437,24 @@ export default function RepInteractionPanel({
     },
     [agentId, cacheKey, hintForStatus, t],
   );
+
+  // Mission-driven open: run the commanded action exactly once, and only
+  // after the account scope has settled (see accountResolved above). Declared
+  // after the rehydrate effect so on the triggering commit the cache
+  // rehydrate runs first and this action's request is the newest.
+  const autoRanRef = useRef(false);
+  useEffect(() => {
+    autoRanRef.current = false;
+  }, [autoAction]);
+  useEffect(() => {
+    if (!autoAction || autoRanRef.current || !accountResolved || !agentId) {
+      return;
+    }
+    const action = rep.actions.find((a) => a.id === autoAction && !a.disabled);
+    if (!action) return;
+    autoRanRef.current = true;
+    void runAction(autoAction);
+  }, [autoAction, accountResolved, agentId, rep, runAction]);
 
   const selectedAgent = agents.find((a) => a.id === agentId) ?? null;
   const busy = state.kind === "loading";

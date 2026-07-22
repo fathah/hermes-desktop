@@ -5,6 +5,7 @@ import { useI18n } from "../../components/useI18n";
 import {
   Check,
   ChevronRight,
+  Folder,
   FolderInput,
   Pencil,
   Pin,
@@ -274,13 +275,16 @@ function SidebarSessionMenu({
                               key={project.path}
                               type="button"
                               role="menuitem"
-                              className="sidebar-session-menu-item"
+                              className={`sidebar-session-menu-item ${
+                                active ? "active-project" : ""
+                              }`}
                               title={project.path}
                               onClick={() => {
                                 if (!active) onMoveToProject(project.path);
                                 requestClose();
                               }}
                             >
+                              <Folder size={15} />
                               <span className="sidebar-session-menu-project-name">
                                 {project.name}
                               </span>

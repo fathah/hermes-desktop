@@ -95,6 +95,10 @@ import {
 } from "../hermes-auth";
 import { startDeviceLogin, cancelDeviceLogin } from "../hermes-account";
 import {
+  ensureHermesOneApiKey,
+  fetchHermesOneCredits,
+} from "../hermesone-provision";
+import {
   syncAgents,
   getAgentSyncStatus,
   getLinkedAgentId,
@@ -838,8 +842,8 @@ export function registerIpcHandlers(context: IpcContext): void {
   // Hermes account sign-in — OAuth 2.0 Device Authorization Grant against the
   // Hermes backend. Streams progress to the renderer's modal, opens the browser
   // approval page once the code is issued, and stores the encrypted session.
-  ipcMain.handle("hermes-account-login", (event, profile?: string) =>
-    startDeviceLogin(profile, {
+  ipcMain.handle("hermes-account-login", async (event, profile?: string) => {
+    const result = await startDeviceLogin(profile, {
       onCode: (info) => {
         if (event.sender.isDestroyed()) return;
         // Show the code in the modal, then open the browser to approve it.
@@ -850,8 +854,15 @@ export function registerIpcHandlers(context: IpcContext): void {
         if (event.sender.isDestroyed()) return;
         event.sender.send("hermes-account-login-progress", chunk);
       },
-    }),
-  );
+    });
+    // Convenience auto-provision: a fresh sign-in should yield model access
+    // without hand-adding keys. Best-effort and local-only — the key lands in
+    // the local profile `.env`, which remote/SSH chat doesn't read.
+    if (result.success && getConnectionConfig().mode === "local") {
+      void ensureHermesOneApiKey(profile).catch(() => {});
+    }
+    return result;
+  });
   ipcMain.handle("hermes-account-login-cancel", () => cancelDeviceLogin());
   // The account is device-wide (one Hermes One login for the whole app), but
   // account.json lives under whichever profile was active at sign-in. Resolve
@@ -864,6 +875,19 @@ export function registerIpcHandlers(context: IpcContext): void {
     clearAllAccounts();
     return { success: true };
   });
+  // Auto-provision a Hermes One Inference key from the signed-in account when
+  // the profile has none (idempotent — an existing key is never replaced, the
+  // backend shows the raw key only once). Local mode only: the key is written
+  // to the local profile `.env`, which remote/SSH chat doesn't read — issuing
+  // one there would strand an orphan key on the backend every screen visit.
+  ipcMain.handle("hermesone-ensure-key", (_event, profile?: string) => {
+    if (getConnectionConfig().mode !== "local") {
+      return { status: "error", error: "Local connections only." };
+    }
+    return ensureHermesOneApiKey(profile?.trim() || getActiveProfileNameSync());
+  });
+  // The signed-in account's AI-credit balance, shown on the account card.
+  ipcMain.handle("hermesone-credits", () => fetchHermesOneCredits());
 
   // Cloud agent sync — reconciles local profiles with the signed-in Hermes One
   // account's cloud agents. `agent-sync-updated` tells the renderer to reload
@@ -2406,7 +2430,9 @@ export function registerIpcHandlers(context: IpcContext): void {
         getActiveProfileNameSync(),
       );
     }
-    return listModels();
+    // Pass the active profile so terminal-added `custom_providers:` entries in
+    // that profile's config.yaml are merged into the library on read.
+    return listModels(getActiveProfileNameSync());
   });
   ipcMain.handle(
     "add-model",

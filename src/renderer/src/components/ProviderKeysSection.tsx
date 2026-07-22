@@ -10,7 +10,11 @@ import {
   X,
 } from "lucide-react";
 import type { FieldDef } from "../constants";
-import { providerRouteForEnvKey } from "../constants";
+import {
+  providerKeyRank,
+  providerNameForEnvKey,
+  providerRouteForEnvKey,
+} from "../constants";
 import { useDiscoveredModels } from "../hooks/useDiscoveredModels";
 import {
   CUSTOM_API_KEY_ENV,
@@ -76,6 +80,18 @@ interface Props {
   profile?: string;
 }
 
+// Masked preview of a stored API key: keep the leading scheme segment (up to
+// and including the first hyphen, e.g. `hs-`) and the last 4 chars, dots in
+// between — enough to recognise the key without revealing it.
+function maskKeyPreview(raw: string): string {
+  const k = (raw || "").trim();
+  if (!k) return "";
+  if (k.length <= 8) return "•".repeat(Math.max(k.length, 6));
+  const dash = k.indexOf("-");
+  const prefix = dash > 0 && dash <= 6 ? k.slice(0, dash + 1) : k.slice(0, 2);
+  return `${prefix}${"•".repeat(10)}${k.slice(-4)}`;
+}
+
 // Best-effort display name recovered from an orphaned `CUSTOM_PROVIDER_<X>_KEY`
 // env var (a provider whose key was saved but whose identity record/models were
 // never persisted). It round-trips: `customProviderEnvKey(envKeyToName(k)) === k`,
@@ -94,11 +110,19 @@ const envKeyToName = (envKey: string): string =>
 // `providerRouteForEnvKey`: native providers keep their slug, OpenAI-compatible
 // ones save as `custom` + base URL. Add-input autocompletes off live provider
 // discovery when a key is present.
+interface ProviderKeyStatus {
+  tone: "ok" | "loading" | "muted";
+  text: string;
+}
+
 function ProviderModelsManager({
   envKey,
   apiKey,
   route: routeOverride,
   providerLabel,
+  showStatus = true,
+  onStatusChange,
+  onModelCountChange,
 }: {
   // Anchor: either an LLM-provider env key (route derived) or an explicit route
   // (custom endpoints, where no fixed env key maps to the base URL).
@@ -109,6 +133,14 @@ function ProviderModelsManager({
   // keys their API key (`CUSTOM_PROVIDER_<label>_KEY`) — only set for named
   // custom providers.
   providerLabel?: string;
+  // When false, the inline status line is hidden (the branded config modal
+  // lifts it into the header pill instead). Defaults to true for the custom
+  // modal, which has no header pill.
+  showStatus?: boolean;
+  // Report the derived key-verification status / saved-model count up to the
+  // parent so a header can render them without duplicating the discovery hook.
+  onStatusChange?: (status: ProviderKeyStatus) => void;
+  onModelCountChange?: (count: number) => void;
 }): React.JSX.Element {
   const { t } = useI18n();
   const route = useMemo(
@@ -119,6 +151,13 @@ function ProviderModelsManager({
   const [loading, setLoading] = useState(true);
   const [modelId, setModelId] = useState("");
   const [busy, setBusy] = useState(false);
+  // The add-input is revealed by the "+ Add model ID" pill; hidden by default
+  // so the models row stays compact.
+  const [adding, setAdding] = useState(false);
+  // Only the first N models render by default; the rest collapse behind a
+  // "+N more" toggle so a provider with a long catalog doesn't flood the modal.
+  const [showAllModels, setShowAllModels] = useState(false);
+  const MODELS_COLLAPSED = 10;
   // Per-model definition editor (display name + context window). Keyed by model
   // id, so a change here applies wherever that id is attached.
   const [editing, setEditing] = useState<LibModel | null>(null);
@@ -184,6 +223,7 @@ function ProviderModelsManager({
         providerLabel,
       );
       setModelId("");
+      setAdding(false);
       await reload();
     } finally {
       setBusy(false);
@@ -218,7 +258,7 @@ function ProviderModelsManager({
   // accepted the key and returned a model list, so "verified" is truthful;
   // providers that don't expose /models fall back to a plain "Connected".
   const hasKey = !!apiKey.trim();
-  const status: { tone: "ok" | "loading" | "muted"; text: string } = !hasKey
+  const status: ProviderKeyStatus = !hasKey
     ? { tone: "muted", text: t("providers.keys.status.needsKey") }
     : discovery.status === "loading"
       ? { tone: "loading", text: t("providers.keys.status.verifying") }
@@ -231,16 +271,31 @@ function ProviderModelsManager({
             ? { tone: "muted", text: t("providers.keys.status.failed") }
             : { tone: "ok", text: t("providers.keys.status.connected") };
 
+  // Report status + model count up to the config-modal header (which shows the
+  // verification pill + "used by N models"). Destructure to primitives so the
+  // effect only fires on real changes, not on every object re-creation.
+  const { tone: statusTone, text: statusText } = status;
+  useEffect(() => {
+    onStatusChange?.({ tone: statusTone, text: statusText });
+  }, [statusTone, statusText, onStatusChange]);
+  useEffect(() => {
+    if (!loading) onModelCountChange?.(models.length);
+  }, [models.length, loading, onModelCountChange]);
+
   return (
     <>
-      <div className={`provider-key-status provider-key-status-${status.tone}`}>
-        {status.tone === "loading" ? (
-          <Loader2 size={12} className="spin" aria-hidden />
-        ) : (
-          <span className="provider-key-status-dot" aria-hidden />
-        )}
-        <span>{status.text}</span>
-      </div>
+      {showStatus && (
+        <div
+          className={`provider-key-status provider-key-status-${status.tone}`}
+        >
+          {status.tone === "loading" ? (
+            <Loader2 size={12} className="spin" aria-hidden />
+          ) : (
+            <span className="provider-key-status-dot" aria-hidden />
+          )}
+          <span>{status.text}</span>
+        </div>
+      )}
 
       <div className="provider-models">
         <div className="provider-models-head">
@@ -254,9 +309,9 @@ function ProviderModelsManager({
             <Loader2 size={13} className="spin" /> {t("common.loading")}
           </p>
         ) : (
-          models.length > 0 && (
-            <div className="provider-models-chips">
-              {models.map((m) => (
+          <div className="provider-models-chips">
+            {(showAllModels ? models : models.slice(0, MODELS_COLLAPSED)).map(
+              (m) => (
                 <span
                   key={m.id}
                   className="provider-model-chip"
@@ -266,14 +321,13 @@ function ProviderModelsManager({
                       : m.model
                   }
                 >
-                  <span className="provider-model-chip-label">{m.model}</span>
                   <button
                     type="button"
-                    className="provider-model-chip-edit"
+                    className="provider-model-chip-label"
                     onClick={() => openEditor(m)}
-                    aria-label={t("common.edit")}
+                    title={t("common.edit")}
                   >
-                    <Pencil size={12} />
+                    {m.model}
                   </button>
                   <button
                     type="button"
@@ -284,42 +338,84 @@ function ProviderModelsManager({
                     <X size={13} />
                   </button>
                 </span>
-              ))}
-            </div>
-          )
-        )}
+              ),
+            )}
 
-        <div className="provider-models-add">
-          <input
-            className="input"
-            list={listId}
-            value={modelId}
-            // Model IDs never contain whitespace — strip it as typed/pasted so
-            // "hello there" can't be saved as a bogus model.
-            onChange={(e) => setModelId(e.target.value.replace(/\s+/g, ""))}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                void add();
-              }
-            }}
-            placeholder={t("providers.models.addPlaceholder")}
-          />
-          <datalist id={listId}>
-            {discovery.models.map((mm) => (
-              <option key={mm} value={mm} />
-            ))}
-          </datalist>
-          <button
-            type="button"
-            className="btn btn-secondary provider-models-add-btn"
-            onClick={() => void add()}
-            disabled={busy || !modelId.trim()}
-          >
-            {busy ? <Loader2 size={14} className="spin" /> : <Plus size={14} />}{" "}
-            {t("common.add")}
-          </button>
-        </div>
+            {/* Collapse a long catalog behind a "+N more" toggle. */}
+            {!showAllModels && models.length > MODELS_COLLAPSED && (
+              <button
+                type="button"
+                className="provider-model-more-pill"
+                onClick={() => setShowAllModels(true)}
+              >
+                {t("providers.models.more", {
+                  count: models.length - MODELS_COLLAPSED,
+                })}
+              </button>
+            )}
+            {showAllModels && models.length > MODELS_COLLAPSED && (
+              <button
+                type="button"
+                className="provider-model-more-pill"
+                onClick={() => setShowAllModels(false)}
+              >
+                {t("providers.models.less")}
+              </button>
+            )}
+
+            {adding ? (
+              <span className="provider-model-chip provider-model-chip-input">
+                <input
+                  className="provider-model-add-input"
+                  list={listId}
+                  autoFocus
+                  value={modelId}
+                  // Model IDs never contain whitespace — strip it as typed/
+                  // pasted so "hello there" can't be saved as a bogus model.
+                  onChange={(e) =>
+                    setModelId(e.target.value.replace(/\s+/g, ""))
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void add();
+                    } else if (e.key === "Escape") {
+                      setModelId("");
+                      setAdding(false);
+                    }
+                  }}
+                  onBlur={() => {
+                    // Commit a typed id on blur; otherwise collapse the input.
+                    if (modelId.trim()) void add();
+                    else setAdding(false);
+                  }}
+                  placeholder={t("providers.models.addModelId")}
+                />
+                <datalist id={listId}>
+                  {discovery.models.map((mm) => (
+                    <option key={mm} value={mm} />
+                  ))}
+                </datalist>
+                {busy && (
+                  <Loader2
+                    size={13}
+                    className="spin provider-model-chip-busy"
+                    aria-hidden
+                  />
+                )}
+              </span>
+            ) : (
+              <button
+                type="button"
+                className="provider-model-add-pill"
+                onClick={() => setAdding(true)}
+              >
+                <Plus size={13} aria-hidden />
+                {t("providers.models.addModelId")}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {editing && (
@@ -407,6 +503,13 @@ export function ProviderKeysSection({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<FieldDef | null>(null);
+  // Branded config modal: whether the API-key field is in edit mode (a fresh
+  // provider with no key, or the user clicked Replace) vs. the masked preview.
+  const [replacingKey, setReplacingKey] = useState(false);
+  // Verification status + saved-model count reported up by the models manager,
+  // shown in the modal header pill and the "used by N models" meta line.
+  const [editStatus, setEditStatus] = useState<ProviderKeyStatus | null>(null);
+  const [editModelCount, setEditModelCount] = useState(0);
   // Custom OpenAI-compatible provider being configured (null = closed).
   // Empty name+baseUrl = a brand-new custom provider.
   const [customEditing, setCustomEditing] = useState<{
@@ -422,9 +525,20 @@ export function ProviderKeysSection({
   >([]);
 
   // The generic "Custom" env key is handled by the dedicated custom flow, not
-  // as a normal key card — drop it from the key-based lists.
+  // as a normal key card — drop it from the key-based lists. Well-known
+  // providers are ordered first (Hermes One leads, AIML last) via a stable
+  // sort on `providerKeyRank`, so the cards + Add-provider picker aren't
+  // ordered by the FieldDef declaration order.
   const keyItems = useMemo(
-    () => items.filter((f) => f.key !== CUSTOM_API_KEY_ENV),
+    () =>
+      items
+        .filter((f) => f.key !== CUSTOM_API_KEY_ENV)
+        .map((f, i) => ({ f, i }))
+        .sort(
+          (a, b) =>
+            providerKeyRank(a.f.key) - providerKeyRank(b.f.key) || a.i - b.i,
+        )
+        .map((x) => x.f),
     [items],
   );
   const isSet = useCallback(
@@ -437,9 +551,17 @@ export function ProviderKeysSection({
   );
   const available = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return keyItems.filter(
-      (f) => !isSet(f.key) && (!q || t(f.label).toLowerCase().includes(q)),
-    );
+    // Match both the displayed provider name and the full FieldDef label, so
+    // searching "hermes" or "api key" both work.
+    const matches = (f: FieldDef): boolean => {
+      if (!q) return true;
+      const name = providerNameForEnvKey(f.key);
+      return (
+        (name !== null && t(name).toLowerCase().includes(q)) ||
+        t(f.label).toLowerCase().includes(q)
+      );
+    };
+    return keyItems.filter((f) => !isSet(f.key) && matches(f));
   }, [keyItems, isSet, search, t]);
 
   // Load configured custom providers: the authoritative `providers.json` records
@@ -508,7 +630,17 @@ export function ProviderKeysSection({
 
   function openConfig(field: FieldDef): void {
     setPickerOpen(false);
+    // Start in preview mode when a key already exists; in edit mode otherwise.
+    setReplacingKey(!isSet(field.key));
+    setEditStatus(null);
+    setEditModelCount(0);
     setEditing(field);
+  }
+
+  function closeConfig(): void {
+    if (editing) void onBlur(editing.key);
+    setEditing(null);
+    setReplacingKey(false);
   }
 
   function openCustom(name: string, baseUrl: string): void {
@@ -559,7 +691,9 @@ export function ProviderKeysSection({
             <BrandLogo provider={field.key} size={22} />
             <span className="provider-config-card-body">
               <span className="provider-config-card-title">
-                {t(field.label)}
+                {/* A list of providers, so just the name — the "API Key"
+                    suffix of the FieldDef label is noise here. */}
+                {t(providerNameForEnvKey(field.key) ?? field.label)}
               </span>
               <span className="provider-config-card-sub">
                 {visibleKeys.has(field.key)
@@ -650,7 +784,7 @@ export function ProviderKeysSection({
                     <BrandLogo provider={field.key} size={22} />
                     <span className="provider-picker-item-body">
                       <span className="provider-picker-item-title">
-                        {t(field.label)}
+                        {t(providerNameForEnvKey(field.key) ?? field.label)}
                       </span>
                       <span className="provider-picker-item-hint">
                         {t(field.hint)}
@@ -681,84 +815,143 @@ export function ProviderKeysSection({
       )}
 
       {/* Config: enter / edit / remove a provider's key */}
-      {editing && (
-        <div className="models-modal-overlay" onClick={() => setEditing(null)}>
-          <div
-            className="models-modal provider-modal"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="models-modal-header">
-              <h2 className="models-modal-title provider-modal-title">
-                <span className="provider-modal-logo">
-                  <BrandLogo provider={editing.key} size={22} />
-                </span>
-                {t(editing.label)}
-                {savedKey === editing.key && (
-                  <span className="settings-saved">{t("common.saved")}</span>
-                )}
-              </h2>
-              <button
-                className="btn-ghost"
-                onClick={() => setEditing(null)}
-                aria-label={t("common.close")}
+      {editing &&
+        (() => {
+          const key = env[editing.key] || "";
+          const hasKey = !!key.trim();
+          const keyVisible = visibleKeys.has(editing.key);
+          // Show the editable input when replacing or when there's no key yet;
+          // otherwise a masked preview with Show / Replace actions.
+          const showInput = replacingKey || !hasKey;
+          const usedByText =
+            editModelCount === 1
+              ? t("providers.keys.usedByModel")
+              : editModelCount > 0
+                ? t("providers.keys.usedByModels", { count: editModelCount })
+                : t("providers.keys.noModelsYet");
+          return (
+            <div className="models-modal-overlay" onClick={closeConfig}>
+              <div
+                className="models-modal provider-modal"
+                onClick={(e) => e.stopPropagation()}
               >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="models-modal-body">
-              <div className="settings-input-row provider-key-row">
-                <KeyRound className="provider-key-icon" size={16} aria-hidden />
-                <input
-                  className="input"
-                  autoFocus
-                  type={
-                    editing.type === "password" && !visibleKeys.has(editing.key)
-                      ? "password"
-                      : "text"
-                  }
-                  value={env[editing.key] || ""}
-                  onChange={(e) => onChange(editing.key, e.target.value)}
-                  onBlur={() => onBlur(editing.key)}
-                  placeholder={t(editing.label)}
-                />
-                {editing.type === "password" && (
+                <div className="models-modal-header provider-modal-header">
+                  <div className="provider-modal-heading">
+                    <span className="provider-modal-logo">
+                      <BrandLogo provider={editing.key} size={24} />
+                    </span>
+                    <span className="provider-modal-name">
+                      {t(providerNameForEnvKey(editing.key) ?? editing.label)}
+                    </span>
+                    {editStatus && (
+                      <span
+                        className={`provider-status-pill provider-status-pill-${editStatus.tone}`}
+                      >
+                        {editStatus.tone === "loading" ? (
+                          <Loader2 size={11} className="spin" aria-hidden />
+                        ) : (
+                          <span
+                            className="provider-status-pill-dot"
+                            aria-hidden
+                          />
+                        )}
+                        {editStatus.text}
+                      </span>
+                    )}
+                  </div>
                   <button
-                    className="btn-ghost settings-toggle-btn"
-                    onClick={() => onToggleVisibility(editing.key)}
+                    className="btn-ghost"
+                    onClick={closeConfig}
+                    aria-label={t("common.close")}
                   >
-                    {visibleKeys.has(editing.key)
-                      ? t("common.hide")
-                      : t("common.show")}
+                    <X size={18} />
                   </button>
-                )}
+                </div>
+
+                <div className="models-modal-body">
+                  <section className="provider-field-block">
+                    <label className="provider-field-label">
+                      {t("providers.keys.apiKeyLabel")}
+                    </label>
+                    <div className="provider-key-field">
+                      {showInput ? (
+                        <input
+                          className="provider-key-input"
+                          autoFocus
+                          type={
+                            editing.type === "password" && !keyVisible
+                              ? "password"
+                              : "text"
+                          }
+                          value={key}
+                          onChange={(e) =>
+                            onChange(editing.key, e.target.value)
+                          }
+                          onBlur={() => onBlur(editing.key)}
+                          placeholder={t(editing.label)}
+                        />
+                      ) : (
+                        <span className="provider-key-masked">
+                          {keyVisible ? key : maskKeyPreview(key)}
+                        </span>
+                      )}
+                      <div className="provider-key-actions">
+                        {editing.type === "password" && (
+                          <button
+                            type="button"
+                            className="provider-link-btn"
+                            onClick={() => onToggleVisibility(editing.key)}
+                          >
+                            {keyVisible
+                              ? t("providers.keys.hide")
+                              : t("providers.keys.show")}
+                          </button>
+                        )}
+                        {hasKey && !showInput && (
+                          <>
+                            <span className="provider-key-sep" aria-hidden>
+                              |
+                            </span>
+                            <button
+                              type="button"
+                              className="provider-link-btn"
+                              onClick={() => setReplacingKey(true)}
+                            >
+                              {t("providers.keys.replace")}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <p className="provider-field-meta">{usedByText}</p>
+                  </section>
+
+                  <ProviderModelsManager
+                    envKey={editing.key}
+                    apiKey={key}
+                    showStatus={false}
+                    onStatusChange={setEditStatus}
+                    onModelCountChange={setEditModelCount}
+                  />
+                </div>
+
+                <div className="models-modal-footer">
+                  {isSet(editing.key) && (
+                    <button
+                      className="btn btn-ghost btn-sm provider-remove-btn"
+                      onClick={() => void removeAndClose(editing)}
+                    >
+                      {t("providers.keys.remove")}
+                    </button>
+                  )}
+                  <button className="btn btn-primary" onClick={closeConfig}>
+                    {t("common.done")}
+                  </button>
+                </div>
               </div>
-              <ProviderModelsManager
-                envKey={editing.key}
-                apiKey={env[editing.key] || ""}
-              />
             </div>
-            <div className="models-modal-footer">
-              {isSet(editing.key) && (
-                <button
-                  className="btn btn-ghost btn-sm provider-remove-btn"
-                  onClick={() => void removeAndClose(editing)}
-                >
-                  {t("providers.keys.remove")}
-                </button>
-              )}
-              <button
-                className="btn btn-primary"
-                onClick={() => {
-                  void onBlur(editing.key);
-                  setEditing(null);
-                }}
-              >
-                {t("common.done")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          );
+        })()}
 
       {/* Config: a named custom OpenAI-compatible provider (name + base URL + key + models) */}
       {customEditing &&

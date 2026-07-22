@@ -646,6 +646,38 @@ describe("resolveDashboardProviderForModel", () => {
     ).toBe("custom");
   });
 
+  // Regression: `/model hermesone-swift --provider custom` let the agent bind
+  // "custom" to the session's *current* base URL — a session sitting on Nous
+  // sent the Hermes One model to the Nous proxy (404 "not in our configuration
+  // or OpenRouter catalog"). A named user-provider row on the same endpoint
+  // (the mirrored config.yaml `providers: hermesone:` entry) must win.
+  it("resolves custom rows to a named user provider on the same endpoint", () => {
+    expect(
+      resolveDashboardProviderForModel(
+        "custom",
+        "hermesone-swift",
+        "https://inference.hermesone.org/v1",
+        {
+          provider: "nous",
+          model: "moonshotai/kimi-k3",
+          providers: [
+            {
+              slug: "nous",
+              name: "Nous Portal",
+              models: ["moonshotai/kimi-k3"],
+            },
+            {
+              slug: "hermesone",
+              name: "Hermes One",
+              api_url: "https://inference.hermesone.org/v1/",
+              models: [],
+            },
+          ],
+        },
+      ),
+    ).toBe("hermesone");
+  });
+
   it("resolves Hermes One custom rows to dashboard custom provider slugs by base URL", () => {
     expect(
       resolveDashboardProviderForModel(

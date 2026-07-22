@@ -8,7 +8,7 @@ import {
   Refresh,
   Settings,
   Signal,
-  Sparkles,
+  Drama,
   Trash,
   User,
   Wallet,
@@ -24,6 +24,7 @@ import type { MemoryData } from "../../screens/Memory/types";
 import { AppModal, AppModalTitle } from "../modal/AppModal";
 import ProfileWalletPane from "./ProfileWalletPane";
 import ProfileSyncPane from "./ProfileSyncPane";
+import { OrbLoader } from "../OrbLoader";
 import type { ProfileSection } from "./ProfileModalContext";
 
 /** Mirrors the entry shape returned by `window.hermesAPI.listProfiles()`. */
@@ -70,7 +71,7 @@ const PROFILE_SECTIONS: ReadonlyArray<{
   Icon: React.ComponentType<{ size?: number }>;
 }> = [
   { id: "profile", labelKey: "agents.sectionProfile", Icon: User },
-  { id: "persona", labelKey: "agents.sectionPersona", Icon: Sparkles },
+  { id: "persona", labelKey: "agents.sectionPersona", Icon: Drama },
   { id: "agentMemory", labelKey: "agents.sectionAgentMemory", Icon: Database },
   { id: "wallet", labelKey: "agents.sectionWallet", Icon: Wallet },
   { id: "sync", labelKey: "agents.sectionSync", Icon: Refresh },
@@ -503,7 +504,7 @@ export default function ProfileModal({
               <div className="profile-modal-pane profile-modal-memory-pane">
                 {memoryLoading && !memoryData ? (
                   <div className="profile-modal-loading">
-                    <div className="loading-spinner" />
+                    <OrbLoader state="searching" size={64} />
                   </div>
                 ) : memoryData ? (
                   <MemoryEntries
@@ -571,7 +572,7 @@ export default function ProfileModal({
           </div>
         ) : (
           <div className="profile-modal-loading">
-            <div className="loading-spinner" />
+            <OrbLoader state="searching" size={64} />
           </div>
         )}
 

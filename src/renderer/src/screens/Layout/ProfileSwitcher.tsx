@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { Settings, Users, Check } from "../../assets/icons";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Settings, Users, Check, Search } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
 import ProfileAvatar from "../../components/common/ProfileAvatar";
 import { useProfileModal } from "../../components/profile/ProfileModalContext";
@@ -30,8 +30,10 @@ interface ProfileSwitcherProps {
 /**
  * Sidebar-footer profile control, split into two affordances: the chip (avatar
  * + name) opens the current profile's edit modal, and a dedicated switch button
- * opens a modal to change the active profile. Collapsed, the single avatar opens
- * the switch modal.
+ * opens a command-palette-style picker to change the active profile. Collapsed,
+ * the single avatar opens the picker. The picker also opens from anywhere via
+ * Cmd/Ctrl+P: a fuzzy search field on top, running profiles grouped above a
+ * "Stopped" section, each row showing its model in monospace and a running dot.
  */
 export default function ProfileSwitcher({
   activeProfile,
@@ -43,6 +45,13 @@ export default function ProfileSwitcher({
   const { openProfile } = useProfileModal();
   const [switchOpen, setSwitchOpen] = useState(false);
   const [profiles, setProfiles] = useState<ProfileInfo[]>([]);
+  const [query, setQuery] = useState("");
+  const [highlight, setHighlight] = useState(0);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const isMac = window.electron?.process?.platform === "darwin";
+  const mod = isMac ? "⌘" : "Ctrl";
 
   const load = useCallback(() => {
     window.hermesAPI
@@ -58,20 +67,36 @@ export default function ProfileSwitcher({
     load();
   }, [load]);
 
-  // Refresh when the switch modal opens — counts and the gateway dot drift.
+  // Cmd/Ctrl+P toggles the picker from anywhere. P is unbound in the app menu,
+  // so the renderer reliably receives it; preventDefault keeps the browser
+  // print dialog from stealing it.
   useEffect(() => {
-    if (switchOpen) load();
-  }, [switchOpen, load]);
-
-  // Escape closes the switch modal.
-  useEffect(() => {
-    if (!switchOpen) return;
     function onKey(e: KeyboardEvent): void {
-      if (e.key === "Escape") setSwitchOpen(false);
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        !e.altKey &&
+        !e.shiftKey &&
+        (e.key === "p" || e.key === "P")
+      ) {
+        e.preventDefault();
+        setSwitchOpen((v) => !v);
+      }
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [switchOpen]);
+  }, []);
+
+  // Refresh + reset search/focus each time the picker opens — counts and the
+  // gateway dot drift while it's closed.
+  useEffect(() => {
+    if (!switchOpen) return;
+    load();
+    setQuery("");
+    setHighlight(0);
+    // Focus after the open animation's first frame so the caret lands reliably.
+    const id = requestAnimationFrame(() => searchRef.current?.focus());
+    return () => cancelAnimationFrame(id);
+  }, [switchOpen, load]);
 
   const activeInfo = profiles.find((p) => p.id === activeProfile);
   const hasDefaultFallbackName =
@@ -87,15 +112,96 @@ export default function ProfileSwitcher({
     openProfile(activeProfile, { onChanged: load });
   }
 
-  async function handleSelect(name: string): Promise<void> {
-    setSwitchOpen(false);
-    if (name === activeProfile) return;
-    try {
-      await window.hermesAPI.setActiveProfile(name);
-    } catch {
-      /* still reflect the choice optimistically */
+  const handleSelect = useCallback(
+    async (name: string): Promise<void> => {
+      setSwitchOpen(false);
+      if (name === activeProfile) return;
+      try {
+        await window.hermesAPI.setActiveProfile(name);
+      } catch {
+        /* still reflect the choice optimistically */
+      }
+      onSwitch(name);
+    },
+    [activeProfile, onSwitch],
+  );
+
+  // Fuzzy-ish filter across the user-facing name, the stable id, and the model.
+  const q = query.trim().toLowerCase();
+  const matches = (p: ProfileInfo): boolean =>
+    !q ||
+    p.name.toLowerCase().includes(q) ||
+    p.id.toLowerCase().includes(q) ||
+    (p.model || "").toLowerCase().includes(q);
+  // Active profile floats to the top of its group; the rest keep list order.
+  const byActiveFirst = (a: ProfileInfo, b: ProfileInfo): number =>
+    Number(b.id === activeProfile) - Number(a.id === activeProfile);
+  const filtered = profiles.filter(matches);
+  const running = filtered.filter((p) => p.gatewayRunning).sort(byActiveFirst);
+  const stopped = filtered.filter((p) => !p.gatewayRunning).sort(byActiveFirst);
+  // Flat order drives keyboard navigation across both groups.
+  const flat = [...running, ...stopped];
+
+  // Keep the highlighted row scrolled into view as the selection moves.
+  useEffect(() => {
+    if (!switchOpen) return;
+    listRef.current
+      ?.querySelector(".profile-menu-item.highlighted")
+      ?.scrollIntoView({ block: "nearest" });
+  }, [highlight, switchOpen]);
+
+  function onSearchKey(e: React.KeyboardEvent): void {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      // Clamp to the (possibly empty) filtered list — an empty list keeps 0
+      // rather than drifting to -1.
+      setHighlight((h) => Math.max(0, Math.min(flat.length - 1, h + 1)));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlight((h) => Math.max(0, h - 1));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      // No-op when the query matches nothing — `flat[highlight]` is undefined.
+      const target = flat[highlight];
+      if (target) void handleSelect(target.id);
+    } else if (e.key === "Escape") {
+      e.stopPropagation();
+      setSwitchOpen(false);
     }
-    onSwitch(name);
+  }
+
+  function renderRow(p: ProfileInfo, flatIndex: number): React.JSX.Element {
+    const isActive = p.id === activeProfile;
+    return (
+      <button
+        key={p.id}
+        className={`profile-menu-item ${isActive ? "active" : ""} ${
+          flatIndex === highlight ? "highlighted" : ""
+        }`}
+        role="menuitemradio"
+        aria-checked={isActive}
+        onClick={() => void handleSelect(p.id)}
+        onMouseMove={() => setHighlight(flatIndex)}
+      >
+        <ProfileAvatar
+          name={p.id}
+          color={p.color}
+          avatar={p.avatar}
+          size={32}
+        />
+        <span className="profile-menu-name">{p.name}</span>
+        <span className="profile-menu-model">
+          {p.model || t("agents.noModel")}
+        </span>
+        <span className="profile-menu-status">
+          <span
+            className={`profile-menu-gateway ${p.gatewayRunning ? "active" : ""}`}
+            aria-hidden
+          />
+          {isActive && <Check size={16} className="profile-menu-check" />}
+        </span>
+      </button>
+    );
   }
 
   return (
@@ -122,7 +228,7 @@ export default function ProfileSwitcher({
           <button
             className="profile-switch-btn"
             onClick={() => setSwitchOpen(true)}
-            title={t("agents.switchProfile")}
+            title={`${t("agents.switchProfile")} (${mod}P)`}
             aria-label={t("agents.switchProfile")}
           >
             <Users size={16} />
@@ -141,59 +247,46 @@ export default function ProfileSwitcher({
             aria-label={t("agents.switchProfile")}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="profile-switch-title">
-              {t("agents.switchProfile")}
+            <div className="profile-switch-search">
+              <Search
+                size={16}
+                className="profile-switch-search-icon"
+                aria-hidden
+              />
+              <input
+                ref={searchRef}
+                className="profile-switch-search-input"
+                type="text"
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setHighlight(0);
+                }}
+                onKeyDown={onSearchKey}
+                placeholder={t("agents.switchProfile")}
+                aria-label={t("agents.switchProfile")}
+              />
+              <kbd className="profile-switch-kbd">{mod}P</kbd>
             </div>
-            <div className="profile-switch-list">
-              {profiles.map((p) => {
-                const isActive = p.id === activeProfile;
-                return (
-                  <button
-                    key={p.id}
-                    className={`profile-menu-item ${isActive ? "active" : ""}`}
-                    role="menuitemradio"
-                    aria-checked={isActive}
-                    onClick={() => handleSelect(p.id)}
-                  >
-                    <div className="profile-menu-avatar">
-                      <ProfileAvatar
-                        name={p.id}
-                        color={p.color}
-                        avatar={p.avatar}
-                        size={28}
-                      />
+
+            <div className="profile-switch-list" ref={listRef}>
+              {flat.length === 0 ? (
+                <div className="profile-switch-empty">
+                  {t("agents.noProfilesMatch")}
+                </div>
+              ) : (
+                <>
+                  {running.map((p, i) => renderRow(p, i))}
+                  {stopped.length > 0 && (
+                    <div className="profile-switch-group">
+                      {t("agents.stopped")}
                     </div>
-                    <span className="profile-menu-info">
-                      <span className="profile-menu-name">
-                        {p.name}
-                        {p.isDefault && (
-                          <span className="profile-menu-tag">
-                            {t("agents.defaultTag")}
-                          </span>
-                        )}
-                        {p.id !== p.name && (
-                          <span className="profile-menu-tag">{p.id}</span>
-                        )}
-                        <span
-                          className={`profile-menu-gateway ${
-                            p.gatewayRunning ? "active" : ""
-                          }`}
-                        />
-                      </span>
-                      <span className="profile-menu-meta">
-                        {[
-                          p.model || t("agents.noModel"),
-                          t("agents.skillsCount", { count: p.skillCount }),
-                        ].join(" · ")}
-                      </span>
-                    </span>
-                    {isActive && (
-                      <Check size={16} className="profile-menu-check" />
-                    )}
-                  </button>
-                );
-              })}
+                  )}
+                  {stopped.map((p, i) => renderRow(p, running.length + i))}
+                </>
+              )}
             </div>
+
             <button
               className="profile-menu-manage"
               onClick={() => {

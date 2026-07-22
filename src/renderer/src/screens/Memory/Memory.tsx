@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Refresh } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
+import { OrbLoader } from "../../components/OrbLoader";
 import Soul from "../Soul/Soul";
 import { CapacityCards } from "./CapacityCards";
 import { MemoryTabs } from "./MemoryTabs";
@@ -40,7 +41,7 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
       <div className="settings-container">
         <h1 className="settings-header">{t("memory.title")}</h1>
         <div style={{ display: "flex", justifyContent: "center", padding: 48 }}>
-          <div className="loading-spinner" />
+          <OrbLoader state="searching" size={64} />
         </div>
       </div>
     );
