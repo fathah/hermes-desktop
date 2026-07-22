@@ -4,9 +4,14 @@ import type { HccDomain } from "../../types/hcc";
 interface DomainDetailProps {
   domainId: string | null;
 }
+interface DomainIntervention { id:string; domain:string; kind:string; rationale:string; status:string; externalActionAllowed:boolean; evidence:Array<Record<string,unknown>> }
+interface SpecialistCockpit { domain:"health"|"finance"; dataState:string; metrics?:Array<{metric:string;latestValue:number;unit:string;delta:number|null;trend:string;referenceFlag:string;evidenceCount:number}>; records?:Record<string,number>; cashflow?:{income:number;expenses:number;net:number}; liquidBalance?:number; runwayMonths?:number|null; accounts?:Array<{accountId:string;balance:number;currency:string;asOf:string}>; evidence:{recordCount:number;sourceCount:number}; safety:Record<string,boolean> }
 
 function DomainDetail({ domainId }: DomainDetailProps): React.JSX.Element {
   const [domain, setDomain] = useState<HccDomain | null>(null);
+  const [cockpit, setCockpit] = useState<SpecialistCockpit | null>(null);
+  const [interventions, setInterventions] = useState<DomainIntervention[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -18,8 +23,15 @@ function DomainDetail({ domainId }: DomainDetailProps): React.JSX.Element {
     setLoading(true);
     setError(null);
     try {
-      const payload = (await window.hermesAPI.getHccDomainDetail(domainId)) as HccDomain;
-      setDomain(payload);
+      const specialist = domainId.endsWith("health") ? "health" : domainId.endsWith("finance") ? "finance" : null;
+      const [payload, cockpitPayload, interventionPayload] = await Promise.all([
+        window.hermesAPI.getHccDomainDetail(domainId),
+        specialist ? window.hermesAPI.getHccDomainCockpit(specialist) : Promise.resolve(null),
+        specialist ? window.hermesAPI.getHccDomainInterventions(specialist) : Promise.resolve({ items: [] }),
+      ]);
+      setDomain(payload as HccDomain);
+      setCockpit(cockpitPayload as SpecialistCockpit | null);
+      setInterventions(((interventionPayload as {items?:DomainIntervention[]}).items)||[]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load domain detail");
     } finally {
@@ -30,6 +42,13 @@ function DomainDetail({ domainId }: DomainDetailProps): React.JSX.Element {
   useEffect(() => {
     void loadDomain();
   }, [loadDomain]);
+
+  const decideIntervention = async (item: DomainIntervention, decision: "approve"|"reject"): Promise<void> => {
+    setBusy(item.id);setError(null);
+    try { await window.hermesAPI.decideHccDomainIntervention(item.id,decision,`${decision} from native domain cockpit`); await loadDomain(); }
+    catch(reason){ setError(reason instanceof Error ? reason.message : "Domain intervention decision failed"); }
+    finally{setBusy(null);}
+  };
 
   if (!domainId) {
     return (
@@ -91,6 +110,13 @@ function DomainDetail({ domainId }: DomainDetailProps): React.JSX.Element {
           <div className="war-room-stat-value">{domain.review_cadence || "weekly"}</div>
         </div>
       </div>
+
+      {cockpit && <section className="war-room-panel specialist-cockpit">
+        <div><div className="war-room-card-kicker">Evidence-backed specialist cockpit</div><div className="war-room-panel-title">{cockpit.domain === "health" ? "Health observability" : "Financial operating picture"}</div><p className="war-room-item-meta">{cockpit.dataState} · {cockpit.evidence.recordCount} records · {cockpit.evidence.sourceCount} sources</p></div>
+        {cockpit.domain==="health"?<div className="specialist-metric-grid">{(cockpit.metrics||[]).map(m=><article key={m.metric}><span>{m.metric.replaceAll("_"," ")}</span><strong>{m.latestValue} {m.unit}</strong><code>{m.delta===null?"no baseline":`Δ ${m.delta}`} · {m.referenceFlag} · {m.evidenceCount} evidence</code></article>)}</div>:<div className="specialist-metric-grid"><article><span>Income</span><strong>{cockpit.cashflow?.income||0}</strong></article><article><span>Expenses</span><strong>{cockpit.cashflow?.expenses||0}</strong></article><article><span>Net</span><strong>{cockpit.cashflow?.net||0}</strong></article><article><span>Liquid</span><strong>{cockpit.liquidBalance||0}</strong></article><article><span>Runway</span><strong>{cockpit.runwayMonths ?? "insufficient data"}</strong><code>months at observed expense baseline</code></article></div>}
+        <div className="specialist-safety">{Object.entries(cockpit.safety).map(([key,value])=><span key={key} className={`war-room-pill ${value?"tone-watch":"tone-healthy"}`}>{key.replaceAll(/([A-Z])/g," $1")}: {String(value)}</span>)}</div>
+        <div className="memory-governance-list">{interventions.map(item=><article className="memory-governance-row" key={item.id}><div><strong>{item.kind}</strong><span>{item.status} · {item.rationale}</span><code>{item.evidence.length} evidence · external action {String(item.externalActionAllowed)}</code></div>{item.status==="pending_approval"&&<div className="war-room-action-row"><button disabled={busy===item.id} onClick={()=>void decideIntervention(item,"approve")}>Approve review</button><button disabled={busy===item.id} onClick={()=>void decideIntervention(item,"reject")}>Reject</button></div>}</article>)}</div>
+      </section>}
 
       <div className="war-room-grid">
         <div className="war-room-panel">

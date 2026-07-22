@@ -516,6 +516,11 @@ export async function decideHccInlineApproval(
   );
 }
 
+export async function fetchHccDomainCockpit(domain: "health" | "finance"): Promise<unknown> { return fetchJson(`/api/hcc/life/${domain}/cockpit`); }
+export async function fetchHccDomainInterventions(domain?: string): Promise<unknown> { const q=domain?`?domain=${encodeURIComponent(domain)}`:""; return fetchJson(`/api/hcc/life/interventions${q}`); }
+export async function stageHccDomainIntervention(domain: string, payload: Record<string, unknown>): Promise<unknown> { return fetchJson(`/api/hcc/life/${encodeURIComponent(domain)}/interventions`, { method:"POST", body:JSON.stringify({ actor:"hermes-desktop", ...payload }) }); }
+export async function decideHccDomainIntervention(id: string, decision: "approve" | "reject", note=""): Promise<unknown> { return fetchJson(`/api/hcc/life/interventions/${encodeURIComponent(id)}/decision/${decision}`, { method:"POST", body:JSON.stringify({ actor:"hermes-desktop", note }) }); }
+
 export async function fetchHccMemoryGovernance(): Promise<unknown> { return fetchJson("/api/hcc/memory/governance"); }
 export async function createHccMemoryGovernanceCase(payload: Record<string, unknown>): Promise<unknown> { return fetchJson("/api/hcc/memory/governance/cases", { method: "POST", body: JSON.stringify({ actor: "hermes-desktop", ...payload }) }); }
 export async function decideHccMemoryGovernanceCase(caseId: string, decision: string, note = ""): Promise<unknown> { return fetchJson(`/api/hcc/memory/governance/cases/${encodeURIComponent(caseId)}/decide`, { method: "POST", body: JSON.stringify({ actor: "hermes-desktop", decision, note }) }); }

@@ -112,6 +112,10 @@ import {
   fetchHccClonedApps,
   fetchHccConductorJobs,
   fetchHccContextInspector,
+  fetchHccDomainCockpit,
+  fetchHccDomainInterventions,
+  stageHccDomainIntervention,
+  decideHccDomainIntervention,
   fetchHccMemoryGovernance,
   createHccMemoryGovernanceCase,
   decideHccMemoryGovernanceCase,
@@ -675,6 +679,10 @@ function setupIPC(): void {
   ipcMain.handle("decide-hcc-inline-approval", (_event, jobId: string, approvalDomain: string, approvalId: string, decision: "approve" | "reject", actor?: string, note?: string) =>
     decideHccInlineApproval(jobId, approvalDomain, approvalId, decision, actor, note),
   );
+  ipcMain.handle("get-hcc-domain-cockpit", (_event, domain: "health" | "finance") => fetchHccDomainCockpit(domain));
+  ipcMain.handle("get-hcc-domain-interventions", (_event, domain?: string) => fetchHccDomainInterventions(domain));
+  ipcMain.handle("stage-hcc-domain-intervention", (_event, domain: string, payload: Record<string, unknown>) => stageHccDomainIntervention(domain, payload));
+  ipcMain.handle("decide-hcc-domain-intervention", (_event, id: string, decision: "approve" | "reject", note?: string) => decideHccDomainIntervention(id, decision, note));
   ipcMain.handle("get-hcc-memory-governance", () => fetchHccMemoryGovernance());
   ipcMain.handle("create-hcc-memory-governance-case", (_event, payload: Record<string, unknown>) => createHccMemoryGovernanceCase(payload));
   ipcMain.handle("decide-hcc-memory-governance-case", (_event, caseId: string, decision: string, note?: string) => decideHccMemoryGovernanceCase(caseId, decision, note));

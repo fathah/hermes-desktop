@@ -298,6 +298,10 @@ const hermesAPI = {
     ipcRenderer.invoke("get-hcc-mission-cost-attribution", jobId),
   decideHccInlineApproval: (jobId: string, approvalDomain: string, approvalId: string, decision: "approve" | "reject", actor?: string, note?: string): Promise<unknown> =>
     ipcRenderer.invoke("decide-hcc-inline-approval", jobId, approvalDomain, approvalId, decision, actor, note),
+  getHccDomainCockpit: (domain: "health" | "finance"): Promise<unknown> => ipcRenderer.invoke("get-hcc-domain-cockpit", domain),
+  getHccDomainInterventions: (domain?: string): Promise<unknown> => ipcRenderer.invoke("get-hcc-domain-interventions", domain),
+  stageHccDomainIntervention: (domain: string, payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("stage-hcc-domain-intervention", domain, payload),
+  decideHccDomainIntervention: (id: string, decision: "approve" | "reject", note?: string): Promise<unknown> => ipcRenderer.invoke("decide-hcc-domain-intervention", id, decision, note),
   getHccMemoryGovernance: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-memory-governance"),
   createHccMemoryGovernanceCase: (payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("create-hcc-memory-governance-case", payload),
   decideHccMemoryGovernanceCase: (caseId: string, decision: string, note?: string): Promise<unknown> => ipcRenderer.invoke("decide-hcc-memory-governance-case", caseId, decision, note),

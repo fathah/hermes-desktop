@@ -2537,6 +2537,11 @@ textarea.war-room-input {
   font-size: 12px;
 }
 
+.specialist-cockpit { display:grid; gap:14px; margin-bottom:16px; }
+.specialist-metric-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+.specialist-metric-grid article { display:grid; gap:5px; padding:12px; background:rgba(14,165,233,.07); border:1px solid rgba(56,189,248,.16); border-radius:11px; }
+.specialist-metric-grid span,.specialist-metric-grid code { color:#94a3b8; font-size:10px; }.specialist-metric-grid strong { color:#f8fafc; font-size:20px; }.specialist-safety { display:flex; flex-wrap:wrap; gap:7px; }
+
 .memory-governance-panel,.memory-governance-list { display:grid; gap:12px; }
 .memory-governance-row { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:11px; border:1px solid rgba(148,163,184,.15); border-radius:10px; }
 .memory-governance-row > div:first-child { display:grid; gap:3px; }.memory-governance-row span,.memory-governance-row code { color:#94a3b8; font-size:10px; }

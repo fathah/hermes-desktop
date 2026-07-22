@@ -24,7 +24,7 @@ describe("DomainDetail", () => {
   beforeEach(() => {
     Object.defineProperty(window, "hermesAPI", {
       configurable: true,
-      value: { getHccDomainDetail: vi.fn().mockResolvedValue(domain) } as unknown as typeof window.hermesAPI,
+      value: { getHccDomainDetail: vi.fn().mockResolvedValue(domain), getHccDomainCockpit: vi.fn().mockResolvedValue({domain:"health",dataState:"grounded",metrics:[{metric:"resting_heart_rate",latestValue:68,unit:"bpm",delta:-4,trend:"improving",referenceFlag:"within_reference",evidenceCount:2}],records:{measurements:2},evidence:{recordCount:2,sourceCount:1},safety:{medicalDiagnosis:false,clinicalAdvice:false,operatorReviewRequired:true}}), getHccDomainInterventions:vi.fn().mockResolvedValue({items:[]}), decideHccDomainIntervention:vi.fn() } as unknown as typeof window.hermesAPI,
     });
   });
 
@@ -37,5 +37,8 @@ describe("DomainDetail", () => {
     expect(screen.getByText("Recovery protocol")).toBeInTheDocument();
     expect(screen.getByText("Life OS Gateway")).toBeInTheDocument();
     expect(screen.getByText("Protect recovery capacity.")).toBeInTheDocument();
+    expect(screen.getByText("Health observability")).toBeInTheDocument();
+    expect(screen.getByText("68 bpm")).toBeInTheDocument();
+    expect(screen.getByText(/medical Diagnosis: false/i)).toBeInTheDocument();
   });
 });
