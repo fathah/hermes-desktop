@@ -10,7 +10,7 @@ The optional `HCC_AUTH_TOKEN` applies only to command-center requests. Remote He
 
 ## Native acceptance
 
-The Windows acceptance harness opens every HCC workspace view through native UI Automation and rejects load errors or unavailable surfaces.
+The Windows acceptance harness opens every HCC workspace view through unique `HCC: <view>` UI Automation labels and rejects load errors or unavailable surfaces.
 
 ## Installer lifecycle
 

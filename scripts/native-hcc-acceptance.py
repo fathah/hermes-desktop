@@ -62,7 +62,7 @@ def main() -> int:
     for label, expected in VIEWS:
         error = None
         try:
-            click_label(pid, window_id, label)
+            click_label(pid, window_id, f"HCC: {label}")
         except Exception as exc:
             error = str(exc)
         deadline = time.time() + (20 if label == "Intelligence" else 5)

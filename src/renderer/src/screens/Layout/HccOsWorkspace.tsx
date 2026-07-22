@@ -43,6 +43,7 @@ function HccOsWorkspace(): React.JSX.Element {
         {HCC_NAV.map((item) => (
           <button
             key={item.view}
+            aria-label={`HCC: ${item.label}`}
             className={view === item.view ? "active" : ""}
             onClick={() => setView(item.view)}
           >
