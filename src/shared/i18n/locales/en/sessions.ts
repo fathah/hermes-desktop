@@ -16,6 +16,12 @@ export default {
   messageSingular: "msg",
   delete: "Delete conversation",
   rename: "Rename conversation",
+  renameFailed: "Couldn't rename conversation",
+  renameInvalid: "Enter a valid name (max 100 characters)",
+  renameTooLong: "Title too long (max {{max}} characters)",
+  renameUnavailable: "Session database unavailable",
+  renameDuplicate: 'Title "{{title}}" is already in use',
+  renameNotFound: "Session not found",
   deleteConfirmTitle: "Delete conversation",
   deleteConfirm:
     "Delete this conversation? This cannot be undone — both the messages and the session record will be permanently removed.",

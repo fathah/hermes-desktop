@@ -46,7 +46,17 @@ vi.mock("../src/main/utils", () => ({
 // Stub the i18n + locale modules so the cache code doesn't need the
 // renderer-side translation files at test time.
 vi.mock("../src/shared/i18n", () => ({
-  t: (key: string) => key,
+  t: (key: string, _lang?: string, options?: Record<string, unknown>) => {
+    const messages: Record<string, string> = {
+      "sessions.newConversation": "sessions.newConversation",
+      "sessions.renameInvalid": "Enter a valid name (max 100 characters)",
+      "sessions.renameTooLong": `Title too long (max ${options?.max ?? 100} characters)`,
+      "sessions.renameUnavailable": "Session database unavailable",
+      "sessions.renameDuplicate": `Title "${options?.title ?? ""}" is already in use`,
+      "sessions.renameNotFound": "Session not found",
+    };
+    return messages[key] ?? key;
+  },
 }));
 vi.mock("../src/main/locale", () => ({
   getAppLocale: () => "en",
@@ -143,6 +153,32 @@ vi.mock("better-sqlite3", () => {
         return { changes: 1 };
       }
 
+      // Desktop rename path — mirrors Hermes `idx_sessions_title_unique`
+      // (NULLs allowed; non-NULL titles must be unique across sessions).
+      if (
+        this.sql.includes("UPDATE sessions SET title") &&
+        this.sql.includes("WHERE id = ?")
+      ) {
+        const [title, id] = args;
+        const session = this.store.sessions.get(String(id));
+        if (!session) return { changes: 0 };
+        const nextTitle =
+          title === null || title === undefined ? null : String(title);
+        if (nextTitle !== null) {
+          for (const other of this.store.sessions.values()) {
+            if (other.id !== session.id && other.title === nextTitle) {
+              const err = new Error(
+                "UNIQUE constraint failed: sessions.title",
+              ) as Error & { code: string };
+              err.code = "SQLITE_CONSTRAINT_UNIQUE";
+              throw err;
+            }
+          }
+        }
+        session.title = nextTitle;
+        return { changes: 1 };
+      }
+
       throw new Error(`Unhandled fake run SQL: ${this.sql}`);
     }
 
@@ -179,7 +215,7 @@ vi.mock("better-sqlite3", () => {
       throw new Error(`Unhandled fake all SQL: ${this.sql}`);
     }
 
-    get(...args: unknown[]): { content: string } | undefined {
+    get(...args: unknown[]): { content: string } | { id: string } | undefined {
       // `tableExists` probes sqlite_master before reading context folders
       // (issue #27). The desktop context-folder table is never created in
       // these tests, so report it absent — sessions then resolve to a null
@@ -199,6 +235,20 @@ vi.mock("better-sqlite3", () => {
           )
           .sort((a, b) => a.timestamp - b.timestamp || a.id - b.id)[0];
         return match ? { content: match.content } : undefined;
+      }
+
+      // Uniqueness probe used by updateSessionTitle before writing.
+      if (
+        this.sql.includes("SELECT id FROM sessions") &&
+        this.sql.includes("WHERE title = ?") &&
+        this.sql.includes("AND id != ?")
+      ) {
+        const [title, sessionId] = args;
+        const match = Array.from(this.store.sessions.values()).find(
+          (session) =>
+            session.title === String(title) && session.id !== String(sessionId),
+        );
+        return match ? { id: match.id } : undefined;
       }
 
       throw new Error(`Unhandled fake get SQL: ${this.sql}`);
@@ -229,7 +279,11 @@ vi.mock("better-sqlite3", () => {
 });
 
 import Database from "better-sqlite3";
-import { syncSessionCache } from "../src/main/session-cache";
+import {
+  listCachedSessions,
+  syncSessionCache,
+  updateSessionTitle,
+} from "../src/main/session-cache";
 import { closeDbConnection } from "../src/main/db";
 
 const CACHE_FILE = join(TEST_HOME, "desktop", "sessions.json");
@@ -627,4 +681,93 @@ describe("syncSessionCache", () => {
     expect(result.every((r) => r.messageCount === 2)).toBe(true);
     expect(elapsed).toBeLessThan(500);
   }, 30000);
+});
+
+describe("updateSessionTitle", () => {
+  // @lat: [[sidebar-navigation#Sidebar recent sessions#Row context menu#Rename persistence]]
+  it("persists a rename to state.db so the next sync keeps the new title", () => {
+    const future = Math.floor(Date.now() / 1000) + 600;
+    seedDb([
+      {
+        id: "s1",
+        started_at: future,
+        message_count: 2,
+        title: "Old title",
+        firstUserMessage: "hi",
+      },
+    ]);
+    syncSessionCache();
+
+    updateSessionTitle("s1", "Renamed chat");
+
+    expect(listCachedSessions(10)[0]?.title).toBe("Renamed chat");
+    const afterSync = syncSessionCache();
+    expect(afterSync[0]?.title).toBe("Renamed chat");
+  });
+
+  it("rejects duplicate titles without leaving a dirty cache entry", () => {
+    const future = Math.floor(Date.now() / 1000) + 600;
+    seedDb([
+      {
+        id: "s1",
+        started_at: future,
+        message_count: 1,
+        title: "Taken name",
+        firstUserMessage: "one",
+      },
+      {
+        id: "s2",
+        started_at: future + 1,
+        message_count: 1,
+        title: "Other chat",
+        firstUserMessage: "two",
+      },
+    ]);
+    syncSessionCache();
+
+    expect(() => updateSessionTitle("s2", "Taken name")).toThrow(
+      /already in use/i,
+    );
+
+    const cached = listCachedSessions(10);
+    expect(cached.find((s) => s.id === "s2")?.title).toBe("Other chat");
+
+    // Sync must not have been poisoned by a cache-only write either.
+    const afterSync = syncSessionCache();
+    expect(afterSync.find((s) => s.id === "s2")?.title).toBe("Other chat");
+  });
+
+  it("throws when the session id is unknown", () => {
+    const future = Math.floor(Date.now() / 1000) + 600;
+    seedDb([
+      {
+        id: "s1",
+        started_at: future,
+        message_count: 1,
+        title: "Exists",
+        firstUserMessage: "hi",
+      },
+    ]);
+    syncSessionCache();
+
+    expect(() => updateSessionTitle("missing", "Nope")).toThrow(/not found/i);
+  });
+
+  it("rejects empty or oversized titles before touching the DB", () => {
+    const future = Math.floor(Date.now() / 1000) + 600;
+    seedDb([
+      {
+        id: "s1",
+        started_at: future,
+        message_count: 1,
+        title: "Exists",
+        firstUserMessage: "hi",
+      },
+    ]);
+    syncSessionCache();
+
+    expect(() => updateSessionTitle("s1", "   ")).toThrow(/valid/i);
+    expect(() => updateSessionTitle("s1", "x".repeat(101))).toThrow(/100/);
+    expect(listCachedSessions(10)[0]?.title).toBe("Exists");
+  });
 });
