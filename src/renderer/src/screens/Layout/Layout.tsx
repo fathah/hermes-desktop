@@ -18,6 +18,7 @@ import {
 } from "./chatRuns";
 import { ActiveSessionsBar } from "./ActiveSessionsBar";
 import { StatusBar } from "./StatusBar";
+import HccOsWorkspace from "./HccOsWorkspace";
 import Sessions from "../Sessions/Sessions";
 import Agents from "../Agents/Agents";
 import Discover from "../Discover/Discover";
@@ -63,6 +64,7 @@ type View =
   | "tools"
   | "schedules"
   | "kanban"
+  | "hcc-os"
   | "gateway";
 
 const PINNED_NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string }[] = [
@@ -71,6 +73,7 @@ const PINNED_NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string }[] = [
   // "Manage profiles" action rather than a top-level nav item.
   { view: "office", icon: Building, labelKey: "navigation.office" },
   { view: "kanban", icon: KanbanIcon, labelKey: "navigation.kanban" },
+  { view: "hcc-os", icon: Building, labelKey: "HCC OS" },
   // "skills" lives under the Discover tab (installed + community), so it's no
   // longer a top-level nav item.
   { view: "schedules", icon: Timer, labelKey: "navigation.schedules" },
@@ -1003,6 +1006,12 @@ function Layout({
               ) : (
                 <Gateway profile={activeProfile} />
               )}
+            </div>
+          )}
+
+          {visitedViews.has("hcc-os") && (
+            <div style={paneStyle("hcc-os")}>
+              <HccOsWorkspace />
             </div>
           )}
         </main>

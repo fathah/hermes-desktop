@@ -530,6 +530,134 @@ interface HermesAPI {
   startDashboard: (profile?: string) => Promise<DashboardStatus>;
   stopDashboard: (profile?: string) => Promise<boolean>;
 
+  getHccGatewayCapabilityMap: () => Promise<unknown>;
+  getHccIntelligence: (contextPackId?: string, tokenBudget?: number) => Promise<unknown>;
+  executeHccRecommendation: (label: string, action: Record<string, unknown>, actor?: string) => Promise<unknown>;
+  getHccExecutors: () => Promise<unknown>;
+  getHccExecutions: (status?: string, limit?: number) => Promise<unknown>;
+  createHccExecution: (payload: Record<string, unknown>) => Promise<unknown>;
+  decideHccExecution: (executionId: string, decision: "approve" | "deny", actor?: string, note?: string) => Promise<unknown>;
+  refreshHccExecution: (executionId: string, actor?: string) => Promise<unknown>;
+  retryHccExecution: (executionId: string, actor?: string) => Promise<unknown>;
+  rollbackHccExecution: (executionId: string, actor?: string, note?: string) => Promise<unknown>;
+  decideHccRetrievalQualityProposal: (proposalId: string, decision: "approved" | "rejected", actor?: string, note?: string) => Promise<unknown>;
+  stageHccRetrievalPolicyExecution: (proposalId: string, actor?: string) => Promise<unknown>;
+  applyHccRetrievalPolicyExecution: (executionId: string, actor?: string, note?: string) => Promise<unknown>;
+  verifyHccRetrievalPolicyExecution: (executionId: string, actor?: string) => Promise<unknown>;
+  rollbackHccRetrievalPolicyExecution: (executionId: string, actor?: string, note?: string) => Promise<unknown>;
+  getHccWarRoomSummary: () => Promise<unknown>;
+  getHccReality: () => Promise<unknown>;
+  updateHccOperatingProfile: (payload: unknown) => Promise<unknown>;
+  createHccTimeBlock: (payload: Record<string, unknown>) => Promise<unknown>;
+  cancelHccTimeBlock: (blockId: string) => Promise<unknown>;
+  decideHccTradeoff: (conflictId: string, optionId: string, rationale: string) => Promise<unknown>;
+  stageHccRecoveryAction: (actionId: string) => Promise<unknown>;
+  stageHccIntervention: (interventionId: string, actor?: string) => Promise<unknown>;
+  getHccRelationships: () => Promise<unknown>;
+  createHccRelationshipContact: (payload: Record<string, unknown>) => Promise<unknown>;
+  recordHccRelationshipInteraction: (contactId: string, payload: Record<string, unknown>) => Promise<unknown>;
+  createHccRelationshipCommitment: (contactId: string, payload: Record<string, unknown>) => Promise<unknown>;
+  transitionHccRelationshipCommitment: (commitmentId: string, status: string, evidence: Array<Record<string, unknown>>) => Promise<unknown>;
+  stageHccRelationshipFollowup: (contactId: string, payload: Record<string, unknown>) => Promise<unknown>;
+  decideHccRelationshipFollowup: (followupId: string, decision: "approve" | "reject", note?: string) => Promise<unknown>;
+  getHccDecisions: () => Promise<unknown>;
+  createHccDecision: (payload: Record<string, unknown>) => Promise<unknown>;
+  evaluateHccDecision: (decisionId: string) => Promise<unknown>;
+  commitHccDecision: (decisionId: string, optionId: string, rationale: string, overrideRationale?: string) => Promise<unknown>;
+  recordHccDecisionOutcome: (decisionId: string, payload: Record<string, unknown>) => Promise<unknown>;
+  getHccCaptures: () => Promise<unknown>;
+  createHccCapture: (payload: Record<string, unknown>) => Promise<unknown>;
+  stageHccCapture: (captureId: string, targetType?: string, targetId?: string) => Promise<unknown>;
+  decideHccCaptureRoute: (routeId: string, decision: "approve" | "reject", note?: string) => Promise<unknown>;
+  getHccProjects: () => Promise<unknown>;
+  getHccProjectDetail: (projectId: string) => Promise<unknown>;
+  getHccProjectGenome: (projectId: string) => Promise<unknown>;
+  stageHccProjectGenomeProposal: (projectId: string, payload: Record<string, unknown>) => Promise<unknown>;
+  decideHccProjectGenomeProposal: (projectId: string, proposalId: string, decision: "approve" | "reject", note?: string) => Promise<unknown>;
+  rollbackHccProjectGenome: (projectId: string, targetVersion: number, rationale: string) => Promise<unknown>;
+  transitionHccProject: (projectId: string, toStatus: string, note?: string) => Promise<unknown>;
+  getHccClonedApps: () => Promise<unknown>;
+  createHccClonedApp: (payload: Record<string, unknown>) => Promise<unknown>;
+  compareHccClonedApp: (appId: string, payload?: Record<string, unknown>) => Promise<unknown>;
+  materializeHccClonedApp: (appId: string) => Promise<unknown>;
+  recordHccCloneTaste: (appId: string, signals: Array<Record<string, unknown>>) => Promise<unknown>;
+  linkHccCloneProject: (appId: string, payload: Record<string, unknown>) => Promise<unknown>;
+  finalizeHccCloneLearning: (appId: string) => Promise<unknown>;
+  getHccDomains: () => Promise<unknown>;
+  getHccLifeDomainSummary: () => Promise<unknown>;
+  getHccDomainDetail: (domainId: string) => Promise<unknown>;
+  getHccMemoryCapsules: () => Promise<unknown>;
+  getHccMemoryPacket: (packetType: string) => Promise<unknown>;
+  getHccReviewCenter: () => Promise<unknown>;
+  getHccOpportunities: (includeDismissed?: boolean) => Promise<unknown>;
+  actOnHccOpportunity: (
+    candidateId: string,
+    action: "capture" | "dismiss" | "defer" | "promote",
+    rationale?: string,
+  ) => Promise<unknown>;
+  stageHccOpportunityIntervention: (
+    candidateId: string,
+    mode: "convert_project" | "create_tasks" | "stage_execution",
+    rationale?: string,
+    payload?: Record<string, unknown>,
+  ) => Promise<unknown>;
+  approveHccOpportunityIntervention: (interventionId: string) => Promise<unknown>;
+  recordHccOpportunityOutcome: (
+    interventionId: string,
+    status: "positive" | "neutral" | "negative",
+    metrics: Record<string, unknown>,
+    evidence: Record<string, unknown>,
+  ) => Promise<unknown>;
+  getHccLearningIntelligence: () => Promise<unknown>;
+  stageHccLearningPromotion: (payload: Record<string, unknown>) => Promise<unknown>;
+  decideHccLearningPromotion: (promotionId: string, decision: "approve" | "reject", note?: string) => Promise<unknown>;
+  getHccLearning: () => Promise<unknown>;
+  getHccConductorJobs: () => Promise<unknown>;
+  spawnHccConductor: (goal: string, maxParallel?: number, supervised?: boolean) => Promise<unknown>;
+  stopHccConductor: (taskId: string) => Promise<unknown>;
+  getHccMissionEvidencePack: (jobId: string) => Promise<unknown>;
+  getHccInlineApprovals: (jobId: string) => Promise<unknown>;
+  getHccMissionCostAttribution: (jobId: string) => Promise<unknown>;
+  decideHccInlineApproval: (jobId: string, approvalDomain: string, approvalId: string, decision: "approve" | "reject", actor?: string, note?: string) => Promise<unknown>;
+  getHccPluginProposals: () => Promise<unknown>;
+  getHccPluginInstallations: () => Promise<unknown>;
+  getHccPluginAudit: () => Promise<unknown>;
+  approveHccPluginProposal: (id:string,note?:string) => Promise<unknown>;
+  installHccPluginProposal: (id:string) => Promise<unknown>;
+  uninstallHccPlugin: (id:string) => Promise<unknown>;
+  getHccNarrative: (cadence?: string) => Promise<unknown>;
+  getHccPersonalApiContracts: () => Promise<unknown>;
+  getHccPersonalApiRuns: () => Promise<unknown>;
+  approveHccPersonalApiContract: (id:string,note?:string) => Promise<unknown>;
+  runHccPersonalApiContract: (id:string,dryRun:boolean) => Promise<unknown>;
+  getHccDomainCockpit: (domain: "health" | "finance") => Promise<unknown>;
+  getHccDomainInterventions: (domain?: string) => Promise<unknown>;
+  stageHccDomainIntervention: (domain: string, payload: Record<string, unknown>) => Promise<unknown>;
+  decideHccDomainIntervention: (id: string, decision: "approve" | "reject", note?: string) => Promise<unknown>;
+  getHccMemoryGovernance: () => Promise<unknown>;
+  createHccMemoryGovernanceCase: (payload: Record<string, unknown>) => Promise<unknown>;
+  decideHccMemoryGovernanceCase: (caseId: string, decision: string, note?: string) => Promise<unknown>;
+  getHccContextInspector: (entityType: string, entityId: string, readerScope?: string) => Promise<unknown>;
+  getHccRuns: () => Promise<unknown>;
+  getHccRunComparison: (leftRunId: string, rightRunId: string) => Promise<unknown>;
+  getHccSwarmOverview: () => Promise<unknown>;
+  createHccLearningTopic: (payload: Record<string, unknown>) => Promise<unknown>;
+  appendHccLearningEvent: (topicId: string, eventType: string, payload: Record<string, unknown>) => Promise<unknown>;
+  promoteHccLearningRecommendation: (recommendationId: string) => Promise<unknown>;
+  getHccGovernanceProposals: (status?: string) => Promise<unknown>;
+  actOnHccGovernanceProposal: (proposalId: string, action: "approve" | "apply" | "reject" | "rollback", actor?: string) => Promise<unknown>;
+  stageHccReviewIntervention: (interventionId: string, actor?: string) => Promise<unknown>;
+  getHccRegistryResource: (resource: "domains" | "tools" | "references") => Promise<unknown>;
+  createHccRegistryEntity: (resource: "domains" | "tools" | "references", payload: unknown) => Promise<unknown>;
+  updateHccRegistryEntity: (resource: "domains" | "tools" | "references", entityId: string, payload: unknown) => Promise<unknown>;
+  deleteHccRegistryEntity: (resource: "domains" | "tools" | "references", entityId: string) => Promise<unknown>;
+  getHccGraph: () => Promise<unknown>;
+  createHccGraphEdge: (payload: unknown) => Promise<unknown>;
+  updateHccGraphEdge: (edgeId: string, payload: unknown) => Promise<unknown>;
+  deleteHccGraphEdge: (edgeId: string) => Promise<unknown>;
+  syncHccGraph: () => Promise<unknown>;
+  repairHccGraphIntegrity: () => Promise<unknown>;
+
   // Platform toggles
   getPlatformEnabled: (profile?: string) => Promise<Record<string, boolean>>;
   setPlatformEnabled: (

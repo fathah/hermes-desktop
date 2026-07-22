@@ -757,6 +757,164 @@ const hermesAPI = {
   stopDashboard: (profile?: string): Promise<boolean> =>
     ipcRenderer.invoke("stop-dashboard", profile),
 
+  getHccGatewayCapabilityMap: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-gateway-capability-map"),
+  getHccIntelligence: (contextPackId?: string, tokenBudget?: number): Promise<unknown> => ipcRenderer.invoke("get-hcc-intelligence", contextPackId, tokenBudget),
+  executeHccRecommendation: (label: string, action: Record<string, unknown>, actor?: string): Promise<unknown> => ipcRenderer.invoke("execute-hcc-recommendation", label, action, actor),
+  getHccExecutors: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-executors"),
+  getHccExecutions: (status?: string, limit?: number): Promise<unknown> => ipcRenderer.invoke("get-hcc-executions", status, limit),
+  createHccExecution: (payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("create-hcc-execution", payload),
+  decideHccExecution: (executionId: string, decision: "approve" | "deny", actor?: string, note?: string): Promise<unknown> => ipcRenderer.invoke("decide-hcc-execution", executionId, decision, actor, note),
+  refreshHccExecution: (executionId: string, actor?: string): Promise<unknown> => ipcRenderer.invoke("refresh-hcc-execution", executionId, actor),
+  retryHccExecution: (executionId: string, actor?: string): Promise<unknown> => ipcRenderer.invoke("retry-hcc-execution", executionId, actor),
+  rollbackHccExecution: (executionId: string, actor?: string, note?: string): Promise<unknown> => ipcRenderer.invoke("rollback-hcc-execution", executionId, actor, note),
+  decideHccRetrievalQualityProposal: (proposalId: string, decision: "approved" | "rejected", actor?: string, note?: string): Promise<unknown> => ipcRenderer.invoke("decide-hcc-retrieval-quality-proposal", proposalId, decision, actor, note),
+  stageHccRetrievalPolicyExecution: (proposalId: string, actor?: string): Promise<unknown> => ipcRenderer.invoke("stage-hcc-retrieval-policy-execution", proposalId, actor),
+  applyHccRetrievalPolicyExecution: (executionId: string, actor?: string, note?: string): Promise<unknown> => ipcRenderer.invoke("apply-hcc-retrieval-policy-execution", executionId, actor, note),
+  verifyHccRetrievalPolicyExecution: (executionId: string, actor?: string): Promise<unknown> => ipcRenderer.invoke("verify-hcc-retrieval-policy-execution", executionId, actor),
+  rollbackHccRetrievalPolicyExecution: (executionId: string, actor?: string, note?: string): Promise<unknown> => ipcRenderer.invoke("rollback-hcc-retrieval-policy-execution", executionId, actor, note),
+  getHccWarRoomSummary: (): Promise<unknown> =>
+    ipcRenderer.invoke("get-hcc-war-room-summary"),
+  getHccReality: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-reality"),
+  updateHccOperatingProfile: (payload: unknown): Promise<unknown> =>
+    ipcRenderer.invoke("update-hcc-operating-profile", payload),
+  createHccTimeBlock: (payload: Record<string, unknown>): Promise<unknown> =>
+    ipcRenderer.invoke("create-hcc-time-block", payload),
+  cancelHccTimeBlock: (blockId: string): Promise<unknown> =>
+    ipcRenderer.invoke("cancel-hcc-time-block", blockId),
+  decideHccTradeoff: (conflictId: string, optionId: string, rationale: string): Promise<unknown> =>
+    ipcRenderer.invoke("decide-hcc-tradeoff", conflictId, optionId, rationale),
+  stageHccRecoveryAction: (actionId: string): Promise<unknown> =>
+    ipcRenderer.invoke("stage-hcc-recovery-action", actionId),
+  stageHccIntervention: (interventionId: string, actor?: string): Promise<unknown> =>
+    ipcRenderer.invoke("stage-hcc-intervention", interventionId, actor),
+  getHccRelationships: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-relationships"),
+  createHccRelationshipContact: (payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("create-hcc-relationship-contact", payload),
+  recordHccRelationshipInteraction: (contactId: string, payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("record-hcc-relationship-interaction", contactId, payload),
+  createHccRelationshipCommitment: (contactId: string, payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("create-hcc-relationship-commitment", contactId, payload),
+  transitionHccRelationshipCommitment: (commitmentId: string, status: string, evidence: Array<Record<string, unknown>>): Promise<unknown> => ipcRenderer.invoke("transition-hcc-relationship-commitment", commitmentId, status, evidence),
+  stageHccRelationshipFollowup: (contactId: string, payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("stage-hcc-relationship-followup", contactId, payload),
+  decideHccRelationshipFollowup: (followupId: string, decision: "approve" | "reject", note?: string): Promise<unknown> => ipcRenderer.invoke("decide-hcc-relationship-followup", followupId, decision, note),
+  getHccDecisions: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-decisions"),
+  createHccDecision: (payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("create-hcc-decision", payload),
+  evaluateHccDecision: (decisionId: string): Promise<unknown> => ipcRenderer.invoke("evaluate-hcc-decision", decisionId),
+  commitHccDecision: (decisionId: string, optionId: string, rationale: string, overrideRationale?: string): Promise<unknown> => ipcRenderer.invoke("commit-hcc-decision", decisionId, optionId, rationale, overrideRationale),
+  recordHccDecisionOutcome: (decisionId: string, payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("record-hcc-decision-outcome", decisionId, payload),
+  getHccCaptures: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-captures"),
+  createHccCapture: (payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("create-hcc-capture", payload),
+  stageHccCapture: (captureId: string, targetType?: string, targetId?: string): Promise<unknown> => ipcRenderer.invoke("stage-hcc-capture", captureId, targetType, targetId),
+  decideHccCaptureRoute: (routeId: string, decision: "approve" | "reject", note?: string): Promise<unknown> => ipcRenderer.invoke("decide-hcc-capture-route", routeId, decision, note),
+  getHccProjects: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-projects"),
+  getHccProjectDetail: (projectId: string): Promise<unknown> =>
+    ipcRenderer.invoke("get-hcc-project-detail", projectId),
+  getHccProjectGenome: (projectId: string): Promise<unknown> => ipcRenderer.invoke("get-hcc-project-genome", projectId),
+  stageHccProjectGenomeProposal: (projectId: string, payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("stage-hcc-project-genome-proposal", projectId, payload),
+  decideHccProjectGenomeProposal: (projectId: string, proposalId: string, decision: "approve" | "reject", note?: string): Promise<unknown> => ipcRenderer.invoke("decide-hcc-project-genome-proposal", projectId, proposalId, decision, note),
+  rollbackHccProjectGenome: (projectId: string, targetVersion: number, rationale: string): Promise<unknown> => ipcRenderer.invoke("rollback-hcc-project-genome", projectId, targetVersion, rationale),
+  transitionHccProject: (projectId: string, toStatus: string, note?: string): Promise<unknown> =>
+    ipcRenderer.invoke("transition-hcc-project", projectId, toStatus, note),
+  getHccClonedApps: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-cloned-apps"),
+  createHccClonedApp: (payload: Record<string, unknown>): Promise<unknown> =>
+    ipcRenderer.invoke("create-hcc-cloned-app", payload),
+  compareHccClonedApp: (appId: string, payload?: Record<string, unknown>): Promise<unknown> =>
+    ipcRenderer.invoke("compare-hcc-cloned-app", appId, payload || {}),
+  materializeHccClonedApp: (appId: string): Promise<unknown> => ipcRenderer.invoke("materialize-hcc-cloned-app", appId),
+  recordHccCloneTaste: (appId: string, signals: Array<Record<string, unknown>>): Promise<unknown> => ipcRenderer.invoke("record-hcc-clone-taste", appId, signals),
+  linkHccCloneProject: (appId: string, payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("link-hcc-clone-project", appId, payload),
+  finalizeHccCloneLearning: (appId: string): Promise<unknown> => ipcRenderer.invoke("finalize-hcc-clone-learning", appId),
+  getHccDomains: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-domains"),
+  getHccLifeDomainSummary: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-life-domain-summary"),
+  getHccDomainDetail: (domainId: string): Promise<unknown> =>
+    ipcRenderer.invoke("get-hcc-domain-detail", domainId),
+  getHccMemoryCapsules: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-memory-capsules"),
+  getHccMemoryPacket: (packetType: string): Promise<unknown> =>
+    ipcRenderer.invoke("get-hcc-memory-packet", packetType),
+  getHccReviewCenter: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-review-center"),
+  getHccOpportunities: (includeDismissed?: boolean): Promise<unknown> =>
+    ipcRenderer.invoke("get-hcc-opportunities", includeDismissed),
+  actOnHccOpportunity: (
+    candidateId: string,
+    action: "capture" | "dismiss" | "defer" | "promote",
+    rationale?: string,
+  ): Promise<unknown> => ipcRenderer.invoke("act-hcc-opportunity", candidateId, action, rationale),
+  stageHccOpportunityIntervention: (
+    candidateId: string,
+    mode: "convert_project" | "create_tasks" | "stage_execution",
+    rationale?: string,
+    payload?: Record<string, unknown>,
+  ): Promise<unknown> => ipcRenderer.invoke("stage-hcc-opportunity-intervention", candidateId, mode, rationale, payload),
+  approveHccOpportunityIntervention: (interventionId: string): Promise<unknown> =>
+    ipcRenderer.invoke("approve-hcc-opportunity-intervention", interventionId),
+  recordHccOpportunityOutcome: (
+    interventionId: string,
+    status: "positive" | "neutral" | "negative",
+    metrics: Record<string, unknown>,
+    evidence: Record<string, unknown>,
+  ): Promise<unknown> => ipcRenderer.invoke("record-hcc-opportunity-outcome", interventionId, status, metrics, evidence),
+  getHccLearningIntelligence: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-learning-intelligence"),
+  stageHccLearningPromotion: (payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("stage-hcc-learning-promotion", payload),
+  decideHccLearningPromotion: (promotionId: string, decision: "approve" | "reject", note?: string): Promise<unknown> => ipcRenderer.invoke("decide-hcc-learning-promotion", promotionId, decision, note),
+  getHccLearning: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-learning"),
+  getHccConductorJobs: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-conductor-jobs"),
+  spawnHccConductor: (goal: string, maxParallel?: number, supervised?: boolean): Promise<unknown> =>
+    ipcRenderer.invoke("spawn-hcc-conductor", goal, maxParallel, supervised),
+  stopHccConductor: (taskId: string): Promise<unknown> => ipcRenderer.invoke("stop-hcc-conductor", taskId),
+  getHccMissionEvidencePack: (jobId: string): Promise<unknown> =>
+    ipcRenderer.invoke("get-hcc-mission-evidence-pack", jobId),
+  getHccInlineApprovals: (jobId: string): Promise<unknown> => ipcRenderer.invoke("get-hcc-inline-approvals", jobId),
+  getHccMissionCostAttribution: (jobId: string): Promise<unknown> =>
+    ipcRenderer.invoke("get-hcc-mission-cost-attribution", jobId),
+  decideHccInlineApproval: (jobId: string, approvalDomain: string, approvalId: string, decision: "approve" | "reject", actor?: string, note?: string): Promise<unknown> =>
+    ipcRenderer.invoke("decide-hcc-inline-approval", jobId, approvalDomain, approvalId, decision, actor, note),
+  getHccPluginProposals: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-plugin-proposals"),
+  getHccPluginInstallations: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-plugin-installations"),
+  getHccPluginAudit: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-plugin-audit"),
+  approveHccPluginProposal: (id:string,note?:string): Promise<unknown> => ipcRenderer.invoke("approve-hcc-plugin-proposal",id,note),
+  installHccPluginProposal: (id:string): Promise<unknown> => ipcRenderer.invoke("install-hcc-plugin-proposal",id),
+  uninstallHccPlugin: (id:string): Promise<unknown> => ipcRenderer.invoke("uninstall-hcc-plugin",id),
+  getHccNarrative: (cadence?: string): Promise<unknown> => ipcRenderer.invoke("get-hcc-narrative", cadence),
+  getHccPersonalApiContracts: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-personal-api-contracts"),
+  getHccPersonalApiRuns: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-personal-api-runs"),
+  approveHccPersonalApiContract: (id:string,note?:string): Promise<unknown> => ipcRenderer.invoke("approve-hcc-personal-api-contract",id,note),
+  runHccPersonalApiContract: (id:string,dryRun:boolean): Promise<unknown> => ipcRenderer.invoke("run-hcc-personal-api-contract",id,dryRun),
+  getHccDomainCockpit: (domain: "health" | "finance"): Promise<unknown> => ipcRenderer.invoke("get-hcc-domain-cockpit", domain),
+  getHccDomainInterventions: (domain?: string): Promise<unknown> => ipcRenderer.invoke("get-hcc-domain-interventions", domain),
+  stageHccDomainIntervention: (domain: string, payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("stage-hcc-domain-intervention", domain, payload),
+  decideHccDomainIntervention: (id: string, decision: "approve" | "reject", note?: string): Promise<unknown> => ipcRenderer.invoke("decide-hcc-domain-intervention", id, decision, note),
+  getHccMemoryGovernance: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-memory-governance"),
+  createHccMemoryGovernanceCase: (payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("create-hcc-memory-governance-case", payload),
+  decideHccMemoryGovernanceCase: (caseId: string, decision: string, note?: string): Promise<unknown> => ipcRenderer.invoke("decide-hcc-memory-governance-case", caseId, decision, note),
+  getHccContextInspector: (entityType: string, entityId: string, readerScope?: string): Promise<unknown> =>
+    ipcRenderer.invoke("get-hcc-context-inspector", entityType, entityId, readerScope),
+  getHccRuns: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-runs"),
+  getHccRunComparison: (leftRunId: string, rightRunId: string): Promise<unknown> =>
+    ipcRenderer.invoke("get-hcc-run-comparison", leftRunId, rightRunId),
+  getHccSwarmOverview: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-swarm-overview"),
+  createHccLearningTopic: (payload: Record<string, unknown>): Promise<unknown> =>
+    ipcRenderer.invoke("create-hcc-learning-topic", payload),
+  appendHccLearningEvent: (topicId: string, eventType: string, payload: Record<string, unknown>): Promise<unknown> =>
+    ipcRenderer.invoke("append-hcc-learning-event", topicId, eventType, payload),
+  promoteHccLearningRecommendation: (recommendationId: string): Promise<unknown> =>
+    ipcRenderer.invoke("promote-hcc-learning-recommendation", recommendationId),
+  getHccGovernanceProposals: (status?: string): Promise<unknown> => ipcRenderer.invoke("get-hcc-governance-proposals", status),
+  actOnHccGovernanceProposal: (proposalId: string, action: "approve" | "apply" | "reject" | "rollback", actor?: string): Promise<unknown> =>
+    ipcRenderer.invoke("act-hcc-governance-proposal", proposalId, action, actor),
+  stageHccReviewIntervention: (interventionId: string, actor?: string): Promise<unknown> =>
+    ipcRenderer.invoke("stage-hcc-review-intervention", interventionId, actor),
+  getHccRegistryResource: (resource: "domains" | "tools" | "references"): Promise<unknown> =>
+    ipcRenderer.invoke("get-hcc-registry-resource", resource),
+  createHccRegistryEntity: (resource: "domains" | "tools" | "references", payload: unknown): Promise<unknown> =>
+    ipcRenderer.invoke("create-hcc-registry-entity", resource, payload),
+  updateHccRegistryEntity: (resource: "domains" | "tools" | "references", entityId: string, payload: unknown): Promise<unknown> =>
+    ipcRenderer.invoke("update-hcc-registry-entity", resource, entityId, payload),
+  deleteHccRegistryEntity: (resource: "domains" | "tools" | "references", entityId: string): Promise<unknown> =>
+    ipcRenderer.invoke("delete-hcc-registry-entity", resource, entityId),
+  getHccGraph: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-graph"),
+  createHccGraphEdge: (payload: unknown): Promise<unknown> => ipcRenderer.invoke("create-hcc-graph-edge", payload),
+  updateHccGraphEdge: (edgeId: string, payload: unknown): Promise<unknown> => ipcRenderer.invoke("update-hcc-graph-edge", edgeId, payload),
+  deleteHccGraphEdge: (edgeId: string): Promise<unknown> => ipcRenderer.invoke("delete-hcc-graph-edge", edgeId),
+  syncHccGraph: (): Promise<unknown> => ipcRenderer.invoke("sync-hcc-graph"),
+  repairHccGraphIntegrity: (): Promise<unknown> => ipcRenderer.invoke("repair-hcc-graph-integrity"),
+
   // Platform toggles
   getPlatformEnabled: (profile?: string): Promise<Record<string, boolean>> =>
     ipcRenderer.invoke("get-platform-enabled", profile),

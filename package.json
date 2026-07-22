@@ -38,7 +38,6 @@
     "@react-three/fiber": "^9.5.0",
     "@types/highlight.js": "^9.12.4",
     "@types/react-syntax-highlighter": "^15.5.13",
-    "@wesbos/code-icons": "^1.2.4",
     "better-sqlite3": "^12.8.0",
     "date-fns": "^4.4.0",
     "electron-updater": "^6.3.9",

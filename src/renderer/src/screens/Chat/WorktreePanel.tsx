@@ -4,8 +4,8 @@ import {
   ChevronRight,
   ChevronDown,
   SquareTerminal,
+  FileCode2,
 } from "lucide-react";
-import { getIconForFile, getSVGStringFromFileType } from "@wesbos/code-icons";
 import { FileViewer } from "./FileViewer";
 import { useI18n } from "../../components/useI18n";
 
@@ -31,18 +31,13 @@ interface TreeItemProps {
 }
 
 function FileIcon({ filename }: { filename: string }): React.JSX.Element {
-  const iconType = getIconForFile(filename);
-  const iconData = iconType ? getSVGStringFromFileType(iconType) : null;
-  const svgString =
-    iconData && typeof iconData === "object" && "svg" in iconData
-      ? iconData.svg
-      : "";
-
   return (
-    <div
+    <span
       className="worktree-file-icon-wrapper"
-      dangerouslySetInnerHTML={{ __html: svgString }}
-    />
+      aria-label={`${filename} file`}
+    >
+      <FileCode2 size={14} />
+    </span>
   );
 }
 

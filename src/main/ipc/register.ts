@@ -653,7 +653,9 @@ function resolveLibraryModelEntry(
   return matches.find((m) => norm(m.baseUrl) === target) ?? matches[0];
 }
 
+import { registerHccIpcHandlers } from "./hcc";
 export function registerIpcHandlers(context: IpcContext): void {
+  registerHccIpcHandlers();
   const {
     activeRuns,
     getMainWindow,

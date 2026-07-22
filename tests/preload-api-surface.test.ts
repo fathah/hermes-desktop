@@ -15,9 +15,12 @@ const preloadTypes = readFileSync(
  */
 function extractPreloadMethods(src: string): string[] {
   const methods: string[] = [];
+  const start = src.indexOf("const hermesAPI = {");
+  const end = src.indexOf("contextBridge.exposeInMainWorld", start);
+  const body = start >= 0 ? src.slice(start, end >= 0 ? end : undefined) : src;
   const re = /^\s{2}(\w+)\s*:\s*\(/gm;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(src)) !== null) {
+  while ((m = re.exec(body)) !== null) {
     methods.push(m[1]);
   }
   return [...new Set(methods)];

@@ -36,9 +36,39 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Audit production dependencies
+        run: npm audit --omit=dev
+
       # Lint is informational for now — the codebase has a large backlog of
       # prettier/line-ending warnings (no errors). Surfaced but not gating,
       # so a warning backlog doesn't block merges.
       - name: Lint
         run: npm run lint
         continue-on-error: true
+
+  windows-package:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows installer
+        run: npm run build:win
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermes-desktop-windows
+          path: |
+            dist/*-setup.exe
+            dist/*.blockmap
+          if-no-files-found: error

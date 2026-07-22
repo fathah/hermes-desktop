@@ -5,7 +5,7 @@ import { join } from "path";
 const ROOT = join(__dirname, "..");
 // After the app/ refactor, ipcMain.handle registrations live in the dedicated
 // IPC registration module plus the updater module, not in index.ts.
-const indexSrc = ["src/main/ipc/register.ts", "src/main/app/updater.ts"]
+const indexSrc = ["src/main/ipc/register.ts", "src/main/ipc/hcc.ts", "src/main/app/updater.ts"]
   .map((p) => readFileSync(join(ROOT, p), "utf-8"))
   .join("\n");
 const preloadSrc = readFileSync(join(ROOT, "src/preload/index.ts"), "utf-8");
@@ -75,6 +75,10 @@ describe("New IPC handlers from v0.8/v0.9 features", () => {
     "list-mcp-catalog",
     "install-mcp-catalog-entry",
     "discover-memory-providers",
+    "get-hcc-learning",
+    "create-hcc-learning-topic",
+    "append-hcc-learning-event",
+    "promote-hcc-learning-recommendation",
   ];
 
   for (const ch of newChannels) {
