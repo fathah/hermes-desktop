@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo, memo } from "react";
 import { Plus, Search, X, ChatBubble, Trash, Pencil } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
+import { confirmSessionRename } from "./confirmSessionRename";
 
 interface CachedSession {
   id: string;
@@ -393,54 +394,44 @@ function Sessions({
 
   const confirmRename = useCallback(
     async (sessionId: string, newTitle: string): Promise<void> => {
-      const trimmed = newTitle.trim();
-      if (!trimmed) {
-        cancelRename();
-        return;
-      }
-      // Capture old titles so we can roll back on failure.
-      let oldSessionTitle = "";
-      let oldSearchResultTitle = "";
-      // Optimistic update
-      setSessions((prev) => {
-        oldSessionTitle = prev.find((s) => s.id === sessionId)?.title ?? "";
-        return prev.map((s) =>
-          s.id === sessionId ? { ...s, title: trimmed } : s,
-        );
+      const oldSessionTitle =
+        sessions.find((s) => s.id === sessionId)?.title ?? "";
+      const oldSearchResultTitle =
+        searchResults.find((r) => r.sessionId === sessionId)?.title ?? "";
+      await confirmSessionRename({
+        sessionId,
+        value: newTitle,
+        currentTitle: oldSessionTitle,
+        isStillEditing: () => editingSessionIdRef.current === sessionId,
+        applyOptimistic: (title) => {
+          setSessions((prev) =>
+            prev.map((s) => (s.id === sessionId ? { ...s, title } : s)),
+          );
+          setSearchResults((prev) =>
+            prev.map((r) => (r.sessionId === sessionId ? { ...r, title } : r)),
+          );
+        },
+        rollback: () => {
+          setSessions((prev) =>
+            prev.map((s) =>
+              s.id === sessionId ? { ...s, title: oldSessionTitle } : s,
+            ),
+          );
+          setSearchResults((prev) =>
+            prev.map((r) =>
+              r.sessionId === sessionId
+                ? { ...r, title: oldSearchResultTitle }
+                : r,
+            ),
+          );
+        },
+        clearEditing: cancelRename,
+        inputRef: renameInputRef,
+        fallbackErrorMessage: t("sessions.renameFailed"),
+        persist: (id, title) => window.hermesAPI.updateSessionTitle(id, title),
       });
-      setSearchResults((prev) => {
-        oldSearchResultTitle =
-          prev.find((r) => r.sessionId === sessionId)?.title ?? "";
-        return prev.map((r) =>
-          r.sessionId === sessionId ? { ...r, title: trimmed } : r,
-        );
-      });
-      try {
-        await window.hermesAPI.updateSessionTitle(sessionId, trimmed);
-      } catch (err) {
-        console.error("Failed to rename session", sessionId, err);
-        // Rollback optimistic update
-        setSessions((prev) =>
-          prev.map((s) =>
-            s.id === sessionId ? { ...s, title: oldSessionTitle } : s,
-          ),
-        );
-        setSearchResults((prev) =>
-          prev.map((r) =>
-            r.sessionId === sessionId
-              ? { ...r, title: oldSearchResultTitle }
-              : r,
-          ),
-        );
-      }
-      // Guard: only clear editing state if the user hasn't started editing
-      // a different session while this request was in flight.
-      if (editingSessionIdRef.current === sessionId) {
-        setEditingSessionId(null);
-        setEditingTitle("");
-      }
     },
-    [cancelRename],
+    [cancelRename, searchResults, sessions, t],
   );
 
   const cancelDelete = useCallback((): void => {
