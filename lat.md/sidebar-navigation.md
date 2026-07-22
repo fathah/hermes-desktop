@@ -42,6 +42,12 @@ The menu is styled light-based and stroke-free (`.sidebar-session-menu`): no 1px
 
 Each action calls an existing desktop API with an optimistic local update and rollback on failure: Rename → `updateSessionTitle` (inline `.sidebar-recent-session-rename` input), Move → [[src/main/session-context-folder-store.ts#setSessionContextFolder]] then a `hermes-session-context-folder-changed` event so other surfaces re-group, Delete → a confirmation dialog (portal overlay) then [[src/main/sessions.ts#deleteSessionRows|deleteSession]]. Deleting the open chat calls `onSessionDeleted`, which [[src/renderer/src/screens/Layout/Layout.tsx#Layout]] uses to drop to a fresh New Chat.
 
+### Rename persistence
+
+Session renames must survive `syncSessionCache`, so the durable `state.db` write happens before the JSON cache is updated.
+
+[[src/main/session-cache.ts#updateSessionTitle]] trims/collapses whitespace, enforces Hermes' 100-character cap ([[src/main/session-cache.ts#MAX_SESSION_TITLE_LENGTH]]), rejects empty titles, and checks uniqueness against Hermes' `idx_sessions_title_unique` before `UPDATE`ing. Failures throw (duplicate / not found / unavailable) instead of being swallowed — the sidebar and Sessions modal roll back their optimistic title, toast the error, and keep the inline editor open. A successful rename updates `sessions.json` only after `state.db` commits, so the next sync cannot resurrect the old name.
+
 Pinned rows are a desktop-only affordance: their ids live in `localStorage` (`hermes.sidebar.pinnedSessions`), and pinned sessions are pulled out of the normal grouping into a collapsible **Pinned** section at the top of the list.
 
 ## Full-list modal

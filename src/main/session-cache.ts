@@ -1,11 +1,6 @@
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
-import {
-  activeStateDbPath,
-  profileHome,
-  getActiveProfileNameSync,
-  safeWriteFile,
-} from "./utils";
+import { profileHome, getActiveProfileNameSync, safeWriteFile } from "./utils";
 import Database from "better-sqlite3";
 import { t } from "../shared/i18n";
 import { getAppLocale } from "./locale";
@@ -258,30 +253,70 @@ export function listCachedSessions(limit = 50, offset = 0): CachedSession[] {
   return cache.sessions.slice(offset, offset + limit);
 }
 
-// Update title for a specific session
+/** Hermes Agent caps session titles at 100 characters (schema + CLI). */
+export const MAX_SESSION_TITLE_LENGTH = 100;
+
+/**
+ * Persist a user-chosen session title to state.db, then mirror it into the
+ * desktop sessions.json cache.
+ *
+ * Order matters: the durable DB write must succeed before the cache is
+ * updated. The previous cache-first + swallow-errors approach left the UI
+ * looking renamed while the next syncSessionCache restored the old DB title
+ * (Hermes enforces UNIQUE non-NULL titles via idx_sessions_title_unique).
+ */
 export function updateSessionTitle(sessionId: string, title: string): void {
+  const locale = getAppLocale();
+  const trimmed = title.trim().replace(/\s+/g, " ");
+  if (!trimmed) {
+    throw new Error(t("sessions.renameInvalid", locale));
+  }
+  if (trimmed.length > MAX_SESSION_TITLE_LENGTH) {
+    throw new Error(
+      t("sessions.renameTooLong", locale, {
+        max: String(MAX_SESSION_TITLE_LENGTH),
+      }),
+    );
+  }
+
+  const db = getDbConnection(false);
+  if (!db) {
+    throw new Error(t("sessions.renameUnavailable", locale));
+  }
+
+  // Match Hermes SessionDB.set_session_title: reject conflicts before write so
+  // we never partially update the JSON cache on a UNIQUE constraint failure.
+  const conflict = db
+    .prepare("SELECT id FROM sessions WHERE title = ? AND id != ?")
+    .get(trimmed, sessionId) as { id: string } | undefined;
+  if (conflict) {
+    throw new Error(t("sessions.renameDuplicate", locale, { title: trimmed }));
+  }
+
+  let changes = 0;
+  try {
+    changes = db
+      .prepare("UPDATE sessions SET title = ? WHERE id = ?")
+      .run(trimmed, sessionId).changes;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/UNIQUE|constraint/i.test(message)) {
+      throw new Error(
+        t("sessions.renameDuplicate", locale, { title: trimmed }),
+      );
+    }
+    throw err instanceof Error ? err : new Error(message);
+  }
+
+  if (changes === 0) {
+    throw new Error(t("sessions.renameNotFound", locale));
+  }
+
   const cache = readCache();
   const idx = cache.sessions.findIndex((s) => s.id === sessionId);
   if (idx >= 0) {
-    cache.sessions[idx].title = title;
+    cache.sessions[idx].title = trimmed;
     writeCache(cache);
-  }
-  // Also persist in state.db so the rename survives cache rebuilds
-  try {
-    const dbPath = activeStateDbPath();
-    if (existsSync(dbPath)) {
-      const db = new Database(dbPath);
-      try {
-        db.prepare("UPDATE sessions SET title = ? WHERE id = ?").run(
-          title,
-          sessionId,
-        );
-      } finally {
-        db.close();
-      }
-    }
-  } catch {
-    // ignore DB errors — cache update above is the fast path
   }
 }
 

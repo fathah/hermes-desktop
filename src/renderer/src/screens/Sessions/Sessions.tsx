@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback, useMemo, memo } from "react";
+import toast from "react-hot-toast";
 import { Plus, Search, X, ChatBubble, Trash, Pencil } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
 
@@ -417,6 +418,12 @@ function Sessions({
       });
       try {
         await window.hermesAPI.updateSessionTitle(sessionId, trimmed);
+        // Guard: only clear editing state if the user hasn't started editing
+        // a different session while this request was in flight.
+        if (editingSessionIdRef.current === sessionId) {
+          setEditingSessionId(null);
+          setEditingTitle("");
+        }
       } catch (err) {
         console.error("Failed to rename session", sessionId, err);
         // Rollback optimistic update
@@ -432,15 +439,18 @@ function Sessions({
               : r,
           ),
         );
-      }
-      // Guard: only clear editing state if the user hasn't started editing
-      // a different session while this request was in flight.
-      if (editingSessionIdRef.current === sessionId) {
-        setEditingSessionId(null);
-        setEditingTitle("");
+        const message =
+          err instanceof Error && err.message
+            ? err.message
+            : t("sessions.renameFailed");
+        toast.error(message);
+        setTimeout(() => {
+          renameInputRef.current?.focus();
+          renameInputRef.current?.select();
+        }, 0);
       }
     },
-    [cancelRename],
+    [cancelRename, t],
   );
 
   const cancelDelete = useCallback((): void => {

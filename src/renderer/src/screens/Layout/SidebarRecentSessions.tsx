@@ -8,6 +8,7 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
+import toast from "react-hot-toast";
 import { useI18n } from "../../components/useI18n";
 import {
   ChevronDown,
@@ -516,21 +517,32 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
         return;
       }
       const previous = current?.title ?? "";
-      // Optimistic local update; roll back if the write fails.
+      // Optimistic local update; roll back if the durable write fails so a
+      // subsequent sync cannot resurrect a cache-only title.
       setSessions((prev) =>
         prev.map((s) => (s.id === id ? { ...s, title: trimmed } : s)),
       );
-      if (editingIdRef.current === id) cancelRename();
       try {
         await window.hermesAPI.updateSessionTitle(id, trimmed);
+        if (editingIdRef.current === id) cancelRename();
       } catch (err) {
         console.error("Failed to rename session", id, err);
         setSessions((prev) =>
           prev.map((s) => (s.id === id ? { ...s, title: previous } : s)),
         );
+        const message =
+          err instanceof Error && err.message
+            ? err.message
+            : t("sessions.renameFailed");
+        toast.error(message);
+        // Keep the inline editor open so the user can pick a unique name.
+        setTimeout(() => {
+          renameInputRef.current?.focus();
+          renameInputRef.current?.select();
+        }, 0);
       }
     },
-    [cancelRename],
+    [cancelRename, t],
   );
 
   const handleMoveToProject = useCallback(
