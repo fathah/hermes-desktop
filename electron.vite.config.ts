@@ -2,6 +2,7 @@ import { resolve } from "path";
 import { defineConfig } from "electron-vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { waitForDreiPrebundle } from "./scripts/vite-wait-for-drei";
 
 const rendererPort = Number(process.env.HERMES_DESKTOP_RENDERER_PORT || 0);
 
@@ -36,11 +37,17 @@ export default defineConfig({
       alias: {
         "@renderer": resolve("src/renderer/src"),
       },
-      // Ensure a single Three.js instance across our code, @react-three/fiber,
-      // drei and troika — multiple copies break `instanceof THREE.*` checks in
-      // the ported office agent renderer.
       dedupe: ["three"],
     },
-    plugins: [tailwindcss(), react()],
+    optimizeDeps: {
+      include: [
+        "@react-three/drei",
+        "@react-three/fiber",
+        "three",
+        "troika-three-text",
+        "three/examples/jsm/utils/SkeletonUtils.js",
+      ],
+    },
+    plugins: [waitForDreiPrebundle(), tailwindcss(), react()],
   },
 });

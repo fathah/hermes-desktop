@@ -6,6 +6,15 @@ import App from "./App";
 import { I18nProvider } from "./components/I18nProvider";
 import { initAnalytics } from "./utils/analytics";
 
+// Vite returns 504 for stale optimized-dep hashes; reload once so Electron
+// picks up the new browserHash (browsers get this from @vite/client automatically).
+// @lat [[main-process#Dev Vite loading]]
+if (import.meta.env.DEV) {
+  window.addEventListener("vite:preloadError", () => {
+    window.location.reload();
+  });
+}
+
 const appName = import.meta.env.VITE_HERMES_DESKTOP_APP_NAME?.trim();
 document.title = appName || "Hermes One";
 

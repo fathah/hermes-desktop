@@ -939,7 +939,11 @@ function isApiServerReady(profile?: string): Promise<boolean> {
         url,
         { method: "GET", timeout: 1500, headers: getRemoteAuthHeader() },
         (res) => {
-          resolve(res.statusCode === 200);
+          // Dashboard SPA answers GET /health with HTML 200. That is NOT the
+          // gateway api_server — treating it as ready causes POST /v1 → 405.
+          const contentType = String(res.headers?.["content-type"] || "");
+          const looksLikeHtml = contentType.toLowerCase().includes("text/html");
+          resolve(res.statusCode === 200 && !looksLikeHtml);
           res.resume();
         },
       );
@@ -3382,35 +3386,56 @@ export function testRemoteConnection(
   url: string,
   apiKey?: string,
 ): Promise<boolean> {
-  return new Promise((resolve) => {
-    const conn = getConnectionConfig();
-    const configuredOAuth =
-      apiKey === undefined &&
-      conn.mode === "remote" &&
-      conn.remoteAuthMode === "oauth" &&
-      normaliseRemoteUrl(conn.remoteUrl) === normaliseRemoteUrl(url);
-    const target = `${normaliseRemoteUrl(url)}${
-      configuredOAuth ? "/api/status" : "/health"
-    }`;
-    const mod = target.startsWith("https") ? https : http;
-    const headers: Record<string, string> = {};
-    const resolvedApiKey = resolveRemoteApiKey(url, apiKey);
-    if (resolvedApiKey) headers.Authorization = `Bearer ${resolvedApiKey}`;
-    const req = mod.request(
-      target,
-      { method: "GET", timeout: 5000, headers },
-      (res) => {
-        resolve(res.statusCode === 200);
-        res.resume();
-      },
-    );
-    req.on("error", () => resolve(false));
-    req.on("timeout", () => {
-      req.destroy();
-      resolve(false);
+  const conn = getConnectionConfig();
+  const normalized = normaliseRemoteUrl(url);
+  const configuredOAuth =
+    apiKey === undefined &&
+    conn.mode === "remote" &&
+    conn.remoteAuthMode === "oauth" &&
+    normaliseRemoteUrl(conn.remoteUrl) === normalized;
+  const prefersDashboard =
+    conn.mode === "remote" &&
+    conn.remoteChatTransport !== "legacy" &&
+    normaliseRemoteUrl(conn.remoteUrl) === normalized;
+
+  const headers: Record<string, string> = {};
+  const resolvedApiKey = resolveRemoteApiKey(url, apiKey);
+  if (resolvedApiKey) headers.Authorization = `Bearer ${resolvedApiKey}`;
+
+  const probe = (path: string): Promise<boolean> =>
+    new Promise((resolve) => {
+      const target = `${normalized}${path}`;
+      const mod = target.startsWith("https") ? https : http;
+      const req = mod.request(
+        target,
+        { method: "GET", timeout: 5000, headers },
+        (res) => {
+          if (path === "/health") {
+            const contentType = String(res.headers?.["content-type"] || "");
+            const looksLikeHtml = contentType
+              .toLowerCase()
+              .includes("text/html");
+            resolve(res.statusCode === 200 && !looksLikeHtml);
+          } else {
+            resolve(res.statusCode === 200);
+          }
+          res.resume();
+        },
+      );
+      req.on("error", () => resolve(false));
+      req.on("timeout", () => {
+        req.destroy();
+        resolve(false);
+      });
+      req.end();
     });
-    req.end();
-  });
+
+  // Dashboard/OAuth remotes: /api/status is the real liveness probe. Fall back
+  // to gateway /health for auto-mode users still pointed at an api_server URL.
+  if (configuredOAuth || prefersDashboard) {
+    return probe("/api/status").then((ok) => (ok ? true : probe("/health")));
+  }
+  return probe("/health");
 }
 
 async function waitForApiServerStopped(
