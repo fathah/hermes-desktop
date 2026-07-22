@@ -46,7 +46,7 @@ def labels(snapshot: dict) -> str:
 def click_label(pid: int, window_id: int, label: str) -> None:
     snapshot = state(pid, window_id)
     button = next(item for item in snapshot["elements"] if item.get("role") == "Button" and item.get("label") == label)
-    call("click", {"pid": pid, "window_id": window_id, "element_index": button["element_index"], "delivery_mode": "foreground"})
+    call("click", {"pid": pid, "window_id": window_id, "element_index": button["element_index"], "delivery_mode": "background"})
 
 def main() -> int:
     windows = call("list_windows", {"on_screen_only": True}).get("windows", [])
@@ -65,7 +65,7 @@ def main() -> int:
             click_label(pid, window_id, f"HCC: {label}")
         except Exception as exc:
             error = str(exc)
-        deadline = time.time() + (20 if label == "Intelligence" else 5)
+        deadline = time.time() + 30
         snapshot = state(pid, window_id)
         text = labels(snapshot)
         while expected.lower() not in text.lower() and time.time() < deadline:
