@@ -46,7 +46,7 @@ Each action calls an existing desktop API with an optimistic local update and ro
 
 Session renames must survive `syncSessionCache`, so the durable `state.db` write happens before the JSON cache is updated.
 
-[[src/main/session-cache.ts#updateSessionTitle]] trims/collapses whitespace, enforces Hermes' 100-character cap ([[src/main/session-cache.ts#MAX_SESSION_TITLE_LENGTH]]), rejects empty titles, and checks uniqueness against Hermes' `idx_sessions_title_unique` before `UPDATE`ing. Failures throw (duplicate / not found / unavailable) instead of being swallowed — the sidebar and Sessions modal roll back their optimistic title, toast the error, and keep the inline editor open. A successful rename updates `sessions.json` only after `state.db` commits, so the next sync cannot resurrect the old name.
+Title policy lives in [[src/shared/session-title.ts]] (`normalizeSessionTitle`, `MAX_SESSION_TITLE_LENGTH`) so the renderer optimistic path and [[src/main/session-cache.ts#updateSessionTitle]] cannot diverge. Main writes `state.db` first (Hermes `idx_sessions_title_unique`), then mirrors into `sessions.json`; failures throw. Both the sidebar and Sessions modal call [[src/renderer/src/screens/Sessions/confirmSessionRename.ts#confirmSessionRename]] for optimistic update, toast/rollback, and keep-editor-on-failure.
 
 Pinned rows are a desktop-only affordance: their ids live in `localStorage` (`hermes.sidebar.pinnedSessions`), and pinned sessions are pulled out of the normal grouping into a collapsible **Pinned** section at the top of the list.
 

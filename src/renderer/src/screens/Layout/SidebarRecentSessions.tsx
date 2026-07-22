@@ -8,7 +8,6 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
-import toast from "react-hot-toast";
 import { useI18n } from "../../components/useI18n";
 import {
   ChevronDown,
@@ -20,6 +19,7 @@ import {
   Pin,
   X,
 } from "../../assets/icons";
+import { confirmSessionRename } from "../Sessions/confirmSessionRename";
 import SidebarSessionMenu, {
   type SidebarMenuProject,
   type SidebarMenuTarget,
@@ -510,37 +510,27 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
 
   const confirmRename = useCallback(
     async (id: string, value: string): Promise<void> => {
-      const trimmed = value.trim();
-      const current = sessionsRef.current.find((s) => s.id === id);
-      if (!trimmed || trimmed === (current?.title ?? "")) {
-        cancelRename();
-        return;
-      }
-      const previous = current?.title ?? "";
-      // Optimistic local update; roll back if the durable write fails so a
-      // subsequent sync cannot resurrect a cache-only title.
-      setSessions((prev) =>
-        prev.map((s) => (s.id === id ? { ...s, title: trimmed } : s)),
-      );
-      try {
-        await window.hermesAPI.updateSessionTitle(id, trimmed);
-        if (editingIdRef.current === id) cancelRename();
-      } catch (err) {
-        console.error("Failed to rename session", id, err);
-        setSessions((prev) =>
-          prev.map((s) => (s.id === id ? { ...s, title: previous } : s)),
-        );
-        const message =
-          err instanceof Error && err.message
-            ? err.message
-            : t("sessions.renameFailed");
-        toast.error(message);
-        // Keep the inline editor open so the user can pick a unique name.
-        setTimeout(() => {
-          renameInputRef.current?.focus();
-          renameInputRef.current?.select();
-        }, 0);
-      }
+      const previous =
+        sessionsRef.current.find((s) => s.id === id)?.title ?? "";
+      await confirmSessionRename({
+        sessionId: id,
+        value,
+        currentTitle: previous,
+        isStillEditing: () => editingIdRef.current === id,
+        applyOptimistic: (title) =>
+          setSessions((prev) =>
+            prev.map((s) => (s.id === id ? { ...s, title } : s)),
+          ),
+        rollback: () =>
+          setSessions((prev) =>
+            prev.map((s) => (s.id === id ? { ...s, title: previous } : s)),
+          ),
+        clearEditing: cancelRename,
+        inputRef: renameInputRef,
+        fallbackErrorMessage: t("sessions.renameFailed"),
+        persist: (sessionId, title) =>
+          window.hermesAPI.updateSessionTitle(sessionId, title),
+      });
     },
     [cancelRename, t],
   );

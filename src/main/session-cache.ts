@@ -3,9 +3,18 @@ import { join } from "path";
 import { profileHome, getActiveProfileNameSync, safeWriteFile } from "./utils";
 import Database from "better-sqlite3";
 import { t } from "../shared/i18n";
+import {
+  isSessionTitleUniqueViolation,
+  MAX_SESSION_TITLE_LENGTH,
+  normalizeSessionTitle,
+  validateNormalizedSessionTitle,
+} from "../shared/session-title";
 import { getAppLocale } from "./locale";
 import { getDbConnection } from "./db";
 import { getSessionContextFolders } from "./session-context-folder-store";
+
+// Re-export for callers/docs that historically imported the cap from here.
+export { MAX_SESSION_TITLE_LENGTH } from "../shared/session-title";
 
 /**
  * The session cache lives alongside its own profile's data so profiles
@@ -253,9 +262,6 @@ export function listCachedSessions(limit = 50, offset = 0): CachedSession[] {
   return cache.sessions.slice(offset, offset + limit);
 }
 
-/** Hermes Agent caps session titles at 100 characters (schema + CLI). */
-export const MAX_SESSION_TITLE_LENGTH = 100;
-
 /**
  * Persist a user-chosen session title to state.db, then mirror it into the
  * desktop sessions.json cache.
@@ -267,16 +273,23 @@ export const MAX_SESSION_TITLE_LENGTH = 100;
  */
 export function updateSessionTitle(sessionId: string, title: string): void {
   const locale = getAppLocale();
-  const trimmed = title.trim().replace(/\s+/g, " ");
-  if (!trimmed) {
-    throw new Error(t("sessions.renameInvalid", locale));
-  }
-  if (trimmed.length > MAX_SESSION_TITLE_LENGTH) {
-    throw new Error(
-      t("sessions.renameTooLong", locale, {
-        max: String(MAX_SESSION_TITLE_LENGTH),
-      }),
-    );
+  const normalized = normalizeSessionTitle(title);
+  const validation = validateNormalizedSessionTitle(normalized);
+  switch (validation) {
+    case "empty":
+      throw new Error(t("sessions.renameInvalid", locale));
+    case "too_long":
+      throw new Error(
+        t("sessions.renameTooLong", locale, {
+          max: String(MAX_SESSION_TITLE_LENGTH),
+        }),
+      );
+    case null:
+      break;
+    default: {
+      const _exhaustive: never = validation;
+      throw new Error(String(_exhaustive));
+    }
   }
 
   const db = getDbConnection(false);
@@ -288,24 +301,25 @@ export function updateSessionTitle(sessionId: string, title: string): void {
   // we never partially update the JSON cache on a UNIQUE constraint failure.
   const conflict = db
     .prepare("SELECT id FROM sessions WHERE title = ? AND id != ?")
-    .get(trimmed, sessionId) as { id: string } | undefined;
+    .get(normalized, sessionId) as { id: string } | undefined;
   if (conflict) {
-    throw new Error(t("sessions.renameDuplicate", locale, { title: trimmed }));
+    throw new Error(
+      t("sessions.renameDuplicate", locale, { title: normalized }),
+    );
   }
 
   let changes = 0;
   try {
     changes = db
       .prepare("UPDATE sessions SET title = ? WHERE id = ?")
-      .run(trimmed, sessionId).changes;
+      .run(normalized, sessionId).changes;
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    if (/UNIQUE|constraint/i.test(message)) {
+    if (isSessionTitleUniqueViolation(err)) {
       throw new Error(
-        t("sessions.renameDuplicate", locale, { title: trimmed }),
+        t("sessions.renameDuplicate", locale, { title: normalized }),
       );
     }
-    throw err instanceof Error ? err : new Error(message);
+    throw err instanceof Error ? err : new Error(String(err));
   }
 
   if (changes === 0) {
@@ -315,7 +329,7 @@ export function updateSessionTitle(sessionId: string, title: string): void {
   const cache = readCache();
   const idx = cache.sessions.findIndex((s) => s.id === sessionId);
   if (idx >= 0) {
-    cache.sessions[idx].title = trimmed;
+    cache.sessions[idx].title = normalized;
     writeCache(cache);
   }
 }
