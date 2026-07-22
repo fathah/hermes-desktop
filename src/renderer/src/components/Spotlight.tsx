@@ -149,6 +149,7 @@ function Spotlight({
       ["learning-engine", "Open Learning Engine", "Track learning loops and progression", "HCC Workspace"],
       ["hcc-memory", "Open Memory Center", "Inspect governed memory, retrieval packets, privacy, and contradictions", "HCC Workspace"],
       ["personal-api", "Open Personal API", "Review evidence narrative and approval-gated automation contracts", "HCC Workspace"],
+      ["plugin-center", "Open Plugin Center", "Approve and install manifest-only HCC apps without arbitrary code execution", "HCC Workspace"],
       ["capture-inbox", "Open Capture Inbox", "Capture, classify, and govern routing into canonical HCC objects", "HCC Workspace"],
       ["decision-center", "Open Decision Center", "Evaluate options against evidence, values, and hard constraints", "HCC Workspace"],
       ["relationship-center", "Open Relationship Center", "Manage private contacts, commitments, evidence, and governed follow-up", "HCC Workspace"],

@@ -298,6 +298,12 @@ const hermesAPI = {
     ipcRenderer.invoke("get-hcc-mission-cost-attribution", jobId),
   decideHccInlineApproval: (jobId: string, approvalDomain: string, approvalId: string, decision: "approve" | "reject", actor?: string, note?: string): Promise<unknown> =>
     ipcRenderer.invoke("decide-hcc-inline-approval", jobId, approvalDomain, approvalId, decision, actor, note),
+  getHccPluginProposals: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-plugin-proposals"),
+  getHccPluginInstallations: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-plugin-installations"),
+  getHccPluginAudit: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-plugin-audit"),
+  approveHccPluginProposal: (id:string,note?:string): Promise<unknown> => ipcRenderer.invoke("approve-hcc-plugin-proposal",id,note),
+  installHccPluginProposal: (id:string): Promise<unknown> => ipcRenderer.invoke("install-hcc-plugin-proposal",id),
+  uninstallHccPlugin: (id:string): Promise<unknown> => ipcRenderer.invoke("uninstall-hcc-plugin",id),
   getHccNarrative: (cadence?: string): Promise<unknown> => ipcRenderer.invoke("get-hcc-narrative", cadence),
   getHccPersonalApiContracts: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-personal-api-contracts"),
   getHccPersonalApiRuns: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-personal-api-runs"),

@@ -112,6 +112,12 @@ import {
   fetchHccClonedApps,
   fetchHccConductorJobs,
   fetchHccContextInspector,
+  fetchHccPluginProposals,
+  fetchHccPluginInstallations,
+  fetchHccPluginAudit,
+  approveHccPluginProposal,
+  installHccPluginProposal,
+  uninstallHccPlugin,
   fetchHccNarrative,
   fetchHccPersonalApiContracts,
   fetchHccPersonalApiRuns,
@@ -684,6 +690,12 @@ function setupIPC(): void {
   ipcMain.handle("decide-hcc-inline-approval", (_event, jobId: string, approvalDomain: string, approvalId: string, decision: "approve" | "reject", actor?: string, note?: string) =>
     decideHccInlineApproval(jobId, approvalDomain, approvalId, decision, actor, note),
   );
+  ipcMain.handle("get-hcc-plugin-proposals", () => fetchHccPluginProposals());
+  ipcMain.handle("get-hcc-plugin-installations", () => fetchHccPluginInstallations());
+  ipcMain.handle("get-hcc-plugin-audit", () => fetchHccPluginAudit());
+  ipcMain.handle("approve-hcc-plugin-proposal", (_event,id:string,note?:string) => approveHccPluginProposal(id,note));
+  ipcMain.handle("install-hcc-plugin-proposal", (_event,id:string) => installHccPluginProposal(id));
+  ipcMain.handle("uninstall-hcc-plugin", (_event,id:string) => uninstallHccPlugin(id));
   ipcMain.handle("get-hcc-narrative", (_event,cadence?:string) => fetchHccNarrative(cadence));
   ipcMain.handle("get-hcc-personal-api-contracts", () => fetchHccPersonalApiContracts());
   ipcMain.handle("get-hcc-personal-api-runs", () => fetchHccPersonalApiRuns());

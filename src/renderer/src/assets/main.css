@@ -2537,6 +2537,7 @@ textarea.war-room-input {
   font-size: 12px;
 }
 
+.plugin-center-screen { display:grid; gap:16px; }
 .personal-api-screen,.narrative-panel { display:grid; gap:14px; }.narrative-section { display:grid; gap:8px; padding:12px; border-left:2px solid rgba(167,139,250,.55); background:rgba(139,92,246,.06); }.narrative-section div { display:grid; gap:3px; }.narrative-section p { margin:0; color:#e2e8f0; }.narrative-section code { color:#a78bfa; font-size:10px; }
 
 .specialist-cockpit { display:grid; gap:14px; margin-bottom:16px; }

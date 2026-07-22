@@ -51,6 +51,7 @@ type View =
   | "domain-detail"
   | "hcc-memory"
   | "personal-api"
+  | "plugin-center"
   | "review-center"
   | "registry-manager"
   | "graph-center"
@@ -223,6 +224,7 @@ const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string; label?: strin
   { view: "domains", icon: Brain, labelKey: "navigation.memory", label: "Domains", eyebrow: "State" },
   { view: "hcc-memory", icon: Brain, labelKey: "navigation.memory", label: "Memory", eyebrow: "Context" },
   { view: "personal-api", icon: Sparkles, labelKey: "navigation.office", label: "Personal API", eyebrow: "Meaning" },
+  { view: "plugin-center", icon: Puzzle, labelKey: "navigation.skills", label: "Plugins", eyebrow: "Install" },
   { view: "review-center", icon: Clock, labelKey: "navigation.sessions", label: "Review", eyebrow: "Steering" },
   { view: "registry-manager", icon: SettingsIcon, labelKey: "navigation.settings", label: "Registry", eyebrow: "Governance" },
   { view: "graph-center", icon: Layers, labelKey: "navigation.memory", label: "Graph", eyebrow: "Relations" },
@@ -250,6 +252,7 @@ const HCC_WORKSPACE_VIEWS = new Set<View>([
   "domain-detail",
   "hcc-memory",
   "personal-api",
+  "plugin-center",
   "review-center",
   "registry-manager",
   "graph-center",

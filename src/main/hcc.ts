@@ -516,6 +516,13 @@ export async function decideHccInlineApproval(
   );
 }
 
+export async function fetchHccPluginProposals(): Promise<unknown> { return fetchJson("/api/hcc/plugins/proposals"); }
+export async function fetchHccPluginInstallations(): Promise<unknown> { return fetchJson("/api/hcc/plugins/installations"); }
+export async function fetchHccPluginAudit(): Promise<unknown> { return fetchJson("/api/hcc/plugins/audit"); }
+export async function approveHccPluginProposal(id:string,note=""): Promise<unknown> { return fetchJson(`/api/hcc/plugins/proposals/${encodeURIComponent(id)}/approve`,{method:"POST",body:JSON.stringify({actor:"hermes-desktop",note})}); }
+export async function installHccPluginProposal(id:string): Promise<unknown> { return fetchJson(`/api/hcc/plugins/proposals/${encodeURIComponent(id)}/install`,{method:"POST",body:JSON.stringify({actor:"hermes-desktop"})}); }
+export async function uninstallHccPlugin(id:string): Promise<unknown> { return fetchJson(`/api/hcc/plugins/installations/${encodeURIComponent(id)}?actor=hermes-desktop`,{method:"DELETE"}); }
+
 export async function fetchHccNarrative(cadence="daily"): Promise<unknown> { return fetchJson(`/api/hcc/narrative?cadence=${encodeURIComponent(cadence)}`); }
 export async function fetchHccPersonalApiContracts(): Promise<unknown> { return fetchJson("/api/hcc/personal-api/contracts"); }
 export async function fetchHccPersonalApiRuns(): Promise<unknown> { return fetchJson("/api/hcc/personal-api/runs"); }
