@@ -112,6 +112,11 @@ import {
   fetchHccClonedApps,
   fetchHccConductorJobs,
   fetchHccContextInspector,
+  fetchHccNarrative,
+  fetchHccPersonalApiContracts,
+  fetchHccPersonalApiRuns,
+  approveHccPersonalApiContract,
+  runHccPersonalApiContract,
   fetchHccDomainCockpit,
   fetchHccDomainInterventions,
   stageHccDomainIntervention,
@@ -679,6 +684,11 @@ function setupIPC(): void {
   ipcMain.handle("decide-hcc-inline-approval", (_event, jobId: string, approvalDomain: string, approvalId: string, decision: "approve" | "reject", actor?: string, note?: string) =>
     decideHccInlineApproval(jobId, approvalDomain, approvalId, decision, actor, note),
   );
+  ipcMain.handle("get-hcc-narrative", (_event,cadence?:string) => fetchHccNarrative(cadence));
+  ipcMain.handle("get-hcc-personal-api-contracts", () => fetchHccPersonalApiContracts());
+  ipcMain.handle("get-hcc-personal-api-runs", () => fetchHccPersonalApiRuns());
+  ipcMain.handle("approve-hcc-personal-api-contract", (_event,id:string,note?:string) => approveHccPersonalApiContract(id,note));
+  ipcMain.handle("run-hcc-personal-api-contract", (_event,id:string,dryRun:boolean) => runHccPersonalApiContract(id,dryRun));
   ipcMain.handle("get-hcc-domain-cockpit", (_event, domain: "health" | "finance") => fetchHccDomainCockpit(domain));
   ipcMain.handle("get-hcc-domain-interventions", (_event, domain?: string) => fetchHccDomainInterventions(domain));
   ipcMain.handle("stage-hcc-domain-intervention", (_event, domain: string, payload: Record<string, unknown>) => stageHccDomainIntervention(domain, payload));

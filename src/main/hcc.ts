@@ -516,6 +516,12 @@ export async function decideHccInlineApproval(
   );
 }
 
+export async function fetchHccNarrative(cadence="daily"): Promise<unknown> { return fetchJson(`/api/hcc/narrative?cadence=${encodeURIComponent(cadence)}`); }
+export async function fetchHccPersonalApiContracts(): Promise<unknown> { return fetchJson("/api/hcc/personal-api/contracts"); }
+export async function fetchHccPersonalApiRuns(): Promise<unknown> { return fetchJson("/api/hcc/personal-api/runs"); }
+export async function approveHccPersonalApiContract(id:string,note=""): Promise<unknown> { return fetchJson(`/api/hcc/personal-api/contracts/${encodeURIComponent(id)}/approve`,{method:"POST",body:JSON.stringify({actor:"hermes-desktop",note})}); }
+export async function runHccPersonalApiContract(id:string,dryRun:boolean): Promise<unknown> { return fetchJson(`/api/hcc/personal-api/contracts/${encodeURIComponent(id)}/run`,{method:"POST",body:JSON.stringify({actor:"hermes-desktop",dryRun})}); }
+
 export async function fetchHccDomainCockpit(domain: "health" | "finance"): Promise<unknown> { return fetchJson(`/api/hcc/life/${domain}/cockpit`); }
 export async function fetchHccDomainInterventions(domain?: string): Promise<unknown> { const q=domain?`?domain=${encodeURIComponent(domain)}`:""; return fetchJson(`/api/hcc/life/interventions${q}`); }
 export async function stageHccDomainIntervention(domain: string, payload: Record<string, unknown>): Promise<unknown> { return fetchJson(`/api/hcc/life/${encodeURIComponent(domain)}/interventions`, { method:"POST", body:JSON.stringify({ actor:"hermes-desktop", ...payload }) }); }

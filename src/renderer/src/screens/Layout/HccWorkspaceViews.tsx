@@ -17,6 +17,7 @@ import ExecutionCenter from "../ExecutionCenter/ExecutionCenter";
 import CaptureInbox from "../CaptureInbox/CaptureInbox";
 import DecisionCenter from "../DecisionCenter/DecisionCenter";
 import RelationshipCenter from "../RelationshipCenter/RelationshipCenter";
+import PersonalApiCenter from "../PersonalApi/PersonalApiCenter";
 
 export type HccWorkspaceView =
   | "war-room"
@@ -37,7 +38,8 @@ export type HccWorkspaceView =
   | "execution-center"
   | "capture-inbox"
   | "decision-center"
-  | "relationship-center";
+  | "relationship-center"
+  | "personal-api";
 
 interface HccWorkspaceViewsProps {
   activeView: string;
@@ -69,6 +71,7 @@ const HCC_VIEWS = new Set<string>([
   "capture-inbox",
   "decision-center",
   "relationship-center",
+  "personal-api",
 ]);
 
 function HccWorkspaceViews({
@@ -133,6 +136,9 @@ function HccWorkspaceViews({
       break;
     case "intelligence-fabric":
       content = <IntelligenceFabric onOpenExecutionCenter={() => onNavigateHccView?.("execution-center")} />;
+      break;
+    case "personal-api":
+      content = <PersonalApiCenter />;
       break;
     case "relationship-center":
       content = <RelationshipCenter />;

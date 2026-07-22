@@ -298,6 +298,11 @@ const hermesAPI = {
     ipcRenderer.invoke("get-hcc-mission-cost-attribution", jobId),
   decideHccInlineApproval: (jobId: string, approvalDomain: string, approvalId: string, decision: "approve" | "reject", actor?: string, note?: string): Promise<unknown> =>
     ipcRenderer.invoke("decide-hcc-inline-approval", jobId, approvalDomain, approvalId, decision, actor, note),
+  getHccNarrative: (cadence?: string): Promise<unknown> => ipcRenderer.invoke("get-hcc-narrative", cadence),
+  getHccPersonalApiContracts: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-personal-api-contracts"),
+  getHccPersonalApiRuns: (): Promise<unknown> => ipcRenderer.invoke("get-hcc-personal-api-runs"),
+  approveHccPersonalApiContract: (id:string,note?:string): Promise<unknown> => ipcRenderer.invoke("approve-hcc-personal-api-contract",id,note),
+  runHccPersonalApiContract: (id:string,dryRun:boolean): Promise<unknown> => ipcRenderer.invoke("run-hcc-personal-api-contract",id,dryRun),
   getHccDomainCockpit: (domain: "health" | "finance"): Promise<unknown> => ipcRenderer.invoke("get-hcc-domain-cockpit", domain),
   getHccDomainInterventions: (domain?: string): Promise<unknown> => ipcRenderer.invoke("get-hcc-domain-interventions", domain),
   stageHccDomainIntervention: (domain: string, payload: Record<string, unknown>): Promise<unknown> => ipcRenderer.invoke("stage-hcc-domain-intervention", domain, payload),

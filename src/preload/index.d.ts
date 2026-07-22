@@ -182,6 +182,11 @@ interface HermesAPI {
   getHccInlineApprovals: (jobId: string) => Promise<unknown>;
   getHccMissionCostAttribution: (jobId: string) => Promise<unknown>;
   decideHccInlineApproval: (jobId: string, approvalDomain: string, approvalId: string, decision: "approve" | "reject", actor?: string, note?: string) => Promise<unknown>;
+  getHccNarrative: (cadence?: string) => Promise<unknown>;
+  getHccPersonalApiContracts: () => Promise<unknown>;
+  getHccPersonalApiRuns: () => Promise<unknown>;
+  approveHccPersonalApiContract: (id:string,note?:string) => Promise<unknown>;
+  runHccPersonalApiContract: (id:string,dryRun:boolean) => Promise<unknown>;
   getHccDomainCockpit: (domain: "health" | "finance") => Promise<unknown>;
   getHccDomainInterventions: (domain?: string) => Promise<unknown>;
   stageHccDomainIntervention: (domain: string, payload: Record<string, unknown>) => Promise<unknown>;
