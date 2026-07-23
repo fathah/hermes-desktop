@@ -86,7 +86,7 @@ const OAUTH_PROVIDER_CURATED: Record<string, string[]> = {
     "gemini-3-pro-preview",
     "gemini-3-flash-preview",
   ],
-  "minimax-oauth": ["MiniMax-M2.7", "MiniMax-M2.7-highspeed"],
+  "minimax-oauth": ["MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.7-highspeed"],
   "qwen-oauth": [],
 };
 
