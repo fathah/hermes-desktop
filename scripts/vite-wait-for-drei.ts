@@ -22,7 +22,7 @@ export function waitForDreiPrebundle(): Plugin {
 
       let ready: Promise<void> | undefined;
 
-      server.middlewares.use((req, res, next) => {
+      server.middlewares.use((req, _res, next) => {
         if (req.method !== "GET" && req.method !== "HEAD") {
           next();
           return;

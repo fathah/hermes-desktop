@@ -18,7 +18,7 @@
     "typecheck:sandbox": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/hermes-sandbox.ps1 typecheck",
     "start": "electron-vite preview",
     "dev": "node scripts/ensure-vite-deps.mjs && electron-vite dev",
-    "dev:clean": "rm -rf node_modules/.vite && npm run dev",
+    "dev:clean": "node scripts/ensure-vite-deps.mjs --force && electron-vite dev",
     "dev:sandbox": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/hermes-sandbox.ps1 dev",
     "sandbox:sync-config": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/hermes-sandbox.ps1 sync-config",
     "dev:fresh": "HERMES_HOME=$(mktemp -d -t hermes-fresh) electron-vite dev",
