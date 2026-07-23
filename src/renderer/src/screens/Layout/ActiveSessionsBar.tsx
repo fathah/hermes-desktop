@@ -1,8 +1,8 @@
 import { memo } from "react";
-import { Spinner, X, Plus } from "../../assets/icons";
+import { X, Plus } from "../../assets/icons";
+import { OrbLoader } from "../../components/OrbLoader";
 import { useI18n } from "../../components/useI18n";
 import ProfileAvatar from "../../components/common/ProfileAvatar";
-import { defaultColorForName } from "../../../../shared/profileColors";
 import type { ChatRun } from "./chatRuns";
 
 export interface ProfileAppearance {
@@ -50,7 +50,6 @@ export const ActiveSessionsBar = memo(function ActiveSessionsBar({
           const active = run.runId === activeRunId;
           const label = run.title || t("sessions.newConversation");
           const appearance = getAppearance?.(run.profile);
-          const color = appearance?.color || defaultColorForName(run.profile);
           return (
             <div
               key={run.runId}
@@ -64,11 +63,10 @@ export const ActiveSessionsBar = memo(function ActiveSessionsBar({
             >
               {run.loading ? (
                 <span
-                  className="active-session-chip-avatar"
-                  style={{ background: color }}
+                  className="active-session-chip-avatar active-session-chip-orb"
                   aria-label={run.profile}
                 >
-                  <Spinner className="active-session-chip-spinner" size={12} />
+                  <OrbLoader state="composing" size={20} />
                 </span>
               ) : (
                 <ProfileAvatar

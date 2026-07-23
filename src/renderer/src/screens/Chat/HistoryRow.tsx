@@ -1,6 +1,6 @@
 import { memo, useState } from "react";
-import { Grid } from "react-loader-spinner";
 import { Brain, ChevronRight, Wrench } from "../../assets/icons";
+import { OrbLoader } from "../../components/OrbLoader";
 import { useI18n } from "../../components/useI18n";
 import { AttachmentChip } from "../../components/AttachmentChip";
 import { ToolGlyph, humanizeToolName } from "../../components/toolMeta";
@@ -56,14 +56,11 @@ export const ReasoningRow = memo(function ReasoningRow({
           onClick={() => setOpen((o) => !o)}
         >
           {active ? (
-            <Grid
-              visible={true}
-              height={13}
-              width={13}
-              radius={15}
-              color="#8b7cf6"
-              ariaLabel="thinking-loading"
-              wrapperClass="chat-reasoning-group-spinner"
+            <OrbLoader
+              state="solving"
+              size={20}
+              aria-label="thinking-loading"
+              className="chat-reasoning-group-spinner"
             />
           ) : (
             <Brain size={13} className="chat-reasoning-group-icon" />
@@ -286,14 +283,11 @@ export const ToolActivityGroup = memo(function ToolActivityGroup({
           onClick={() => setOpen((o) => !o)}
         >
           {active ? (
-            <Grid
-              visible={true}
-              height={13}
-              width={13}
-              radius={15}
-              color="#4aa8ff"
-              ariaLabel="tool-loading"
-              wrapperClass="chat-tool-group-spinner"
+            <OrbLoader
+              state="working"
+              size={20}
+              aria-label="tool-loading"
+              className="chat-tool-group-spinner"
             />
           ) : soloTool ? (
             <ToolGlyph

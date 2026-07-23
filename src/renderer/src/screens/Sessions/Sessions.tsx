@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback, useMemo, memo } from "react";
 import { Plus, Search, X, ChatBubble, Trash, Pencil } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
 import { confirmSessionRename } from "./confirmSessionRename";
+import { OrbLoader } from "../../components/OrbLoader";
 
 interface CachedSession {
   id: string;
@@ -725,12 +726,12 @@ function Sessions({
       {/* Content */}
       {loading ? (
         <div className="sessions-loading">
-          <div className="loading-spinner" />
+          <OrbLoader state="searching" size={64} />
         </div>
       ) : isShowingSearch ? (
         isSearching ? (
           <div className="sessions-loading">
-            <div className="loading-spinner" />
+            <OrbLoader state="searching" size={64} />
           </div>
         ) : searchResults.length === 0 ? (
           <div className="sessions-empty">

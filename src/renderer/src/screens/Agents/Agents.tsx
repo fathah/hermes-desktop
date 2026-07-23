@@ -3,6 +3,7 @@ import { Plus, ChatBubble, Pencil, X } from "../../assets/icons";
 import ProfileAvatar from "../../components/common/ProfileAvatar";
 import { AppModal, AppModalTitle } from "../../components/modal/AppModal";
 import { useI18n } from "../../components/useI18n";
+import { OrbLoader } from "../../components/OrbLoader";
 import { useProfileModal } from "../../components/profile/ProfileModalContext";
 import type {
   AgentSyncResult,
@@ -246,7 +247,7 @@ function Agents({
     return (
       <div className="agents-container">
         <div className="agents-loading">
-          <div className="loading-spinner" />
+          <OrbLoader state="searching" size={64} />
         </div>
       </div>
     );

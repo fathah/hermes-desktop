@@ -4,6 +4,7 @@ import { Wrench, Plug, Puzzle, Search, X } from "../../assets/icons";
 import { TOOL_ICONS, FALLBACK_TOOL_ICON } from "../../components/toolMeta";
 import Skills from "../Skills/Skills";
 import RemoteNotice from "../../components/RemoteNotice";
+import { OrbLoader } from "../../components/OrbLoader";
 
 interface ToolsetInfo {
   key: string;
@@ -597,7 +598,7 @@ function Tools({
     return (
       <div className="tools-container">
         <div className="tools-loading">
-          <div className="loading-spinner" />
+          <OrbLoader state="searching" size={64} />
         </div>
       </div>
     );

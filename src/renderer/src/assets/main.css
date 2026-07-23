@@ -703,15 +703,6 @@ body:has(.shell-vibrant),
   background: var(--bg-primary);
 }
 
-.loading-spinner {
-  width: 28px;
-  height: 28px;
-  border: 2.5px solid var(--border-bright);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -2438,11 +2429,10 @@ body:has(.shell-vibrant),
   line-height: 1;
 }
 
-.active-session-chip-spinner {
-  flex-shrink: 0;
-  /* Sits on the profile's colour-filled avatar circle. */
-  color: #fff;
-  animation: spin 0.8s linear infinite;
+/* Loading chips render a transparent, theme-aware thinking orb in the
+   avatar slot instead of the colour-filled circle, so no background here. */
+.active-session-chip-orb {
+  background: none;
 }
 
 .active-session-chip-title {
@@ -4277,6 +4267,20 @@ body:has(.shell-vibrant),
 .chat-avatar-agent {
   border-radius: 50px;
   overflow: hidden;
+}
+
+/* While loading, the avatar holds a monochrome thinking orb whose ink can wash
+   out against the near-black page. Back it with an *inverted* circle — light on
+   dark themes, dark on light themes (--text-primary) — and flip the orb ink to
+   match (the `invert` prop on OrbLoader) so it always reads as a dark orb on a
+   white disc (dark theme) or a light orb on a dark disc (light theme). Inset
+   the orb a touch so its dots sit inside the circle rather than clipping. */
+.chat-avatar-orb {
+  background: var(--text-primary);
+}
+
+.chat-avatar-orb canvas {
+  transform: scale(0.82);
 }
 
 .chat-avatar-agent img {

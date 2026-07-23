@@ -40,7 +40,7 @@ Visually the strip is a Safari-style tab bar: the strip uses the darker `--bg-se
 
 The bar always renders so it is always a drag area, but chips stay hidden only while the sole conversation is still a blank scratch chat.
 
-Chips show when more than one run is open, any run is loading, or any run has a session id/title (`showChips` in [[src/renderer/src/screens/Layout/ActiveSessionsBar.tsx#ActiveSessionsBar]]). When chips show, a browser-style new-tab **"+"** button (`.active-session-new`, `no-drag`) trails them and calls `onNew` → `handleNewChat` in [[src/renderer/src/screens/Layout/Layout.tsx]] to open a fresh conversation.
+Chips show when more than one run is open, any run is loading, or any run has a session id/title (`showChips` in [[src/renderer/src/screens/Layout/ActiveSessionsBar.tsx#ActiveSessionsBar]]). A loading chip renders a thinking-orbs [[loading-indicators|OrbLoader]] (`composing`, size 20) in place of its profile avatar — the orb's canvas is transparent and theme-aware, so `.active-session-chip-orb` drops the colour-filled avatar circle rather than painting the profile colour behind it. When chips show, a browser-style new-tab **"+"** button (`.active-session-new`, `no-drag`) trails them and calls `onNew` → `handleNewChat` in [[src/renderer/src/screens/Layout/Layout.tsx]] to open a fresh conversation.
 
 Because the bar doubles as the drag strip, [[src/renderer/src/screens/Layout/Layout.tsx]] renders it as the first child of `.content`; the verify-warning banner (when shown) sits just below it, clear of the drag layer.
 

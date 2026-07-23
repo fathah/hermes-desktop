@@ -12,6 +12,7 @@ import {
   Wand,
 } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
+import { OrbLoader } from "../../components/OrbLoader";
 
 interface KanbanProps {
   profile?: string;
@@ -680,7 +681,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
     return (
       <div className="kanban-container">
         <div className="schedules-loading">
-          <div className="loading-spinner" />
+          <OrbLoader state="searching" size={64} />
         </div>
       </div>
     );
@@ -1283,7 +1284,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
               </button>
             </div>
             <div className="schedules-modal-body">
-              {detailLoading && <div className="loading-spinner" />}
+              {detailLoading && <OrbLoader state="searching" size={20} />}
               {detail && (
                 <>
                   <div className="kanban-detail-meta">
