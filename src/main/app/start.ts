@@ -199,6 +199,32 @@ function createWindow(): void {
     if (OPEN_DEVTOOLS_ON_START) {
       mainWindow?.webContents.openDevTools({ mode: "detach" });
     }
+    // Vite can 504 stale optimized-dep hashes on the first Electron load after
+    // a re-optimize; reload once when React never mounts into #root.
+    // @lat [[main-process#Dev Vite loading]]
+    if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
+      const wc = mainWindow?.webContents;
+      if (!wc) return;
+      let reloaded = false;
+      setTimeout(() => {
+        if (reloaded || wc.isDestroyed()) return;
+        void wc
+          .executeJavaScript(
+            "Boolean(document.getElementById('root')?.firstElementChild)",
+            true,
+          )
+          .then((mounted) => {
+            if (!mounted && !reloaded && !wc.isDestroyed()) {
+              reloaded = true;
+              console.warn(
+                "[dev] Blank renderer after load — reloading for Vite deps",
+              );
+              wc.reload();
+            }
+          })
+          .catch(() => {});
+      }, 4000);
+    }
   });
 
   // Let mid-turn gateway sudo/secret prompts parent their modal to this window.

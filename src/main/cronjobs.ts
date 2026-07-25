@@ -245,16 +245,76 @@ async function isCronFallbackHealthy(
 
 async function remoteJsonError(res: Response): Promise<string> {
   try {
-    const body = (await res.json()) as { error?: string };
-    return body.error || `HTTP ${res.status}`;
+    const body = (await res.json()) as { error?: string; detail?: string };
+    return body.error || body.detail || `HTTP ${res.status}`;
   } catch {
     return `HTTP ${res.status}`;
   }
 }
 
+/** Dashboard (`hermes dashboard` / `serve`) cron REST root. */
+const DASHBOARD_CRON_BASE = "/api/cron/jobs";
+/** Gateway api_server cron REST root (legacy remote/SSH transport). */
+const GATEWAY_CRON_BASE = "/api/jobs";
+
+function isUnsupportedCronRoute(res: Response): boolean {
+  return res.status === 404 || res.status === 405;
+}
+
+/** Dashboard returns a bare array; gateway wraps `{ jobs: [...] }`. */
+export function cronJobsFromResponseBody(
+  body: unknown,
+): Record<string, unknown>[] {
+  if (Array.isArray(body)) return body as Record<string, unknown>[];
+  if (
+    body &&
+    typeof body === "object" &&
+    Array.isArray((body as { jobs?: unknown }).jobs)
+  ) {
+    return (body as { jobs: Record<string, unknown>[] }).jobs;
+  }
+  return [];
+}
+
+/**
+ * Prefer the dashboard cron surface; fall back to the gateway `/api/jobs`
+ * routes when the URL is a legacy api_server (404/405 on the dashboard path).
+ */
+async function remoteFetchCron(
+  jobPath: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const dashboardRes = await remoteFetch(
+    `${DASHBOARD_CRON_BASE}${jobPath}`,
+    init,
+  );
+  if (!isUnsupportedCronRoute(dashboardRes)) return dashboardRes;
+
+  // Gateway uses `/run` where the dashboard uses `/trigger`.
+  const gatewayPath = jobPath.endsWith("/trigger")
+    ? `${jobPath.slice(0, -"/trigger".length)}/run`
+    : jobPath;
+  return remoteFetch(`${GATEWAY_CRON_BASE}${gatewayPath}`, init);
+}
+
+function normalizeCronJobRows(
+  raw: Record<string, unknown>[],
+  includeDisabled: boolean,
+): CronJob[] {
+  const jobs: CronJob[] = [];
+  for (const job of raw) {
+    const normalized = normalizeJob(job);
+    if (!normalized) continue;
+    if (!includeDisabled && !normalized.enabled) continue;
+    jobs.push(normalized);
+  }
+  return jobs;
+}
+
 /**
  * Read cron jobs from the jobs.json file (async to avoid blocking the main process).
- * In remote mode, fetches from the Hermes API server's /api/jobs endpoint instead.
+ * In remote/SSH dashboard mode, fetches `/api/cron/jobs` (with gateway `/api/jobs`
+ * fallback for legacy transport).
  */
 export async function listCronJobs(
   includeDisabled = true,
@@ -275,22 +335,21 @@ export async function listCronJobs(
 
   if (isRemoteMode()) {
     try {
-      const qs = includeDisabled ? "?include_disabled=true" : "";
-      const res = await remoteFetch(`/api/jobs${qs}`);
+      // Dashboard list has no include_disabled flag — filter client-side.
+      // Gateway accepts ?include_disabled= when we fall back.
+      let res = await remoteFetch(DASHBOARD_CRON_BASE);
+      if (isUnsupportedCronRoute(res)) {
+        const qs = includeDisabled ? "?include_disabled=true" : "";
+        res = await remoteFetch(`${GATEWAY_CRON_BASE}${qs}`);
+      }
       if (!res.ok) {
         console.error("[CRON] remote list failed:", await remoteJsonError(res));
         return [];
       }
-      const body = (await res.json()) as { jobs?: Record<string, unknown>[] };
-      const raw = body.jobs || [];
-      const jobs: CronJob[] = [];
-      for (const job of raw) {
-        const normalized = normalizeJob(job);
-        if (!normalized) continue;
-        if (!includeDisabled && !normalized.enabled) continue;
-        jobs.push(normalized);
-      }
-      return jobs;
+      return normalizeCronJobRows(
+        cronJobsFromResponseBody(await res.json()),
+        includeDisabled,
+      );
     } catch (err) {
       console.error("[CRON] remote list error:", err);
       return [];
@@ -304,16 +363,7 @@ export async function listCronJobs(
     const content = await readFile(filePath, "utf-8");
     const parsed = JSON.parse(content);
     const raw = Array.isArray(parsed) ? parsed : parsed.jobs || [];
-    const jobs: CronJob[] = [];
-
-    for (const job of raw) {
-      const normalized = normalizeJob(job);
-      if (!normalized) continue;
-      if (!includeDisabled && !normalized.enabled) continue;
-      jobs.push(normalized);
-    }
-
-    return jobs;
+    return normalizeCronJobRows(raw, includeDisabled);
   } catch (err) {
     console.error("[CRON] Failed to read jobs file:", err);
     return [];
@@ -376,7 +426,7 @@ export async function createCronJob(
 
   if (isRemoteMode()) {
     try {
-      const res = await remoteFetch("/api/jobs", {
+      const res = await remoteFetchCron("", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -410,7 +460,7 @@ export async function removeCronJob(
   }
   if (isRemoteMode()) {
     try {
-      const res = await remoteFetch(`/api/jobs/${encodeURIComponent(jobId)}`, {
+      const res = await remoteFetchCron(`/${encodeURIComponent(jobId)}`, {
         method: "DELETE",
       });
       if (!res.ok) {
@@ -435,8 +485,10 @@ async function remoteJobAction(
     return { success: sshResult.success, error: sshResult.error };
   }
   try {
-    const res = await remoteFetch(
-      `/api/jobs/${encodeURIComponent(jobId)}/${action}`,
+    // Dashboard exposes `/trigger`; gateway uses `/run`. remoteFetchCron maps.
+    const dashboardAction = action === "run" ? "trigger" : action;
+    const res = await remoteFetchCron(
+      `/${encodeURIComponent(jobId)}/${dashboardAction}`,
       { method: "POST" },
     );
     if (!res.ok) {

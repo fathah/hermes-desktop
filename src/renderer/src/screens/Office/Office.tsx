@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Crown,
   DoorOpen,
@@ -14,7 +14,6 @@ import type { GpuStatus } from "../../../../shared/gpu";
 import { useI18n } from "../../components/useI18n";
 import oneChatIcon from "../../assets/images/one-chat.svg";
 import OneChatModal from "./OneChatModal";
-import Office3D from "./office3d/Office3D";
 import RepInteractionPanel from "./RepInteractionPanel";
 import { officeAgentsChanged, profilesToOfficeAgents } from "./office3d/agents";
 import {
@@ -36,6 +35,8 @@ import type { ShowroomCar } from "./office3d/objects/CarShowroom";
 import type { BuildingId, OfficeLocation } from "./office3d/core/locations";
 import type { AgentPlace, OfficeAgent } from "./office3d/core/types";
 import type { PlayerInteraction } from "./office3d/interactions/proximity";
+
+const Office3D = lazy(() => import("./office3d/Office3D"));
 
 function isEditableTarget(t: EventTarget | null): boolean {
   return (
@@ -516,24 +517,26 @@ function Office({ visible, profile }: OfficeProps): React.JSX.Element {
       </header>
 
       <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
-        <Office3D
-          agents={positionedAgents}
-          selectedId={selectedId}
-          onSelectAgent={setSelectedId}
-          location={location}
-          onFocusBuilding={setFocusedBuilding}
-          onAtmActivate={handleAtmActivate}
-          tellerLabel={t("office.repBankTeller")}
-          onTellerActivate={handleTellerActivate}
-          onCarActivate={handleCarActivate}
-          onDeskActivate={handleDeskActivate}
-          walkMode={walkMode}
-          playerLabel={t("office.you")}
-          onPlayerPlaceChange={handlePlayerPlace}
-          onNearbyInteraction={setNearby}
-          devMode={devMode}
-          onDevLog={setDevLog}
-        />
+        <Suspense fallback={null}>
+          <Office3D
+            agents={positionedAgents}
+            selectedId={selectedId}
+            onSelectAgent={setSelectedId}
+            location={location}
+            onFocusBuilding={setFocusedBuilding}
+            onAtmActivate={handleAtmActivate}
+            tellerLabel={t("office.repBankTeller")}
+            onTellerActivate={handleTellerActivate}
+            onCarActivate={handleCarActivate}
+            onDeskActivate={handleDeskActivate}
+            walkMode={walkMode}
+            playerLabel={t("office.you")}
+            onPlayerPlaceChange={handlePlayerPlace}
+            onNearbyInteraction={setNearby}
+            devMode={devMode}
+            onDevLog={setDevLog}
+          />
+        </Suspense>
 
         {/* Walk-mode toggle: drop in as an avatar / return to the sky view. */}
         {!devMode && (

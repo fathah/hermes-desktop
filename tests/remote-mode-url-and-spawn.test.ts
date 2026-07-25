@@ -105,6 +105,9 @@ import http from "http";
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  connModeRef.mode = "local";
+  sshTunnelUrlRef.value = "http://localhost:18642";
+  sshLocalPortRef.value = 18642;
 });
 
 describe("normaliseRemoteUrl", () => {
@@ -204,12 +207,13 @@ describe("Cron SSH fallback", () => {
       if (target === "http://127.0.0.1:18642/health") {
         return { ok: true } as Response;
       }
-      if (target === "http://127.0.0.1:18642/api/jobs?include_disabled=true") {
+      if (target === "http://127.0.0.1:18642/api/cron/jobs") {
         return {
           ok: true,
-          json: async () => ({
-            jobs: [{ id: "job-1", name: "Daily", schedule: "0 9 * * *" }],
-          }),
+          status: 200,
+          json: async () => [
+            { id: "job-1", name: "Daily", schedule: "0 9 * * *" },
+          ],
         } as Response;
       }
       throw new Error(`unexpected fetch target: ${target}`);
@@ -228,7 +232,51 @@ describe("Cron SSH fallback", () => {
     );
     expect(fetchSpy).toHaveBeenNthCalledWith(
       2,
-      "http://127.0.0.1:18642/api/jobs?include_disabled=true",
+      "http://127.0.0.1:18642/api/cron/jobs",
+      expect.any(Object),
+    );
+  });
+
+  it("falls back to gateway /api/jobs when the dashboard cron route is unsupported", async () => {
+    connModeRef.mode = "remote";
+    sshTunnelUrlRef.value = "http://example.com";
+
+    const fetchSpy = vi.fn(async (target: string) => {
+      if (target === "http://example.com/api/cron/jobs") {
+        return {
+          ok: false,
+          status: 405,
+          json: async () => ({ detail: "Method Not Allowed" }),
+        } as Response;
+      }
+      if (
+        target === "http://example.com/api/jobs?include_disabled=true"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            jobs: [{ id: "gw-1", name: "Legacy", schedule: "0 9 * * *" }],
+          }),
+        } as Response;
+      }
+      throw new Error(`unexpected fetch target: ${target}`);
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const { listCronJobs } = await import("../src/main/cronjobs");
+    const jobs = await listCronJobs();
+
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0].id).toBe("gw-1");
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      1,
+      "http://example.com/api/cron/jobs",
+      expect.any(Object),
+    );
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      2,
+      "http://example.com/api/jobs?include_disabled=true",
       expect.any(Object),
     );
   });
@@ -266,6 +314,17 @@ describe("Cron SSH fallback", () => {
   });
 });
 
+describe("cronJobsFromResponseBody", () => {
+  it("accepts both dashboard arrays and gateway {jobs} wrappers", async () => {
+    const { cronJobsFromResponseBody } = await import("../src/main/cronjobs");
+    expect(cronJobsFromResponseBody([{ id: "a" }])).toEqual([{ id: "a" }]);
+    expect(cronJobsFromResponseBody({ jobs: [{ id: "b" }] })).toEqual([
+      { id: "b" },
+    ]);
+    expect(cronJobsFromResponseBody(null)).toEqual([]);
+  });
+});
+
 describe("testRemoteConnection URL probe", () => {
   it("strips trailing /v1 before appending /health", async () => {
     // Capture the URL handed to http.request by the health probe.
@@ -280,7 +339,11 @@ describe("testRemoteConnection URL probe", () => {
         // Find the response callback (last arg) and immediately fire it
         // with a fake 200 so the promise resolves cleanly.
         const cb = rest[rest.length - 1] as (res: unknown) => void;
-        cb({ statusCode: 200, resume: () => {} });
+        cb({
+          statusCode: 200,
+          headers: { "content-type": "application/json" },
+          resume: () => {},
+        });
         // Stub minimal request handle
         return {
           on: () => {},
@@ -294,6 +357,30 @@ describe("testRemoteConnection URL probe", () => {
 
     await testRemoteConnection("http://127.0.0.1:8642/V1/");
     expect(capturedTarget).toBe("http://127.0.0.1:8642/health");
+
+    reqSpy.mockRestore();
+  });
+
+  it("rejects dashboard SPA HTML /health as not a gateway api_server", async () => {
+    const reqSpy = vi
+      .spyOn(http, "request")
+      .mockImplementation((_target: unknown, ...rest: unknown[]) => {
+        const cb = rest[rest.length - 1] as (res: unknown) => void;
+        cb({
+          statusCode: 200,
+          headers: { "content-type": "text/html; charset=utf-8" },
+          resume: () => {},
+        });
+        return {
+          on: () => {},
+          end: () => {},
+          destroy: () => {},
+        } as unknown as ReturnType<typeof http.request>;
+      });
+
+    await expect(
+      testRemoteConnection("http://127.0.0.1:9119"),
+    ).resolves.toBe(false);
 
     reqSpy.mockRestore();
   });

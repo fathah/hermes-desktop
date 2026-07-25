@@ -43,6 +43,8 @@ This matches the reference `apps/desktop`, which has no `/v1` chat path at all (
 
 So `ensureClient` distinguishes two failures: a **genuinely absent** dashboard (`startDashboard` → `running:false`) latches the negative flag and (auto mode) drops to legacy gateway `/v1`; a **transient** WS drop while the dashboard is up (a "socket hang up" from a tunnel blip) instead **retries the connect** (up to 3×, re-running `startDashboard` each time to re-establish the SSH tunnel). If it still can't connect, it throws a `dashboardWasReachable`-tagged error so `sendMessage` **fails the turn for the user to retry** rather than 405-ing on `/v1`.
 
+[[src/main/hermes.ts#isApiServerReady]] also rejects dashboard SPA HTML `/health` responses so a dashboard URL is never mistaken for a gateway with `/v1`. Remote connection tests prefer `/api/status` when chat transport is not `legacy` ([[src/main/hermes.ts#testRemoteConnection]]).
+
 ## Completion text reconciliation
 
 On `message.complete` the desktop reconciles the text streamed via `message.delta` with the turn's `final_response`, because a last-turn-only final would otherwise clobber text streamed before a tool call (#746).
