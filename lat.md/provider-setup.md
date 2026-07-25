@@ -34,7 +34,15 @@ The screen is organized as two tabs: Providers and Auxiliary Tasks. There is no 
 
 The **MODEL** section shows a read-only summary (logo + provider label + model). A **Change** button opens a picker modal with a **provider** picker (a custom `LogoSelect` — the brand logo renders inside the control and each option, which a native `<select>` can't do) and a native **model** dropdown. Confirming sets `modelProvider`/`modelName`/`modelBaseUrl`, which the existing debounced auto-save persists to `config.yaml` via `setModelConfig` (compat providers as `custom` + base_url). The **API key is resolved automatically** at runtime — the picker never asks for it.
 
+That modal (`model-select-modal`) is styled **light-based** (no strokes): the container border, header/footer dividers, and control outlines are dropped in favor of filled controls (`--bg-elevated`, `--bg-hover` on hover/open) — matching the branded config modal's treatment. Crucially it sets `overflow: visible` (the base `.models-modal` clips with `overflow: hidden`), so the `LogoSelect` dropdown — which is absolutely positioned and can extend past the modal — isn't clipped; the menu itself caps at `max-height` and scrolls internally when the provider list is long. Without the override the lower providers were hidden and unreachable.
+
 The provider list (`pickerProviders`) is sourced from the **configured providers** — the same set shown as LLM cards — NOT from which providers happen to have saved models: keyed FieldDef providers (`env[f.key]` set, in FieldDef order so Hermes One leads) plus named custom providers whose `customProviderEnvKey(label)` is set. So a freshly-keyed provider with no models yet still appears.
+
+### Native keys without a setup card still route
+
+Native-provider keys with no `PROVIDERS.setup` card carrying them (or only the OAuth variant, `envKey: ""`) must still resolve to their agent slug, or the picker silently drops them even with a key set — the Nous-missing-from-Change-modal bug.
+
+[[src/renderer/src/constants.ts#providerRouteForEnvKey]] consults an explicit `NATIVE_ENV_KEY_ROUTES` table after the setup/preset lookups: `NOUS_API_KEY → nous`, `GLM_API_KEY → zai`, `KIMI_API_KEY → kimi-coding`, `MINIMAX_API_KEY → minimax`, `MINIMAX_CN_API_KEY → minimax-cn`, `NVIDIA_API_KEY → nvidia`, `OPENCODE_ZEN_API_KEY → opencode-zen`, `OPENCODE_GO_API_KEY → opencode-go`, `HF_TOKEN → huggingface`, and `PERPLEXITY_API_KEY → custom` + its compat base URL. Slugs and env vars mirror hermes-agent's own registry (`plugins/model-providers/*`). A test enforces the invariant that **no** LLM-section FieldDef falls through to the dead `custom` + empty-base-URL fallback (`tests/constants.test.ts`).
 
 The **model** dropdown merges that provider's saved models with live discovery ([[src/renderer/src/hooks/useDiscoveredModels.ts#useDiscoveredModels]]) so a just-configured provider is immediately usable. On confirm, a discovered-only model is persisted via `addModel` first (so its key resolves and it reappears), and compat providers store `custom` + their `OPENAI_COMPATIBLE_BASE_URLS` base URL.
 
@@ -45,6 +53,20 @@ The debounced auto-save keeps a guard from the grid era that still applies: `sav
 The `SETTINGS_SECTIONS` "LLM Providers" section no longer renders a static key card for every known provider (an overwhelming wall of empty inputs). It shows only providers with a key set, plus an **Add provider** action.
 
 [[src/renderer/src/components/ProviderKeysSection.tsx#ProviderKeysSection]] renders the configured cards + an Add tile; Add opens a searchable picker modal (logo per provider) → a per-provider config modal (key input with show/hide, **Remove provider**). It's a presentation layer over the same `env` state + `handleChange`/`handleBlur`/`handleRemove` handlers in [[src/renderer/src/screens/Providers/Providers.tsx]], so persistence is unchanged (`setEnv`); removing clears the env var.
+
+Card and picker titles show the **plain provider name** ("Hermes One"), not the FieldDef's "… API Key" label — the section is a list of providers, and suffix-stripping the label isn't locale-safe. [[src/renderer/src/constants.ts#providerNameForEnvKey]] derives the display brand from the env key (via `providerRouteForEnvKey` + `displayBrandFromConfig`) and returns its `PROVIDERS.labels` entry, falling back to the FieldDef label for brandless keys; the picker search matches both the name and the full label. A test asserts every LLM-section key resolves to a name (`tests/constants.test.ts`).
+
+### Branded config modal
+
+The per-provider config modal (a keyed brand like Hermes One, not the custom flow) leads with the **provider logo tile + name + a verification pill** in the header, replacing the old key-icon-prefixed title.
+
+The pill's text/tone comes from the same live discovery the models list uses, lifted out of the body: `ProviderModelsManager` takes `showStatus={false}` and reports `{tone,text}` + the saved-model count up via `onStatusChange`/`onModelCountChange`, so there's one discovery hook and no duplicate status line.
+
+The **API key** shows as a masked preview (`maskKeyPreview` — leading scheme segment + last 4, dots between) with **Show** / **Replace** actions and a "used by N models" meta line, rather than a raw always-editable input. `replacingKey` state governs edit vs. preview: a keyed provider opens in preview (Replace swaps to the input), a fresh one opens straight in the input. Closing the modal (Done, ✕, or overlay click) flushes the key through `onBlur` first. The **Models** list drops the separate add row for a **+ Add model ID** pill that swaps to an inline autocomplete input (Enter/blur commits, Escape cancels), and each model chip's id is itself the click target for the definition editor. Only the first `MODELS_COLLAPSED` (10) chips render; the rest collapse behind a **+N more** toggle (`showAllModels`) so a large catalog doesn't flood the modal.
+
+Visually the modal is **stroke-free**: the logo tile, status pill, API-key field, model chips, and the add/more pills are all differentiated by fill/elevation (`--bg-elevated`/`--bg-hover`), not borders — only the header/footer keep a hairline divider for structure. Chip and control fonts are small (11–13px).
+
+The cards and picker are **ordered by display priority**, not the FieldDef declaration order (which groups providers by when they were added, surfacing niche endpoints like AIML API near the top). [[src/renderer/src/constants.ts#providerKeyRank]] ranks each env key: `PROVIDER_KEY_ORDER` front-loads the well-known providers (Hermes One first), unlisted keys keep their FieldDef order in the middle, and `PROVIDER_KEY_DEMOTED` (AIML API) sinks to the end. `ProviderKeysSection` sorts `keyItems` with a **stable** sort on the rank, so both the configured cards and the Add-provider picker share the ordering. A test pins Hermes One first and AIML last.
 
 The section is rendered **standalone, above the credential pool** rather than in the `SETTINGS_SECTIONS.map` position — it's the primary surface for configuring providers and the models the top active-model selector picks from, so it sits before the advanced multi-key pool. The map skips the `constants.sectionLlmProviders` entry (an inline title check returning null); other `SETTINGS_SECTIONS` (non-LLM) still render inline in place, after the pool.
 
@@ -63,6 +85,55 @@ Configured custom-provider cards are the **union** of three sources, deduped by 
 Sponsor/partner providers (and Hermes One itself) are OpenAI-compatible custom endpoints under the hood but are presented **first-class** — curated in-app, exactly like `hermesone`, with their own host-derived key and branding.
 
 To add one, mirror the Hermes One entries: a card in `PROVIDERS.setup` + `PROVIDER_CARDS` + a base URL in `OPENAI_COMPATIBLE_BASE_URLS` ([[src/renderer/src/constants.ts]]), a `URL_KEY_MAP` entry giving it a dedicated `<PARTNER>_API_KEY` in [[src/shared/url-key-map.ts]], and a `detectBrand` rule + logo in [[src/renderer/src/components/common/BrandLogo.tsx]].
+
+## Agent config sync for named providers
+
+Named OpenAI-compatible providers sync both ways between the desktop and the agent's config.yaml — a CLI-added provider appears in the desktop UI, and a desktop-added one is visible to `hermes model` / `--provider <slug>`.
+
+The agent reads two user-config shapes (`hermes-agent/hermes_cli/providers.py`): the `providers:` dict (`{slug: {name, base_url, key_env, transport}}`, resolved by `resolve_user_provider`) and the legacy `custom_providers:` list. [[src/main/agent-config-providers.ts]] is the bridge: it parses and text-edits those blocks with offset/line splicing (like `config.ts`), so user comments and unrelated keys survive round-trips.
+
+The agent's config scaffold writes an inline empty dict (`providers: {}`), which the line-based block parser can't index — the upsert rewrites that line into block form instead of appending (a second `providers:` key would make the YAML ambiguous; this miss silently disabled the Hermes One mirror on real configs). Any other unparseable flow-dict form is left untouched rather than risking a duplicate key.
+
+Sync is read-repair plus write-mirroring, all in the main process — the renderer needed no changes:
+
+- **Import (terminal → desktop)**: every [[src/main/providers-store.ts#listCustomProviders]] read first runs the import — each config.yaml `providers:` entry is upserted into `providers.json` (skipping hosts that own a dedicated brand card), and a terminal `key_env`'s value is aliased additively to the derived `CUSTOM_PROVIDER_<NAME>_KEY` so the desktop key field and the runtime's label-derived lookup resolve unchanged. Similarly [[src/main/models.ts#syncAgentConfigModels]] merges `custom_providers:` model entries into `models.json` on every [[src/main/models.ts#listModels]] call (not just first seed), deduped by provider + model id + base URL, tagging rows with `providerLabel` so cards group correctly.
+- **Mirror (desktop → terminal)**: [[src/main/providers-store.ts#upsertCustomProvider]] upserts a matching `providers:` entry (`name`/`base_url`/`key_env: CUSTOM_PROVIDER_<NAME>_KEY`) via [[src/main/agent-config-providers.ts#upsertAgentUserProvider]] — matching an existing entry by `key_env` then slug, and patching field values in place so a terminal user's extra fields (e.g. `transport:`) survive. [[src/main/providers-store.ts#removeCustomProvider]] removes the entry from **both** config.yaml shapes so the next read can't re-import a deleted provider.
+
+Config.yaml is effectively the shared source of truth: desktop edits land there, and imports copy it back into the desktop stores. All writes are best-effort (an unwritable config.yaml never breaks the desktop store) and idempotent (unchanged content is never rewritten).
+
+### Parses the agent's providers dict
+
+`listAgentUserProviders` reads `providers:` entries with the same `base_url`/`api`/`url` alias precedence and `key_env` handling as the agent's `resolve_user_provider`, scoped by indentation so nested maps can't shadow the identity fields.
+
+### Desktop saves mirror into config.yaml
+
+`upsertAgentUserProvider` appends a `providers:` block (creating config.yaml or the block when missing) and round-trips through the parser; unrelated top-level keys are untouched.
+
+### Store upserts propagate to the agent config
+
+A desktop `upsertCustomProvider` leaves a terminal-visible `providers:` entry carrying the provider's derived `CUSTOM_PROVIDER_<NAME>_KEY` as `key_env`.
+
+### Terminal-added providers import on read
+
+A config.yaml `providers:` entry surfaces as a desktop provider card/record on the next list read, with its custom `key_env` value aliased additively into the derived env var; entries pointing at dedicated-brand hosts (e.g. Groq) are skipped.
+
+### Model library merges custom_providers on every read
+
+`custom_providers:` entries added from the terminal **after** the library was first seeded appear via `listModels`, exactly once (idempotent dedup), with their API key persisted under the derived env var.
+
+### Desktop deletion cleans the agent config
+
+Removing a provider in the desktop also deletes its `providers:` entry, so it stays deleted instead of re-importing on the next read.
+
+### Legacy custom_providers removal
+
+`removeAgentCustomProviderEntry` drops a `custom_providers:` list item by display name while leaving sibling items and following top-level blocks intact.
+
+### First-party brands mirror as user providers
+
+A keyed Hermes One is mirrored into config.yaml as `providers: hermesone:` ([[src/main/agent-config-providers.ts#mirrorFirstPartyAgentProviders]], run on every model-library / provider-list read) — without creating a custom card, since the brand owns a dedicated key card.
+
+This exists because desktop models on `inference.hermesone.org` are saved as bare `custom` + base URL, and the agent resolves `/model … --provider custom` against the **session's current** base URL — a session sitting on another provider (e.g. Nous) would send the Hermes One model to the wrong endpoint (the hermesone-swift → Nous-proxy 404). The named entry gives the switch a slug that always carries the right URL and `HERMESONE_API_KEY`; the dashboard transport's [[src/renderer/src/screens/Chat/hooks/useDashboardChatTransport.ts#resolveDashboardProviderForModel]] correspondingly matches **any** gateway provider row by base URL (named user providers included, not just `custom:*` rows) before ever falling back to bare `custom`.
 
 ## Models live under each provider (OpenCode-style)
 

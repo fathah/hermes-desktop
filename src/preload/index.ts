@@ -22,11 +22,17 @@ import type {
 import type { ChatToolEvent } from "../shared/chat-stream";
 import type {
   DeviceCodeInfo,
+  EnsureHermesOneKeyResult,
   HermesAccount,
   HermesAccountUser,
+  HermesOneCreditsResult,
 } from "../shared/account";
 import type { AgentSyncResult, AgentSyncStatus } from "../shared/agent-sync";
 import type { GpuPreferenceMode, GpuStatus } from "../shared/gpu";
+import type {
+  SshHermesTargetInspection,
+  SshDockerProvisionResult,
+} from "../shared/ssh-docker";
 
 /**
  * Mirror of the renderer-side `CredentialPoolEntry` ambient type
@@ -209,6 +215,13 @@ const hermesAPI = {
     ipcRenderer.invoke("hermes-account-get", profile),
   accountLogout: (profile?: string): Promise<{ success: boolean }> =>
     ipcRenderer.invoke("hermes-account-logout", profile),
+  // Auto-provision a Hermes One Inference key from the signed-in account
+  // (no-op when the profile already has one), and read the account's
+  // AI-credit balance for the Providers account card.
+  ensureHermesOneKey: (profile?: string): Promise<EnsureHermesOneKeyResult> =>
+    ipcRenderer.invoke("hermesone-ensure-key", profile),
+  getHermesOneCredits: (): Promise<HermesOneCreditsResult> =>
+    ipcRenderer.invoke("hermesone-credits"),
 
   // Cloud agent sync (profiles ↔ signed-in Hermes One account)
   syncAgents: (): Promise<AgentSyncResult> =>
@@ -325,6 +338,7 @@ const hermesAPI = {
       keyPath: string;
       remotePort: number;
       localPort: number;
+      dockerContainerName?: string;
     };
   }> => ipcRenderer.invoke("get-connection-config"),
 
@@ -361,6 +375,7 @@ const hermesAPI = {
         keyPath: string;
         remotePort: number;
         localPort: number;
+        dockerContainerName?: string;
       };
     }) => void,
   ): (() => void) => {
@@ -384,6 +399,7 @@ const hermesAPI = {
             keyPath: string;
             remotePort: number;
             localPort: number;
+            dockerContainerName?: string;
           };
         },
       );
@@ -399,6 +415,7 @@ const hermesAPI = {
     keyPath: string,
     remotePort: number,
     localPort: number,
+    dockerContainerName?: string,
   ): Promise<boolean> =>
     ipcRenderer.invoke(
       "set-ssh-config",
@@ -408,6 +425,43 @@ const hermesAPI = {
       keyPath,
       remotePort,
       localPort,
+      dockerContainerName,
+    ),
+
+  inspectSshHermesTarget: (
+    host: string,
+    port: number,
+    username: string,
+    keyPath: string,
+    remotePort: number,
+    dockerContainerName?: string,
+  ): Promise<SshHermesTargetInspection> =>
+    ipcRenderer.invoke(
+      "inspect-ssh-hermes-target",
+      host,
+      port,
+      username,
+      keyPath,
+      remotePort,
+      dockerContainerName,
+    ),
+
+  provisionSshDockerTarget: (
+    host: string,
+    port: number,
+    username: string,
+    keyPath: string,
+    remotePort: number,
+    dockerContainerName: string,
+  ): Promise<SshDockerProvisionResult> =>
+    ipcRenderer.invoke(
+      "provision-ssh-docker-target",
+      host,
+      port,
+      username,
+      keyPath,
+      remotePort,
+      dockerContainerName,
     ),
 
   testRemoteConnection: (url: string, apiKey?: string): Promise<boolean> =>
@@ -737,6 +791,8 @@ const hermesAPI = {
   restartGateway: (profile?: string): Promise<boolean> =>
     ipcRenderer.invoke("restart-gateway", profile),
   gatewayStatus: (): Promise<boolean> => ipcRenderer.invoke("gateway-status"),
+  setNativeAppearance: (source: "dark" | "light" | "system"): Promise<void> =>
+    ipcRenderer.invoke("set-native-appearance", source),
   dashboardStatus: (profile?: string): Promise<DashboardStatus> =>
     ipcRenderer.invoke("dashboard-status", profile),
   freshDashboardWsUrl: (profile?: string): Promise<string> =>
@@ -1557,6 +1613,20 @@ const hermesAPI = {
     profile?: string,
   ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("add-mcp-server", input, profile),
+  updateMcpServer: (
+    originalName: string,
+    input: {
+      name: string;
+      type: "http" | "stdio";
+      url?: string;
+      command?: string;
+      args?: string[];
+      env?: Record<string, string>;
+      auth?: string;
+    },
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("update-mcp-server", originalName, input, profile),
   removeMcpServer: (
     name: string,
     profile?: string,

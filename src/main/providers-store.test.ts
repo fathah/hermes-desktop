@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { existsSync, mkdtempSync, rmSync } from "fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -102,6 +102,109 @@ describe("providers store", () => {
     });
     s.removeCustomProvider("default", "FAAB.AI"); // different casing, same anchor
     expect(s.listCustomProviders("default")).toEqual([]);
+  });
+
+  // @lat: [[provider-setup#Provider setup#Agent config sync for named providers#Terminal-added providers import on read]]
+  it("imports terminal-added providers: entries from config.yaml", async () => {
+    const { writeFileSync } = await import("fs");
+    writeFileSync(
+      join(mockState.hermesHome, "config.yaml"),
+      [
+        "providers:",
+        "  faab-ai:",
+        '    name: "Faab AI"',
+        '    base_url: "https://faab.ai/v1"',
+        '    key_env: "MY_FAAB_KEY"',
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(join(mockState.hermesHome, ".env"), "MY_FAAB_KEY=sk-123\n");
+
+    const s = await store();
+    const list = s.listCustomProviders("default");
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({
+      name: "Faab AI",
+      baseUrl: "https://faab.ai/v1",
+    });
+    // The terminal entry's key is aliased to the desktop's derived env var so
+    // the key field and the chat runtime's label-derived lookup both resolve.
+    const env = readFileSync(join(mockState.hermesHome, ".env"), "utf-8");
+    expect(env).toContain("CUSTOM_PROVIDER_FAAB_AI_KEY=sk-123");
+    // Original stays — aliasing is additive.
+    expect(env).toContain("MY_FAAB_KEY=sk-123");
+  });
+
+  it("skips config.yaml entries whose host has a dedicated brand card", async () => {
+    const { writeFileSync } = await import("fs");
+    writeFileSync(
+      join(mockState.hermesHome, "config.yaml"),
+      [
+        "providers:",
+        "  my-groq:",
+        '    base_url: "https://api.groq.com/openai/v1"',
+        "",
+      ].join("\n"),
+    );
+    const s = await store();
+    expect(s.listCustomProviders("default")).toEqual([]);
+  });
+
+  // @lat: [[provider-setup#Provider setup#Agent config sync for named providers#Store upserts propagate to the agent config]]
+  it("mirrors desktop upserts into config.yaml's providers: dict", async () => {
+    const s = await store();
+    s.upsertCustomProvider("default", {
+      name: "Faab AI",
+      baseUrl: "https://faab.ai/v1",
+    });
+    const config = readFileSync(
+      join(mockState.hermesHome, "config.yaml"),
+      "utf-8",
+    );
+    expect(config).toContain("faab-ai:");
+    expect(config).toContain('base_url: "https://faab.ai/v1"');
+    expect(config).toContain('key_env: "CUSTOM_PROVIDER_FAAB_AI_KEY"');
+  });
+
+  // @lat: [[provider-setup#Provider setup#Agent config sync for named providers#Desktop deletion cleans the agent config]]
+  it("removes the config.yaml entry on delete so it can't re-import", async () => {
+    const s = await store();
+    s.upsertCustomProvider("default", {
+      name: "Faab AI",
+      baseUrl: "https://faab.ai/v1",
+    });
+    s.removeCustomProvider("default", "Faab AI");
+    expect(s.listCustomProviders("default")).toEqual([]);
+    const config = readFileSync(
+      join(mockState.hermesHome, "config.yaml"),
+      "utf-8",
+    );
+    expect(config).not.toContain("faab-ai");
+  });
+
+  // @lat: [[provider-setup#Provider setup#Agent config sync for named providers#First-party brands mirror as user providers]]
+  it("mirrors a keyed Hermes One into config.yaml providers: without a custom card", async () => {
+    const { writeFileSync } = await import("fs");
+    writeFileSync(
+      join(mockState.hermesHome, ".env"),
+      "HERMESONE_API_KEY=hs-live-abc\n",
+    );
+    const s = await store();
+    // No custom-provider card — Hermes One owns a dedicated brand card.
+    expect(s.listCustomProviders("default")).toEqual([]);
+    const config = readFileSync(
+      join(mockState.hermesHome, "config.yaml"),
+      "utf-8",
+    );
+    expect(config).toContain("hermesone:");
+    expect(config).toContain('base_url: "https://inference.hermesone.org/v1"');
+    expect(config).toContain('key_env: "HERMESONE_API_KEY"');
+  });
+
+  it("does not create a providers: entry without a Hermes One key", async () => {
+    const s = await store();
+    s.listCustomProviders("default");
+    expect(existsSync(join(mockState.hermesHome, "config.yaml"))).toBe(false);
   });
 
   it("isolates providers per profile", async () => {

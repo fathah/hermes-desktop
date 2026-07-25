@@ -36,6 +36,14 @@ Remote session history uses the same selected authentication transport as manage
 
 [[src/main/remote-sessions.ts#remoteRequestJson]] routes direct OAuth session lists, search, messages, media, titles, and deletion through the persistent cookie partition. Token and SSH session requests retain the session-token header.
 
+## Authenticated management request boundary
+
+Direct Remote management features share one main-process request client that selects cookie or token authentication without exposing reusable credentials through IPC.
+
+[[src/main/remote-api.ts#remoteDashboardRequestJson]] resolves `auto` through the public status probe, routes OAuth through the persistent Electron partition, and routes token mode through `X-Hermes-Session-Token`. Probe failures never guess another transport or fall back to local state.
+
+[[src/main/remote-api.ts#RemoteDashboardApiError]] normalizes HTTP status for feature adapters. A `404` marks only that feature unsupported; OAuth login-required errors retain their original reauthentication signal.
+
 ## Failure behavior
 
 Missing or expired OAuth sessions stop Remote chat and request browser sign-in without falling back to local state or legacy `/v1`.
@@ -77,3 +85,11 @@ Insecure remote WebSockets use a one-shot loopback relay with an unguessable pat
 ### OAuth bearer suppression
 
 Once a Remote connection resolves to OAuth, shared request headers omit any stored token while token and SSH authentication remain unchanged.
+
+### Management authentication routing
+
+Management requests resolve `auto` before selecting token or OAuth transport, preserve profile scoping, skip probing for explicit modes, reject non-Remote callers, and retain OAuth login-required errors for reauthentication.
+
+### Management failure classification
+
+Token and OAuth HTTP failures expose the same structured status, with `404` identified as an unsupported feature instead of an application-wide connection failure.

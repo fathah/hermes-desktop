@@ -33,6 +33,8 @@ export default {
   local: "Local",
   manageProfiles: "Manage profiles",
   switchProfile: "Switch profile",
+  stopped: "Stopped",
+  noProfilesMatch: "No profiles match",
   defaultTag: "default",
   editAppearance: "Edit profile",
   editAppearanceFor: "Edit {{name}}",

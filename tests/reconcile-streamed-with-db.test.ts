@@ -1109,3 +1109,89 @@ describe("reconcileStreamedWithDb", () => {
     expect(merged.filter((m) => m.id === "user-active-image")).toHaveLength(1);
   });
 });
+
+/**
+ * The live reasoning stream is best-effort: dropped delta chunks leave the
+ * streamed row with garbled text whose reconciliation key can't match the
+ * canonical DB reasoning row, so both used to survive the merge — the user
+ * saw the corrupt partial AND the full thought stacked in one Thought block
+ * ("moon-k3 via provider ous" above "moonshotai/kimi-k3 via provider nous").
+ * A dropped-chunks preview is by construction a subsequence of the canonical
+ * text, which separates "same thought, chunks missing" (drop) from a distinct
+ * second reasoning segment (keep).
+ */
+describe("lossy streamed reasoning previews", () => {
+  const CANONICAL = "I'm running moonshotai/kimi-k3 via provider nous.";
+  const LOSSY = "I'm running moon-k3 via provider ous.";
+
+  // @lat: [[chat-commands#Slash command execution#Reasoning & tool activity rows#Reasoning reconciliation#Lossy live preview collapses into the DB row]]
+  it("drops a garbled streamed preview when the DB has the canonical row", () => {
+    const merged = reconcileStreamedWithDb(
+      [
+        STREAMED_USER("what model are you"),
+        STREAMED_REASONING(LOSSY, "r-lossy"),
+      ],
+      [DB_USER("what model are you", 1), DB_REASONING(CANONICAL, 2)],
+    );
+
+    const reasoning = merged.filter(
+      (m) => "kind" in m && m.kind === "reasoning",
+    );
+    expect(reasoning).toHaveLength(1);
+    expect((reasoning[0] as { text: string }).text).toBe(CANONICAL);
+  });
+
+  // @lat: [[chat-commands#Slash command execution#Reasoning & tool activity rows#Reasoning reconciliation#Distinct live segments survive]]
+  it("keeps a live second reasoning segment that is not a lossy duplicate", () => {
+    const SECOND = "Now checking the weather tool output.";
+    const merged = reconcileStreamedWithDb(
+      [
+        STREAMED_USER("hi"),
+        STREAMED_REASONING(CANONICAL, "r-seg-1"),
+        STREAMED_REASONING(SECOND, "r-seg-2"),
+      ],
+      [DB_USER("hi", 1), DB_REASONING(CANONICAL, 2)],
+    );
+
+    const texts = merged
+      .filter((m) => "kind" in m && m.kind === "reasoning")
+      .map((m) => (m as { text: string }).text);
+    expect(texts).toEqual([CANONICAL, SECOND]);
+  });
+
+  it("keeps a short thought that embeds only as scattered characters", () => {
+    // Review regression: a distinct short thought whose characters happen to
+    // appear in order inside the canonical text (as scattered 1-char
+    // fragments) is NOT a lossy preview and must survive the merge.
+    const merged = reconcileStreamedWithDb(
+      [STREAMED_USER("hi"), STREAMED_REASONING("abcdefghijkl", "r-scattered")],
+      [DB_USER("hi", 1), DB_REASONING("a1b2c3d4e5f6g7h8i9j0k1l2", 2)],
+    );
+
+    const texts = merged
+      .filter((m) => "kind" in m && m.kind === "reasoning")
+      .map((m) => (m as { text: string }).text);
+    expect(texts).toContain("abcdefghijkl");
+    expect(texts).toContain("a1b2c3d4e5f6g7h8i9j0k1l2");
+  });
+
+  // @lat: [[chat-commands#Slash command execution#Reasoning & tool activity rows#Reasoning reconciliation#Turn-scoped matching]]
+  it("does not cross-drop against a DB reasoning row from another turn", () => {
+    // Turn 1 is fully reconciled (DB); turn 2's live preview happens to be a
+    // subsequence of turn 1's canonical text but belongs to a different turn,
+    // so it must be kept.
+    const merged = reconcileStreamedWithDb(
+      [
+        STREAMED_USER("first", "u-1"),
+        STREAMED_USER("second", "u-2"),
+        STREAMED_REASONING(LOSSY, "r-turn-2"),
+      ],
+      [DB_USER("first", 1), DB_REASONING(CANONICAL, 2), DB_USER("second", 3)],
+    );
+
+    const texts = merged
+      .filter((m) => "kind" in m && m.kind === "reasoning")
+      .map((m) => (m as { text: string }).text);
+    expect(texts).toEqual([CANONICAL, LOSSY]);
+  });
+});

@@ -22,6 +22,7 @@ export default {
     "A folder exists here but isn't a valid Hermes installation — installing will delete and replace it.",
   confirmNotInherited:
     "If you installed Hermes somewhere else, or via the command line, it won't be carried over.",
+  cancelInstallation: "Cancel installation",
   confirmInstallBtn: "Install Hermes",
   useExistingBtn: "Use an existing installation",
   useExistingHint:

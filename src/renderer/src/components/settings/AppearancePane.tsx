@@ -7,12 +7,16 @@ import { useI18n } from "../useI18n";
 import type { GpuPreferenceMode, GpuStatus } from "../../../../shared/gpu";
 
 const GPU_MODES: GpuPreferenceMode[] = ["auto", "on", "off"];
+// Show two rows of the 4-col grid up front (7 themes + a "more" tile); the
+// rest stay one click away so the pane opens tidy.
+const THEME_PREVIEW_COUNT = 7;
 
 /** Theme, rounded corners, interface font, and hardware acceleration. */
 export default function AppearancePane(): React.JSX.Element {
   const { t } = useI18n();
   const { theme, setTheme, rounded, setRounded } = useTheme();
   const { font, setFont } = useFont();
+  const [showAllThemes, setShowAllThemes] = useState(false);
   // Hardware acceleration is fixed pre-ready, so a changed preference only
   // applies after a relaunch; `savedPref` tracks what's on disk, `bootPref`
   // what this process actually launched with (to decide the restart prompt).
@@ -49,6 +53,11 @@ export default function AppearancePane(): React.JSX.Element {
     savedPref !== null &&
     savedPref !== gpuStatus.bootPreference;
 
+  const hiddenThemeCount = THEMES.length - THEME_PREVIEW_COUNT;
+  const visibleThemes = showAllThemes
+    ? THEMES
+    : THEMES.slice(0, THEME_PREVIEW_COUNT);
+
   return (
     <div className="settings-modal-pane">
       <div className="settings-field">
@@ -56,7 +65,7 @@ export default function AppearancePane(): React.JSX.Element {
           {t("settings.theme.label")}
         </label>
         <div className="settings-theme-grid">
-          {THEMES.map((th) => {
+          {visibleThemes.map((th) => {
             const active = theme === th.id;
             return (
               <button
@@ -84,18 +93,26 @@ export default function AppearancePane(): React.JSX.Element {
               </button>
             );
           })}
-        </div>
-        <div className="settings-field-hint">
-          {t("settings.appearanceHint")}
+          {!showAllThemes && hiddenThemeCount > 0 && (
+            <button
+              type="button"
+              className="settings-theme-card settings-theme-more"
+              onClick={() => setShowAllThemes(true)}
+            >
+              {t("settings.theme.more", { count: hiddenThemeCount })}
+            </button>
+          )}
         </div>
       </div>
-      <div className="settings-field">
-        <div className="settings-theme-system">
-          <div>
-            <div className="settings-theme-system-label">
+
+      {/* Grouped preferences — one card, row dividers, control on the right. */}
+      <div className="settings-group">
+        <div className="settings-row">
+          <div className="settings-row-text">
+            <div className="settings-row-label">
               {t("settings.roundedCorners.label")}
             </div>
-            <div className="settings-theme-system-hint">
+            <div className="settings-row-hint">
               {t("settings.roundedCorners.hint")}
             </div>
           </div>
@@ -108,75 +125,72 @@ export default function AppearancePane(): React.JSX.Element {
             <span className="tools-toggle-track" />
           </label>
         </div>
-      </div>
-      <div className="settings-field">
-        <label className="settings-field-label">
-          {t("settings.font.label")}
-        </label>
-        <div className="settings-theme-options">
-          {FONT_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              className={`settings-theme-option ${font === opt.value ? "active" : ""}`}
-              style={{ fontFamily: opt.stack }}
-              onClick={() => setFont(opt.value)}
-            >
-              {t(opt.label)}
-            </button>
-          ))}
-        </div>
-        <div className="settings-field-hint">{t("settings.font.hint")}</div>
-      </div>
-      {gpuStatus !== null && savedPref !== null && (
-        <div className="settings-field">
-          <label className="settings-field-label">
-            {t("settings.hardwareAcceleration.label")}
-          </label>
-          <div className="settings-theme-options">
-            {GPU_MODES.map((mode) => (
+
+        <div className="settings-row">
+          <div className="settings-row-text">
+            <div className="settings-row-label">{t("settings.font.label")}</div>
+            <div className="settings-row-hint">{t("settings.font.hint")}</div>
+          </div>
+          <div className="settings-seg">
+            {FONT_OPTIONS.map((opt) => (
               <button
-                key={mode}
-                className={`settings-theme-option ${savedPref === mode ? "active" : ""}`}
-                onClick={() => selectGpuMode(mode)}
+                key={opt.value}
+                type="button"
+                className={`settings-seg-btn ${font === opt.value ? "active" : ""}`}
+                style={{ fontFamily: opt.stack }}
+                onClick={() => setFont(opt.value)}
               >
-                {t(`settings.hardwareAcceleration.${mode}`)}
+                {t(opt.label)}
               </button>
             ))}
           </div>
-          <div className="settings-field-hint">
-            {t("settings.hardwareAcceleration.hint")}
+        </div>
+
+        {gpuStatus !== null && savedPref !== null && (
+          <div className="settings-row">
+            <div className="settings-row-text">
+              <div className="settings-row-label">
+                {t("settings.hardwareAcceleration.label")}
+              </div>
+              <div className="settings-row-hint">
+                {gpuEnvForced
+                  ? t("settings.hardwareAcceleration.envOverride")
+                  : t("settings.hardwareAcceleration.hint")}
+              </div>
+            </div>
+            <div className="settings-seg">
+              {GPU_MODES.map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={`settings-seg-btn ${savedPref === mode ? "active" : ""}`}
+                  onClick={() => selectGpuMode(mode)}
+                >
+                  {t(`settings.hardwareAcceleration.${mode}`)}
+                </button>
+              ))}
+            </div>
           </div>
-          {gpuEnvForced && (
-            <div className="settings-field-hint">
-              {t("settings.hardwareAcceleration.envOverride")}
-            </div>
-          )}
-          {gpuSaveError && (
-            <div className="settings-field-hint" style={{ color: "#ef4444" }}>
-              {t("settings.hardwareAcceleration.saveFailed")}
-            </div>
-          )}
-          {gpuRestartNeeded && !gpuSaveError && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                marginTop: 8,
-              }}
-            >
-              <span className="settings-field-hint" style={{ margin: 0 }}>
-                {t("settings.hardwareAcceleration.restartToApply")}
-              </span>
-              <button
-                type="button"
-                className="settings-theme-option"
-                onClick={() => void window.hermesAPI.relaunchApp()}
-              >
-                {t("settings.hardwareAcceleration.restartNow")}
-              </button>
-            </div>
-          )}
+        )}
+      </div>
+
+      {gpuSaveError && (
+        <div className="settings-field-hint" style={{ color: "#ef4444" }}>
+          {t("settings.hardwareAcceleration.saveFailed")}
+        </div>
+      )}
+      {gpuRestartNeeded && !gpuSaveError && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span className="settings-field-hint" style={{ margin: 0 }}>
+            {t("settings.hardwareAcceleration.restartToApply")}
+          </span>
+          <button
+            type="button"
+            className="settings-seg-btn"
+            onClick={() => void window.hermesAPI.relaunchApp()}
+          >
+            {t("settings.hardwareAcceleration.restartNow")}
+          </button>
         </div>
       )}
     </div>

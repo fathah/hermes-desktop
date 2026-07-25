@@ -8,6 +8,9 @@ import {
   OPENAI_COMPATIBLE_BASE_URLS,
   DASHSCOPE_ENDPOINTS,
   THEME_OPTIONS,
+  providerKeyRank,
+  providerNameForEnvKey,
+  providerRouteForEnvKey,
 } from "../src/renderer/src/constants";
 
 // ─── PROVIDERS ──────────────────────────────────────────
@@ -244,6 +247,101 @@ describe("LOCAL_PRESETS", () => {
   it("maps every preset id to an OpenAI-compatible base URL", () => {
     for (const preset of LOCAL_PRESETS) {
       expect(OPENAI_COMPATIBLE_BASE_URLS[preset.id]).toBeTruthy();
+    }
+  });
+});
+
+// ─── providerRouteForEnvKey ─────────────────────────────
+
+// @lat: [[provider-setup#Provider setup#Active model is picked from configured providers#Native keys without a setup card still route]]
+describe("providerRouteForEnvKey", () => {
+  // Regression: NOUS_API_KEY (and other native-provider keys whose setup card
+  // is the OAuth variant or absent) fell through to the bare `custom` fallback,
+  // so the Providers tab's Change-model picker dropped them even with a key
+  // set. Each must route to its hermes-agent slug.
+  it("routes native-provider keys to their agent slugs", () => {
+    const native: Record<string, string> = {
+      NOUS_API_KEY: "nous",
+      GLM_API_KEY: "zai",
+      KIMI_API_KEY: "kimi-coding",
+      MINIMAX_API_KEY: "minimax",
+      MINIMAX_CN_API_KEY: "minimax-cn",
+      NVIDIA_API_KEY: "nvidia",
+      OPENCODE_ZEN_API_KEY: "opencode-zen",
+      OPENCODE_GO_API_KEY: "opencode-go",
+      HF_TOKEN: "huggingface",
+    };
+    for (const [envKey, slug] of Object.entries(native)) {
+      expect(providerRouteForEnvKey(envKey)).toEqual({
+        provider: slug,
+        baseUrl: "",
+      });
+    }
+  });
+
+  it("orders Hermes One first and AIML API last among LLM keys", () => {
+    const llm = SETTINGS_SECTIONS.find(
+      (s) => s.title === "constants.sectionLlmProviders",
+    )!;
+    const ordered = llm.items
+      .filter((f) => f.key !== "CUSTOM_API_KEY")
+      .map((f, i) => ({ key: f.key, i }))
+      .sort(
+        (a, b) => providerKeyRank(a.key) - providerKeyRank(b.key) || a.i - b.i,
+      )
+      .map((x) => x.key);
+
+    expect(ordered[0]).toBe("HERMESONE_API_KEY");
+    expect(ordered[ordered.length - 1]).toBe("AIMLAPI_API_KEY");
+    // A well-known provider outranks a niche one it followed in FieldDef order.
+    expect(ordered.indexOf("ANTHROPIC_API_KEY")).toBeLessThan(
+      ordered.indexOf("AIMLAPI_API_KEY"),
+    );
+    expect(ordered.indexOf("OPENAI_API_KEY")).toBeLessThan(
+      ordered.indexOf("OLLAMA_API_KEY"),
+    );
+  });
+
+  it("routes Perplexity as an OpenAI-compatible custom endpoint", () => {
+    expect(providerRouteForEnvKey("PERPLEXITY_API_KEY")).toEqual({
+      provider: "custom",
+      baseUrl: OPENAI_COMPATIBLE_BASE_URLS.perplexity,
+    });
+  });
+
+  // The provider cards/picker show plain provider names ("Hermes One"), not
+  // the FieldDef's "… API Key" label. Every LLM-section key must resolve to a
+  // name so no card falls back to the noisy label.
+  it("resolves a plain provider name for every LLM-provider key", () => {
+    const llm = SETTINGS_SECTIONS.find(
+      (s) => s.title === "constants.sectionLlmProviders",
+    );
+    expect(llm).toBeDefined();
+    for (const f of llm!.items) {
+      if (f.key === "CUSTOM_API_KEY") continue; // generic bucket — no brand
+      expect(
+        providerNameForEnvKey(f.key),
+        `${f.key} has no provider display name`,
+      ).toBeTruthy();
+    }
+  });
+
+  // Every password-type key in the LLM Providers section must resolve to a
+  // usable route: either a native agent slug or `custom` with a non-empty base
+  // URL. A bare `custom` route (empty base URL) is silently dropped by the
+  // active-model picker — exactly the bug that hid Nous Portal.
+  it("leaves no LLM-provider FieldDef on the dead custom fallback", () => {
+    const llm = SETTINGS_SECTIONS.find(
+      (s) => s.title === "constants.sectionLlmProviders",
+    );
+    expect(llm).toBeDefined();
+    for (const f of llm!.items) {
+      if (f.key === "CUSTOM_API_KEY") continue; // the generic bucket, by design
+      const route = providerRouteForEnvKey(f.key);
+      expect(
+        route.provider !== "custom" || route.baseUrl !== "",
+        `${f.key} falls through to the bare custom route`,
+      ).toBe(true);
     }
   });
 });

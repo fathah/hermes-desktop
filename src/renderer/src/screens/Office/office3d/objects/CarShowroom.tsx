@@ -4,6 +4,7 @@ import { Text } from "@react-three/drei";
 import * as THREE from "three";
 import { VehicleModel, car1GlbUrl, car2GlbUrl } from "./Traffic";
 import { Interactable } from "./Interactable";
+import { GlassRoof } from "./Roofs";
 import { StaffPerson } from "./StaffPerson";
 import { CHAR_MAN, CHAR_WOMAN } from "../core/characters";
 import {
@@ -42,7 +43,7 @@ function RotatingShowcaseCar({
   });
   return (
     <group ref={groupRef} position={position}>
-      <VehicleModel url={url} tint={tint} targetLen={2.6} />
+      <VehicleModel url={url} tint={tint} targetLen={3.5} />
     </group>
   );
 }
@@ -61,7 +62,9 @@ interface DisplayCar {
   name: string;
 }
 
-const DISPLAY_CARS: DisplayCar[] = [
+// Exported for the walk-mode proximity system, which needs each car's
+// showroom-local position to place its "Press E" interaction point.
+export const DISPLAY_CARS: DisplayCar[] = [
   {
     pos: [-4, 0, -7],
     rotY: Math.PI / 2 - 0.3,
@@ -106,7 +109,12 @@ const DISPLAY_CARS: DisplayCar[] = [
   },
 ];
 
-const HERO_CAR: ShowroomCar = { name: "Hermes S1 Aurum", tint: "#d4ac0d" };
+export const HERO_CAR: ShowroomCar = {
+  name: "Hermes S1 Aurum",
+  tint: "#d4ac0d",
+};
+/** The hero car's pedestal position in showroom-local coordinates. */
+export const HERO_CAR_POS: [number, number] = [1.5, 0];
 
 // Storefront pillars every 4 units; the middle bay is the open entrance.
 const PILLAR_ZS = [-10, -6, -2, 2, 6, 10];
@@ -120,11 +128,14 @@ const GLASS_BAYS = [0, 1, 3, 4]; // bay 2 (centre) stays open
 export const CarShowroom = memo(function CarShowroom({
   position = [SHOWROOM_X, 0, SHOWROOM_Z],
   interactive = false,
+  roof = false,
   onCarActivate,
 }: {
   position?: [number, number, number];
   /** Interior mode: display cars become hover/click interactables. */
   interactive?: boolean;
+  /** Mount the glass roof (city view, or walk mode indoors). */
+  roof?: boolean;
   onCarActivate?: (car: ShowroomCar) => void;
 } = {}): React.JSX.Element {
   const halfW = SHOWROOM_W / 2;
@@ -147,6 +158,13 @@ export const CarShowroom = memo(function CarShowroom({
           envMapIntensity={0.9}
         />
       </mesh>
+      {roof && (
+        <GlassRoof
+          width={SHOWROOM_W}
+          depth={SHOWROOM_D}
+          height={SHOWROOM_WALL_H + 0.06}
+        />
+      )}
       {/* Back (west) wall */}
       <mesh position={[-halfW, wallH / 2, 0]}>
         <boxGeometry args={[wallT, wallH, SHOWROOM_D]} />
@@ -247,7 +265,7 @@ export const CarShowroom = memo(function CarShowroom({
             ringRadius={1.5}
           >
             <group rotation={[0, c.rotY, 0]}>
-              <VehicleModel url={c.url} tint={c.tint} targetLen={2.3} />
+              <VehicleModel url={c.url} tint={c.tint} targetLen={3.3} />
             </group>
           </Interactable>
         ))}

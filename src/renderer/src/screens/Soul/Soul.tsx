@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Refresh } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
+import { OrbLoader } from "../../components/OrbLoader";
 
 interface SoulProps {
   profile?: string;
@@ -67,7 +68,7 @@ function Soul({ profile }: SoulProps): React.JSX.Element {
     return (
       <div className="soul-container">
         <div className="soul-loading">
-          <div className="loading-spinner" />
+          <OrbLoader state="searching" size={64} />
         </div>
       </div>
     );

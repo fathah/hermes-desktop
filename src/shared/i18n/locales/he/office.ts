@@ -56,6 +56,10 @@ export default {
   showroomCardHint:
     "הסתובבו באולם התצוגה — רכישת מכוניות לסוכנים שלכם תגיע בקרוב.",
   // Space representatives (bank teller interaction menu)
+  walkMode: "הסתובבות",
+  walkModeExit: "יציאה מהליכה (Esc)",
+  walkHint: "WASD / חצים לתנועה · Shift לריצה · Esc ליציאה",
+  you: "אתה",
   repBankTeller: "פקיד בנק",
   spaceBank: "בנק",
   repPanelAgentLabel: "סוכן",
@@ -74,7 +78,7 @@ export default {
   repBadgeReceiveOnly: "קבלה בלבד",
   repBalanceNoTransactable: "לסוכן זה אין עדיין חשבון עסקאות — פתחו אחד תחילה.",
   repBalanceEmpty: "אין עדיין יתרות אסימונים.",
-  repBalanceTotal: "סה\"כ",
+  repBalanceTotal: 'סה"כ',
   repCreateSuccess: "החשבון נפתח",
   repCreateExists: "לסוכן זה כבר יש חשבון בנק.",
   repStatusForeign: "סוכן זה מקושר לחשבון Hermes One אחר.",

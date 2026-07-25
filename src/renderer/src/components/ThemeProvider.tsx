@@ -6,6 +6,8 @@ import {
   THEME_STORAGE_KEY as STORAGE_KEY,
 } from "../constants";
 
+const THEME_APPEARANCE = new Map(THEMES.map((t) => [t.id, t.appearance]));
+
 /** "system" follows the OS preference; any other value is a theme id. */
 type Theme = "system" | string;
 
@@ -87,6 +89,18 @@ export function ThemeProvider({
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", resolved);
   }, [resolved]);
+
+  // Keep the native window appearance (macOS vibrancy material tone) in step
+  // with the theme. "System" passes through so its prefers-color-scheme still
+  // follows the OS; an explicit theme forces its own appearance so the sidebar
+  // material matches it instead of the OS setting.
+  useEffect(() => {
+    const source =
+      theme === "system"
+        ? "system"
+        : (THEME_APPEARANCE.get(resolved) ?? "dark");
+    void window.hermesAPI?.setNativeAppearance?.(source);
+  }, [theme, resolved]);
 
   // Apply data-radius attribute to <html> ("none" squares off all corners)
   useEffect(() => {

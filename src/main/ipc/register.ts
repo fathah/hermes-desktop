@@ -5,6 +5,7 @@ import {
   ipcMain,
   Menu,
   Notification,
+  nativeTheme,
   dialog,
   clipboard,
 } from "electron";
@@ -78,6 +79,7 @@ import {
 } from "../hermes-agent-compat";
 import {
   addMcpServer,
+  updateMcpServer,
   installMcpCatalogEntry,
   listMcpCatalog,
   listMcpServers,
@@ -92,6 +94,10 @@ import {
   detectDeviceCode,
 } from "../hermes-auth";
 import { startDeviceLogin, cancelDeviceLogin } from "../hermes-account";
+import {
+  ensureHermesOneApiKey,
+  fetchHermesOneCredits,
+} from "../hermesone-provision";
 import {
   syncAgents,
   getAgentSyncStatus,
@@ -397,6 +403,10 @@ import {
   sshRunDump,
   sshDiscoverMemoryProviders,
 } from "../ssh-remote";
+import {
+  sshInspectHermesTarget,
+  sshProvisionDockerTarget,
+} from "../ssh-docker";
 
 export interface IpcContext {
   activeRuns: Map<string, () => void>;
@@ -836,8 +846,8 @@ export function registerIpcHandlers(context: IpcContext): void {
   // Hermes account sign-in — OAuth 2.0 Device Authorization Grant against the
   // Hermes backend. Streams progress to the renderer's modal, opens the browser
   // approval page once the code is issued, and stores the encrypted session.
-  ipcMain.handle("hermes-account-login", (event, profile?: string) =>
-    startDeviceLogin(profile, {
+  ipcMain.handle("hermes-account-login", async (event, profile?: string) => {
+    const result = await startDeviceLogin(profile, {
       onCode: (info) => {
         if (event.sender.isDestroyed()) return;
         // Show the code in the modal, then open the browser to approve it.
@@ -848,8 +858,15 @@ export function registerIpcHandlers(context: IpcContext): void {
         if (event.sender.isDestroyed()) return;
         event.sender.send("hermes-account-login-progress", chunk);
       },
-    }),
-  );
+    });
+    // Convenience auto-provision: a fresh sign-in should yield model access
+    // without hand-adding keys. Best-effort and local-only — the key lands in
+    // the local profile `.env`, which remote/SSH chat doesn't read.
+    if (result.success && getConnectionConfig().mode === "local") {
+      void ensureHermesOneApiKey(profile).catch(() => {});
+    }
+    return result;
+  });
   ipcMain.handle("hermes-account-login-cancel", () => cancelDeviceLogin());
   // The account is device-wide (one Hermes One login for the whole app), but
   // account.json lives under whichever profile was active at sign-in. Resolve
@@ -862,6 +879,19 @@ export function registerIpcHandlers(context: IpcContext): void {
     clearAllAccounts();
     return { success: true };
   });
+  // Auto-provision a Hermes One Inference key from the signed-in account when
+  // the profile has none (idempotent — an existing key is never replaced, the
+  // backend shows the raw key only once). Local mode only: the key is written
+  // to the local profile `.env`, which remote/SSH chat doesn't read — issuing
+  // one there would strand an orphan key on the backend every screen visit.
+  ipcMain.handle("hermesone-ensure-key", (_event, profile?: string) => {
+    if (getConnectionConfig().mode !== "local") {
+      return { status: "error", error: "Local connections only." };
+    }
+    return ensureHermesOneApiKey(profile?.trim() || getActiveProfileNameSync());
+  });
+  // The signed-in account's AI-credit balance, shown on the account card.
+  ipcMain.handle("hermesone-credits", () => fetchHermesOneCredits());
 
   // Cloud agent sync — reconciles local profiles with the signed-in Hermes One
   // account's cloud agents. `agent-sync-updated` tells the renderer to reload
@@ -1251,12 +1281,21 @@ export function registerIpcHandlers(context: IpcContext): void {
       keyPath: string,
       remotePort: number,
       localPort: number,
+      dockerContainerName?: string,
     ) => {
       const current = getConnectionConfig();
       setConnectionConfig({
         ...current,
         mode: "ssh",
-        ssh: { host, port, username, keyPath, remotePort, localPort },
+        ssh: {
+          host,
+          port,
+          username,
+          keyPath,
+          remotePort,
+          localPort,
+          dockerContainerName: dockerContainerName?.trim() || "",
+        },
       });
       resetSshDashboardAvailability();
       notifyConnectionConfigChanged();
@@ -1337,6 +1376,52 @@ export function registerIpcHandlers(context: IpcContext): void {
         remotePort,
         localPort: 19642,
       }),
+  );
+
+  // Docker-backed SSH targets (issue #432): survey the remote (host install,
+  // ~/.hermes state, launcher hook, running Hermes containers) and provision
+  // the launcher hook + ~/.hermes symlink for a selected container. Both take
+  // explicit connection params so Settings/Welcome can inspect a draft config
+  // before saving it.
+  ipcMain.handle(
+    "inspect-ssh-hermes-target",
+    (
+      _event,
+      host: string,
+      port: number,
+      username: string,
+      keyPath: string,
+      remotePort: number,
+      dockerContainerName?: string,
+    ) =>
+      sshInspectHermesTarget(
+        { host, port, username, keyPath, remotePort, localPort: 19642 },
+        dockerContainerName?.trim() || "",
+      ),
+  );
+
+  ipcMain.handle(
+    "provision-ssh-docker-target",
+    async (
+      _event,
+      host: string,
+      port: number,
+      username: string,
+      keyPath: string,
+      remotePort: number,
+      dockerContainerName: string,
+    ) => {
+      const result = await sshProvisionDockerTarget(
+        { host, port, username, keyPath, remotePort, localPort: 19642 },
+        dockerContainerName,
+      );
+      if (result.ok) {
+        // The remote just gained a launcher/home it did not have — retry the
+        // dashboard probe immediately instead of waiting out the negative TTL.
+        resetSshDashboardAvailability();
+      }
+      return result;
+    },
   );
 
   ipcMain.handle("start-ssh-tunnel", async () => {
@@ -1705,6 +1790,18 @@ export function registerIpcHandlers(context: IpcContext): void {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh) return sshGatewayStatus(conn.ssh);
     return isGatewayRunning();
+  });
+
+  // Keep the native window appearance in step with the app's theme so the
+  // macOS sidebar vibrancy material is dark under a dark theme (and light under
+  // a light one) instead of following the system appearance — which is what
+  // made a dark theme on a light-mode Mac render a milky sidebar. "system" is
+  // passed through for the "System" theme so its `prefers-color-scheme` still
+  // tracks the OS. See the renderer's ThemeProvider.
+  ipcMain.handle("set-native-appearance", (_event, source: unknown) => {
+    if (source === "dark" || source === "light" || source === "system") {
+      nativeTheme.themeSource = source;
+    }
   });
 
   // Dashboard/WebSocket transport probe. This is intentionally separate from
@@ -2392,7 +2489,9 @@ export function registerIpcHandlers(context: IpcContext): void {
         getActiveProfileNameSync(),
       );
     }
-    return listModels();
+    // Pass the active profile so terminal-added `custom_providers:` entries in
+    // that profile's config.yaml are merged into the library on read.
+    return listModels(getActiveProfileNameSync());
   });
   ipcMain.handle(
     "add-model",
@@ -2887,6 +2986,11 @@ export function registerIpcHandlers(context: IpcContext): void {
     "add-mcp-server",
     (_event, input: McpServerInput, profile?: string) =>
       addMcpServer(input, profile),
+  );
+  ipcMain.handle(
+    "update-mcp-server",
+    (_event, originalName: string, input: McpServerInput, profile?: string) =>
+      updateMcpServer(originalName, input, profile),
   );
   ipcMain.handle(
     "remove-mcp-server",

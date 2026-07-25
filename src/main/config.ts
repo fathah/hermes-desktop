@@ -38,6 +38,10 @@ export interface SshConnectionConfig {
   keyPath: string;
   remotePort: number;
   localPort: number;
+  // Docker container on the SSH host that runs Hermes (issue #432). Used by
+  // the Settings/Welcome target inspection UI; the runtime itself routes
+  // through the provisioned remote launcher hook, not this name.
+  dockerContainerName?: string;
 }
 
 export type RemoteChatTransport = "auto" | "dashboard" | "legacy";
@@ -117,6 +121,7 @@ export function getConnectionConfig(): ConnectionConfig {
       keyPath: (ssh.keyPath as string) || "",
       remotePort: (ssh.remotePort as number) || 8642,
       localPort: (ssh.localPort as number) || 18642,
+      dockerContainerName: (ssh.dockerContainerName as string) || "",
     },
   };
 }

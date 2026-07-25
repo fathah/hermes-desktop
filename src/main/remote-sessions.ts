@@ -27,7 +27,7 @@ export interface RemoteSessionConfig {
   profile?: string;
 }
 
-type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
+type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 interface RemoteRequestOptions {
   method?: HttpMethod;

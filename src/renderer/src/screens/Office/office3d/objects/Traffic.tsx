@@ -7,6 +7,7 @@ import car2GlbUrl from "../assets/car2.glb?url";
 import truck1GlbUrl from "../assets/truck1.glb?url";
 import { seededRandom } from "../core/rng";
 import { vehicleClone, normalizeFootprint } from "../core/glb";
+import { getCrowdBodies } from "../core/collision";
 import { ROADS, ROAD_WIDTH, ROAD_Y, TRAFFIC_LEN } from "../core/cityPlan";
 
 export { car1GlbUrl, car2GlbUrl, truck1GlbUrl };
@@ -42,6 +43,21 @@ const YIELD_DIST = 9; // N-S traffic waits while E-W traffic is this close
 // Junction box half-extent along the direction of travel: half the crossing
 // road's width plus clearance so cars stop visibly short of the junction.
 const HALF_BOX = ROAD_WIDTH / 2 + 0.6;
+// ── People on the road (crowd bodies with place "outside") ────────────────
+// Cars never drive through a person: anyone in the lane corridor ahead makes
+// the car creep, then hard-stop — pedestrians, trip agents and the walk-mode
+// player all register in the same crowd, so all of them stop traffic.
+const PERSON_LANE_HALF = 1.7; // corridor half-width around the lane centre
+const PERSON_STOP = 3.0; // hard-stop bumper gap to a person ahead
+const PERSON_SLOW = 7.0; // creep inside this gap
+const PERSON_CREEP = 1.1; // creep speed while a person is in the slow zone
+
+/**
+ * Live vehicle positions as push-out circles for walk-mode player collision
+ * (see PlayerLayer). Mutated in place each simulation step; emptied when the
+ * TrafficLayer unmounts (no cars exist while the sim is paused indoors).
+ */
+export const TRAFFIC_OBSTACLES: { x: number; z: number; r: number }[] = [];
 
 interface TrafficVehicle {
   url: string;
@@ -91,7 +107,10 @@ function makeTraffic(): TrafficVehicle[] {
         : roll > 0.39
           ? car2GlbUrl
           : car1GlbUrl;
-      const targetLen = isTruck ? 3.4 : 2.3;
+      // Sized against PERSON_WORLD_HEIGHT (≈1.65): a car is ~2.5 person
+      // heights long, like the real world — smaller and people tower over
+      // the traffic.
+      const targetLen = isTruck ? 5.6 : 4.2;
       const cruise = (isTruck ? 3.2 : 4.5) + seededRandom(seed * 13 + 3) * 2.2;
       vehicles.push({
         url,
@@ -360,7 +379,13 @@ function disposeTrafficWorld(world: TrafficWorld): void {
   for (const fleet of world.fleets)
     for (const part of fleet.parts) part.mesh.dispose();
   for (const material of world.materials) material.dispose();
+  // No cars exist while the layer is unmounted (interiors) — the player
+  // must not collide with ghosts.
+  TRAFFIC_OBSTACLES.length = 0;
 }
+
+/** Scratch list of outdoor people, rebuilt each simulation step. */
+const outsidePeople: { x: number; z: number; r: number }[] = [];
 
 /** Wrapped distance from `v` forward to another position along the loop. */
 function gapAhead(v: TrafficVehicle, otherS: number): number {
@@ -381,6 +406,13 @@ function stepTraffic(world: TrafficWorld, dt: number): void {
   occX.fill(0);
   occZ.fill(0);
   nearX.fill(0);
+
+  // People currently outdoors — the only ones who can be on a road.
+  // (Object refs from the crowd registry; the array itself is reused.)
+  outsidePeople.length = 0;
+  for (const b of getCrowdBodies().values()) {
+    if (b.place === "outside") outsidePeople.push(b);
+  }
 
   // Pass 1: junction occupancy. A vehicle inside a box marks it for its
   // axis; E-W vehicles closing in on a box also flag it so N-S traffic
@@ -423,6 +455,25 @@ function stepTraffic(world: TrafficWorld, dt: number): void {
       if (bestGap < MIN_GAP) target = 0;
       else if (bestGap < SLOW_GAP) target = Math.min(target, leaderSpeed);
 
+      // People ahead in this lane's corridor: creep, then hard-stop. The
+      // gap is unwrapped (people only exist near the city centre, far from
+      // the loop seam).
+      if (target > 0) {
+        for (const p of outsidePeople) {
+          const cross = (v.axis === "x" ? p.z : p.x) - v.fixed;
+          if (Math.abs(cross) > PERSON_LANE_HALF + p.r) continue;
+          const along = v.axis === "x" ? p.x : p.z;
+          const gap = (along - v.s) * v.dir - v.halfLen - p.r;
+          if (gap > -1 && gap < PERSON_STOP) {
+            target = 0;
+            break;
+          }
+          if (gap >= PERSON_STOP && gap < PERSON_SLOW) {
+            target = Math.min(target, PERSON_CREEP);
+          }
+        }
+      }
+
       // Junction yielding — only when not already committed to a crossing.
       if (target > 0 && v.insideBox < 0) {
         const crossings = v.axis === "x" ? zRoadXs : xRoadZs;
@@ -442,7 +493,8 @@ function stepTraffic(world: TrafficWorld, dt: number): void {
   }
 
   // Pass 3: integrate. Ease toward the target speed so cars visibly brake
-  // and pull away instead of snapping.
+  // and pull away instead of snapping. Also refresh the live obstacle
+  // circles the walk-mode player collides against.
   for (let i = 0; i < vehicles.length; i++) {
     const v = vehicles[i];
     const target = desired[i];
@@ -453,7 +505,15 @@ function stepTraffic(world: TrafficWorld, dt: number): void {
     if (s > half) s -= TRAFFIC_LEN;
     else if (s < -half) s += TRAFFIC_LEN;
     v.s = s;
+
+    const o = (TRAFFIC_OBSTACLES[i] ??= { x: 0, z: 0, r: 0 });
+    o.x = v.axis === "x" ? v.s : v.fixed;
+    o.z = v.axis === "x" ? v.fixed : v.s;
+    // A circle can't match an oblong car; radius splits the difference
+    // between its half-length and half-width.
+    o.r = v.halfLen * 0.75;
   }
+  TRAFFIC_OBSTACLES.length = vehicles.length;
 }
 
 function writeInstanceMatrices(world: TrafficWorld): void {

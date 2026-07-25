@@ -2,6 +2,7 @@ import { Laptop, Server, Terminal, Wifi } from "lucide-react";
 import { useI18n } from "../useI18n";
 import { useSettings } from "./SettingsDataContext";
 import { CHAT_TRANSPORT_OPTIONS } from "./settingsHelpers";
+import SshDockerTargetSection from "./SshDockerTargetSection";
 
 /**
  * Local / Remote / SSH connection mode, chat transport, server config, and the
@@ -45,6 +46,8 @@ export default function ConnectionPane(): React.JSX.Element {
     setSshKeyPath,
     sshRemotePort,
     setSshRemotePort,
+    sshDockerContainer,
+    setSshDockerContainer,
     handleSaveConnection,
     handleTestConnection,
     handleRemoteOAuthLogin,
@@ -350,6 +353,18 @@ export default function ConnectionPane(): React.JSX.Element {
               })}
             </div>
           </div>
+          <SshDockerTargetSection
+            draft={{
+              host: sshHost,
+              port: parseInt(sshPort, 10) || 22,
+              username: sshUser,
+              keyPath: sshKeyPath,
+              remotePort: parseInt(sshRemotePort, 10) || 8642,
+            }}
+            value={sshDockerContainer}
+            onChange={setSshDockerContainer}
+            onProvisioned={() => void handleSaveConnection()}
+          />
           <div className="settings-field">
             <label className="settings-field-label">Chat transport</label>
             <div className="settings-theme-options">
