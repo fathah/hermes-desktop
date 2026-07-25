@@ -1157,6 +1157,43 @@ body:has(.shell-vibrant),
   margin-top: 32px;
 }
 
+/* ---- Graphnosis pairing card ---- */
+.onboard-graphnosis {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  width: 100%;
+  max-width: 420px;
+  margin-top: 34px;
+  padding: 18px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  text-align: left;
+}
+
+.onboard-graphnosis-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #c3c8d8;
+}
+
+.onboard-graphnosis-body {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #8b91a5;
+  text-wrap: pretty;
+}
+
+.onboard-graphnosis .onboard-btn-glass {
+  padding: 10px 20px;
+  font-size: 14px;
+}
+
 /* ---- Field + info card (Install / Setup) ---- */
 .onboard-field-label {
   align-self: flex-start;
@@ -1584,32 +1621,6 @@ body:has(.shell-vibrant),
   font-size: 12px;
   color: var(--text-muted);
   margin: 0;
-}
-
-.welcome-graphnosis-card {
-  margin-top: 24px;
-  padding: 16px 18px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  background: var(--surface-elevated, rgba(255, 255, 255, 0.03));
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  max-width: 420px;
-  text-align: left;
-}
-
-.welcome-graphnosis-title {
-  font-size: 15px;
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-
-.welcome-graphnosis-body {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--text-muted);
 }
 
 /* ========================================================================
@@ -3399,7 +3410,8 @@ body:has(.shell-vibrant),
   align-items: center;
   gap: 10px;
   padding: 14px 16px;
-  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 7%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--text-primary) 7%, transparent);
 }
 .profile-switch-search-icon {
   flex-shrink: 0;

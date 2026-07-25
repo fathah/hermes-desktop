@@ -411,25 +411,25 @@ function Welcome({
         <p className="onboard-note">{t("welcome.installSizeHint")}</p>
       </div>
 
-      <div className="welcome-graphnosis-card">
-        <div className="welcome-graphnosis-copy">
-          <div className="welcome-graphnosis-title">
+      <div className="onboard-graphnosis">
+        <div>
+          <div className="onboard-graphnosis-title">
             {t("welcome.graphnosisTitle")}
           </div>
-          <p className="welcome-graphnosis-body">
+          <p className="onboard-graphnosis-body">
             {t("welcome.graphnosisBody")}
           </p>
         </div>
         <button
           type="button"
-          className="btn btn-secondary btn-sm"
+          className="onboard-btn onboard-btn-glass"
           onClick={() =>
             void window.hermesAPI.openExternal(
               "https://graphnosis.com/download",
             )
           }
         >
-          {t("welcome.graphnosisDownload")}
+          <span>{t("welcome.graphnosisDownload")}</span>
         </button>
       </div>
 
