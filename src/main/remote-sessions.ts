@@ -1,5 +1,7 @@
 import http from "http";
 import https from "https";
+import type { ConnectionConfig } from "./config";
+import { requestRemoteOAuthJson } from "./remote-oauth";
 import type { CachedSession } from "./session-cache";
 import {
   extractLeadingVisionImageFallback,
@@ -25,7 +27,7 @@ export interface RemoteSessionConfig {
   profile?: string;
 }
 
-type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
+type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 interface RemoteRequestOptions {
   method?: HttpMethod;
@@ -67,10 +69,24 @@ export function dashboardApiUrl(
 }
 
 export function remoteRequestJson<T>(
-  config: RemoteSessionConfig,
+  config: RemoteSessionConfig | ConnectionConfig,
   path: string,
   options: RemoteRequestOptions = {},
 ): Promise<T> {
+  if ("mode" in config) {
+    if (config.mode !== "remote") {
+      throw new Error(
+        "Remote dashboard API is available only in direct Remote mode.",
+      );
+    }
+    if (config.remoteAuthMode === "oauth") {
+      return requestRemoteOAuthJson(
+        dashboardApiUrl(config, path),
+        options,
+      ) as Promise<T>;
+    }
+  }
+
   const token = config.apiKey.trim();
   if (!token)
     throw new Error("Remote Hermes dashboard token is not configured.");

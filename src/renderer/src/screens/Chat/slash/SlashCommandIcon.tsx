@@ -35,7 +35,7 @@ import {
   Server,
   Settings,
   Share2,
-  Sparkles,
+  Puzzle,
   Target,
   Terminal,
   Undo2,
@@ -118,7 +118,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   // Info
   help: HelpCircle,
   tools: Wrench,
-  skills: Sparkles,
+  skills: Puzzle,
   "reload-skills": RefreshCw,
   kanban: Columns,
   schedules: Calendar,
@@ -196,7 +196,7 @@ export function SlashCommandIcon({
   const IconComponent: LucideIcon =
     ICON_MAP[cleanName] ??
     (category ? CATEGORY_DEFAULTS[category.toLowerCase()] : undefined) ??
-    Sparkles;
+    Zap;
 
   return <IconComponent size={size} className={className} />;
 }

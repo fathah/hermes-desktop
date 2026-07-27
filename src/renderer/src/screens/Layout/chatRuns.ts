@@ -68,9 +68,7 @@ export function selectProfileRunTransition(
   if (isScratchRun(active)) {
     return {
       activeRunId,
-      runs: runs.map((r) =>
-        r.runId === activeRunId ? { ...r, profile } : r,
-      ),
+      runs: runs.map((r) => (r.runId === activeRunId ? { ...r, profile } : r)),
     };
   }
 

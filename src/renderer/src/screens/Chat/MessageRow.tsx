@@ -1,8 +1,8 @@
-import { memo, useMemo, useState, useCallback, useEffect, useRef } from "react";
+import { memo, useMemo, useState, useCallback } from "react";
 import { formatDistanceToNowStrict } from "date-fns";
-import { Grid } from "react-loader-spinner";
 import { Copy, Check } from "lucide-react";
-import loadingGif from "../../assets/loadingo.gif";
+import ProfileAvatar from "../../components/common/ProfileAvatar";
+import { OrbLoader } from "../../components/OrbLoader";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
 import { AttachmentChip } from "../../components/AttachmentChip";
 import { MediaSegmentView } from "../../components/MediaImage";
@@ -88,115 +88,58 @@ function isChatBubbleMessage(msg: ChatMessage): msg is ChatBubbleMessage {
   );
 }
 
-/**
- * One full loop of `loadingo.gif`, in ms (119 frames × 40ms). Used to let the
- * animation finish its current loop after generation stops instead of freezing
- * mid-frame.
- */
-const GIF_LOOP_MS = 4760;
-
-/**
- * Captures the gif's first frame as a static PNG data URL, once, shared across
- * every avatar instance. Idle avatars (past turns) render this frozen frame so
- * the chat isn't full of perpetually-spinning gifs — only the in-flight turn's
- * avatar runs the live animation.
- */
-let frozenFramePromise: Promise<string> | null = null;
-function getFrozenFrame(): Promise<string> {
-  if (!frozenFramePromise) {
-    frozenFramePromise = new Promise<string>((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        try {
-          const canvas = document.createElement("canvas");
-          canvas.width = img.naturalWidth;
-          canvas.height = img.naturalHeight;
-          const ctx = canvas.getContext("2d");
-          if (!ctx) return reject(new Error("no 2d context"));
-          // drawImage right after load captures frame 0 (not yet advanced).
-          ctx.drawImage(img, 0, 0);
-          resolve(canvas.toDataURL("image/png"));
-        } catch (err) {
-          reject(err as Error);
-        }
-      };
-      img.onerror = () => reject(new Error("failed to load loadingo.gif"));
-      img.src = loadingGif;
-    });
-  }
-  return frozenFramePromise;
+/** Appearance of the agent whose turn a row belongs to, used to render its
+ *  profile avatar while idle. Name drives the letter/logo + default colour. */
+export interface AgentAvatarInfo {
+  name: string;
+  color?: string | null;
+  avatar?: string | null;
 }
 
 /**
- * Agent avatar. While `active` (the turn is generating) it plays the looping
- * `loadingo.gif`. When `active` goes false it doesn't freeze instantly — it
- * keeps animating until the end of the current loop, then swaps to a static
- * frozen frame so the stop lands on a clean loop boundary.
+ * Agent avatar. While `active` (the turn is generating) it shows the animated
+ * thinking-orb ([[loading-indicators]]) — the `solving` orb scaled to the
+ * avatar footprint via `style` ([[OrbLoader]] snaps the design to the nearest
+ * shipped preset); its ink follows the app theme. When `active` goes false it
+ * swaps straight to the agent's profile avatar so idle turns are identified by
+ * who produced them (no per-frame stop dance is needed — the canvas orb has no
+ * freeze-mid-frame problem the way the old gif did). With no known agent (e.g.
+ * the live typing indicator before any turn) the orb stays as the fallback.
  */
 export const HermesAvatar = memo(function HermesAvatar({
   size = 30,
   active = false,
+  agent,
 }: {
   size?: number;
   /** True only for the avatar of the turn currently being generated. */
   active?: boolean;
+  /** The agent whose profile avatar shows once the turn is idle. When absent
+   *  (e.g. the live typing indicator) the orb is used as the fallback. */
+  agent?: AgentAvatarInfo;
 }): React.JSX.Element {
-  const [frozenSrc, setFrozenSrc] = useState<string | null>(null);
-  const [playing, setPlaying] = useState(active);
-  // Re-keying the <img> on each play session restarts the gif from frame 0 so
-  // the loop clock below is accurate.
-  const [playKey, setPlayKey] = useState(0);
-  // Timestamp (performance.now) of the current play session's frame 0; set in
-  // the effect, never during render. 0 = not yet started.
-  const playStartRef = useRef(0);
-  const stopTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    getFrozenFrame()
-      .then((src) => {
-        if (!cancelled) setFrozenSrc(src);
-      })
-      .catch(() => {
-        /* fall back to the live gif if the snapshot can't be built */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (active) {
-      // (Re)start the animation immediately when generation begins.
-      if (stopTimer.current) clearTimeout(stopTimer.current);
-      if (!playing) {
-        setPlayKey((k) => k + 1);
-        playStartRef.current = performance.now();
-        setPlaying(true);
-      } else if (playStartRef.current === 0) {
-        // Mounted already playing (active on first render): anchor the loop clock.
-        playStartRef.current = performance.now();
-      }
-    } else if (playing) {
-      // Generation stopped: run out the rest of the current loop, then freeze.
-      const elapsed = (performance.now() - playStartRef.current) % GIF_LOOP_MS;
-      const remaining = GIF_LOOP_MS - elapsed;
-      if (stopTimer.current) clearTimeout(stopTimer.current);
-      stopTimer.current = setTimeout(() => setPlaying(false), remaining);
-    }
-    return () => {
-      if (stopTimer.current) clearTimeout(stopTimer.current);
-    };
-  }, [active, playing]);
+  const showOrb = active || !agent;
 
   return (
-    <div className="chat-avatar chat-avatar-agent">
-      {playing ? (
-        <img key={playKey} src={loadingGif} width={size} height={size} alt="" />
+    <div
+      className={`chat-avatar chat-avatar-agent${
+        showOrb ? " chat-avatar-orb" : ""
+      }`}
+    >
+      {showOrb ? (
+        <OrbLoader
+          state="composing"
+          size={64}
+          invert
+          style={{ width: size, height: size }}
+        />
       ) : (
-        <img src={frozenSrc ?? loadingGif} width={size} height={size} alt="" />
+        <ProfileAvatar
+          name={agent.name}
+          color={agent.color}
+          avatar={agent.avatar}
+          size={size}
+        />
       )}
     </div>
   );
@@ -221,6 +164,8 @@ interface MessageRowProps {
   /** False on continuation rows of a turn — render a spacer instead of the
    *  avatar so the turn reads as one grouped block. Defaults to true. */
   showAvatar?: boolean;
+  /** Appearance of the chatting agent, shown once the avatar goes idle. */
+  agent?: AgentAvatarInfo;
 }
 
 export const MessageRow = memo(function MessageRow({
@@ -230,6 +175,7 @@ export const MessageRow = memo(function MessageRow({
   onApprove,
   onDeny,
   showAvatar = true,
+  agent,
 }: MessageRowProps): React.JSX.Element {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
@@ -270,7 +216,7 @@ export const MessageRow = memo(function MessageRow({
     return (
       <div className={`chat-message chat-message-${msg.role}`}>
         {showAvatar ? (
-          <HermesAvatar active={isLoading && isLast} />
+          <HermesAvatar active={isLoading && isLast} agent={agent} />
         ) : (
           <AvatarSpacer />
         )}
@@ -303,7 +249,7 @@ export const MessageRow = memo(function MessageRow({
       {msg.role === "user" ? null : !showAvatar ? (
         <AvatarSpacer />
       ) : (
-        <HermesAvatar active={isLoading && isLast} />
+        <HermesAvatar active={isLoading && isLast} agent={agent} />
       )}
       <div
         className={`chat-bubble chat-bubble-${msg.role}${
@@ -332,14 +278,7 @@ export const MessageRow = memo(function MessageRow({
         )}
         {msg.isSlashLoader ? (
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Grid
-              visible={true}
-              height={13}
-              width={13}
-              radius={15}
-              color="#8b7cf6"
-              ariaLabel="running-command"
-            />
+            <OrbLoader state="working" size={20} aria-label="running-command" />
             <span>{msg.content}</span>
           </div>
         ) : (

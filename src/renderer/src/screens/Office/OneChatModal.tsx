@@ -1,11 +1,22 @@
 import { useState, useRef, useEffect } from "react";
 import { X, Send, Bot } from "lucide-react";
+import {
+  buildWorldActionSystemPrompt,
+  parseWorldActions,
+  stripWorldActionBlocks,
+  type WorldAction,
+} from "./office3d/interactions/worldActions";
 import type { OfficeAgent } from "./office3d/core/types";
 
 interface OneChatModalProps {
   open: boolean;
   onClose: () => void;
   agents: OfficeAgent[];
+  /**
+   * The agent's reply carried world actions ("go to the bank and check my
+   * balance"). The Office screen turns them into a mission.
+   */
+  onWorldActions?: (agentId: string, actions: WorldAction[]) => void;
 }
 
 interface ChatMessage {
@@ -15,10 +26,29 @@ interface ChatMessage {
   timestamp: number;
 }
 
+// Session rows → display messages. Assistant texts are stripped of
+// world-action blocks: the protocol JSON is machine traffic, never shown.
+function toChatMessages(
+  items: Array<{ kind: "user" | "assistant"; id: number; content?: string }>,
+): ChatMessage[] {
+  return items
+    .filter((it) => it.kind === "user" || it.kind === "assistant")
+    .map((it) => ({
+      id: `db-${it.id}`,
+      role: it.kind === "user" ? ("user" as const) : ("agent" as const),
+      text:
+        it.kind === "assistant"
+          ? stripWorldActionBlocks(it.content || "")
+          : it.content || "",
+      timestamp: Date.now(),
+    }));
+}
+
 export default function OneChatModal({
   open,
   onClose,
   agents,
+  onWorldActions,
 }: OneChatModalProps): React.JSX.Element | null {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -61,15 +91,10 @@ export default function OneChatModal({
           content?: string;
         }>;
         if (cancelled) return;
-        const loaded: ChatMessage[] = items
-          .filter((it) => it.kind === "user" || it.kind === "assistant")
-          .map((it) => ({
-            id: `db-${it.id}`,
-            role: it.kind === "user" ? "user" : "agent",
-            text: it.content || "",
-            timestamp: Date.now(),
-          }));
-        setMessages((prev) => ({ ...prev, [selectedAgentId]: loaded }));
+        setMessages((prev) => ({
+          ...prev,
+          [selectedAgentId]: toChatMessages(items),
+        }));
       } catch {
         // Session may not exist yet — that's fine
       }
@@ -129,15 +154,29 @@ export default function OneChatModal({
     setLoadingMap((prev) => ({ ...prev, [selectedAgentId]: true }));
     try {
       const sessionId = `office-${selectedAgentId}`;
-      const history = (messages[selectedAgentId] ?? [])
-        .filter((m) => m.role === "user" || m.role === "agent")
-        .map((m) => ({ role: m.role, content: m.text }));
-      await window.hermesAPI.sendMessage(
+      // The world-action vocabulary rides along as a request-side system
+      // message: it's never persisted, so transcripts and reloads stay clean.
+      const history = [
+        {
+          role: "system",
+          content: buildWorldActionSystemPrompt(target.name),
+        },
+        ...(messages[selectedAgentId] ?? [])
+          .filter((m) => m.role === "user" || m.role === "agent")
+          .map((m) => ({ role: m.role, content: m.text })),
+      ];
+      const result = await window.hermesAPI.sendMessage(
         text,
         selectedAgentId,
         sessionId,
         history,
       );
+      // World actions ship only in the fresh reply (reloads merely strip
+      // them), so a reopened transcript can never replay an old errand.
+      const { actions } = parseWorldActions(result?.response ?? "");
+      if (actions.length > 0) {
+        onWorldActions?.(selectedAgentId, actions);
+      }
       // Reload persisted messages from the session
       const items = (await window.hermesAPI.getSessionMessages(
         sessionId,
@@ -146,15 +185,10 @@ export default function OneChatModal({
         id: number;
         content?: string;
       }>;
-      const loaded: ChatMessage[] = items
-        .filter((it) => it.kind === "user" || it.kind === "assistant")
-        .map((it) => ({
-          id: `db-${it.id}`,
-          role: it.kind === "user" ? "user" : "agent",
-          text: it.content || "",
-          timestamp: Date.now(),
-        }));
-      setMessages((prev) => ({ ...prev, [selectedAgentId]: loaded }));
+      setMessages((prev) => ({
+        ...prev,
+        [selectedAgentId]: toChatMessages(items),
+      }));
     } catch (err) {
       // The response may have been persisted even though the promise rejected.
       // Try to reload from the database before showing a raw error.
@@ -167,14 +201,7 @@ export default function OneChatModal({
           id: number;
           content?: string;
         }>;
-        const loaded: ChatMessage[] = items
-          .filter((it) => it.kind === "user" || it.kind === "assistant")
-          .map((it) => ({
-            id: `db-${it.id}`,
-            role: it.kind === "user" ? "user" : "agent",
-            text: it.content || "",
-            timestamp: Date.now(),
-          }));
+        const loaded = toChatMessages(items);
         if (loaded.length > 0) {
           setMessages((prev) => ({
             ...prev,

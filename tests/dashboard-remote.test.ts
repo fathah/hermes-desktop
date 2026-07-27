@@ -1,7 +1,33 @@
 import http from "http";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConnectionConfig } from "../src/main/config";
+
+const oauthMocks = vi.hoisted(() => ({
+  buildRemoteOAuthWsUrl: vi.fn((baseUrl: string, ticket: string) => {
+    const url = new URL("/api/ws", baseUrl);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    url.searchParams.set("ticket", ticket);
+    return url.toString();
+  }),
+  mintRemoteOAuthWsTicket: vi.fn(),
+  probeRemoteAuthMode: vi.fn(),
+  remoteOAuthSessionState: vi.fn(),
+  requestRemoteOAuthJson: vi.fn(),
+}));
+
+const configMocks = vi.hoisted(() => ({
+  getConnectionConfig: vi.fn(),
+}));
+
+vi.mock("../src/main/remote-oauth", () => oauthMocks);
+vi.mock("../src/main/config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/main/config")>()),
+  getConnectionConfig: configMocks.getConnectionConfig,
+}));
+
 import {
+  freshDashboardWebSocketUrl,
+  getRemoteDashboardStatusForConfig,
   probeDashboardWebSocket,
   remoteDashboardConnectionFromConfig,
   sshDashboardConnectionFromTunnel,
@@ -34,6 +60,18 @@ afterEach(async () => {
   }
 });
 
+beforeEach(() => {
+  vi.clearAllMocks();
+  oauthMocks.buildRemoteOAuthWsUrl.mockImplementation(
+    (baseUrl: string, ticket: string) => {
+      const url = new URL("/api/ws", baseUrl);
+      url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+      url.searchParams.set("ticket", ticket);
+      return url.toString();
+    },
+  );
+});
+
 function remoteConnection(
   overrides: Partial<ConnectionConfig>,
 ): ConnectionConfig {
@@ -41,6 +79,7 @@ function remoteConnection(
     mode: "remote",
     remoteUrl: "https://hermes.example/v1/",
     apiKey: "dashboard-token",
+    remoteAuthMode: "auto",
     remoteChatTransport: "auto",
     sshChatTransport: "auto",
     ssh: {
@@ -82,12 +121,147 @@ describe("remoteDashboardConnectionFromConfig", () => {
     ).toBeNull();
   });
 
+  it("builds an OAuth connection without exposing token credentials", () => {
+    expect(
+      remoteDashboardConnectionFromConfig(
+        remoteConnection({ apiKey: "", remoteAuthMode: "oauth" }),
+      ),
+    ).toMatchObject({
+      authMode: "oauth",
+      baseUrl: "https://hermes.example",
+      token: "",
+      wsUrl: "",
+    });
+  });
+
   it("ignores non-remote modes", () => {
     expect(
       remoteDashboardConnectionFromConfig(
         remoteConnection({ mode: "ssh", remoteUrl: "https://hermes.example" }),
       ),
     ).toBeNull();
+  });
+});
+
+describe("OAuth remote dashboard status", () => {
+  // @lat: [[remote-dashboard-oauth#Test specifications#OAuth dashboard readiness]]
+  it("reports browser login needed without attempting authenticated REST", async () => {
+    oauthMocks.probeRemoteAuthMode.mockResolvedValue({
+      authMode: "oauth",
+      version: "0.2.0",
+    });
+    oauthMocks.remoteOAuthSessionState.mockResolvedValue({ signedIn: false });
+
+    await expect(
+      getRemoteDashboardStatusForConfig(
+        remoteConnection({ apiKey: "", remoteAuthMode: "auto" }),
+      ),
+    ).resolves.toMatchObject({
+      supported: true,
+      running: false,
+      needsOAuthLogin: true,
+      connection: { authMode: "oauth", token: "", wsUrl: "" },
+    });
+    expect(oauthMocks.requestRemoteOAuthJson).not.toHaveBeenCalled();
+    expect(oauthMocks.mintRemoteOAuthWsTicket).not.toHaveBeenCalled();
+  });
+
+  it("authenticates REST with cookies and probes WebSocket with a ticket", async () => {
+    const { url } = await startServer((_req, res) => {
+      res.statusCode = 404;
+      res.end();
+    });
+    let upgradeUrl = "";
+    server!.on("upgrade", (req, socket) => {
+      upgradeUrl = req.url || "";
+      socket.write(
+        "HTTP/1.1 101 Switching Protocols\r\n" +
+          "Upgrade: websocket\r\n" +
+          "Connection: Upgrade\r\n\r\n",
+      );
+      socket.destroy();
+    });
+    oauthMocks.probeRemoteAuthMode.mockResolvedValue({
+      authMode: "oauth",
+      version: "0.2.0",
+    });
+    oauthMocks.remoteOAuthSessionState.mockResolvedValue({ signedIn: true });
+    oauthMocks.requestRemoteOAuthJson.mockResolvedValue([]);
+    oauthMocks.mintRemoteOAuthWsTicket.mockResolvedValue("probe-once");
+
+    const result = await getRemoteDashboardStatusForConfig(
+      remoteConnection({
+        remoteUrl: url,
+        apiKey: "must-not-be-used",
+        remoteAuthMode: "auto",
+      }),
+    );
+
+    expect(result).toMatchObject({
+      supported: true,
+      running: true,
+      connection: { authMode: "oauth", token: "", wsUrl: "" },
+    });
+    expect(oauthMocks.requestRemoteOAuthJson).toHaveBeenCalledWith(
+      `${url}/api/sessions?limit=1`,
+    );
+    expect(upgradeUrl).toBe("/api/ws?ticket=probe-once");
+  });
+});
+
+describe("freshDashboardWebSocketUrl", () => {
+  // @lat: [[remote-dashboard-oauth#Test specifications#Fresh ticket per connection]]
+  it("mints a new OAuth ticket for every connection attempt", async () => {
+    configMocks.getConnectionConfig.mockReturnValue(
+      remoteConnection({ apiKey: "", remoteAuthMode: "oauth" }),
+    );
+    oauthMocks.probeRemoteAuthMode.mockResolvedValue({
+      authMode: "oauth",
+      version: null,
+    });
+    oauthMocks.mintRemoteOAuthWsTicket
+      .mockResolvedValueOnce("first")
+      .mockResolvedValueOnce("second");
+
+    await expect(freshDashboardWebSocketUrl()).resolves.toContain(
+      "ticket=first",
+    );
+    await expect(freshDashboardWebSocketUrl()).resolves.toContain(
+      "ticket=second",
+    );
+    expect(oauthMocks.mintRemoteOAuthWsTicket).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns the stable token URL without minting", async () => {
+    configMocks.getConnectionConfig.mockReturnValue(remoteConnection({}));
+    oauthMocks.probeRemoteAuthMode.mockResolvedValue({
+      authMode: "token",
+      version: null,
+    });
+
+    await expect(freshDashboardWebSocketUrl()).resolves.toBe(
+      "wss://hermes.example/api/ws?token=dashboard-token",
+    );
+    expect(oauthMocks.mintRemoteOAuthWsTicket).not.toHaveBeenCalled();
+  });
+
+  it("keeps an insecure remote target and token out of renderer IPC", async () => {
+    configMocks.getConnectionConfig.mockReturnValue(
+      remoteConnection({
+        remoteUrl: "http://gateway.lan",
+        apiKey: "private-dashboard-token",
+      }),
+    );
+    oauthMocks.probeRemoteAuthMode.mockResolvedValue({
+      authMode: "token",
+      version: null,
+    });
+
+    const result = await freshDashboardWebSocketUrl();
+
+    expect(result).toMatch(/^ws:\/\/127\.0\.0\.1:\d+\/[a-f0-9]{64}$/);
+    expect(result).not.toContain("gateway.lan");
+    expect(result).not.toContain("private-dashboard-token");
   });
 });
 

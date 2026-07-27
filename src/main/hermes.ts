@@ -163,7 +163,11 @@ export function getRemoteAuthHeader(): Record<string, string> {
       return { Authorization: `Bearer ${_sshRemoteApiKey}` };
     return {};
   }
-  if (conn.mode === "remote" && conn.apiKey) {
+  if (
+    conn.mode === "remote" &&
+    conn.remoteAuthMode !== "oauth" &&
+    conn.apiKey
+  ) {
     return { Authorization: `Bearer ${conn.apiKey}` };
   }
   return {};
@@ -275,6 +279,7 @@ function resolveRemoteApiKey(url: string, apiKey?: string): string {
   if (normaliseRemoteUrl(conn.remoteUrl) !== normaliseRemoteUrl(url)) {
     return "";
   }
+  if (conn.remoteAuthMode === "oauth") return "";
   return conn.apiKey;
 }
 
@@ -3378,7 +3383,15 @@ export function testRemoteConnection(
   apiKey?: string,
 ): Promise<boolean> {
   return new Promise((resolve) => {
-    const target = `${normaliseRemoteUrl(url)}/health`;
+    const conn = getConnectionConfig();
+    const configuredOAuth =
+      apiKey === undefined &&
+      conn.mode === "remote" &&
+      conn.remoteAuthMode === "oauth" &&
+      normaliseRemoteUrl(conn.remoteUrl) === normaliseRemoteUrl(url);
+    const target = `${normaliseRemoteUrl(url)}${
+      configuredOAuth ? "/api/status" : "/health"
+    }`;
     const mod = target.startsWith("https") ? https : http;
     const headers: Record<string, string> = {};
     const resolvedApiKey = resolveRemoteApiKey(url, apiKey);

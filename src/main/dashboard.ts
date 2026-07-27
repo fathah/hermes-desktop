@@ -15,8 +15,16 @@ import {
   HERMES_REPO,
 } from "./installer";
 import { buildLocalDashboardCliArgs } from "./dashboard-launch";
+import { dashboardWebSocketUrlForRenderer } from "./dashboard-websocket-relay";
 import { ensureLocalDashboardCompatibility } from "./hermes-agent-compat";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
+import {
+  buildRemoteOAuthWsUrl,
+  mintRemoteOAuthWsTicket,
+  probeRemoteAuthMode,
+  remoteOAuthSessionState,
+  requestRemoteOAuthJson,
+} from "./remote-oauth";
 import { ensureSshTunnel, getSshTunnelUrl } from "./ssh-tunnel";
 import { sshEnsureDashboard } from "./ssh-remote";
 import {
@@ -29,6 +37,7 @@ export interface DashboardConnection {
   baseUrl: string;
   wsUrl: string;
   token: string;
+  authMode?: "token" | "oauth";
   mode: "local" | "remote" | "ssh";
   profile?: string;
   pid?: number;
@@ -43,6 +52,7 @@ export interface DashboardStatus {
   connection?: DashboardConnection;
   error?: string;
   logPath?: string;
+  needsOAuthLogin?: boolean;
 }
 
 interface ManagedDashboard {
@@ -91,11 +101,13 @@ export function remoteDashboardConnectionFromConfig(
   if (config.mode !== "remote") return null;
   const baseUrl = normalizeRemoteDashboardBaseUrl(config.remoteUrl);
   const token = config.apiKey.trim();
-  if (!baseUrl || !token) return null;
+  const authMode = config.remoteAuthMode === "oauth" ? "oauth" : "token";
+  if (!baseUrl || (authMode === "token" && !token)) return null;
   return {
     baseUrl,
-    wsUrl: dashboardWsUrl(baseUrl, token),
-    token,
+    wsUrl: authMode === "oauth" ? "" : dashboardWsUrl(baseUrl, token),
+    token: authMode === "oauth" ? "" : token,
+    authMode,
     mode: "remote",
     profile: resolveProfile(profile),
   };
@@ -115,6 +127,7 @@ export function sshDashboardConnectionFromTunnel(
     baseUrl: normalizedBaseUrl,
     wsUrl: dashboardWsUrl(normalizedBaseUrl, cleanToken),
     token: cleanToken,
+    authMode: "token",
     mode: "ssh",
     profile: resolveProfile(profile),
   };
@@ -349,7 +362,15 @@ function dashboardStatusRequiresOAuth(status: unknown): boolean {
   );
 }
 
-async function getRemoteDashboardStatusForConfig(
+function errorNeedsOAuthLogin(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { needsOAuthLogin?: unknown }).needsOAuthLogin === true
+  );
+}
+
+export async function getRemoteDashboardStatusForConfig(
   config: ConnectionConfig,
   profile?: string,
 ): Promise<DashboardStatus> {
@@ -361,33 +382,55 @@ async function getRemoteDashboardStatusForConfig(
     };
   }
 
-  const connection = remoteDashboardConnectionFromConfig(config, profile);
-  if (!connection) {
+  const baseUrl = normalizeRemoteDashboardBaseUrl(config.remoteUrl);
+  if (!baseUrl) {
     return {
       supported: true,
       running: false,
-      error:
-        "Remote dashboard transport needs a valid dashboard URL and session token.",
+      error: "Remote dashboard transport needs a valid dashboard URL.",
     };
   }
 
+  let connection: DashboardConnection | undefined;
   try {
-    const status = await requestJson(
-      `${connection.baseUrl}/api/status`,
-      connection.token,
-    );
-    if (dashboardStatusRequiresOAuth(status)) {
+    const detected = await probeRemoteAuthMode(baseUrl);
+    connection =
+      remoteDashboardConnectionFromConfig(
+        { ...config, remoteAuthMode: detected.authMode },
+        profile,
+      ) ?? undefined;
+
+    if (detected.authMode === "oauth") {
+      if (!connection) throw new Error("Could not resolve remote OAuth URL.");
+      const sessionState = await remoteOAuthSessionState(baseUrl);
+      if (!sessionState.signedIn) {
+        return {
+          supported: true,
+          running: false,
+          connection,
+          needsOAuthLogin: true,
+          error: "Sign in with your browser to connect to this remote gateway.",
+        };
+      }
+
+      await requestRemoteOAuthJson(`${baseUrl}/api/sessions?limit=1`);
+      const ticket = await mintRemoteOAuthWsTicket(baseUrl);
+      await probeDashboardWebSocket({
+        ...connection,
+        wsUrl: buildRemoteOAuthWsUrl(baseUrl, ticket),
+      });
+      return { supported: true, running: true, connection };
+    }
+
+    if (!connection) {
       return {
         supported: true,
         running: false,
         error:
-          "Remote dashboard requires OAuth browser authentication. Token-based remote dashboard is supported now; OAuth ticket flow is not wired in Hermes One yet.",
+          "Remote dashboard transport needs a session token for this gateway.",
       };
     }
 
-    // /api/status is intentionally public upstream. Touch an authenticated
-    // endpoint as well so a legacy API key or stale token fails before the
-    // renderer opens the WebSocket.
     await requestJson(
       `${connection.baseUrl}/api/sessions?limit=1`,
       connection.token,
@@ -400,6 +443,7 @@ async function getRemoteDashboardStatusForConfig(
       supported: true,
       running: false,
       connection,
+      needsOAuthLogin: errorNeedsOAuthLogin(err),
       error: err instanceof Error ? err.message : String(err),
     };
   }
@@ -509,6 +553,37 @@ export async function getDashboardStatus(
   };
 }
 
+export async function freshDashboardWebSocketUrl(
+  profile?: string,
+): Promise<string> {
+  const config = getConnectionConfig();
+  if (config.mode === "remote") {
+    const baseUrl = normalizeRemoteDashboardBaseUrl(config.remoteUrl);
+    if (!baseUrl) throw new Error("Remote dashboard URL is invalid.");
+    const detected = await probeRemoteAuthMode(baseUrl);
+    if (detected.authMode === "oauth") {
+      const ticket = await mintRemoteOAuthWsTicket(baseUrl);
+      return dashboardWebSocketUrlForRenderer(
+        buildRemoteOAuthWsUrl(baseUrl, ticket),
+      );
+    }
+    const connection = remoteDashboardConnectionFromConfig(
+      { ...config, remoteAuthMode: "token" },
+      profile,
+    );
+    if (!connection) {
+      throw new Error("Remote dashboard session token is missing.");
+    }
+    return dashboardWebSocketUrlForRenderer(connection.wsUrl);
+  }
+
+  const status = await getDashboardStatus(profile);
+  if (!status.running || !status.connection?.wsUrl) {
+    throw new Error(status.error || "Dashboard WebSocket is unavailable.");
+  }
+  return dashboardWebSocketUrlForRenderer(status.connection.wsUrl);
+}
+
 export async function startDashboard(
   profile?: string,
 ): Promise<DashboardStatus> {
@@ -587,6 +662,7 @@ export async function startDashboard(
     baseUrl,
     wsUrl: dashboardWsUrl(baseUrl, token),
     token,
+    authMode: "token",
     mode: "local",
     profile: resolvedProfile,
     pid: proc.pid,

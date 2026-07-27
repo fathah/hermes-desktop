@@ -67,6 +67,11 @@ export function useSettingsData(profile?: string) {
   const [connApiKey, setConnApiKey] = useState("");
   const [connApiKeyMask, setConnApiKeyMask] = useState("");
   const [connHasApiKey, setConnHasApiKey] = useState(false);
+  const [remoteAuthMode, setRemoteAuthMode] = useState<
+    "auto" | "token" | "oauth"
+  >("auto");
+  const [remoteOAuthSignedIn, setRemoteOAuthSignedIn] = useState(false);
+  const [remoteOAuthBusy, setRemoteOAuthBusy] = useState(false);
   const [remoteChatTransport, setRemoteChatTransport] =
     useState<RemoteChatTransport>("auto");
   const [sshChatTransport, setSshChatTransport] =
@@ -84,6 +89,7 @@ export function useSettingsData(profile?: string) {
   const [sshKeyPath, setSshKeyPath] = useState("");
   const [sshRemotePort, setSshRemotePort] = useState("");
   const [sshLocalPort, setSshLocalPort] = useState("");
+  const [sshDockerContainer, setSshDockerContainer] = useState("");
   const [transportProbe, setTransportProbe] = useState<TransportProbe | null>(
     null,
   );
@@ -162,6 +168,7 @@ export function useSettingsData(profile?: string) {
     setConnMode(conn.mode);
     setConnRemoteUrl(conn.remoteUrl);
     setConnHasApiKey(conn.hasApiKey);
+    setRemoteAuthMode(conn.remoteAuthMode ?? "auto");
     setRemoteChatTransport(conn.remoteChatTransport ?? "auto");
     setSshChatTransport(conn.sshChatTransport ?? "auto");
     const mask = conn.hasApiKey ? makeApiKeyMask(conn.apiKeyLength) : "";
@@ -173,9 +180,32 @@ export function useSettingsData(profile?: string) {
     setSshKeyPath(conn.ssh?.keyPath || "");
     setSshRemotePort(conn.ssh?.remotePort ? String(conn.ssh.remotePort) : "");
     setSshLocalPort(conn.ssh?.localPort ? String(conn.ssh.localPort) : "");
+    setSshDockerContainer(conn.ssh?.dockerContainerName || "");
     setApiServerKeyMissing(!keyStatus.hasKey);
     setAutoUpgradeEnabled(autoUpgrade);
     connLoaded.current = true;
+
+    if (conn.mode === "remote" && conn.remoteUrl.trim()) {
+      try {
+        const detected = await window.hermesAPI.probeRemoteAuthMode(
+          conn.remoteUrl,
+        );
+        if (requestId !== loadConfigRequestRef.current) return;
+        setRemoteAuthMode(detected.authMode);
+        if (detected.authMode === "oauth") {
+          const state = await window.hermesAPI.remoteOAuthSessionState();
+          if (requestId !== loadConfigRequestRef.current) return;
+          setRemoteOAuthSignedIn(state.signedIn);
+        } else {
+          setRemoteOAuthSignedIn(false);
+        }
+      } catch {
+        if (requestId !== loadConfigRequestRef.current) return;
+        setRemoteOAuthSignedIn(false);
+      }
+    } else {
+      setRemoteOAuthSignedIn(false);
+    }
 
     const homeResult = await Promise.resolve()
       .then(() => window.hermesAPI.getHermesHome(profile))
@@ -383,6 +413,7 @@ export function useSettingsData(profile?: string) {
       sshKeyPath.trim(),
       parseInt(sshRemotePort, 10) || 8642,
       parseInt(sshLocalPort, 10) || 18642,
+      sshDockerContainer.trim(),
     );
   }
 
@@ -423,6 +454,15 @@ export function useSettingsData(profile?: string) {
               : "Auto active: Dashboard",
           detail: status.connection.baseUrl,
           kind: "ok",
+          loading: false,
+        });
+        return;
+      }
+      if (status.needsOAuthLogin) {
+        setTransportProbe({
+          label: "Sign in required",
+          detail: status.error || "Browser authentication is required.",
+          kind: "warn",
           loading: false,
         });
         return;
@@ -529,6 +569,23 @@ export function useSettingsData(profile?: string) {
       }
       setConnTesting(true);
       setConnStatus(null);
+      if (remoteAuthMode === "oauth") {
+        await window.hermesAPI.setConnectionConfig(
+          "remote",
+          url,
+          getConnectionApiKeyForSave(),
+        );
+        const status = await window.hermesAPI.dashboardStatus(profile);
+        setConnTesting(false);
+        if (status.running) setRemoteOAuthSignedIn(true);
+        if (status.needsOAuthLogin) setRemoteOAuthSignedIn(false);
+        setConnStatus(
+          status.running
+            ? t("settings.remoteSuccess")
+            : status.error || t("settings.remoteErrorFailedSimple"),
+        );
+        return;
+      }
       const ok = await window.hermesAPI.testRemoteConnection(
         url,
         getConnectionApiKeyForSave(),
@@ -539,6 +596,52 @@ export function useSettingsData(profile?: string) {
           ? t("settings.remoteSuccess")
           : t("settings.remoteErrorFailedSimple"),
       );
+    }
+  }
+
+  async function handleRemoteOAuthLogin(): Promise<void> {
+    const url = connRemoteUrl.trim();
+    if (!url) {
+      setConnStatus(t("settings.remoteErrorRequiredSimple"));
+      return;
+    }
+    setRemoteOAuthBusy(true);
+    setConnStatus(null);
+    try {
+      await window.hermesAPI.setConnectionConfig(
+        "remote",
+        url,
+        getConnectionApiKeyForSave(),
+      );
+      await window.hermesAPI.remoteOAuthLogin();
+      setRemoteAuthMode("oauth");
+      setRemoteOAuthSignedIn(true);
+      setConnStatus(t("settings.remoteOAuthLoginSuccess"));
+      void refreshTransportProbe();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setConnStatus(
+        /cancel/i.test(message)
+          ? t("settings.remoteOAuthCancelled")
+          : message || t("settings.remoteOAuthLoginFailed"),
+      );
+    } finally {
+      setRemoteOAuthBusy(false);
+    }
+  }
+
+  async function handleRemoteOAuthLogout(): Promise<void> {
+    setRemoteOAuthBusy(true);
+    setConnStatus(null);
+    try {
+      await window.hermesAPI.remoteOAuthLogout();
+      setRemoteOAuthSignedIn(false);
+      setConnStatus(t("settings.remoteOAuthLogoutSuccess"));
+      void refreshTransportProbe();
+    } catch (err) {
+      setConnStatus(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRemoteOAuthBusy(false);
     }
   }
 
@@ -748,6 +851,10 @@ export function useSettingsData(profile?: string) {
     connApiKey,
     setConnApiKey,
     connApiKeyMask,
+    remoteAuthMode,
+    setRemoteAuthMode,
+    remoteOAuthSignedIn,
+    remoteOAuthBusy,
     connTesting,
     connStatus,
     connLoaded,
@@ -762,6 +869,8 @@ export function useSettingsData(profile?: string) {
     handleSaveConnection,
     handleChatTransportChange,
     handleTestConnection,
+    handleRemoteOAuthLogin,
+    handleRemoteOAuthLogout,
     handleSwitchToLocal,
     handleSwitchToRemote,
     handleSwitchToSsh,
@@ -776,6 +885,8 @@ export function useSettingsData(profile?: string) {
     setSshKeyPath,
     sshRemotePort,
     setSshRemotePort,
+    sshDockerContainer,
+    setSshDockerContainer,
     // backup / data
     backingUp,
     backupResult,

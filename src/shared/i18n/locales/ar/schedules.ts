@@ -6,8 +6,7 @@ export default {
   frequency: "التكرار",
   refresh: "تحديث",
   empty: "لا توجد مهام مجدولة بعد",
-  emptyHint:
-    "أنشئ مهمة مجدولة لتشغيل وكيلك تلقائياً على مؤقت",
+  emptyHint: "أنشئ مهمة مجدولة لتشغيل وكيلك تلقائياً على مؤقت",
   firstTask: "إنشاء مهمتك الأولى",
   namePlaceholder: "مثال: تذكير النسخ الاحتياطي اليومي",
   frequencyMinutes: "دقائق",

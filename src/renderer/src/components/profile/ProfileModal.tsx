@@ -8,7 +8,7 @@ import {
   Refresh,
   Settings,
   Signal,
-  Sparkles,
+  Drama,
   Trash,
   User,
   Wallet,
@@ -24,6 +24,7 @@ import type { MemoryData } from "../../screens/Memory/types";
 import { AppModal, AppModalTitle } from "../modal/AppModal";
 import ProfileWalletPane from "./ProfileWalletPane";
 import ProfileSyncPane from "./ProfileSyncPane";
+import { OrbLoader } from "../OrbLoader";
 import type { ProfileSection } from "./ProfileModalContext";
 
 /** Mirrors the entry shape returned by `window.hermesAPI.listProfiles()`. */
@@ -70,7 +71,7 @@ const PROFILE_SECTIONS: ReadonlyArray<{
   Icon: React.ComponentType<{ size?: number }>;
 }> = [
   { id: "profile", labelKey: "agents.sectionProfile", Icon: User },
-  { id: "persona", labelKey: "agents.sectionPersona", Icon: Sparkles },
+  { id: "persona", labelKey: "agents.sectionPersona", Icon: Drama },
   { id: "agentMemory", labelKey: "agents.sectionAgentMemory", Icon: Database },
   { id: "wallet", labelKey: "agents.sectionWallet", Icon: Wallet },
   { id: "sync", labelKey: "agents.sectionSync", Icon: Refresh },
@@ -314,8 +315,8 @@ export default function ProfileModal({
       overlayClassName="profile-modal-overlay"
       labelledBy="profile-modal-title"
     >
-      <div className="profile-modal-header">
-        <div className="profile-modal-header-main">
+      <aside className="profile-modal-sidebar">
+        <div className="profile-modal-sidebar-head">
           {profile && (
             <ProfileAvatar
               name={profile.id}
@@ -331,18 +332,7 @@ export default function ProfileModal({
             {agentName}
           </AppModalTitle>
         </div>
-        <button
-          type="button"
-          className="profile-modal-close"
-          onClick={onClose}
-          aria-label={t("common.cancel")}
-        >
-          <X size={18} />
-        </button>
-      </div>
-
-      {profile ? (
-        <div className="profile-modal-layout">
+        {profile && (
           <nav className="profile-modal-nav" aria-label={t("agents.title")}>
             {PROFILE_SECTIONS.map((s) => (
               <button
@@ -358,7 +348,22 @@ export default function ProfileModal({
               </button>
             ))}
           </nav>
+        )}
+      </aside>
 
+      <div className="profile-modal-main">
+        <div className="profile-modal-topbar">
+          <button
+            type="button"
+            className="profile-modal-close"
+            onClick={onClose}
+            aria-label={t("common.cancel")}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {profile ? (
           <div className="profile-modal-content">
             {section === "profile" && (
               <div className="profile-modal-pane">
@@ -499,7 +504,7 @@ export default function ProfileModal({
               <div className="profile-modal-pane profile-modal-memory-pane">
                 {memoryLoading && !memoryData ? (
                   <div className="profile-modal-loading">
-                    <div className="loading-spinner" />
+                    <OrbLoader state="searching" size={64} />
                   </div>
                 ) : memoryData ? (
                   <MemoryEntries
@@ -565,17 +570,17 @@ export default function ProfileModal({
               </div>
             )}
           </div>
-        </div>
-      ) : (
-        <div className="profile-modal-loading">
-          <div className="loading-spinner" />
-        </div>
-      )}
+        ) : (
+          <div className="profile-modal-loading">
+            <OrbLoader state="searching" size={64} />
+          </div>
+        )}
 
-      <div className="profile-modal-footer">
-        <button className="btn btn-primary btn-sm" onClick={onClose}>
-          {t("common.done")}
-        </button>
+        <div className="profile-modal-footer">
+          <button className="btn btn-primary btn-sm" onClick={onClose}>
+            {t("common.done")}
+          </button>
+        </div>
       </div>
 
       <input

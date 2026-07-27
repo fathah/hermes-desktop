@@ -48,6 +48,7 @@ describe("connection config secret exposure", () => {
       apiKey: "remote-secret",
       remoteChatTransport: "dashboard",
       sshChatTransport: "auto",
+      remoteAuthMode: "auto",
       ssh: getConnectionConfig().ssh,
     });
 
@@ -59,6 +60,7 @@ describe("connection config secret exposure", () => {
       remoteUrl: "https://hermes.example",
       remoteChatTransport: "dashboard",
       sshChatTransport: "auto",
+      remoteAuthMode: "auto",
       hasApiKey: true,
       // Length is intentionally exposed so the renderer can render a
       // mask that matches the stored key's width. The secret itself
@@ -139,6 +141,41 @@ describe("connection config secret exposure", () => {
       await expect(testRemoteConnection(url, "wrong-secret")).resolves.toBe(
         false,
       );
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it("does not attach a stale token to OAuth Remote health probes", async () => {
+    const { setConnectionConfig } = await loadConnectionConfigModule();
+    const { testRemoteConnection } = await import("../src/main/hermes");
+    const server = http.createServer((req, res) => {
+      res.statusCode =
+        req.url === "/api/status" && !req.headers.authorization ? 200 : 401;
+      res.end();
+    });
+
+    const url = await listen(server);
+
+    try {
+      setConnectionConfig({
+        mode: "remote",
+        remoteUrl: url,
+        apiKey: "stale-token",
+        remoteAuthMode: "oauth",
+        remoteChatTransport: "auto",
+        sshChatTransport: "auto",
+        ssh: {
+          host: "",
+          port: 22,
+          username: "",
+          keyPath: "",
+          remotePort: 8642,
+          localPort: 18642,
+        },
+      });
+
+      await expect(testRemoteConnection(url)).resolves.toBe(true);
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }

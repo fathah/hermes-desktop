@@ -526,8 +526,16 @@ export function resolveDashboardProviderForModel(
   );
 
   if (requestedBaseUrl) {
-    const baseMatches = customProviders.filter(
+    // Match ANY provider row on the requested endpoint — named user providers
+    // from config.yaml `providers:` (e.g. the mirrored `hermesone` entry) as
+    // well as legacy `custom:<name>` rows. Falling through to bare "custom"
+    // is the failure mode this avoids: the agent resolves `--provider custom`
+    // against the session's *current* base URL, so a session sitting on
+    // another provider would send this model to the wrong endpoint (the
+    // hermesone-swift → Nous-proxy 404).
+    const baseMatches = providers.filter(
       (provider) =>
+        !!provider.slug &&
         normalizeBaseUrl(providerBaseUrl(provider)) === requestedBaseUrl,
     );
     return (
@@ -1143,7 +1151,14 @@ export function useDashboardChatTransport({
           if (clientGenerationRef.current !== generation) {
             throw new Error("Hermes dashboard connection was superseded");
           }
-          if (!status.running || !status.connection?.wsUrl) {
+          if (!status.running || !status.connection) {
+            if (status.needsOAuthLogin) {
+              const error = new Error(
+                status.error || "Remote gateway sign-in is required",
+              ) as Error & { dashboardWasReachable?: boolean };
+              error.dashboardWasReachable = true;
+              throw error;
+            }
             // No dashboard on this remote (gateway-only install). Latch + notify
             // only in auto mode where we actually fall back to legacy.
             if (
@@ -1169,7 +1184,13 @@ export function useDashboardChatTransport({
             },
           });
           try {
-            await client.connect(status.connection.wsUrl);
+            const freshUrl = window.hermesAPI.freshDashboardWsUrl
+              ? await window.hermesAPI.freshDashboardWsUrl(profile)
+              : status.connection.wsUrl;
+            if (!freshUrl) {
+              throw new Error("Hermes dashboard WebSocket URL is unavailable");
+            }
+            await client.connect(freshUrl);
           } catch (err) {
             lastConnectErr = err;
             client.close();

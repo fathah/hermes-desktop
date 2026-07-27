@@ -22,6 +22,8 @@ export interface RegistryItem {
   path?: string;
   /** Bundled skills only: install identifier for `hermes skills install`. */
   source?: string;
+  /** Absolute raw URL of the entry's icon, when the registry provides one. */
+  icon?: string;
 }
 
 export interface RegistryCatalog {

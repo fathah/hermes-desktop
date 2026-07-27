@@ -114,6 +114,16 @@ describe("New APIs from v0.8/v0.9 features", () => {
     expect(typeMethods).toContain("stopDashboard");
     expect(preloadMethods).toContain("setConnectionChatTransports");
     expect(typeMethods).toContain("setConnectionChatTransports");
+    expect(preloadMethods).toContain("probeRemoteAuthMode");
+    expect(typeMethods).toContain("probeRemoteAuthMode");
+    expect(preloadMethods).toContain("remoteOAuthLogin");
+    expect(typeMethods).toContain("remoteOAuthLogin");
+    expect(preloadMethods).toContain("remoteOAuthLogout");
+    expect(typeMethods).toContain("remoteOAuthLogout");
+    expect(preloadMethods).toContain("remoteOAuthSessionState");
+    expect(typeMethods).toContain("remoteOAuthSessionState");
+    expect(preloadMethods).toContain("freshDashboardWsUrl");
+    expect(typeMethods).toContain("freshDashboardWsUrl");
   });
 });
 

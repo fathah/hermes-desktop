@@ -37,6 +37,7 @@ export default {
     system: "System",
     light: "Light",
     dark: "Dark",
+    more: "{{count}} more…",
   },
   roundedCorners: {
     label: "Rounded corners",
@@ -45,7 +46,7 @@ export default {
   font: {
     label: "Font",
     manrope: "Manrope",
-    system: "System",
+    gsans: "G Sans",
     hint: "Choose the interface font",
   },
   hardwareAcceleration: {
@@ -53,7 +54,7 @@ export default {
     auto: "Auto",
     on: "Always on",
     off: "Always off",
-    hint: "Auto uses the GPU and falls back to software rendering for 24 hours after a GPU crash. Always on retries the GPU every launch; Always off keeps software rendering (the 3D office will be slow).",
+    hint: "Use the GPU for rendering when available.",
     envOverride:
       "Overridden by the HERMES_DISABLE_GPU environment variable — this setting will have no effect until it is removed.",
     restartToApply: "Takes effect after a restart.",
@@ -152,6 +153,21 @@ export default {
   remoteApiKey: "API Key",
   remoteApiKeyHint:
     "Matches API_SERVER_KEY on the remote host. Leave empty if the server accepts unauthenticated requests.",
+  remoteAuthDetecting:
+    "Authentication is detected automatically. Enter a token only for token-based gateways.",
+  remoteOAuthTitle: "Browser authentication",
+  remoteOAuthHint:
+    "This gateway uses OAuth. Sign in in the secure browser window to continue.",
+  remoteOAuthConnected: "Signed in to the remote gateway.",
+  remoteOAuthSignIn: "Sign in with browser",
+  remoteOAuthSignOut: "Sign out",
+  remoteOAuthWorking: "Working…",
+  remoteOAuthLoginSuccess: "Remote gateway sign-in complete.",
+  remoteOAuthLoginFailed: "Remote gateway sign-in failed.",
+  remoteOAuthCancelled: "Remote gateway sign-in cancelled.",
+  remoteOAuthLogoutSuccess: "Signed out from the remote gateway.",
+  remoteChatTransportHint:
+    "Auto detects token or OAuth dashboard authentication. OAuth never falls back to the legacy remote API when sign-in is missing or expired.",
   testingConnection: "Testing...",
   testConnection: "Test Connection",
   save: "Save",
@@ -221,6 +237,36 @@ export default {
   remoteErrorFailed: "Connection test failed.",
   sshSuccess: "SSH tunnel connected!",
   sshErrorRequiredSimple: "Host and username are required",
+  sshDockerTitle: "Remote Hermes install",
+  sshDockerDetect: "Detect remote install",
+  sshDockerDetecting: "Detecting…",
+  sshDockerDetectHint:
+    "Checks the SSH host for a Hermes install — including Hermes running inside a Docker container (Coolify, Compose, NAS).",
+  sshDockerHostInstall: "Hermes CLI found on the host — no extra setup needed.",
+  sshDockerNoDocker:
+    "No host Hermes install found, and Docker is not available for this SSH user.",
+  sshDockerNoContainers:
+    "No host Hermes install found, and no running Hermes Docker containers were detected.",
+  sshDockerContainersFound: "Hermes Docker containers on this host:",
+  sshDockerSelectPrompt:
+    "Several Hermes containers are running — pick the one this connection should use.",
+  sshDockerNoDataMount: "no data volume mounted at /opt/data",
+  sshDockerPortMatch: "publishes port {{port}}",
+  sshDockerConfigured:
+    'Docker access is set up for container "{{name}}" — the Hermes CLI and data are reachable over SSH.',
+  sshDockerConfiguredOther:
+    'The remote launcher currently routes to container "{{name}}". Run setup again to switch it.',
+  sshDockerCustomLauncher:
+    "A custom remote launcher exists on this host (~/.config/hermes-desktop/remote-hermes). Hermes Desktop will use it as-is and won't overwrite it.",
+  sshDockerHomeDirConflict:
+    "~/.hermes exists as a real directory on the host, so it can't be linked to the container data volume. Move it aside (e.g. mv ~/.hermes ~/.hermes.host-backup) and detect again.",
+  sshDockerSetup: "Set up Docker access",
+  sshDockerSettingUp: "Setting up…",
+  sshDockerSetupHint:
+    "Writes two files on the SSH host as {{user}}: a launcher at ~/.config/hermes-desktop/remote-hermes that runs the Hermes CLI inside the selected container, and a ~/.hermes symlink to the container's data volume. Nothing inside the container is modified.",
+  sshDockerSetupDone: "Docker access ready — {{version}}",
+  sshDockerSetupFailed: "Setup failed: {{msg}}",
+  sshDockerInspectFailed: "Could not inspect the remote host: {{msg}}",
   remoteSuccess: "Connected successfully!",
   remoteErrorRequiredSimple: "Please enter a URL",
   remoteErrorFailedSimple: "Could not reach server",

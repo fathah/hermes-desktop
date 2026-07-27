@@ -149,6 +149,7 @@ describe("useDashboardChatTransport recovery", () => {
     Object.defineProperty(window, "hermesAPI", {
       configurable: true,
       value: {
+        freshDashboardWsUrl: vi.fn(async () => "ws://fresh-dashboard"),
         recordSessionContinuation: vi.fn(async () => true),
         recordSessionLocalError: vi.fn(async () => true),
         startDashboard: vi.fn(async () => ({
@@ -157,6 +158,59 @@ describe("useDashboardChatTransport recovery", () => {
         })),
       },
     });
+  });
+
+  it("requests a fresh WebSocket URL immediately before connecting", async () => {
+    dashboardMock.request.mockImplementation(async (method) => {
+      if (method === "session.create") {
+        return { session_id: "live", stored_session_id: "stored" };
+      }
+      return {};
+    });
+    const api: HarnessApi = {};
+    render(<Harness api={api} initialConnectionMode="remote" />);
+
+    await act(async () => {
+      await api.send?.("hello");
+    });
+
+    expect(window.hermesAPI.freshDashboardWsUrl).toHaveBeenCalledTimes(1);
+    expect(dashboardMock.connect).toHaveBeenCalledWith("ws://fresh-dashboard");
+  });
+
+  it("surfaces OAuth login requirements without legacy fallback", async () => {
+    // @lat: [[remote-dashboard-oauth#Test specifications#OAuth no-fallback]]
+    const onUnavailable = vi.fn();
+    Object.defineProperty(window, "hermesAPI", {
+      configurable: true,
+      value: {
+        recordSessionContinuation: vi.fn(async () => true),
+        recordSessionLocalError: vi.fn(async () => true),
+        startDashboard: vi.fn(async () => ({
+          running: false,
+          needsOAuthLogin: true,
+          error: "Sign in with your browser.",
+          connection: { authMode: "oauth", wsUrl: "" },
+        })),
+      },
+    });
+    const api: HarnessApi = {};
+    render(
+      <Harness
+        api={api}
+        initialConnectionMode="remote"
+        fallbackOnUnavailable
+        onDashboardUnavailable={onUnavailable}
+      />,
+    );
+
+    let handled: boolean | undefined;
+    await act(async () => {
+      handled = await api.send?.("hello");
+    });
+
+    expect(handled).toBe(true);
+    expect(onUnavailable).not.toHaveBeenCalled();
   });
 
   afterEach(() => {

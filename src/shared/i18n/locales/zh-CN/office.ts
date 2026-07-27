@@ -33,6 +33,10 @@ export default {
   showroomCardColor: "车漆颜色",
   showroomCardHint: "在车行里四处看看——为你的智能体购车功能即将上线。",
   // Space representatives (bank teller interaction menu)
+  walkMode: "步行模式",
+  walkModeExit: "退出步行 (Esc)",
+  walkHint: "WASD / 方向键移动 · Shift 奔跑 · Esc 退出",
+  you: "你",
   repBankTeller: "银行柜员",
   spaceBank: "银行",
   repPanelAgentLabel: "智能体",

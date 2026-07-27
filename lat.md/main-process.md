@@ -70,6 +70,8 @@ Speech-to-text IPC sends recorded desktop audio through the Hermes API server, n
 
 SSH mode has two chat transports because the remote serves chat from **two different servers**, and the desktop must reach the right one.
 
+Direct Remote mode also supports browser-authenticated dashboards through [[remote-dashboard-oauth]], while SSH stays on its existing session-token transport.
+
 The dashboard is **not** a `/v1` superset (a long-standing misconception in earlier comments): `hermes_cli/web_server.py` has no `/v1/chat`, `/v1/responses`, or `/v1/runs` routes and does not proxy `/v1` to the gateway.
 
 - **Gateway api_server** (port 8642, `API_SERVER_KEY` auth) serves `/v1` chat (`/v1/chat/completions`, `/v1/responses`, `/v1/runs`) + `/health`. This is the **no-build** transport — no Node, no web dist — used by `remote` mode and the SSH gateway fallback. See [[main-process#SSH api_server provisioning]].

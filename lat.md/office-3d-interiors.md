@@ -4,6 +4,8 @@ Enterable building interiors on the Office tab: click the office, bank, or car s
 
 The feature spans the screen shell ([[src/renderer/src/screens/Office/Office.tsx]] owns the location state and DOM overlays) and the scene ([[src/renderer/src/screens/Office/office3d/Office3D.tsx]] mounts layers per location).
 
+The same location state is also driven by [[office-3d-walk-mode|walk mode]], where the user's avatar enters buildings by walking through their doorways instead of click + Enter; the buildings additionally wear [[office-3d-walk-mode#Glass roofs|glass roofs]] in the city view.
+
 ## Locations & conditional rendering
 
 `OfficeLocation` ("city" | "office" | "bank" | "showroom") lives in `office3d/core/locations.ts` with per-location camera presets, orbit clamps, and shadow centres. Buildings never move — entering only flies the camera and changes what's mounted.
@@ -48,9 +50,13 @@ Each pedestrian tracks a `place` ("outside" | "bank" | "showroom") from its curr
 
 People never pass through walls, furniture, or each other: a crowd registry separates overlapping people, and per-place static colliders (wall boxes with door gaps, furniture circles) push walkers out. Buildings are entered through doorways only.
 
+Crowd separation is radial plus a tangential bias with fixed world handedness ([[src/renderer/src/screens/Office/office3d/core/collision.ts#applyCrowdSeparation]]): a purely radial push deadlocks two head-on walkers — separation shoves them apart, goal pull shoves them back, and the pair vibrates in place (the sidewalk-glitch bug). The tangent makes an approaching pair sidestep in opposite world directions, so both "pass on the right" and spiral past each other.
+
 Everything lives in [[src/renderer/src/screens/Office/office3d/core/collision.ts]] and works in world coordinates; the office simulation converts its canvas positions at the boundary. Wall colliders mirror the visible geometry including every door gap — the office's south wall gained a real doorway (`OFFICE_DOOR_X` in cityPlan.ts, east of the HQ logo) that trips now walk through instead of phasing the wall. Seats (chairs, beanbags) are deliberately not colliders so agents can reach them, and desk boxes cover only the desk body away from the seat side.
 
 Blocked walkers wall-follow: when the push-out cancels a step, the walker commits to a short slide along the blocking face's tangent — signed toward its goal, re-derived at corners — with goal steering suspended for the burst. (A per-frame perpendicular nudge is not enough: the goal pull re-pins the walker against the face each frame, walking in place forever — the original stuck-at-desk bug.) The static resolver exposes its push normal for this via `resolveStaticColliders`' `pushOut`.
+
+Wall-follow handles convex obstacles only — in a concave pocket (a wall corner plus furniture) the two faces re-derive opposite slides every frame and the walker deadlocks in place. Doorways are therefore routed explicitly: [[src/renderer/src/screens/Office/office3d/core/routing.ts#routeTarget]] makes every room crossing a two-hop "door gate" (near-side gate point first, then the far side), so the wall-crossing hop passes through the door gap from any start position. The CEO office's own doorway is routed before the divider — a CEO→east walk that aims at the partition door first pins against the glass (the stuck-in-the-corner bug, exposed when [[office-world-actions|chat-commanded missions]] started walks from arbitrary desks). [[src/renderer/src/screens/Office/office3d/core/routing.test.ts]] walks the previously-deadlocking routes hop by hop and asserts no hop segment crosses an interior wall.
 
 Desk seats add a structural rule: agents approach the chair from the open side — up the desk-free aisle between desk columns, then across at seat height (`deskApproachByAgent` in AgentsLayer) — so the everyday sit-down never depends on obstacle avoidance at all. Trip/NPC waypoints sit clear of all colliders with looser arrival radii so a crowded waypoint can't strand anyone. Pedestrians register in the same crowd as visiting agents, so the two populations avoid each other too; standing staff participate as static circles.
 
@@ -60,6 +66,6 @@ Idle agents occasionally walk out of the office to the bank or showroom, wander 
 
 The canvas↔world mapping ([[src/renderer/src/screens/Office/office3d/core/geometry.ts#worldToCanvas]]) is linear, so waypoints far outside the office's 0..1800 rectangle work unchanged — no second coordinate system.
 
-The controller in [[src/renderer/src/screens/Office/office3d/objects/AgentsLayer.tsx#AgentsLayer]] adds a "trip" mode (phases out → wander → back) beside toSeat/seated. Only idle (non-working) seated agents start trips, capped at `TRIP_MAX_TRAVELLERS`; if an agent's gateway starts mid-trip it walks the route home in reverse rather than teleporting. Each agent's `place` ("office" | "bank" | "showroom" | "outside") is derived from route progress.
+The controller in [[src/renderer/src/screens/Office/office3d/objects/AgentsLayer.tsx#AgentsLayer]] adds a "trip" mode (phases out → wander → back) beside toSeat/seated. Only idle (non-working) seated agents start trips, capped at `TRIP_MAX_TRAVELLERS`; if an agent's gateway starts mid-trip it walks the route home in reverse rather than teleporting. Each agent's `place` ("office" | "bank" | "showroom" | "outside") is derived from route progress. Trips can also be commanded from the office chat — a mission replaces the wander with a "visit" at a named interaction stop; see [[office-world-actions#Office World Actions#Commanded trips]].
 
 The simulation always runs for every agent; the `visiblePlace` prop only toggles per-agent wrapper-group visibility each frame, so each interior view shows exactly the agents actually in that building and the city view shows everyone, including walkers on the street.

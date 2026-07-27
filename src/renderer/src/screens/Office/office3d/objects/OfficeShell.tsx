@@ -10,8 +10,13 @@ import { glbClone, normalizeFootprint } from "../core/glb";
 import type { WorldPalette } from "../core/palette";
 import { INTERIOR_WALLS, GLASS_WALLS, CEO_OFFICE } from "../layout";
 
-const ROOM_WALL_H = 2.4;
+// Perimeter walls match the 3.6 north wall so every wall meets the glass
+// roof — the old 2.4 left a floating gap band visible from street level in
+// walk mode. Interiors read as one tall storey (~2.2 person heights).
+const ROOM_WALL_H = 3.6;
 const ROOM_WALL_T = 0.2;
+// Doorway opening height; the wall above it is solid up to the roof.
+const DOOR_TOP = 2.2;
 
 /** North wall — 3.6 m tall with three window openings and glass panels. */
 function NorthWall({ palette }: { palette: WorldPalette }): React.JSX.Element {
@@ -152,9 +157,10 @@ export const Room = memo(function Room({
               <boxGeometry args={[eastW, wallH, wallT]} />
               <meshStandardMaterial color={palette.wallNS} />
             </mesh>
-            {/* Header above the doorway so the gap reads as an entrance. */}
-            <mesh position={[OFFICE_DOOR_X, wallH - 0.25, halfH]}>
-              <boxGeometry args={[OFFICE_DOOR_W, 0.5, wallT]} />
+            {/* Header above the doorway so the gap reads as an entrance —
+                solid from the door top (human scale) up to the roof line. */}
+            <mesh position={[OFFICE_DOOR_X, (DOOR_TOP + wallH) / 2, halfH]}>
+              <boxGeometry args={[OFFICE_DOOR_W, wallH - DOOR_TOP, wallT]} />
               <meshStandardMaterial color={palette.wallNS} />
             </mesh>
           </>

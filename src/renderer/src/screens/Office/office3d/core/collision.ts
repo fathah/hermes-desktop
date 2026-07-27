@@ -70,9 +70,28 @@ export function removeCrowdBody(id: string): void {
 }
 
 /**
+ * Read-only view of every registered person, for systems that react to
+ * people rather than move them — the traffic simulation reads it to brake
+ * for anyone standing or walking on a road.
+ */
+export function getCrowdBodies(): ReadonlyMap<
+  string,
+  { place: AgentPlace; x: number; z: number; r: number }
+> {
+  return bodies;
+}
+
+/**
  * Push `p` away from every other registered person in the same place. Soft
  * (fractional push per frame) so two people meeting in a doorway slide past
  * each other instead of deadlocking.
+ *
+ * The push is radial PLUS a tangential bias with fixed world handedness:
+ * a purely radial push deadlocks head-on walkers (separation shoves them
+ * straight apart, their goal pull shoves them straight back — the pair
+ * vibrates in place, the sidewalk-glitch bug). Each party's tangent is its
+ * own normal rotated the same way, so an approaching pair sidesteps in
+ * opposite world directions — both "pass on the right" — and spirals past.
  */
 export function applyCrowdSeparation(
   id: string,
@@ -94,8 +113,11 @@ export function applyCrowdSeparation(
     }
     const d = Math.sqrt(d2);
     const push = (rsum - d) * 0.6;
-    p.x += (dx / d) * push;
-    p.z += (dz / d) * push;
+    const nx = dx / d;
+    const nz = dz / d;
+    const tangential = push * 0.5;
+    p.x += nx * push - nz * tangential;
+    p.z += nz * push + nx * tangential;
   }
 }
 
@@ -356,14 +378,14 @@ export const SHOWROOM_COLLIDERS: StaticCollider[] = [
   box(SX - SHW, SX + SHW, SZ + SHD - WALL_PAD, SZ + SHD + WALL_PAD),
   box(SX + SHW - WALL_PAD, SX + SHW + WALL_PAD, SZ - SHD, SZ - 2),
   box(SX + SHW - WALL_PAD, SX + SHW + WALL_PAD, SZ + 2, SZ + SHD),
-  // Hero pedestal + display cars.
+  // Hero pedestal + display cars (radius covers the 3.3-long car bodies).
   circle(SX + 1.5, SZ, 2.4),
-  circle(SX - 4, SZ - 7, 1.5),
-  circle(SX - 4, SZ - 2.5, 1.5),
-  circle(SX - 4, SZ + 2.5, 1.5),
-  circle(SX - 4, SZ + 7, 1.5),
-  circle(SX + 2.5, SZ - 6.5, 1.5),
-  circle(SX + 2.5, SZ + 6.5, 1.5),
+  circle(SX - 4, SZ - 7, 1.8),
+  circle(SX - 4, SZ - 2.5, 1.8),
+  circle(SX - 4, SZ + 2.5, 1.8),
+  circle(SX - 4, SZ + 7, 1.8),
+  circle(SX + 2.5, SZ - 6.5, 1.8),
+  circle(SX + 2.5, SZ + 6.5, 1.8),
   // Standing staff (salesperson at the entrance, manager at the back).
   circle(SX + 5.8, SZ + 3.2, 0.4),
   circle(SX - 6.3, SZ, 0.4),

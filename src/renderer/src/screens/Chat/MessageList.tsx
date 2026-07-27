@@ -1,5 +1,6 @@
 import { memo, useMemo } from "react";
 import { HermesAvatar, MessageRow } from "./MessageRow";
+import type { AgentAvatarInfo } from "./MessageRow";
 import { ReasoningRow, ToolActivityGroup } from "./HistoryRow";
 import { ClarifyCard } from "./ClarifyCard";
 import type {
@@ -22,16 +23,21 @@ interface MessageListProps {
   onDeny: () => void;
   /** Mark an inline clarify card resolved once the user answers/skips. */
   onClarifyResolved: (requestId: string, answer: string) => void;
+  /** Appearance of the agent this conversation is with, so idle avatars show
+   *  the agent's profile picture instead of the loading gif. */
+  agentAvatar?: AgentAvatarInfo;
 }
 
 function TypingIndicator({
   toolProgress,
+  agentAvatar,
 }: {
   toolProgress: string | null;
+  agentAvatar?: AgentAvatarInfo;
 }): React.JSX.Element {
   return (
     <div className="chat-message chat-message-agent">
-      <HermesAvatar active />
+      <HermesAvatar active agent={agentAvatar} />
       <div className="chat-bubble chat-bubble-agent">
         {toolProgress ? (
           <div className="chat-tool-progress">{toolProgress}</div>
@@ -66,6 +72,7 @@ export const MessageList = memo(function MessageList({
   onApprove,
   onDeny,
   onClarifyResolved,
+  agentAvatar,
 }: MessageListProps): React.JSX.Element {
   // Bubbles with empty content are still hidden (live-stream placeholders).
   // History rows pass through unconditionally.
@@ -112,6 +119,7 @@ export const MessageList = memo(function MessageList({
             !visibleMessages[start - 1] ||
             visibleMessages[start - 1].role !== "agent"
           }
+          agent={agentAvatar}
         />,
       );
       continue;
@@ -128,6 +136,7 @@ export const MessageList = memo(function MessageList({
           // a completed "Thought".
           active={isLoading && i === visibleMessages.length - 1}
           showAvatar={showAvatar}
+          agent={agentAvatar}
         />,
       );
       continue;
@@ -154,6 +163,7 @@ export const MessageList = memo(function MessageList({
         onApprove={onApprove}
         onDeny={onDeny}
         showAvatar={showAvatar}
+        agent={agentAvatar}
       />,
     );
   }
@@ -163,7 +173,10 @@ export const MessageList = memo(function MessageList({
       {rows}
 
       {isLoading && !lastMessageIsAgent && (
-        <TypingIndicator toolProgress={toolProgress} />
+        <TypingIndicator
+          toolProgress={toolProgress}
+          agentAvatar={agentAvatar}
+        />
       )}
 
       {isLoading && toolProgress && lastMessageIsAgent && (

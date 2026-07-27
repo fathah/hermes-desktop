@@ -1,5 +1,6 @@
 import { useState } from "react";
 import HermesLogo from "../../components/common/HermesLogo";
+import OnboardHero from "../../components/common/OnboardHero";
 import {
   ArrowRight,
   Refresh,
@@ -10,6 +11,7 @@ import {
 } from "../../assets/icons";
 import { getInstallCmd } from "../../constants";
 import { useI18n } from "../../components/useI18n";
+import SshDockerTargetSection from "../../components/settings/SshDockerTargetSection";
 
 interface WelcomeProps {
   error: string | null;
@@ -43,6 +45,7 @@ function Welcome({
   const [sshUser, setSshUser] = useState("");
   const [sshKeyPath, setSshKeyPath] = useState("");
   const [sshRemotePort, setSshRemotePort] = useState("");
+  const [sshDockerContainer, setSshDockerContainer] = useState("");
   const [sshError, setSshError] = useState<string | null>(null);
   const [sshTesting, setSshTesting] = useState(false);
 
@@ -97,6 +100,7 @@ function Welcome({
           sshKeyPath.trim(),
           remotePort,
           18642,
+          sshDockerContainer.trim(),
         );
         onRecheck();
       } else {
@@ -268,6 +272,18 @@ function Welcome({
             onChange={(e) => setSshRemotePort(e.target.value)}
           />
 
+          <SshDockerTargetSection
+            draft={{
+              host: sshHost,
+              port: parseInt(sshPort, 10) || 22,
+              username: sshUser,
+              keyPath: sshKeyPath,
+              remotePort: parseInt(sshRemotePort, 10) || 8642,
+            }}
+            value={sshDockerContainer}
+            onChange={setSshDockerContainer}
+          />
+
           <div className="welcome-remote-row" style={{ marginTop: 16 }}>
             <button
               className="btn btn-primary"
@@ -316,107 +332,106 @@ function Welcome({
     );
   }
 
-  return (
-    <div className="screen welcome-screen">
-      <HermesLogo size={80} />
-      <br />
-      {error ? (
-        <>
-          <h1 className="welcome-title">{t("welcome.installIssueTitle")}</h1>
-          <p className="welcome-subtitle">{error}</p>
+  if (error) {
+    return (
+      <div className="screen welcome-screen">
+        <HermesLogo size={80} />
+        <br />
+        <h1 className="welcome-title">{t("welcome.installIssueTitle")}</h1>
+        <p className="welcome-subtitle">{error}</p>
 
-          <div className="welcome-actions">
-            <button
-              className="btn btn-primary welcome-button"
-              onClick={onStart}
-            >
-              {t("welcome.retryInstall")}
-              <Refresh size={16} />
-            </button>
-            <div className="welcome-divider">
-              <span>{t("welcome.dividerOr")}</span>
-            </div>
-            <div className="welcome-terminal-option">
-              <p className="welcome-terminal-label">
-                {t("welcome.terminalInstallHint")}
-              </p>
-              <div className="welcome-terminal-box">
-                <code>{getInstallCmd()}</code>
-                <button
-                  className="btn-ghost welcome-copy-btn"
-                  onClick={() => navigator.clipboard.writeText(getInstallCmd())}
-                  title={t("welcome.copyInstallCommand")}
-                >
-                  <Copy size={14} />
-                </button>
-              </div>
-            </div>
-            <button
-              className="btn btn-secondary welcome-recheck-btn"
-              onClick={onRecheck}
-            >
-              {t("welcome.recheck")}
-            </button>
-            {connectionMode !== "local" && (
-              <button
-                className="btn btn-secondary welcome-recheck-btn"
-                onClick={onSwitchToLocal}
-              >
-                {t("welcome.switchToLocal")}
-              </button>
-            )}
-            <div className="welcome-divider">
-              <span>{t("welcome.dividerOr")}</span>
-            </div>
-            <button
-              className="btn btn-secondary welcome-recheck-btn"
-              onClick={() => setPanel("ssh")}
-            >
-              <KeyRound size={16} />
-              {t("settings.connectSsh")}
-            </button>{" "}
-            <button
-              className="btn btn-secondary welcome-recheck-btn "
-              onClick={() => setPanel("remote")}
-            >
-              <Globe size={16} />
-              {t("welcome.connectRemote")}
-            </button>
-          </div>
-        </>
-      ) : (
-        <>
-          <h1 className="welcome-title">{t("welcome.title")}</h1>
-          <p className="welcome-subtitle">{t("welcome.subtitle")}</p>
+        <div className="welcome-actions">
           <button className="btn btn-primary welcome-button" onClick={onStart}>
-            {t("welcome.getStarted")}
-            <ArrowRight size={16} />
+            {t("welcome.retryInstall")}
+            <Refresh size={16} />
           </button>
-          <p className="welcome-note">{t("welcome.installSizeHint")}</p>
-
           <div className="welcome-divider">
             <span>{t("welcome.dividerOr")}</span>
           </div>
-
+          <div className="welcome-terminal-option">
+            <p className="welcome-terminal-label">
+              {t("welcome.terminalInstallHint")}
+            </p>
+            <div className="welcome-terminal-box">
+              <code>{getInstallCmd()}</code>
+              <button
+                className="btn-ghost welcome-copy-btn"
+                onClick={() => navigator.clipboard.writeText(getInstallCmd())}
+                title={t("welcome.copyInstallCommand")}
+              >
+                <Copy size={14} />
+              </button>
+            </div>
+          </div>
+          <button
+            className="btn btn-secondary welcome-recheck-btn"
+            onClick={onRecheck}
+          >
+            {t("welcome.recheck")}
+          </button>
+          {connectionMode !== "local" && (
+            <button
+              className="btn btn-secondary welcome-recheck-btn"
+              onClick={onSwitchToLocal}
+            >
+              {t("welcome.switchToLocal")}
+            </button>
+          )}
+          <div className="welcome-divider">
+            <span>{t("welcome.dividerOr")}</span>
+          </div>
           <button
             className="btn btn-secondary welcome-recheck-btn"
             onClick={() => setPanel("ssh")}
           >
             <KeyRound size={16} />
             {t("settings.connectSsh")}
-          </button>
-
+          </button>{" "}
           <button
-            className="btn btn-secondary welcome-recheck-btn"
+            className="btn btn-secondary welcome-recheck-btn "
             onClick={() => setPanel("remote")}
-            style={{ marginTop: 12 }}
           >
             <Globe size={16} />
             {t("welcome.connectRemote")}
           </button>
-        </>
-      )}
-    </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <OnboardHero intro eyebrow="HERMES ONE" title={t("welcome.title")}>
+      <p className="onboard-subtitle">{t("welcome.subtitle")}</p>
+
+      <div className="onboard-cta-row">
+        <button className="onboard-btn onboard-btn-primary" onClick={onStart}>
+          <span>{t("welcome.getStarted")}</span>
+          <ArrowRight size={17} />
+        </button>
+        <p className="onboard-note">{t("welcome.installSizeHint")}</p>
+      </div>
+
+      <div className="onboard-divider">
+        <span>{t("welcome.dividerOr")}</span>
+      </div>
+
+      <div className="onboard-connect-row">
+        <button
+          className="onboard-btn onboard-btn-glass"
+          onClick={() => setPanel("ssh")}
+        >
+          <KeyRound size={16} />
+          <span>{t("settings.connectSsh")}</span>
+        </button>
+        <button
+          className="onboard-btn onboard-btn-glass"
+          onClick={() => setPanel("remote")}
+        >
+          <Globe size={16} />
+          <span>{t("welcome.connectRemote")}</span>
+        </button>
+      </div>
+    </OnboardHero>
   );
 }
 

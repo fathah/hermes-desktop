@@ -245,7 +245,11 @@ function App(): React.JSX.Element {
         <ProfileModalProvider>
           <SettingsModalProvider>
             <ErrorBoundary>
-              <div className={`app${isMac ? " is-mac" : ""}`}>
+              <div
+                className={`app${isMac ? " is-mac" : ""}${
+                  isMac && screen === "main" ? " shell-vibrant" : ""
+                }`}
+              >
                 {isMac && <div className="drag-region" />}
                 <div className="app-content">{renderScreen()}</div>
               </div>

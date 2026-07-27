@@ -1,5 +1,9 @@
 import http from "http";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ConnectionConfig } from "../src/main/config";
+
+const requestRemoteOAuthJson = vi.hoisted(() => vi.fn());
+vi.mock("../src/main/remote-oauth", () => ({ requestRemoteOAuthJson }));
 import {
   remoteDeleteSession,
   remoteGetSessionMessages,
@@ -25,6 +29,7 @@ describe("remote session REST bridge", () => {
 
   beforeEach(async () => {
     requests.length = 0;
+    requestRemoteOAuthJson.mockReset();
     server = http.createServer((req, res) => {
       const chunks: Buffer[] = [];
       req.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -368,6 +373,23 @@ describe("remote session REST bridge", () => {
         contextFolder: null,
       },
     ]);
+  });
+
+  it("uses the persistent OAuth session for direct Remote session lists", async () => {
+    const connection = {
+      mode: "remote",
+      remoteUrl: "https://remote.example",
+      apiKey: "",
+      remoteAuthMode: "oauth",
+    } as ConnectionConfig;
+    requestRemoteOAuthJson.mockResolvedValue({ sessions: [] });
+
+    await expect(remoteListCachedSessions(connection)).resolves.toEqual([]);
+    expect(requestRemoteOAuthJson).toHaveBeenCalledWith(
+      "https://remote.example/api/profiles/sessions?limit=50&offset=0&min_messages=0&archived=exclude&order=recent&profile=all",
+      {},
+    );
+    expect(requests).toEqual([]);
   });
 
   it("expands remote stored messages into rich history items", async () => {

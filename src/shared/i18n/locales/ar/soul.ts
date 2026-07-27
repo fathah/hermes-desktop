@@ -1,7 +1,6 @@
 export default {
   title: "الشخصية",
-  subtitle:
-    "حدد شخصية وكيلك ونغمته وتعليماته عبر SOUL.md",
+  subtitle: "حدد شخصية وكيلك ونغمته وتعليماته عبر SOUL.md",
   resetTitle: "إعادة تعيين إلى الافتراضي",
   reset: "إعادة تعيين",
   resetConfirm:

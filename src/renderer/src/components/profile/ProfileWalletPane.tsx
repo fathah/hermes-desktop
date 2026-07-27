@@ -7,6 +7,7 @@ import { BASE_NETWORK_LABEL } from "../../../../shared/wallets";
 import type { TokenBalancesResponse } from "../../../../shared/tokens";
 import { AppModal, AppModalTitle } from "../modal/AppModal";
 import { useI18n } from "../useI18n";
+import { OrbLoader } from "../OrbLoader";
 
 /** Map token IDs to their Vite-resolved icon URLs. */
 const TOKEN_ICONS: Record<string, string> = {
@@ -229,7 +230,7 @@ export default function ProfileWalletPane({
 
       {loading ? (
         <div className="profile-modal-loading">
-          <div className="loading-spinner" />
+          <OrbLoader state="searching" size={64} />
         </div>
       ) : wallets.length === 0 ? (
         <div className="profile-wallet-empty">

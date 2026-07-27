@@ -33,6 +33,9 @@ const REGISTRY_REPO = "fathah/hermes-registry";
 const REGISTRY_BRANCH = "main";
 const REGISTRY_RAW_BASE = `https://raw.githubusercontent.com/${REGISTRY_REPO}/refs/heads/${REGISTRY_BRANCH}`;
 const REGISTRY_REPO_BASE = `https://github.com/${REGISTRY_REPO}/tree/${REGISTRY_BRANCH}`;
+// Icons are served by the registry web service (from its DB), not raw GitHub —
+// e.g. https://registry.hermesone.org/registry-icon/mcp/aws/icon.svg.
+const REGISTRY_ICON_BASE = "https://registry.hermesone.org/registry-icon";
 const INDEX_URL = `${REGISTRY_RAW_BASE}/index.json`;
 const MODELS_URL = `${REGISTRY_RAW_BASE}/models.json`;
 const TREE_URL = `https://api.github.com/repos/${REGISTRY_REPO}/git/trees/${REGISTRY_BRANCH}?recursive=1`;
@@ -50,6 +53,8 @@ interface IndexEntry {
   license?: string;
   platforms?: string[];
   path?: string;
+  /** Repo-relative path to the entry's icon, e.g. "mcp/ableton/icon.svg". */
+  icon?: string;
 }
 
 /** Per-entry manifest.json (mcp / agent / workflow). */
@@ -112,6 +117,9 @@ function toItem(e: IndexEntry): RegistryItem {
     platforms: e.platforms,
     path: e.path,
     homepage: e.path ? `${REGISTRY_REPO_BASE}/${e.path}` : undefined,
+    // Resolve the repo-relative icon path to the registry service's icon URL,
+    // loaded as an <img> on a white tile — see the registry web UI's EntryIcon.
+    icon: e.icon ? `${REGISTRY_ICON_BASE}/${e.icon}` : undefined,
   };
 }
 
