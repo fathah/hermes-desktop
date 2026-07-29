@@ -4,6 +4,8 @@ The top strip of the main window is a browser-style title bar: it is the window'
 
 On macOS the window is frameless (`titleBarStyle: "hiddenInset"`, traffic lights inset at x/y 16 — see [[src/main/app/start.ts#startMainProcess]]), and [[src/renderer/src/App.tsx]] renders a fixed full-width `.drag-region` (`-webkit-app-region: drag`, z-index 1000) so the whole top band — including over the sidebar/traffic-light area — drags the window. This strip is mac-only; other platforms keep the OS title bar.
 
+The Settings modal stacks above both the drag region and the z-index 1001 conversation tab bar. Its overlay therefore dims the complete title bar and prevents the invisible drag layer from intercepting modal interactions; see [[theme-selection#Modal chrome stacking]].
+
 `.app` fills the window (`height: 100vh`) so the chrome reaches every edge. The sidebar rounds only its **top-left** corner (`border-radius: 16px 0 0 0`); the full-width status strip owns the window's bottom edge and rounds both bottom corners (`0 0 16px 16px`), so the sidebar's bottom-left is square against it. A hairline seam (`.content` `border-inline-start`) separates the content pane from the sidebar.
 
 ## Translucent sidebar (macOS vibrancy)
@@ -16,9 +18,11 @@ For the material to paint, the renderer leaves surfaces transparent: [[src/rende
 
 ## Modal & popover glass is near-opaque (compositing-independent)
 
-Modals and pickers use a `--bg-secondary` tint plus `backdrop-filter: blur(30px) saturate(1.5)`, but the tint is **97% opaque** so legibility never depends on the blur actually painting.
+Frosted surfaces stay nearly opaque so legibility never depends on `backdrop-filter`; Settings is fully opaque in every theme.
 
-The blur is treated as pure enhancement, not a load-bearing layer. On the transparent vibrancy window above, `backdrop-filter` is unreliable in packaged macOS builds — it silently drops to a no-op even with hardware acceleration on — which left the earlier 85%-opaque panels showing sharp app content bleeding through (the "transparent modal" bug). Raising the tint to 97% in `main.css` makes every shared frosted surface — the settings/profile/models/schedules/gateway/profile-switch modals and the model/reasoning/fast-mode dropdowns — render near-identically for all users regardless of GPU or build type; where the blur *does* paint it adds a faint frost, but its absence is barely perceptible. Keep new glass surfaces at this opacity, not the old 85%, for the same reason.
+Modals and pickers use a 97%-opaque `--bg-secondary` tint plus `backdrop-filter: blur(30px) saturate(1.5)`. Settings uses a fully opaque `--bg-secondary` surface because its dense controls otherwise reveal high-contrast chat chrome in Light mode.
+
+The blur is treated as pure enhancement, not a load-bearing layer. On the transparent vibrancy window above, `backdrop-filter` is unreliable in packaged macOS builds — it silently drops to a no-op even with hardware acceleration on — which left the earlier 85%-opaque panels showing sharp app content bleeding through (the "transparent modal" bug). Raising the tint to 97% in `main.css` makes shared frosted surfaces — profile/models/schedules/gateway/profile-switch modals and the model/reasoning/fast-mode dropdowns — render near-identically for all users regardless of GPU or build type; where the blur *does* paint it adds a faint frost, but its absence is barely perceptible. Keep new glass surfaces at this opacity, not the old 85%, unless their content needs the fully opaque Settings treatment.
 
 ## Bottom status strip
 

@@ -11,6 +11,7 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[code-blocks]] — collapsible long code blocks, and why expansion state is keyed on source position to survive react-markdown's streaming remounts.
 - [[loading-indicators]] — the thinking-orbs dotted-orb loaders behind every loading state, and the OrbLoader wrapper that pins dark/light from the Hermes theme registry instead of the library's auto-detection.
 - [[window-chrome]] — the browser-style title bar where open-conversation tabs sit on top of the window drag region, clickable while empty space still drags.
+- [[theme-selection]] — persisted palette selection, runtime System following, native Electron appearance synchronization, and modal chrome layering.
 - [[desktop-updates]] — GitHub release checks, startup upgrade button behavior, and the Settings auto-upgrade preference.
 - [[sidebar-navigation]] — the recent-sessions list under the Chat nav item, capped at five with a "Show more" button that opens the full session list in a modal.
 - [[context-folder]] — the per-session linked working folder, persisted in a desktop-owned state.db table so a re-opened conversation restores its folder.

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check } from "lucide-react";
+import { Check, Monitor } from "lucide-react";
 import { useTheme } from "../ThemeProvider";
 import { useFont } from "../FontProvider";
 import { THEMES, FONT_OPTIONS } from "../../constants";
@@ -14,7 +14,7 @@ const THEME_PREVIEW_COUNT = 7;
 /** Theme, rounded corners, interface font, and hardware acceleration. */
 export default function AppearancePane(): React.JSX.Element {
   const { t } = useI18n();
-  const { theme, setTheme, rounded, setRounded } = useTheme();
+  const { theme, resolved, setTheme, rounded, setRounded } = useTheme();
   const { font, setFont } = useFont();
   const [showAllThemes, setShowAllThemes] = useState(false);
   // Hardware acceleration is fixed pre-ready, so a changed preference only
@@ -64,6 +64,35 @@ export default function AppearancePane(): React.JSX.Element {
         <label className="settings-field-label">
           {t("settings.theme.label")}
         </label>
+        <button
+          type="button"
+          className={`settings-theme-system ${theme === "system" ? "active" : ""}`}
+          aria-pressed={theme === "system"}
+          onClick={() => setTheme("system")}
+        >
+          <span className="settings-theme-system-copy">
+            <Monitor size={18} aria-hidden="true" />
+            <span>
+              <span className="settings-theme-system-label">
+                {t("settings.theme.system")}
+              </span>
+              {theme === "system" && (
+                <span className="settings-theme-system-hint">
+                  {t(
+                    resolved === "light"
+                      ? "settings.theme.light"
+                      : "settings.theme.dark",
+                  )}
+                </span>
+              )}
+            </span>
+          </span>
+          {theme === "system" && (
+            <span className="settings-theme-card-check" aria-hidden="true">
+              <Check size={14} />
+            </span>
+          )}
+        </button>
         <div className="settings-theme-grid">
           {visibleThemes.map((th) => {
             const active = theme === th.id;
@@ -72,6 +101,7 @@ export default function AppearancePane(): React.JSX.Element {
                 key={th.id}
                 type="button"
                 className={`settings-theme-card ${active ? "active" : ""}`}
+                aria-pressed={active}
                 onClick={() => setTheme(th.id)}
               >
                 <div className="settings-theme-preview" data-theme={th.id}>
