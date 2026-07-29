@@ -10160,16 +10160,43 @@ body:has(.shell-vibrant),
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  width: 100%;
   padding: 12px;
   margin-bottom: 12px;
   background: var(--bg-primary);
   border: 1.5px solid var(--border);
   border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    border-color var(--transition),
+    color var(--transition);
+}
+
+.settings-theme-system:hover {
+  border-color: var(--border-bright);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.settings-theme-system:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
 }
 
 .settings-theme-system.active {
   border-color: var(--accent);
   background: var(--accent-subtle);
+}
+
+.settings-theme-system-copy {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
 .settings-theme-system-label {
@@ -10179,6 +10206,7 @@ body:has(.shell-vibrant),
 }
 
 .settings-theme-system-hint {
+  display: block;
   font-size: 12px;
   color: var(--text-muted);
   margin-top: 2px;
@@ -10187,7 +10215,9 @@ body:has(.shell-vibrant),
 /* Grouped preferences — one quiet card, hairline row dividers, macOS-style. */
 .settings-group {
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  /* Keep preference copy opaque in light themes: translucent rows let the
+     high-contrast chat toolbar beneath the modal ghost through. */
+  background: var(--bg-tertiary);
   overflow: hidden;
 }
 .settings-row {
@@ -10917,6 +10947,9 @@ body:has(.shell-vibrant),
   padding: 24px;
   /* Lighter scrim so the frosted glass reads as translucent. */
   background: rgba(0, 0, 0, 0.4);
+  /* Above the macOS drag strip (1000) and browser-style tab bar (1001), so
+     Settings dims and disables the entire title-bar band. */
+  z-index: 1200;
 }
 
 .settings-modal {
@@ -10926,8 +10959,10 @@ body:has(.shell-vibrant),
   height: 80vh;
   max-width: 1000px;
   max-height: 780px;
-  /* Frosted glass — same material as the pickers/profile modal. */
-  background: color-mix(in srgb, var(--bg-secondary) 97%, transparent);
+  z-index: 1201;
+  /* Settings carries dense labels and controls, so use an opaque themed
+     surface; the backdrop still provides the glass separation. */
+  background: var(--bg-secondary);
   backdrop-filter: blur(30px) saturate(1.5);
   -webkit-backdrop-filter: blur(30px) saturate(1.5);
   border: 0.5px solid var(--border);
