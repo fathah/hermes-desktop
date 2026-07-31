@@ -21,4 +21,8 @@ export default {
   connect: "Connect",
   remoteHint:
     "Leave the key empty if the server accepts unauthenticated requests (e.g. via SSH tunnel to localhost).",
+  graphnosisTitle: "Pair with Graphnosis",
+  graphnosisBody:
+    "Add local encrypted memory to Hermes — auto-prefetch, recall, and MCP tools. Install Graphnosis, unlock your cortex, then enable the Graphnosis memory provider and MCP catalog in Settings.",
+  graphnosisDownload: "Download Graphnosis",
 } as const;

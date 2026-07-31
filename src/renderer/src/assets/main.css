@@ -1157,6 +1157,43 @@ body:has(.shell-vibrant),
   margin-top: 32px;
 }
 
+/* ---- Graphnosis pairing card ---- */
+.onboard-graphnosis {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  width: 100%;
+  max-width: 420px;
+  margin-top: 34px;
+  padding: 18px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  text-align: left;
+}
+
+.onboard-graphnosis-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #c3c8d8;
+}
+
+.onboard-graphnosis-body {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #8b91a5;
+  text-wrap: pretty;
+}
+
+.onboard-graphnosis .onboard-btn-glass {
+  padding: 10px 20px;
+  font-size: 14px;
+}
+
 /* ---- Field + info card (Install / Setup) ---- */
 .onboard-field-label {
   align-self: flex-start;
@@ -3373,7 +3410,8 @@ body:has(.shell-vibrant),
   align-items: center;
   gap: 10px;
   padding: 14px 16px;
-  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 7%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--text-primary) 7%, transparent);
 }
 .profile-switch-search-icon {
   flex-shrink: 0;
@@ -14967,6 +15005,25 @@ body:has(.shell-vibrant),
   padding: 16px;
   background: color-mix(in srgb, var(--text-primary) 4%, transparent);
   border-radius: var(--radius-md);
+}
+
+.tools-graphnosis-promo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--surface-elevated, rgba(255, 255, 255, 0.03));
+}
+
+.tools-graphnosis-promo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .tools-mcp-card {

@@ -141,5 +141,11 @@ export default {
   mcpCatalogLoadFailed: "Failed to load MCP catalog.",
   mcpCatalogEmpty: "No catalog entries available.",
   mcpInstall: "Install",
+  mcpInstallWorking: "Installing…",
   mcpInstalledStatus: "Installed",
+  graphnosisMcpTitle: "Graphnosis memory (recommended)",
+  graphnosisMcpDescription:
+    "Install the Graphnosis MCP server for recall, remember, edit, and cross-engram search. Requires the Graphnosis app running with cortex unlocked.",
+  graphnosisMcpInstall: "Install Graphnosis MCP",
+  graphnosisMcpDownload: "Get Graphnosis app",
 } as const;
