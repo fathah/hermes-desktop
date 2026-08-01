@@ -93,6 +93,31 @@ const DEFAULT_MODELS: DefaultModel[] = [
     model: "Qwen/Qwen3-235B-A22B-Instruct-2507",
     baseUrl: "",
   },
+
+  // ── OrcaRouter (OpenAI-compatible routing gateway) ────────────────
+  // https://www.orcarouter.ai — model ids are namespaced by upstream
+  // (`openai/…`, `anthropic/…`, `google/…`); the full catalog lives at
+  // https://www.orcarouter.ai/models. `orcarouter/auto` is a router, not a
+  // model: it picks an upstream per request from the strategy configured in
+  // the OrcaRouter console (cheapest / balanced / quality / adaptive).
+  {
+    name: "Auto (OrcaRouter)",
+    provider: "orcarouter",
+    model: "orcarouter/auto",
+    baseUrl: "",
+  },
+  {
+    name: "GPT-5.5 (OrcaRouter)",
+    provider: "orcarouter",
+    model: "openai/gpt-5.5",
+    baseUrl: "",
+  },
+  {
+    name: "Claude Opus 4.8 (OrcaRouter)",
+    provider: "orcarouter",
+    model: "anthropic/claude-opus-4.8",
+    baseUrl: "",
+  },
 ];
 
 export default DEFAULT_MODELS;

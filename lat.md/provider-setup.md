@@ -22,9 +22,11 @@ DashScope users choose between the mainland China and international endpoints du
 
 ## OpenAI-compatible endpoints route through Local
 
-Endpoints the agent does not natively support (Groq, DeepSeek, Together, Fireworks, Cerebras, AtlasCloud, Mistral, AIML, …) are offered as `LOCAL_PRESETS` chips under the `local` card, not as top-level cards.
+Endpoints the agent does not natively support (Groq, DeepSeek, Together, Fireworks, Cerebras, AtlasCloud, Mistral, AIML, OrcaRouter, …) are offered as `LOCAL_PRESETS` chips under the `local` card, not as top-level cards.
 
-Selecting a preset sets the base URL; the API-key env var is resolved by `resolveCustomEnvKey` — first an exact `LOCAL_PRESETS.envKey` match, then [[src/shared/url-key-map.ts]] by host. So a compatible provider configures correctly without a dedicated card (e.g. `api.aimlapi.com` → `AIMLAPI_API_KEY`).
+Selecting a preset sets the base URL; the API-key env var is resolved by `resolveCustomEnvKey` — first an exact `LOCAL_PRESETS.envKey` match, then [[src/shared/url-key-map.ts]] by host. So a compatible provider configures correctly without a dedicated card (e.g. `api.aimlapi.com` → `AIMLAPI_API_KEY`, `api.orcarouter.ai` → `ORCAROUTER_API_KEY`).
+
+Two of these — `aimlapi` and `orcarouter` — are also offered directly in the provider dropdown (`PROVIDERS.options`, under *Aggregators*) even though neither is a canonical agent slug. `CLI_COMPAT_PROVIDER_OVERRIDE` in [[src/main/hermes.ts]] maps both to `--provider custom` and forces the CLI path, writing `OPENAI_BASE_URL` / `CUSTOM_BASE_URL` from the canonical registry so the agent still routes to the right endpoint.
 
 ## Active model is picked from configured providers
 

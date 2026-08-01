@@ -2239,6 +2239,7 @@ async function sendMessageViaTuiGateway(
 const NOISE_PATTERNS = [/^[╭╰│╮╯─┌┐└┘┤├┬┴┼]/, /⚕\s*Hermes/];
 const CLI_COMPAT_PROVIDER_OVERRIDE: Record<string, string> = {
   aimlapi: "custom",
+  orcarouter: "custom",
 };
 
 type ModelConfig = ReturnType<typeof getModelConfig>;
@@ -2373,6 +2374,7 @@ function sendMessageViaCli(
     "OPENAI_API_KEY",
     "OLLAMA_API_KEY",
     "AIMLAPI_API_KEY",
+    "ORCAROUTER_API_KEY",
     "ANTHROPIC_API_KEY",
     "GROQ_API_KEY",
     "DEEPSEEK_API_KEY",
