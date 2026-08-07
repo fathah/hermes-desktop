@@ -27,6 +27,7 @@ describe("PROVIDERS", () => {
     const values = PROVIDERS.options.map((o) => o.value);
     expect(values).toContain("openrouter");
     expect(values).toContain("aimlapi");
+    expect(values).toContain("orcarouter");
     expect(values).toContain("anthropic");
     expect(values).toContain("openai");
     expect(values).toContain("openai-codex");
@@ -202,6 +203,7 @@ describe("SETTINGS_SECTIONS", () => {
     expect(allKeys).toContain("XAI_API_KEY");
     expect(allKeys).toContain("XIAOMI_API_KEY");
     expect(allKeys).toContain("AIMLAPI_API_KEY");
+    expect(allKeys).toContain("ORCAROUTER_API_KEY");
   });
 
   it("includes existing keys (backward compat)", () => {
@@ -228,6 +230,7 @@ describe("LOCAL_PRESETS", () => {
     const ids = LOCAL_PRESETS.map((p) => p.id);
     expect(ids).toContain("lmstudio");
     expect(ids).toContain("aimlapi");
+    expect(ids).toContain("orcarouter");
     expect(ids).toContain("ollama");
     expect(ids).toContain("vllm");
     expect(ids).toContain("llamacpp");

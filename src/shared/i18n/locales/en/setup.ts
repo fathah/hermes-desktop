@@ -25,6 +25,7 @@ export default {
     atlascloud: "AtlasCloud",
     mistral: "Mistral",
     aimlapi: "AIML API",
+    orcarouter: "OrcaRouter",
   },
   serverPreset: "Server Preset",
   localGroupLabel: "Local Servers",

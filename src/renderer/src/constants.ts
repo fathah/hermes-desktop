@@ -45,6 +45,7 @@ export const PROVIDERS = {
     // Aggregators
     { value: "openrouter", label: "constants.openrouterName" },
     { value: "aimlapi", label: "constants.aimlapiName" },
+    { value: "orcarouter", label: "constants.orcarouterName" },
     // First-party API providers
     { value: "anthropic", label: "constants.anthropicName" },
     { value: "openai", label: "constants.openaiName" },
@@ -91,6 +92,7 @@ export const PROVIDERS = {
     atlascloud: "AtlasCloud",
     openrouter: "constants.openrouterName",
     aimlapi: "constants.aimlapiName",
+    orcarouter: "constants.orcarouterName",
     anthropic: "constants.anthropicName",
     openai: "constants.openaiName",
     "openai-codex": "constants.openaiCodexName",
@@ -379,6 +381,7 @@ export const OPENAI_COMPATIBLE_BASE_URLS: Record<string, string> = {
   hermesone: "https://inference.hermesone.org/v1",
   openai: "https://api.openai.com/v1",
   aimlapi: "https://api.aimlapi.com/v1",
+  orcarouter: "https://api.orcarouter.ai/v1",
   mistral: "https://api.mistral.ai/v1",
   groq: "https://api.groq.com/openai/v1",
   deepseek: "https://api.deepseek.com/v1",
@@ -511,6 +514,13 @@ export const LOCAL_PRESETS: LocalPreset[] = [
     baseUrl: "https://api.aimlapi.com/v1",
     group: "remote",
     envKey: "AIMLAPI_API_KEY",
+  },
+  {
+    id: "orcarouter",
+    name: "constants.orcarouter",
+    baseUrl: "https://api.orcarouter.ai/v1",
+    group: "remote",
+    envKey: "ORCAROUTER_API_KEY",
   },
 ];
 
@@ -766,6 +776,12 @@ export const SETTINGS_SECTIONS: SectionDef[] = [
         label: "constants.aimlapiApiKey",
         type: "password",
         hint: "constants.aimlapiHint",
+      },
+      {
+        key: "ORCAROUTER_API_KEY",
+        label: "constants.orcarouterApiKey",
+        type: "password",
+        hint: "constants.orcarouterHint",
       },
       {
         key: "ANTHROPIC_API_KEY",

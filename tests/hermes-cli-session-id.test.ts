@@ -325,6 +325,39 @@ describe("CLI fallback session id propagation", () => {
     await expect(done).resolves.toBe("20260527_143413_10df4c");
   });
 
+  it("runs OrcaRouter through the CLI custom provider bridge", async () => {
+    modelConfig.model = "openai/gpt-5.5";
+    modelConfig.provider = "orcarouter";
+    modelConfig.baseUrl = "https://api.orcarouter.ai/v1";
+    profileEnv.ORCAROUTER_API_KEY = "sk-orca-test";
+
+    const done = new Promise<string | undefined>((resolve) => {
+      sendMessage("hi", {
+        onChunk: () => {},
+        onDone: resolve,
+        onError: () => {},
+      }).then(() => {
+        const proc = spawned[0];
+        proc.stdout.emit("data", Buffer.from("Hi there"));
+        proc.emit("close", 0);
+      });
+    });
+
+    await expect(done).resolves.toBeUndefined();
+
+    const proc = spawned[0];
+    expect(proc.spawnArgs).toEqual(
+      expect.arrayContaining(["-m", "openai/gpt-5.5", "--provider", "custom"]),
+    );
+    expect(proc.spawnOptions?.env).toMatchObject({
+      ORCAROUTER_API_KEY: "sk-orca-test",
+      OPENAI_API_KEY: "sk-orca-test",
+      OPENAI_BASE_URL: "https://api.orcarouter.ai/v1",
+      CUSTOM_BASE_URL: "https://api.orcarouter.ai/v1",
+      HERMES_INFERENCE_PROVIDER: "custom",
+    });
+  });
+
   it("runs AIML API through the CLI custom provider bridge", async () => {
     modelConfig.model = "gpt-4o-mini";
     modelConfig.provider = "aimlapi";

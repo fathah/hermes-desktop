@@ -22,6 +22,9 @@ describe("provider-registry", () => {
       expect(canonicalProviderBaseUrl("aimlapi")).toBe(
         "https://api.aimlapi.com/v1",
       );
+      expect(canonicalProviderBaseUrl("orcarouter")).toBe(
+        "https://api.orcarouter.ai/v1",
+      );
       expect(canonicalProviderBaseUrl("together")).toBe(
         "https://api.together.xyz/v1",
       );
@@ -98,6 +101,7 @@ describe("provider-registry", () => {
       const requiredBuiltins = [
         "groq",
         "aimlapi",
+        "orcarouter",
         "deepseek",
         "together",
         "fireworks",

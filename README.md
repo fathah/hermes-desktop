@@ -199,6 +199,7 @@ In local mode, chat requests go through `http://127.0.0.1:8642` with SSE streami
 | Provider            | Notes                                    |
 | ------------------- | ---------------------------------------- |
 | **OpenRouter**      | 200+ models via single API (recommended) |
+| **OrcaRouter**      | Routing gateway — one key across upstreams ([orcarouter.ai](https://www.orcarouter.ai)) |
 | **Anthropic**       | Direct Claude access                     |
 | **OpenAI**          | Direct GPT access                        |
 | **Google (Gemini)** | Google AI Studio                         |
