@@ -100,6 +100,9 @@ import {
   restartGatewayViaCli,
   testRemoteConnection,
   contextFolderSystemMessage,
+  localChatWorkingDirectory,
+  moveTuiStoredSessionContextFolder,
+  syncTuiSessionContextFolder,
 } from "../src/main/hermes";
 import http from "http";
 
@@ -388,5 +391,62 @@ describe("contextFolderSystemMessage (issue #27)", () => {
   it("instructs the agent to use absolute paths under the folder", () => {
     const msg = contextFolderSystemMessage("/work");
     expect(msg!.content.toLowerCase()).toContain("absolute path");
+  });
+});
+
+describe("context folder runtime binding", () => {
+  it("moves the durable workspace before a stored session is resumed", async () => {
+    const request = vi.fn().mockResolvedValue({});
+
+    await moveTuiStoredSessionContextFolder(
+      { request } as unknown as Parameters<
+        typeof moveTuiStoredSessionContextFolder
+      >[0],
+      "stored-session-1",
+      "  /work/project  ",
+    );
+
+    expect(request).toHaveBeenCalledWith("session.workspace.move", {
+      session_key: "stored-session-1",
+      cwd: "/work/project",
+    });
+  });
+
+  it("re-anchors a resumed TUI session before its next turn", async () => {
+    const request = vi.fn().mockResolvedValue({});
+
+    await syncTuiSessionContextFolder(
+      { request } as unknown as Parameters<
+        typeof syncTuiSessionContextFolder
+      >[0],
+      "runtime-session-1",
+      "  /work/project  ",
+    );
+
+    expect(request).toHaveBeenCalledWith("session.cwd.set", {
+      session_id: "runtime-session-1",
+      cwd: "/work/project",
+    });
+  });
+
+  it("does not issue a cwd request when no folder is selected", async () => {
+    const request = vi.fn().mockResolvedValue({});
+
+    await syncTuiSessionContextFolder(
+      { request } as unknown as Parameters<
+        typeof syncTuiSessionContextFolder
+      >[0],
+      "runtime-session-1",
+      "   ",
+    );
+
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("launches CLI fallback from the selected folder", () => {
+    expect(localChatWorkingDirectory("  /work/project  ")).toBe(
+      "/work/project",
+    );
+    expect(localChatWorkingDirectory()).toBe("/dev/null");
   });
 });

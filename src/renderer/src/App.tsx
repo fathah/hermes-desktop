@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Toaster } from "react-hot-toast";
 import { ThemeProvider } from "./components/ThemeProvider";
 import { FontProvider } from "./components/FontProvider";
+import { SoftBackgroundProvider } from "./components/SoftBackgroundProvider";
 import { ProfileModalProvider } from "./components/profile/ProfileModalProvider";
 import { SettingsModalProvider } from "./components/settings/SettingsModalProvider";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -241,34 +242,36 @@ function App(): React.JSX.Element {
 
   return (
     <ThemeProvider>
-      <FontProvider>
-        <ProfileModalProvider>
-          <SettingsModalProvider>
-            <ErrorBoundary>
-              <div
-                className={`app${isMac ? " is-mac" : ""}${
-                  isMac && screen === "main" ? " shell-vibrant" : ""
-                }`}
-              >
-                {isMac && <div className="drag-region" />}
-                <div className="app-content">{renderScreen()}</div>
-              </div>
-              <Toaster
-                position="bottom-right"
-                reverseOrder={false}
-                toastOptions={{
-                  style: {
-                    background: "var(--bg-elevated)",
-                    color: "var(--text-primary)",
-                    border: "1px solid var(--border-bright)",
-                    fontSize: 13,
-                  },
-                }}
-              />
-            </ErrorBoundary>
-          </SettingsModalProvider>
-        </ProfileModalProvider>
-      </FontProvider>
+      <SoftBackgroundProvider>
+        <FontProvider>
+          <ProfileModalProvider>
+            <SettingsModalProvider>
+              <ErrorBoundary>
+                <div
+                  className={`app${isMac ? " is-mac" : ""}${
+                    isMac && screen === "main" ? " shell-vibrant" : ""
+                  }`}
+                >
+                  {isMac && <div className="drag-region" />}
+                  <div className="app-content">{renderScreen()}</div>
+                </div>
+                <Toaster
+                  position="bottom-right"
+                  reverseOrder={false}
+                  toastOptions={{
+                    style: {
+                      background: "var(--bg-elevated)",
+                      color: "var(--text-primary)",
+                      border: "1px solid var(--border-bright)",
+                      fontSize: 13,
+                    },
+                  }}
+                />
+              </ErrorBoundary>
+            </SettingsModalProvider>
+          </ProfileModalProvider>
+        </FontProvider>
+      </SoftBackgroundProvider>
     </ThemeProvider>
   );
 }

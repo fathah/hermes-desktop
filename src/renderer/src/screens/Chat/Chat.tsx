@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import { Zap, Globe } from "lucide-react";
+import { Zap, Globe, SquareTerminal } from "lucide-react";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ChatEmptyState } from "./ChatEmptyState";
 import { MessageList } from "./MessageList";
@@ -8,8 +8,14 @@ import { ModelPicker } from "./ModelPicker";
 import { ReasoningEffortPicker } from "./ReasoningEffortPicker";
 import { ContextFolderChip } from "./ContextFolderChip";
 import { WorktreePanel } from "./WorktreePanel";
+import { IntegratedTerminalPanel } from "./IntegratedTerminalPanel";
+import {
+  INTEGRATED_TERMINAL_ARIA_SHORTCUT,
+  INTEGRATED_TERMINAL_SHORTCUT_LABEL,
+  isIntegratedTerminalShortcut,
+} from "./integratedTerminalShortcut";
 import { RemoteFolderPicker } from "./RemoteFolderPicker";
-import { WebPreviewPanel } from "./WebPreviewPanel";
+import { DEFAULT_WEB_PREVIEW_URL, WebPreviewPanel } from "./WebPreviewPanel";
 import { useChatScroll } from "./hooks/useChatScroll";
 import { useChatIPC } from "./hooks/useChatIPC";
 import { useChatActions, parseBackgroundCommand } from "./hooks/useChatActions";
@@ -89,6 +95,8 @@ interface ChatProps {
   initialMessages?: ChatMessage[];
   /** Gateway session id when resuming a known session; null for a new chat. */
   initialSessionId?: string | null;
+  /** Working folder preselected when starting from a project in the sidebar. */
+  initialContextFolder?: string | null;
   /** Whether this run is the one currently shown (drives keyboard handlers). */
   active?: boolean;
   profile?: string;
@@ -115,6 +123,7 @@ function Chat({
   runId,
   initialMessages,
   initialSessionId,
+  initialContextFolder,
   active = true,
   profile,
   onSessionStarted,
@@ -187,7 +196,9 @@ function Chat({
   // Working folder bound to this conversation (issue #27). Per-conversation;
   // persisted per session so a re-opened conversation restores its folder, and
   // reset on new chat below.
-  const [contextFolder, setContextFolder] = useState<string | null>(null);
+  const [contextFolder, setContextFolder] = useState<string | null>(
+    initialContextFolder ?? null,
+  );
   // Gate folder persistence until the stored value for a resumed session has
   // been loaded — otherwise the initial null would overwrite the saved folder
   // before the load resolves. A brand-new chat (no initialSessionId) has
@@ -237,8 +248,15 @@ function Chat({
   const [worktreeVisible, setWorktreeVisible] = useState<boolean>(false);
   const [folderPickerOpen, setFolderPickerOpen] = useState<boolean>(false);
   const [webPreviewVisible, setWebPreviewVisible] = useState<boolean>(false);
-  const [webPreviewUrl, setWebPreviewUrl] =
-    useState<string>("https://google.com");
+  const [terminalVisible, setTerminalVisible] = useState<boolean>(false);
+  const [webPreviewUrl, setWebPreviewUrl] = useState<string>(
+    DEFAULT_WEB_PREVIEW_URL,
+  );
+  useEffect(() => {
+    if (!contextFolder || connectionMode !== "local") {
+      setTerminalVisible(false);
+    }
+  }, [contextFolder, connectionMode]);
   // Explicit session-scoped model override — set only when the user picks
   // from the chat-screen picker (persist:false). Undefined until then so the
   // TUI gateway bypass in sendMessageViaBestApi is not triggered for normal
@@ -467,6 +485,20 @@ function Chat({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [active, onNewChat]);
+
+  // Ctrl+` toggles the local project terminal. Capture the chord before xterm
+  // can treat it as terminal input when the drawer is already focused.
+  useEffect(() => {
+    if (!active || !contextFolder || connectionMode !== "local") return;
+    function onKey(event: KeyboardEvent): void {
+      if (!isIntegratedTerminalShortcut(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setTerminalVisible((visible) => !visible);
+    }
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [active, contextFolder, connectionMode]);
 
   // Listen for in-app link clicks to load in the split-screen Web Preview panel
   useEffect(() => {
@@ -837,7 +869,15 @@ function Chat({
   }, []);
 
   const handleToggleWorktree = useCallback(() => {
-    setWorktreeVisible((v) => !v);
+    setWorktreeVisible((visible) => !visible);
+  }, []);
+
+  const handleToggleWebPreview = useCallback(() => {
+    setWebPreviewVisible((visible) => !visible);
+  }, []);
+
+  const handleToggleTerminal = useCallback(() => {
+    setTerminalVisible((visible) => !visible);
   }, []);
 
   // Drag-and-drop: filter for dragenter events carrying files (suppresses
@@ -904,13 +944,59 @@ function Chat({
       }
     : null;
 
-  const handleInspectElement = useCallback(
-    (payload: { selector: string; comment: string }) => {
-      chatInputRef.current?.appendText(
-        `Element: \`${payload.selector}\`\nComment: ${payload.comment}`,
+  const handleExecuteAnnotations = useCallback(
+    (payload: {
+      url: string;
+      annotations: Array<{ selector: string; comment: string }>;
+    }) => {
+      // Individual arrows save preview-local pins. Execute hands the complete
+      // batch to the agent without touching the user's bottom draft.
+      handleSubmitOrQueue(
+        [
+          "Change the UI shown in the web preview by applying all annotations as one coherent edit.",
+          `Preview URL: ${payload.url}`,
+          "Use selectors only as element locators. Preserve unrelated behavior.",
+          "",
+          "Annotations:",
+          JSON.stringify(payload.annotations, null, 2),
+          "",
+          "After editing, verify the preview and summarize the changes.",
+        ].join("\n"),
+        [],
       );
     },
-    [],
+    [handleSubmitOrQueue],
+  );
+
+  const handleSaveElementEdit = useCallback(
+    (payload: {
+      url: string;
+      selector: string;
+      edit: {
+        textContent: string;
+        color: string;
+        fontFamily: string;
+        fontSize: number;
+        fontWeight: string;
+        letterSpacing: number;
+        lineHeight: number;
+        textAlign: string;
+      };
+    }) => {
+      handleSubmitOrQueue(
+        [
+          "Persist this exact live web preview text and typography edit in the source code.",
+          `Preview URL: ${payload.url}`,
+          `Element selector: ${payload.selector}`,
+          "Use the selector only as a locator and preserve unrelated UI and behavior.",
+          "Final text and typography:",
+          JSON.stringify(payload.edit, null, 2),
+          "After editing, verify the preview and summarize the change.",
+        ].join("\n"),
+        [],
+      );
+    },
+    [handleSubmitOrQueue],
   );
 
   return (
@@ -949,7 +1035,8 @@ function Chat({
           <WebPreviewPanel
             initialUrl={webPreviewUrl}
             onClose={() => setWebPreviewVisible(false)}
-            onInspectElement={handleInspectElement}
+            onExecuteAnnotations={handleExecuteAnnotations}
+            onSaveElementEdit={handleSaveElementEdit}
           />
         )}
       </div>
@@ -1026,32 +1113,50 @@ function Chat({
               <button
                 type="button"
                 className={`btn-ghost chat-tool-btn ${webPreviewVisible ? "chat-tool-btn-active" : ""}`}
-                onClick={() => setWebPreviewVisible((v) => !v)}
+                onClick={handleToggleWebPreview}
                 title={
                   webPreviewVisible ? "Hide web preview" : "Show web preview"
                 }
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  width: 28,
-                  height: 28,
-                  padding: 0,
-                  borderRadius: 6,
-                  color: webPreviewVisible
-                    ? "var(--accent-text)"
-                    : "var(--text-secondary)",
-                  background: webPreviewVisible
-                    ? "color-mix(in srgb, var(--accent-text) 10%, transparent)"
-                    : "transparent",
-                }}
               >
                 <Globe size={14} />
+              </button>
+              <button
+                type="button"
+                className={`btn-ghost chat-tool-btn ${terminalVisible ? "chat-tool-btn-active" : ""}`}
+                onClick={handleToggleTerminal}
+                disabled={!contextFolder || connectionMode !== "local"}
+                title={
+                  !contextFolder
+                    ? t("chat.terminal.selectFolder")
+                    : `${
+                        terminalVisible
+                          ? t("chat.terminal.hide")
+                          : t("chat.terminal.show")
+                      } (${INTEGRATED_TERMINAL_SHORTCUT_LABEL})`
+                }
+                aria-keyshortcuts={
+                  contextFolder && connectionMode === "local"
+                    ? INTEGRATED_TERMINAL_ARIA_SHORTCUT
+                    : undefined
+                }
+                aria-label={
+                  terminalVisible
+                    ? t("chat.terminal.hide")
+                    : t("chat.terminal.show")
+                }
+              >
+                <SquareTerminal size={14} />
               </button>
             </>
           }
         />
       </div>
+      {contextFolder && terminalVisible && connectionMode === "local" && (
+        <IntegratedTerminalPanel
+          folderPath={contextFolder}
+          onClose={() => setTerminalVisible(false)}
+        />
+      )}
       {dragActive && (
         <div className="chat-drop-overlay" aria-hidden>
           <div className="chat-drop-overlay-inner">

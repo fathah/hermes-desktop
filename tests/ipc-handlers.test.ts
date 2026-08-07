@@ -36,8 +36,22 @@ function extractPreloadInvokeChannels(src: string): string[] {
   return [...new Set(channels)];
 }
 
+function extractIpcOnChannels(src: string): string[] {
+  return [...src.matchAll(/ipcMain\.on\(\s*["']([^"']+)["']/g)].map(
+    (match) => match[1],
+  );
+}
+
+function extractPreloadSendChannels(src: string): string[] {
+  return [...src.matchAll(/ipcRenderer\.send\(\s*["']([^"']+)["']/g)].map(
+    (match) => match[1],
+  );
+}
+
 const mainChannels = extractIpcHandleChannels(indexSrc);
 const preloadChannels = extractPreloadInvokeChannels(preloadSrc);
+const mainSendChannels = extractIpcOnChannels(indexSrc);
+const preloadSendChannels = extractPreloadSendChannels(preloadSrc);
 
 describe("IPC Handler ↔ Preload Consistency", () => {
   it("main process registers IPC handlers", () => {
@@ -55,6 +69,13 @@ describe("IPC Handler ↔ Preload Consistency", () => {
 
   it("every main handler has a matching preload invoke", () => {
     const missing = mainChannels.filter((ch) => !preloadChannels.includes(ch));
+    expect(missing).toEqual([]);
+  });
+
+  it("every one-way preload send has a matching main listener", () => {
+    const missing = preloadSendChannels.filter(
+      (channel) => !mainSendChannels.includes(channel),
+    );
     expect(missing).toEqual([]);
   });
 });

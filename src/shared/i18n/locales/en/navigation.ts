@@ -12,6 +12,7 @@ export default {
   chats: "Chats",
   pinned: "Pinned",
   noChats: "No chats",
+  newProjectChat: "New chat in project",
   soul: "Persona",
   memory: "Memory",
   tools: "Capabilities",
@@ -41,5 +42,13 @@ export default {
     deleteCancel: "Cancel",
     deleteConfirmAction: "Delete",
     deleting: "Deleting…",
+  },
+  projectModal: {
+    title: "Add project",
+    name: "Project folder name",
+    namePlaceholder: "my-project",
+    create: "Create new project…",
+    or: "or",
+    addExisting: "Add existing folder…",
   },
 } as const;

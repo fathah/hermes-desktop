@@ -2,6 +2,18 @@
 
 Long fenced code blocks in agent messages render collapsed behind a "Show more" / "Show less" toggle, so a big file dump doesn't bury the rest of the conversation. [[src/renderer/src/components/AgentMarkdown.tsx]]'s `CodeBlock` treats a block as long when it exceeds 15 lines or 800 characters.
 
+## Inline code stays lightweight
+
+Inline commands and identifiers use a compact, low-contrast treatment so they remain readable inside prose without competing with the surrounding message.
+
+The Markdown renderer assigns `chat-inline-code` only to single-line, unfenced code. Its subtle theme-derived fill and border are separate from the stronger `--code-bg` surface reserved for fenced blocks.
+
+## Tool payload syntax highlighting
+
+Expanded tool arguments and results color recognized source code and structured data, making JSON, JavaScript, TypeScript, Python, SQL, HTML, and shell scripts easier to scan.
+
+[[src/renderer/src/components/ToolSyntaxHighlight.tsx#ToolSyntaxHighlight]] lazily loads Prism only for recognized code. [[src/renderer/src/components/ToolSyntaxHighlight.tsx#detectToolCodeLanguage]] uses conservative signatures so ordinary terminal logs stay plain.
+
 ## Expansion must survive streaming remounts
 
 The expand/collapse choice is stored in a module-level `Set` keyed by the block's source position, not in plain component state — otherwise it resets to collapsed mid-stream.

@@ -49,6 +49,7 @@ interface HarnessApi {
   messages?: ChatMessage[];
   send?: (text: string) => Promise<boolean>;
   setConnectionMode?: Dispatch<SetStateAction<"local" | "remote" | "ssh">>;
+  setContextFolder?: Dispatch<SetStateAction<string | null>>;
   setMessages?: Dispatch<SetStateAction<ChatMessage[]>>;
   setModel?: Dispatch<SetStateAction<string>>;
   setProvider?: Dispatch<SetStateAction<string>>;
@@ -71,12 +72,14 @@ const activeRecoveryTurn: ActiveTurn = {
 function Harness({
   api,
   fallbackOnUnavailable = false,
+  initialContextFolder = null,
   initialConnectionMode = "local",
   onDashboardUnavailable,
   setUsage = vi.fn() as SetUsageMock,
 }: {
   api: HarnessApi;
   fallbackOnUnavailable?: boolean;
+  initialContextFolder?: string | null;
   initialConnectionMode?: "local" | "remote" | "ssh";
   onDashboardUnavailable?: (reason: string) => void;
   setUsage?: SetUsageMock;
@@ -91,13 +94,16 @@ function Harness({
   ]);
   const [model, setModel] = useState("bad-model");
   const [provider, setProvider] = useState("bad-provider");
+  const [contextFolder, setContextFolder] = useState<string | null>(
+    initialContextFolder,
+  );
   const [connectionMode, setConnectionMode] = useState<
     "local" | "remote" | "ssh"
   >(initialConnectionMode);
   const activeTurnRef = useRef<ActiveTurn | null>({ ...activeBadTurn });
   const transport = useDashboardChatTransport({
     activeTurnRef,
-    contextFolder: null,
+    contextFolder,
     connectionMode,
     enabled: true,
     fallbackOnUnavailable,
@@ -123,6 +129,7 @@ function Harness({
       messages,
       send: transport.sendMessage,
       setConnectionMode,
+      setContextFolder,
       setMessages,
       setModel,
       setProvider,
@@ -132,6 +139,7 @@ function Harness({
     api,
     messages,
     setConnectionMode,
+    setContextFolder,
     setMessages,
     transport.sendMessage,
   ]);
@@ -176,6 +184,82 @@ describe("useDashboardChatTransport recovery", () => {
 
     expect(window.hermesAPI.freshDashboardWsUrl).toHaveBeenCalledTimes(1);
     expect(dashboardMock.connect).toHaveBeenCalledWith("ws://fresh-dashboard");
+  });
+
+  it("reopens a live runtime when its linked project folder changes", async () => {
+    const requests: Array<{ method: string; params: unknown }> = [];
+    dashboardMock.request.mockImplementation(async (method, params) => {
+      requests.push({ method, params });
+      if (method === "session.create") {
+        return {
+          info: { cwd: "/Users/me/.hermes/hermes-agent" },
+          session_id: "live-old",
+          stored_session_id: "stored-chat",
+        };
+      }
+      if (method === "session.resume") {
+        return {
+          info: { cwd: "/work/project" },
+          resumed: "stored-chat",
+          session_id: "live-project",
+        };
+      }
+      if (method === "model.options") {
+        return { model: "bad-model", provider: "bad-provider", providers: [] };
+      }
+      return {};
+    });
+    const api: HarnessApi = {};
+    render(<Harness api={api} />);
+
+    await act(async () => {
+      await api.send?.("first prompt");
+    });
+
+    const firstSend = api.send;
+    await act(async () => {
+      api.setContextFolder?.("/work/project");
+    });
+    await waitFor(() => expect(api.send).not.toBe(firstSend));
+
+    await act(async () => {
+      await api.send?.("second prompt");
+    });
+
+    expect(requests).toContainEqual({
+      method: "session.cwd.set",
+      params: { session_id: "live-old", cwd: "/work/project" },
+    });
+    expect(requests).toContainEqual({
+      method: "session.close",
+      params: { session_id: "live-old" },
+    });
+    expect(requests).toContainEqual({
+      method: "session.resume",
+      params: { session_id: "stored-chat", cols: 96 },
+    });
+
+    const cwdSetIndex = requests.findIndex(
+      (request) => request.method === "session.cwd.set",
+    );
+    const closeIndex = requests.findIndex(
+      (request) => request.method === "session.close",
+    );
+    const resumeIndex = requests.findIndex(
+      (request) => request.method === "session.resume",
+    );
+    const secondSubmitIndex = requests.findIndex(
+      (request) =>
+        request.method === "prompt.submit" &&
+        (request.params as { text?: string }).text === "second prompt",
+    );
+    expect(cwdSetIndex).toBeLessThan(closeIndex);
+    expect(closeIndex).toBeLessThan(resumeIndex);
+    expect(resumeIndex).toBeLessThan(secondSubmitIndex);
+    expect(requests[secondSubmitIndex]).toEqual({
+      method: "prompt.submit",
+      params: { session_id: "live-project", text: "second prompt" },
+    });
   });
 
   it("surfaces OAuth login requirements without legacy fallback", async () => {

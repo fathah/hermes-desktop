@@ -32,6 +32,16 @@ async function renderHighlighted(
 }
 
 describe("AgentMarkdown", () => {
+  it("marks inline code separately from fenced code blocks", () => {
+    const { container } = render(
+      <AgentMarkdown>{"Run `bun run lint` before shipping."}</AgentMarkdown>,
+    );
+
+    const inlineCode = container.querySelector(".chat-inline-code");
+    expect(inlineCode?.textContent).toBe("bun run lint");
+    expect(inlineCode?.closest("pre")).toBeNull();
+  });
+
   it("renders box-drawing tree diagrams as plain text, even with the highlighter loaded", async () => {
     // Control first: prove highlighting works in this environment, and leave
     // the highlighter module loaded so the tree block below would use Prism

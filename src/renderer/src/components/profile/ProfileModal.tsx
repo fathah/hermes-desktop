@@ -26,6 +26,7 @@ import ProfileWalletPane from "./ProfileWalletPane";
 import ProfileSyncPane from "./ProfileSyncPane";
 import { OrbLoader } from "../OrbLoader";
 import type { ProfileSection } from "./ProfileModalContext";
+import SoftBackgroundPicker from "./SoftBackgroundPicker";
 
 /** Mirrors the entry shape returned by `window.hermesAPI.listProfiles()`. */
 interface ProfileInfo {
@@ -487,6 +488,8 @@ export default function ProfileModal({
                     ))}
                   </div>
                 </div>
+
+                <SoftBackgroundPicker profile={profile.id} />
 
                 {error && <div className="agents-create-error">{error}</div>}
               </div>

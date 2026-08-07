@@ -29,6 +29,11 @@ import type {
 } from "../shared/account";
 import type { AgentSyncResult, AgentSyncStatus } from "../shared/agent-sync";
 import type { GpuPreferenceMode, GpuStatus } from "../shared/gpu";
+import type { CustomSoftBackground } from "../shared/soft-backgrounds";
+import {
+  isWebPreviewShortcutAction,
+  type WebPreviewShortcutAction,
+} from "../shared/web-preview-shortcuts";
 import type {
   SshHermesTargetInspection,
   SshDockerProvisionResult,
@@ -130,6 +135,13 @@ const hermesAPI = {
     ipcRenderer.invoke("set-gpu-preference", mode),
 
   relaunchApp: (): Promise<void> => ipcRenderer.invoke("relaunch-app"),
+
+  listSoftBackgrounds: (): Promise<CustomSoftBackground[]> =>
+    ipcRenderer.invoke("list-soft-backgrounds"),
+  addSoftBackgrounds: (): Promise<CustomSoftBackground[]> =>
+    ipcRenderer.invoke("add-soft-backgrounds"),
+  removeSoftBackground: (id: string): Promise<boolean> =>
+    ipcRenderer.invoke("remove-soft-background", id),
 
   onInstallProgress: (
     callback: (progress: {
@@ -880,6 +892,18 @@ const hermesAPI = {
   listRecentSessionContextFolders: (limit?: number): Promise<string[]> =>
     ipcRenderer.invoke("list-recent-session-context-folders", limit),
 
+  listProjects: (): Promise<import("../shared/projects").DesktopProject[]> =>
+    ipcRenderer.invoke("list-projects"),
+
+  addExistingProject: (): Promise<
+    import("../shared/projects").DesktopProject | null
+  > => ipcRenderer.invoke("add-existing-project"),
+
+  createProject: (
+    name: string,
+  ): Promise<import("../shared/projects").DesktopProject | null> =>
+    ipcRenderer.invoke("create-project", name),
+
   getSessionModelOverride: (
     sessionId: string,
   ): Promise<SessionModelOverride | null> =>
@@ -1514,12 +1538,68 @@ const hermesAPI = {
   readFile: (
     filePath: string,
     maxBytes?: number,
-  ): Promise<{ content: string; truncated: boolean } | null> =>
-    ipcRenderer.invoke("read-file", filePath, maxBytes),
+    workspaceRoot?: string,
+  ): Promise<{
+    content: string;
+    truncated: boolean;
+    editToken?: string;
+  } | null> =>
+    ipcRenderer.invoke("read-file", filePath, maxBytes, workspaceRoot),
+  saveFile: (
+    editToken: string,
+    content: string,
+  ): Promise<
+    | { success: true }
+    | {
+        success: false;
+        error:
+          | "invalid-token"
+          | "stale"
+          | "too-large"
+          | "not-local"
+          | "write-failed";
+      }
+  > => ipcRenderer.invoke("save-file", editToken, content),
   openFileInEditor: (filePath: string): Promise<boolean> =>
     ipcRenderer.invoke("open-file-in-editor", filePath),
   openTerminal: (dirPath: string): Promise<boolean> =>
     ipcRenderer.invoke("open-terminal", dirPath),
+  startIntegratedTerminal: (dirPath: string): Promise<{ id: string } | null> =>
+    ipcRenderer.invoke("integrated-terminal-start", dirPath),
+  writeIntegratedTerminal: (id: string, data: string): void =>
+    ipcRenderer.send("integrated-terminal-write", id, data),
+  resizeIntegratedTerminal: (
+    id: string,
+    cols: number,
+    rows: number,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("integrated-terminal-resize", id, cols, rows),
+  stopIntegratedTerminal: (id: string): Promise<boolean> =>
+    ipcRenderer.invoke("integrated-terminal-stop", id),
+  onIntegratedTerminalData: (
+    callback: (id: string, data: string) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      id: unknown,
+      data: unknown,
+    ): void => callback(String(id), String(data));
+    ipcRenderer.on("integrated-terminal-data", handler);
+    return () =>
+      ipcRenderer.removeListener("integrated-terminal-data", handler);
+  },
+  onIntegratedTerminalExit: (
+    callback: (id: string, exitCode: number) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      id: unknown,
+      exitCode: unknown,
+    ): void => callback(String(id), Number(exitCode));
+    ipcRenderer.on("integrated-terminal-exit", handler);
+    return () =>
+      ipcRenderer.removeListener("integrated-terminal-exit", handler);
+  },
   readImageFile: (filePath: string): Promise<string | null> =>
     ipcRenderer.invoke("read-image-file", filePath),
   kanbanAssignTask: (
@@ -1554,15 +1634,114 @@ const hermesAPI = {
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke("open-external", url),
 
+  onWebPreviewShortcut: (
+    callback: (shortcut: WebPreviewShortcutAction) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      value: unknown,
+    ): void => {
+      if (isWebPreviewShortcutAction(value)) callback(value);
+    };
+    ipcRenderer.on("web-preview-shortcut", handler);
+    return () => ipcRenderer.removeListener("web-preview-shortcut", handler);
+  },
+
   inspectWebPreview: (
     webContentsId: number,
   ): Promise<{
+    annotationId: number;
     selector: string;
     rect: { left: number; top: number; width: number; height: number };
   } | null> => ipcRenderer.invoke("web-preview-inspect", webContentsId),
 
+  measureWebPreviewSelections: (
+    webContentsId: number,
+  ): Promise<
+    Array<{
+      annotationId: number;
+      rect: {
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+      } | null;
+    }>
+  > => ipcRenderer.invoke("web-preview-measure-selections", webContentsId),
+
+  readWebPreviewElementEditState: (
+    webContentsId: number,
+    annotationId: number,
+  ): Promise<{
+    textContent: string;
+    canEditText: boolean;
+    styles: {
+      color: string;
+      fontFamily: string;
+      fontSize: number;
+      fontWeight: string;
+      letterSpacing: number;
+      lineHeight: number;
+      textAlign: string;
+    };
+    inlineStyles: Record<
+      | "color"
+      | "font-family"
+      | "font-size"
+      | "font-weight"
+      | "letter-spacing"
+      | "line-height"
+      | "text-align",
+      string | null
+    >;
+  } | null> =>
+    ipcRenderer.invoke(
+      "web-preview-read-element-edit-state",
+      webContentsId,
+      annotationId,
+    ),
+
+  applyWebPreviewElementEdit: (
+    webContentsId: number,
+    annotationId: number,
+    patch: {
+      textContent?: string;
+      styles?: Partial<
+        Record<
+          | "color"
+          | "font-family"
+          | "font-size"
+          | "font-weight"
+          | "letter-spacing"
+          | "line-height"
+          | "text-align",
+          string | null
+        >
+      >;
+    },
+  ): Promise<boolean> =>
+    ipcRenderer.invoke(
+      "web-preview-apply-element-edit",
+      webContentsId,
+      annotationId,
+      patch,
+    ),
+
   cancelWebPreviewInspection: (webContentsId: number): Promise<void> =>
     ipcRenderer.invoke("web-preview-cancel-inspection", webContentsId),
+
+  releaseWebPreviewSelection: (
+    webContentsId: number,
+    annotationId: number,
+  ): Promise<void> =>
+    ipcRenderer.invoke(
+      "web-preview-release-selection",
+      webContentsId,
+      annotationId,
+    ),
+
+  clearWebPreviewSelections: (webContentsId: number): Promise<void> =>
+    ipcRenderer.invoke("web-preview-clear-selections", webContentsId),
 
   // Backup / Import
   runHermesBackup: (

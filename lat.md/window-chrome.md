@@ -6,6 +6,8 @@ On macOS the window is frameless (`titleBarStyle: "hiddenInset"`, traffic lights
 
 `.app` fills the window (`height: 100vh`) so the chrome reaches every edge. The sidebar rounds only its **top-left** corner (`border-radius: 16px 0 0 0`); the full-width status strip owns the window's bottom edge and rounds both bottom corners (`0 0 16px 16px`), so the sidebar's bottom-left is square against it. A hairline seam (`.content` `border-inline-start`) separates the content pane from the sidebar.
 
+Per-agent soft backgrounds are contained to `.content`. They never paint on `.app`, the title-tab strip, or the status bar; this keeps tabs above the fixed drag region and prevents wallpaper from leaking below the bottom chrome.
+
 ## Translucent sidebar (macOS vibrancy)
 
 The sidebar is frosted glass on macOS — the window material shows through it — while the content pane stays opaque and readable.

@@ -8,6 +8,7 @@ import { stopAllDashboards } from "../dashboard";
 import { cleanupTempMediaFiles } from "../media";
 import { closeDbConnection } from "../db";
 import { stopSshTunnel } from "../ssh-tunnel";
+import { stopAllIntegratedTerminals } from "../integrated-terminal";
 import {
   hardenAttachedWebContents,
   hardenWebviewPreferences,
@@ -20,6 +21,8 @@ import { setGatewayPromptParent } from "../gatewayPrompt";
 import { showChatContextMenu } from "./context-menu";
 import { buildMenu } from "./menu";
 import { setupUpdater } from "./updater";
+import { matchWebPreviewShortcut } from "../../shared/web-preview-shortcuts";
+import { installSoftBackgroundProtocol } from "../soft-backgrounds";
 
 const APP_NAME = process.env.HERMES_DESKTOP_APP_NAME?.trim() || "Hermes One";
 const OPEN_DEVTOOLS_ON_START =
@@ -51,6 +54,7 @@ export function startMainProcess(): void {
 
   app.whenReady().then(() => {
     electronApp.setAppUserModelId("com.hermes.desktop");
+    installSoftBackgroundProtocol();
 
     app.on("browser-window-created", (_, window) => {
       optimizer.watchWindowShortcuts(window);
@@ -67,6 +71,17 @@ export function startMainProcess(): void {
         const isWebPreview =
           contents.session === session.fromPartition("web-preview");
         hardenAttachedWebContents(contents, isWebPreview);
+        if (isWebPreview) {
+          contents.on("before-input-event", (event, input) => {
+            const shortcut = matchWebPreviewShortcut(
+              input,
+              process.platform === "darwin",
+            );
+            if (!shortcut) return;
+            event.preventDefault();
+            contents.hostWebContents?.send("web-preview-shortcut", shortcut);
+          });
+        }
       }
     });
 
@@ -77,7 +92,7 @@ export function startMainProcess(): void {
           "default-src 'self'; " +
             "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; " +
             "style-src 'self' 'unsafe-inline'; " +
-            "img-src 'self' data: blob: file: https:; " +
+            "img-src 'self' data: blob: file: hermes-background: https:; " +
             "media-src 'self' data: blob: file: https:; " +
             "connect-src 'self' blob: http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:* https: wss:; " +
             "font-src 'self' data:; " +
@@ -126,6 +141,7 @@ export function startMainProcess(): void {
     // orphaned (reparented to PID 1) and keeps holding its local port, so each
     // relaunch leaks another tunnel and the port drifts (18642 → 61799 → …).
     stopSshTunnel();
+    stopAllIntegratedTerminals();
     closeDbConnection();
   });
 }

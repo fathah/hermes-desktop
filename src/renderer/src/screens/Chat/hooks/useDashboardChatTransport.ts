@@ -74,6 +74,7 @@ interface EnsureDashboardRuntimeSessionParams {
 
 interface EnsureDashboardRuntimeSessionResult {
   created: boolean;
+  cwd?: string;
   runtimeSessionId: string;
   storedSessionId: string;
 }
@@ -173,6 +174,12 @@ export function isDashboardSlashWorkerExitError(err: unknown): boolean {
   return /slash worker exited/i.test(message);
 }
 
+function dashboardSessionResponseCwd(response: SessionResponse): string | null {
+  if (!response.info || typeof response.info !== "object") return null;
+  const cwd = (response.info as { cwd?: unknown }).cwd;
+  return typeof cwd === "string" && cwd.trim() ? cwd.trim() : null;
+}
+
 export async function submitDashboardPromptWithRecovery(
   client: DashboardPromptClient,
   params: {
@@ -241,8 +248,10 @@ export async function ensureDashboardRuntimeSession(
       if (!resumed.session_id) {
         throw new Error("session.resume returned no session_id");
       }
+      const cwd = dashboardSessionResponseCwd(resumed);
       return {
         created: false,
+        ...(cwd ? { cwd } : {}),
         runtimeSessionId: resumed.session_id,
         storedSessionId: resumed.stored_session_id || resumed.resumed || stored,
       };
@@ -265,9 +274,11 @@ export async function ensureDashboardRuntimeSession(
       ...(params.profile ? { profile: params.profile } : {}),
     },
   );
+  const cwd = dashboardSessionResponseCwd(created);
 
   return {
     created: true,
+    ...(cwd ? { cwd } : {}),
     runtimeSessionId: created.session_id,
     storedSessionId: created.stored_session_id || created.session_id,
   };
@@ -1247,6 +1258,7 @@ export function useDashboardChatTransport({
     ): Promise<string> => {
       let targetSessionId = runtimeSessionIdRef.current;
       let justCreated = false;
+      const requestedCwd = contextFolder?.trim() || null;
 
       if (!targetSessionId) {
         const stored = storedSessionIdRef.current;
@@ -1273,8 +1285,8 @@ export function useDashboardChatTransport({
         runtimeSessionIdRef.current = targetSessionId;
         lastRuntimeSessionWasCreatedRef.current = response.created;
         justCreated = response.created;
-        if (justCreated && contextFolder) {
-          lastSyncedCwdRef.current = contextFolder;
+        if (requestedCwd && (justCreated || response.cwd === requestedCwd)) {
+          lastSyncedCwdRef.current = requestedCwd;
         }
         const storedId = response.storedSessionId;
         storedSessionIdRef.current = storedId;
@@ -1283,20 +1295,62 @@ export function useDashboardChatTransport({
       }
 
       if (
-        contextFolder &&
+        requestedCwd &&
         targetSessionId &&
-        lastSyncedCwdRef.current !== contextFolder
+        lastSyncedCwdRef.current !== requestedCwd
       ) {
-        lastSyncedCwdRef.current = contextFolder;
-        await client
-          .request("session.cwd.set", {
+        try {
+          await client.request("session.cwd.set", {
             session_id: targetSessionId,
-            cwd: contextFolder,
-          })
-          .catch((err) => {
-            lastSyncedCwdRef.current = null;
-            console.warn("Failed to sync dashboard CWD:", err);
+            cwd: requestedCwd,
           });
+
+          // `session.cwd.set` moves tool execution but an already-built agent
+          // keeps its cached system prompt. Re-open a resumed/live runtime so
+          // Hermes rebuilds that prompt from the newly persisted cwd before the
+          // user's next turn. A just-created runtime already received cwd in
+          // session.create, so it does not need this reset.
+          if (!justCreated) {
+            const stored = storedSessionIdRef.current;
+            await client.request("session.close", {
+              session_id: targetSessionId,
+            });
+            runtimeSessionIdRef.current = null;
+            reasoningSegmentClosedRef.current = false;
+            appliedModelRef.current = null;
+
+            const excludeSeedUserId =
+              options.excludeSeedUserId ??
+              activeTurnRef.current?.userId ??
+              null;
+            const replacement = await ensureDashboardRuntimeSession({
+              client,
+              contextFolder: requestedCwd,
+              excludeSeedUserId,
+              messages: messagesRef.current,
+              profile,
+              storedSessionId: stored,
+            });
+            if (stored && replacement.created) {
+              pendingRecoveredContinuationRef.current =
+                dashboardContinuationItemsFromTranscript(messagesRef.current, {
+                  excludeUserId: excludeSeedUserId,
+                });
+            }
+            targetSessionId = replacement.runtimeSessionId;
+            runtimeSessionIdRef.current = targetSessionId;
+            lastRuntimeSessionWasCreatedRef.current = replacement.created;
+            storedSessionIdRef.current = replacement.storedSessionId;
+            recreateRuntimeSessionRef.current = false;
+            setHermesSessionId(replacement.storedSessionId);
+          }
+
+          lastSyncedCwdRef.current = requestedCwd;
+        } catch (err) {
+          lastSyncedCwdRef.current = null;
+          console.warn("Failed to sync dashboard CWD:", err);
+          throw err;
+        }
       }
 
       return targetSessionId;

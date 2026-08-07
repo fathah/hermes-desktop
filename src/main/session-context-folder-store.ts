@@ -1,5 +1,7 @@
 import type Database from "better-sqlite3";
+import { basename } from "path";
 import { getDbConnection } from "./db";
+import type { DesktopProject } from "../shared/projects";
 
 /**
  * Desktop-owned, per-session store for the working folder the user links to a
@@ -12,6 +14,7 @@ import { getDbConnection } from "./db";
  * table in the active profile's state.db, keyed by `session_id`.
  */
 const TABLE = "desktop_session_context_folders";
+const PROJECTS_TABLE = "desktop_projects";
 
 function ensureTable(db: Database.Database): void {
   db.exec(`
@@ -23,10 +26,25 @@ function ensureTable(db: Database.Database): void {
   `);
 }
 
+function ensureProjectsTable(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ${PROJECTS_TABLE} (
+      folder_path TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      created_at REAL NOT NULL DEFAULT (strftime('%s', 'now')),
+      updated_at REAL NOT NULL DEFAULT (strftime('%s', 'now'))
+    );
+  `);
+}
+
 function tableExists(db: Database.Database): boolean {
+  return tableExistsNamed(db, TABLE);
+}
+
+function tableExistsNamed(db: Database.Database, table: string): boolean {
   const row = db
     .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ?")
-    .get(TABLE) as { name: string } | undefined;
+    .get(table) as { name: string } | undefined;
   return !!row;
 }
 
@@ -55,6 +73,67 @@ export function setSessionContextFolder(
        folder_path = excluded.folder_path,
        updated_at = excluded.updated_at`,
   ).run(sessionId, folder);
+
+  // A linked working folder is also a project. Keep a separate registry so
+  // the folder remains in the sidebar after its final chat is moved/deleted.
+  ensureProjectsTable(db);
+  upsertProject(db, folder);
+}
+
+function upsertProject(
+  db: Database.Database,
+  folderPath: string,
+  displayName?: string,
+): DesktopProject {
+  const name = displayName?.trim() || basename(folderPath) || folderPath;
+  db.prepare(
+    `INSERT INTO ${PROJECTS_TABLE} (folder_path, name, updated_at)
+     VALUES (?, ?, strftime('%s', 'now'))
+     ON CONFLICT(folder_path) DO UPDATE SET
+       name = excluded.name,
+       updated_at = excluded.updated_at`,
+  ).run(folderPath, name);
+  return { path: folderPath, name };
+}
+
+/** Register a local folder as a project independently of any conversation. */
+export function addProject(
+  folderPath: string,
+  displayName?: string,
+): DesktopProject | null {
+  const path = folderPath.trim();
+  if (!path) return null;
+  const db = getDbConnection(false);
+  if (!db) return null;
+  ensureProjectsTable(db);
+  return upsertProject(db, path, displayName);
+}
+
+/** List registered projects, including empty projects with no chats yet. */
+export function listProjects(): DesktopProject[] {
+  const db = getDbConnection(false);
+  if (!db) return [];
+  ensureProjectsTable(db);
+  // One-time/lazy migration for projects that existed only as session folder
+  // bindings before the independent registry was introduced.
+  if (tableExists(db)) {
+    const folders = db
+      .prepare(
+        `SELECT folder_path FROM ${TABLE} WHERE folder_path IS NOT NULL AND folder_path != '' GROUP BY folder_path`,
+      )
+      .all() as Array<{ folder_path: string }>;
+    for (const { folder_path } of folders) {
+      db.prepare(
+        `INSERT OR IGNORE INTO ${PROJECTS_TABLE} (folder_path, name) VALUES (?, ?)`,
+      ).run(folder_path, basename(folder_path) || folder_path);
+    }
+  }
+  const rows = db
+    .prepare(
+      `SELECT folder_path, name FROM ${PROJECTS_TABLE} ORDER BY updated_at DESC, name COLLATE NOCASE`,
+    )
+    .all() as Array<{ folder_path: string; name: string }>;
+  return rows.map((row) => ({ path: row.folder_path, name: row.name }));
 }
 
 /** Read the folder linked to a session, or null when none is stored. */

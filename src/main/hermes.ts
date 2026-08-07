@@ -840,6 +840,40 @@ function waitForGatewayEvent(
   });
 }
 
+type GatewayRequestClient = Pick<TuiGatewayClient, "request">;
+
+/**
+ * Re-anchor a live Hermes runtime session to the folder selected in Desktop.
+ * `session.resume` restores the session's previous cwd, so the selected folder
+ * must be applied again before every resumed turn.
+ */
+export async function syncTuiSessionContextFolder(
+  client: GatewayRequestClient,
+  sessionId: string,
+  contextFolder?: string,
+): Promise<void> {
+  const cwd = contextFolder?.trim();
+  if (!cwd) return;
+  await client.request("session.cwd.set", {
+    session_id: sessionId,
+    cwd,
+  });
+}
+
+/** Persist a linked folder before resuming so Hermes builds in that folder. */
+export async function moveTuiStoredSessionContextFolder(
+  client: GatewayRequestClient,
+  storedSessionId: string,
+  contextFolder?: string,
+): Promise<void> {
+  const cwd = contextFolder?.trim();
+  if (!storedSessionId || !cwd) return;
+  await client.request("session.workspace.move", {
+    session_key: storedSessionId,
+    cwd,
+  });
+}
+
 function wsDataToString(
   data: string | Buffer | ArrayBuffer | Buffer[],
 ): string {
@@ -850,6 +884,11 @@ function wsDataToString(
 }
 
 const tuiGatewayClients = new Map<string, TuiGatewayClient>();
+const tuiSessionContextFolders = new Map<string, string>();
+
+function tuiSessionContextKey(profile: string | undefined, sessionId: string) {
+  return `${profileKey(profile)}\0${sessionId}`;
+}
 
 export function tuiGatewayEnv(profile?: string): Record<string, string> {
   const resolved = resolveProfile(profile);
@@ -916,6 +955,12 @@ function stopTuiGatewayClient(profile?: string): void {
   if (!client) return;
   client.stop();
   tuiGatewayClients.delete(key);
+  const prefix = `${key}\0`;
+  for (const sessionKey of tuiSessionContextFolders.keys()) {
+    if (sessionKey.startsWith(prefix)) {
+      tuiSessionContextFolders.delete(sessionKey);
+    }
+  }
 }
 
 const CAPABILITIES_TIMEOUT_MS = 350;
@@ -1902,6 +1947,15 @@ async function sendMessageViaTuiGateway(
   contextFolder?: string,
 ): Promise<ChatHandle> {
   const client = getTuiGatewayClient(profile);
+  const requestedCwd = contextFolder?.trim() || "";
+  const incomingContextKey = resumeSessionId
+    ? tuiSessionContextKey(profile, resumeSessionId)
+    : "";
+  const previousCwd = incomingContextKey
+    ? tuiSessionContextFolders.get(incomingContextKey)
+    : undefined;
+  const contextChangedWhileLive =
+    previousCwd !== undefined && previousCwd !== requestedCwd;
   let activeSessionId = "";
   let storedSessionId = resumeSessionId || "";
   let finished = false;
@@ -1948,18 +2002,31 @@ async function sendMessageViaTuiGateway(
     cleanup();
     client.stop();
     console.warn(
-      "[chat] Hermes gateway stream failed before output; falling back to API stream:",
+      "[chat] Hermes gateway stream failed before output; using fallback transport:",
       reason,
     );
-    void sendMessageViaNonGatewayApi(
-      message,
-      cb,
-      profile,
-      resumeSessionId,
-      history,
-      undefined,
-      contextFolder,
-    )
+    const fallback = contextFolder?.trim()
+      ? Promise.resolve(
+          sendMessageViaCli(
+            message,
+            cb,
+            profile,
+            resumeSessionId,
+            undefined,
+            undefined,
+            contextFolder,
+          ),
+        )
+      : sendMessageViaNonGatewayApi(
+          message,
+          cb,
+          profile,
+          resumeSessionId,
+          history,
+          undefined,
+          contextFolder,
+        );
+    void fallback
       .then((handle) => {
         fallbackHandle = handle;
         if (fallbackAborted) handle.abort();
@@ -2163,17 +2230,41 @@ async function sendMessageViaTuiGateway(
 
   try {
     if (resumeSessionId) {
-      const resumed = await client.request<{
-        info?: unknown;
-        resumed?: string;
-        session_id?: string;
-      }>("session.resume", {
-        cols: 96,
-        session_id: resumeSessionId,
-      });
-      activeSessionId = String(resumed.session_id || "");
-      storedSessionId = String(resumed.resumed || resumeSessionId);
-      hasSessionInfo = !!resumed.info;
+      // Update the durable row first. `session.resume` can start building its
+      // agent immediately, and changing cwd afterward leaves its cached system
+      // prompt naming the old folder.
+      if (requestedCwd && previousCwd !== requestedCwd) {
+        await moveTuiStoredSessionContextFolder(
+          client,
+          resumeSessionId,
+          requestedCwd,
+        );
+      }
+
+      const resumeStoredSession = async (): Promise<void> => {
+        const resumed = await client.request<{
+          info?: unknown;
+          resumed?: string;
+          session_id?: string;
+        }>("session.resume", {
+          cols: 96,
+          session_id: resumeSessionId,
+        });
+        activeSessionId = String(resumed.session_id || "");
+        storedSessionId = String(resumed.resumed || resumeSessionId);
+        hasSessionInfo = !!resumed.info;
+      };
+
+      await resumeStoredSession();
+
+      // workspace.move retargets tools on an existing live agent, but that
+      // agent may still hold a system prompt cached for the previous folder.
+      if (contextChangedWhileLive && activeSessionId) {
+        await client.request("session.close", {
+          session_id: activeSessionId,
+        });
+        await resumeStoredSession();
+      }
     } else {
       const created = await client.request<{
         info?: unknown;
@@ -2191,6 +2282,15 @@ async function sendMessageViaTuiGateway(
 
     if (!activeSessionId) {
       throw new Error("Hermes gateway did not return a session id");
+    }
+
+    await syncTuiSessionContextFolder(client, activeSessionId, contextFolder);
+
+    if (storedSessionId) {
+      tuiSessionContextFolders.set(
+        tuiSessionContextKey(profile, storedSessionId),
+        requestedCwd,
+      );
     }
 
     if (!hasSessionInfo) {
@@ -2293,6 +2393,11 @@ export function shouldForceCliForSessionOverride(
   );
 }
 
+/** Return the process cwd for a local CLI chat turn. */
+export function localChatWorkingDirectory(contextFolder?: string): string {
+  return contextFolder?.trim() || HERMES_REPO;
+}
+
 function sendMessageViaCli(
   message: string,
   cb: ChatCallbacks,
@@ -2300,6 +2405,7 @@ function sendMessageViaCli(
   resumeSessionId?: string,
   attachments?: Attachment[],
   override?: SessionModelOverride,
+  contextFolder?: string,
 ): ChatHandle {
   // CLI fallback can't pipe multimodal content; inline text-file attachments
   // and ignore images.  The gateway is the supported attachment path; this
@@ -2360,6 +2466,10 @@ function sendMessageViaCli(
     HERMES_HOME: HERMES_HOME,
     PYTHONUNBUFFERED: "1",
   };
+  const chatCwd = localChatWorkingDirectory(contextFolder);
+  if (contextFolder?.trim()) {
+    env.TERMINAL_CWD = chatCwd;
+  }
 
   // Inject all API keys from the profile .env so the CLI can access them.
   // The built-in remote OpenAI-compatible providers (DeepSeek, Together,
@@ -2521,7 +2631,7 @@ function sendMessageViaCli(
   }
 
   const proc = spawn(HERMES_PYTHON, args, {
-    cwd: HERMES_REPO,
+    cwd: chatCwd,
     env,
     stdio: ["ignore", "pipe", "pipe"],
     ...HIDDEN_SUBPROCESS_OPTIONS,
@@ -2704,10 +2814,38 @@ async function sendMessageViaBestApi(
       );
     } catch (error) {
       console.warn(
-        "[chat] Hermes gateway stream unavailable; falling back to API stream:",
+        "[chat] Hermes gateway stream unavailable; using fallback transport:",
         error instanceof Error ? error.message : String(error),
       );
+      if (contextFolder?.trim()) {
+        return sendMessageViaCli(
+          message,
+          cb,
+          profile,
+          resumeSessionId,
+          attachments,
+          override,
+          contextFolder,
+        );
+      }
     }
+  }
+
+  if (
+    !isRemoteMode() &&
+    contextFolder?.trim() &&
+    !attachments?.length &&
+    !approvalCommand
+  ) {
+    return sendMessageViaCli(
+      message,
+      cb,
+      profile,
+      resumeSessionId,
+      attachments,
+      override,
+      contextFolder,
+    );
   }
 
   return sendMessageViaNonGatewayApi(
@@ -2787,6 +2925,7 @@ async function sendMessageViaBestApiWithLocalRecovery(
       resumeSessionId,
       attachments,
       override,
+      contextFolder,
     );
   };
 
@@ -2911,6 +3050,7 @@ export async function sendMessage(
       resumeSessionId,
       attachments,
       override,
+      contextFolder,
     );
   }
 
@@ -2946,6 +3086,7 @@ export async function sendMessage(
     resumeSessionId,
     attachments,
     override,
+    contextFolder,
   );
 }
 

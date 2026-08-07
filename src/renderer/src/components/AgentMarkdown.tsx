@@ -258,7 +258,7 @@ const AgentMarkdown = memo(function AgentMarkdown({
             !children.includes("\n");
           if (isInline) {
             return (
-              <code className={className} {...props}>
+              <code className="chat-inline-code" {...props}>
                 {children}
               </code>
             );

@@ -9,10 +9,20 @@ import {
   dialog,
   clipboard,
 } from "electron";
-import { extname } from "path";
+import { extname, join } from "path";
 import { randomUUID } from "crypto";
-import { readdir, readFile, stat } from "fs/promises";
+import { mkdir, readdir, readFile, stat } from "fs/promises";
+import {
+  addCustomSoftBackgrounds,
+  listCustomSoftBackgrounds,
+  removeCustomSoftBackground,
+} from "../soft-backgrounds";
 import { getActiveProfileNameSync } from "../utils";
+import {
+  WorkspaceFileAccess,
+  type WorkspaceFileReadResult,
+  type WorkspaceFileSaveResult,
+} from "../workspace-file-access";
 import type { Attachment } from "../../shared/attachments";
 import type { SessionModelOverride } from "../../shared/model-override";
 import type { AppLocale } from "../../shared/i18n/types";
@@ -34,6 +44,8 @@ import {
   getSessionContextFolder,
   setSessionContextFolder,
   getRecentSessionContextFolders,
+  addProject,
+  listProjects,
 } from "../session-context-folder-store";
 import {
   getSessionModelOverride,
@@ -46,6 +58,12 @@ import {
   mediaFileExists,
 } from "../media";
 import { openTerminalInDirectory } from "../terminal-launcher";
+import {
+  resizeIntegratedTerminal,
+  startIntegratedTerminal,
+  stopIntegratedTerminal,
+  writeIntegratedTerminal,
+} from "../integrated-terminal";
 import {
   getGpuStatus,
   reenableGpuAndRelaunch,
@@ -408,8 +426,13 @@ import {
   sshProvisionDockerTarget,
 } from "../ssh-docker";
 import {
+  applyWebPreviewElementEdit,
   cancelWebPreviewInspection,
+  clearWebPreviewSelections,
   inspectWebPreview,
+  measureWebPreviewSelections,
+  readWebPreviewElementEditState,
+  releaseWebPreviewSelection,
 } from "../web-preview-inspector";
 
 export interface IpcContext {
@@ -662,6 +685,22 @@ function resolveLibraryModelEntry(
 }
 
 export function registerIpcHandlers(context: IpcContext): void {
+  const workspaceFiles = new WorkspaceFileAccess();
+  const workspaceFileOwners = new Set<number>();
+  const bindWorkspaceFileOwner = (
+    event: Electron.IpcMainInvokeEvent,
+  ): number => {
+    const ownerId = event.sender.id;
+    if (!workspaceFileOwners.has(ownerId)) {
+      workspaceFileOwners.add(ownerId);
+      event.sender.once("destroyed", () => {
+        workspaceFiles.releaseOwner(ownerId);
+        workspaceFileOwners.delete(ownerId);
+      });
+    }
+    return ownerId;
+  };
+
   const {
     activeRuns,
     getMainWindow,
@@ -716,6 +755,15 @@ export function registerIpcHandlers(context: IpcContext): void {
     return setGpuPreference(mode);
   });
   ipcMain.handle("relaunch-app", () => relaunchApp());
+
+  ipcMain.handle("list-soft-backgrounds", () => listCustomSoftBackgrounds());
+  ipcMain.handle("add-soft-backgrounds", async (event) => {
+    const owner = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+    return addCustomSoftBackgrounds(owner);
+  });
+  ipcMain.handle("remove-soft-background", (_event, id: string) =>
+    removeCustomSoftBackground(id),
+  );
 
   // Hermes engine info
   ipcMain.handle("get-hermes-version", async () => {
@@ -2052,6 +2100,39 @@ export function registerIpcHandlers(context: IpcContext): void {
     },
   );
 
+  ipcMain.handle("list-projects", () => listProjects());
+
+  ipcMain.handle("add-existing-project", async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const result = win
+      ? await dialog.showOpenDialog(win, { properties: ["openDirectory"] })
+      : await dialog.showOpenDialog({ properties: ["openDirectory"] });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return addProject(result.filePaths[0]);
+  });
+
+  ipcMain.handle("create-project", async (event, rawName: string) => {
+    const name = typeof rawName === "string" ? rawName.trim() : "";
+    if (!name || name === "." || name === ".." || /[\\/]/.test(name)) {
+      throw new Error("Enter a valid folder name without slashes.");
+    }
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const options = {
+      title: "Choose where to create the project",
+      properties: ["openDirectory", "createDirectory"] as (
+        | "openDirectory"
+        | "createDirectory"
+      )[],
+    };
+    const result = win
+      ? await dialog.showOpenDialog(win, options)
+      : await dialog.showOpenDialog(options);
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const projectPath = join(result.filePaths[0], name);
+    await mkdir(projectPath);
+    return addProject(projectPath, name);
+  });
+
   // Per-session model/provider selected from the in-chat picker. This is a
   // desktop-only routing binding and intentionally stores no API keys.
   ipcMain.handle("get-session-model-override", (_event, sessionId: string) => {
@@ -2830,21 +2911,48 @@ export function registerIpcHandlers(context: IpcContext): void {
   ipcMain.handle(
     "read-file",
     async (
-      _event,
-      filePath: string,
-      maxBytes?: number,
-    ): Promise<{ content: string; truncated: boolean } | null> => {
-      try {
-        const limit = maxBytes ?? 102400; // Default 100KB
-        const buffer = await readFile(filePath);
-        const truncated = buffer.byteLength > limit;
-        const content = truncated
-          ? buffer.subarray(0, limit).toString("utf-8")
-          : buffer.toString("utf-8");
-        return { content, truncated };
-      } catch {
-        return null;
+      event,
+      filePath: unknown,
+      maxBytes?: unknown,
+      workspaceRoot?: unknown,
+    ): Promise<WorkspaceFileReadResult | null> => {
+      if (typeof filePath !== "string") return null;
+      const isLocal = getConnectionConfig().mode === "local";
+      const editableRoot =
+        isLocal && typeof workspaceRoot === "string"
+          ? workspaceRoot
+          : undefined;
+      const ownerId = editableRoot
+        ? bindWorkspaceFileOwner(event)
+        : event.sender.id;
+      return workspaceFiles.read(
+        ownerId,
+        filePath,
+        typeof maxBytes === "number" ? maxBytes : undefined,
+        editableRoot,
+      );
+    },
+  );
+
+  ipcMain.handle(
+    "save-file",
+    async (
+      event,
+      editToken: unknown,
+      content: unknown,
+    ): Promise<
+      WorkspaceFileSaveResult | { success: false; error: "not-local" }
+    > => {
+      if (getConnectionConfig().mode !== "local") {
+        return { success: false, error: "not-local" };
       }
+      if (typeof editToken !== "string") {
+        return { success: false, error: "invalid-token" };
+      }
+      if (typeof content !== "string") {
+        return { success: false, error: "write-failed" };
+      }
+      return workspaceFiles.save(event.sender.id, editToken, content);
     },
   );
 
@@ -2870,6 +2978,32 @@ export function registerIpcHandlers(context: IpcContext): void {
       return false;
     }
   });
+
+  ipcMain.handle(
+    "integrated-terminal-start",
+    async (event, dirPath: string): Promise<{ id: string } | null> => {
+      if (getConnectionConfig().mode !== "local") return null;
+      try {
+        return await startIntegratedTerminal(dirPath, event.sender);
+      } catch {
+        return null;
+      }
+    },
+  );
+  ipcMain.on(
+    "integrated-terminal-write",
+    (event, id: string, data: string): void => {
+      writeIntegratedTerminal(id, event.sender.id, data);
+    },
+  );
+  ipcMain.handle(
+    "integrated-terminal-resize",
+    (event, id: string, cols: number, rows: number): boolean =>
+      resizeIntegratedTerminal(id, event.sender.id, cols, rows),
+  );
+  ipcMain.handle("integrated-terminal-stop", (event, id: string): boolean =>
+    stopIntegratedTerminal(id, event.sender.id),
+  );
 
   // Read image file as data URL for preview
   ipcMain.handle(
@@ -2968,9 +3102,50 @@ export function registerIpcHandlers(context: IpcContext): void {
     inspectWebPreview(event, webContentsId, getMainWindow),
   );
   ipcMain.handle(
+    "web-preview-measure-selections",
+    (event, webContentsId: unknown) =>
+      measureWebPreviewSelections(event, webContentsId, getMainWindow),
+  );
+  ipcMain.handle(
+    "web-preview-read-element-edit-state",
+    (event, webContentsId: unknown, annotationId: unknown) =>
+      readWebPreviewElementEditState(
+        event,
+        webContentsId,
+        annotationId,
+        getMainWindow,
+      ),
+  );
+  ipcMain.handle(
+    "web-preview-apply-element-edit",
+    (event, webContentsId: unknown, annotationId: unknown, patch: unknown) =>
+      applyWebPreviewElementEdit(
+        event,
+        webContentsId,
+        annotationId,
+        patch,
+        getMainWindow,
+      ),
+  );
+  ipcMain.handle(
     "web-preview-cancel-inspection",
     (event, webContentsId: unknown) =>
       cancelWebPreviewInspection(event, webContentsId, getMainWindow),
+  );
+  ipcMain.handle(
+    "web-preview-release-selection",
+    (event, webContentsId: unknown, annotationId: unknown) =>
+      releaseWebPreviewSelection(
+        event,
+        webContentsId,
+        annotationId,
+        getMainWindow,
+      ),
+  );
+  ipcMain.handle(
+    "web-preview-clear-selections",
+    (event, webContentsId: unknown) =>
+      clearWebPreviewSelections(event, webContentsId, getMainWindow),
   );
 
   // Backup / Import

@@ -17,12 +17,15 @@ import {
   Loader,
   MoreHorizontal,
   Pin,
+  Plus,
   X,
 } from "../../assets/icons";
+import type { DesktopProject } from "../../../../shared/projects";
 import SidebarSessionMenu, {
   type SidebarMenuProject,
   type SidebarMenuTarget,
 } from "./SidebarSessionMenu";
+import { ProjectModal } from "./ProjectModal";
 
 interface RecentSession {
   id: string;
@@ -113,7 +116,10 @@ function folderName(path: string): string {
   return parts.at(-1) || path;
 }
 
-function groupSessionsByWorkspace(sessions: RecentSession[]): {
+export function groupSessionsByWorkspace(
+  sessions: RecentSession[],
+  registeredProjects: DesktopProject[] = [],
+): {
   projectGroups: Array<{
     path: string;
     name: string;
@@ -121,8 +127,17 @@ function groupSessionsByWorkspace(sessions: RecentSession[]): {
   }>;
   chats: RecentSession[];
 } {
-  const projects = new Map<string, RecentSession[]>();
+  const projects = new Map<
+    string,
+    { name: string; sessions: RecentSession[] }
+  >();
   const chats: RecentSession[] = [];
+
+  for (const project of registeredProjects) {
+    if (project.path.trim()) {
+      projects.set(project.path, { name: project.name, sessions: [] });
+    }
+  }
 
   for (const session of sessions) {
     const contextFolder = session.contextFolder?.trim();
@@ -131,15 +146,20 @@ function groupSessionsByWorkspace(sessions: RecentSession[]): {
       continue;
     }
     const existing = projects.get(contextFolder);
-    if (existing) existing.push(session);
-    else projects.set(contextFolder, [session]);
+    if (existing) existing.sessions.push(session);
+    else {
+      projects.set(contextFolder, {
+        name: folderName(contextFolder),
+        sessions: [session],
+      });
+    }
   }
 
   return {
-    projectGroups: Array.from(projects.entries()).map(([path, list]) => ({
+    projectGroups: Array.from(projects.entries()).map(([path, project]) => ({
       path,
-      name: folderName(path),
-      sessions: list,
+      name: project.name,
+      sessions: project.sessions,
     })),
     chats,
   };
@@ -164,6 +184,7 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
   loadingSessionIds,
   resumingSessionId,
   onSelect,
+  onNewProjectChat,
   onSessionDeleted,
   scrollRootRef,
 }: {
@@ -176,6 +197,7 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
   /** A session whose history is being fetched for resume (transient spinner). */
   resumingSessionId: string | null;
   onSelect: (sessionId: string) => void;
+  onNewProjectChat: (folder: string) => void;
   /** Notifies Layout when a row is deleted so it can leave a stale active chat. */
   onSessionDeleted?: (sessionId: string) => void;
   /** Scroll container owned by Layout; nearing its bottom loads the next page. */
@@ -183,6 +205,10 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
 }): React.JSX.Element | null {
   const { t } = useI18n();
   const [sessions, setSessions] = useState<RecentSession[]>([]);
+  const [registeredProjects, setRegisteredProjects] = useState<
+    DesktopProject[]
+  >([]);
+  const [projectModalOpen, setProjectModalOpen] = useState(false);
   // True when the profile has more cache rows than the sidebar has loaded.
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -323,6 +349,14 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
     [applyLoadedWindow],
   );
 
+  const refreshProjects = useCallback(async (): Promise<void> => {
+    try {
+      setRegisteredProjects(await window.hermesAPI.listProjects());
+    } catch {
+      // Existing session-linked folders still render as projects.
+    }
+  }, []);
+
   const loadNextPage = useCallback(async (): Promise<void> => {
     if (!open || !hasMoreRef.current || loadingMoreRef.current) return;
     loadingMoreRef.current = true;
@@ -357,6 +391,7 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
     if (!open) return;
     let cancelled = false;
     void (async () => {
+      void refreshProjects();
       try {
         const cached = await window.hermesAPI.listCachedSessions(
           // One over the page size so the cache read alone can decide whether
@@ -378,7 +413,7 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
     return () => {
       cancelled = true;
     };
-  }, [open, activeProfile, applyFirstPage]);
+  }, [open, activeProfile, applyFirstPage, refreshProjects]);
 
   // While open: pick up background sessions (gateway, cron, other devices)
   // on focus and on a slow timer. No listeners or timers at all when closed.
@@ -390,6 +425,7 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
     };
     const onContextFolderChanged = (): void => {
       void refresh(true);
+      void refreshProjects();
     };
     window.addEventListener("focus", onFocus);
     window.addEventListener(
@@ -404,7 +440,7 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
         onContextFolderChanged,
       );
     };
-  }, [open, refresh]);
+  }, [open, refresh, refreshProjects]);
 
   useEffect(() => {
     if (!open) return;
@@ -455,22 +491,31 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
   );
   const { projectGroups, chats } = useMemo(
     () =>
-      groupSessionsByWorkspace(sessions.filter((s) => !pinnedIds.has(s.id))),
-    [sessions, pinnedIds],
+      groupSessionsByWorkspace(
+        sessions.filter((s) => !pinnedIds.has(s.id)),
+        registeredProjects,
+      ),
+    [sessions, pinnedIds, registeredProjects],
   );
 
   // Every distinct project folder currently in use, so "Move to project" lists
   // them all — even ones whose only conversation is pinned or filtered out.
   const projectChoices = useMemo<SidebarMenuProject[]>(() => {
-    const byPath = new Map<string, SidebarMenuProject>();
-    for (const s of sessions) {
-      const folder = s.contextFolder?.trim();
-      if (folder && !byPath.has(folder)) {
-        byPath.set(folder, { path: folder, name: folderName(folder) });
-      }
+    return projectGroups.map(({ path, name }) => ({ path, name }));
+  }, [projectGroups]);
+
+  const handleProjectAdded = useCallback((project: DesktopProject): void => {
+    setRegisteredProjects((prev) => [
+      project,
+      ...prev.filter((item) => item.path !== project.path),
+    ]);
+    setProjectsOpen(true);
+    try {
+      localStorage.setItem(PROJECTS_OPEN_KEY, "true");
+    } catch {
+      /* ignore persistence failures */
     }
-    return Array.from(byPath.values());
-  }, [sessions]);
+  }, []);
 
   const togglePinned = (): void => {
     setPinnedOpen((prev) => {
@@ -789,8 +834,8 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
             </div>
           </div>
         )}
-        {projectGroups.length > 0 && (
-          <div className="sidebar-recent-section">
+        <div className="sidebar-recent-section">
+          <div className="sidebar-recent-section-header">
             <button
               type="button"
               className="sidebar-recent-section-toggle"
@@ -811,17 +856,29 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
                 />
               )}
             </button>
-            <div
-              className={`sidebar-recent-collapse ${
-                projectsOpen ? "expanded" : ""
-              }`}
+            <button
+              type="button"
+              className="sidebar-recent-section-add"
+              onClick={() => setProjectModalOpen(true)}
+              aria-label={t("navigation.projectModal.title")}
+              title={t("navigation.projectModal.title")}
+              tabIndex={expanded ? 0 : -1}
             >
-              <div className="sidebar-recent-collapse-inner">
-                {projectGroups.map((group) => {
-                  const projectOpen = !closedProjectFolders.has(group.path);
-                  const visible = expanded && projectsOpen && projectOpen;
-                  return (
-                    <div className="sidebar-recent-project" key={group.path}>
+              <Plus size={13} />
+            </button>
+          </div>
+          <div
+            className={`sidebar-recent-collapse ${
+              projectsOpen ? "expanded" : ""
+            }`}
+          >
+            <div className="sidebar-recent-collapse-inner">
+              {projectGroups.map((group) => {
+                const projectOpen = !closedProjectFolders.has(group.path);
+                const visible = expanded && projectsOpen && projectOpen;
+                return (
+                  <div className="sidebar-recent-project" key={group.path}>
+                    <div className="sidebar-recent-project-row">
                       <button
                         type="button"
                         className="sidebar-recent-project-heading"
@@ -844,24 +901,34 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
                           />
                         )}
                       </button>
-                      <div
-                        className={`sidebar-recent-collapse ${
-                          projectOpen ? "expanded" : ""
-                        }`}
+                      <button
+                        type="button"
+                        className="sidebar-recent-project-new-chat"
+                        title={t("navigation.newProjectChat")}
+                        aria-label={t("navigation.newProjectChat")}
+                        onClick={() => onNewProjectChat(group.path)}
+                        tabIndex={expanded && projectsOpen ? 0 : -1}
                       >
-                        <div className="sidebar-recent-collapse-inner">
-                          {group.sessions.map((s) =>
-                            renderSessionButton(s, true, visible),
-                          )}
-                        </div>
+                        <Plus size={13} />
+                      </button>
+                    </div>
+                    <div
+                      className={`sidebar-recent-collapse ${
+                        projectOpen ? "expanded" : ""
+                      }`}
+                    >
+                      <div className="sidebar-recent-collapse-inner">
+                        {group.sessions.map((s) =>
+                          renderSessionButton(s, true, visible),
+                        )}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
-        )}
+        </div>
         <div className="sidebar-recent-section">
           <button
             type="button"
@@ -985,6 +1052,11 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
           </div>,
           document.body,
         )}
+      <ProjectModal
+        open={projectModalOpen}
+        onOpenChange={setProjectModalOpen}
+        onAdded={handleProjectAdded}
+      />
     </div>
   );
 });

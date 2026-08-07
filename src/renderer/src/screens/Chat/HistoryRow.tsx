@@ -3,6 +3,7 @@ import { Brain, ChevronRight, Wrench } from "../../assets/icons";
 import { OrbLoader } from "../../components/OrbLoader";
 import { useI18n } from "../../components/useI18n";
 import { AttachmentChip } from "../../components/AttachmentChip";
+import { ToolSyntaxHighlight } from "../../components/ToolSyntaxHighlight";
 import { ToolGlyph, humanizeToolName } from "../../components/toolMeta";
 import { HermesAvatar, AvatarSpacer } from "./MessageRow";
 import type { AgentAvatarInfo } from "./MessageRow";
@@ -227,13 +228,12 @@ const ToolActivityItem = memo(function ToolActivityItem({
                 ))}
               </div>
             )}
-            <pre
-              className={`chat-history-pre ${
-                call ? "chat-history-pre--code" : "chat-history-pre--scroll"
-              }`}
-            >
-              {call ? msg.args || "(no arguments)" : msg.content || "(empty)"}
-            </pre>
+            <ToolSyntaxHighlight
+              source={
+                call ? msg.args || "(no arguments)" : msg.content || "(empty)"
+              }
+              scroll={!call}
+            />
           </div>
         </div>
       </div>

@@ -111,6 +111,15 @@ async function startNameEdit(): Promise<HTMLInputElement> {
 }
 
 describe("ProfileModal name editor", () => {
+  it("shows the per-agent background picker in Profile settings", async () => {
+    installHermesAPI([profile()]);
+    renderModal();
+
+    expect(
+      await screen.findByText("settings.softBackground.label"),
+    ).toBeInTheDocument();
+  });
+
   it("does not save a canceled Escape edit when blur fires afterward", async () => {
     const api = installHermesAPI([profile()]);
     renderModal();

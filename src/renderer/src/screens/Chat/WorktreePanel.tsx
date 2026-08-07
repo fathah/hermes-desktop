@@ -1,10 +1,5 @@
 import { useState, useEffect, useCallback, memo } from "react";
-import {
-  Folder,
-  ChevronRight,
-  ChevronDown,
-  SquareTerminal,
-} from "lucide-react";
+import { Folder, ChevronRight, ChevronDown } from "lucide-react";
 import { getIconForFile, getSVGStringFromFileType } from "@wesbos/code-icons";
 import { FileViewer } from "./FileViewer";
 import { useI18n } from "../../components/useI18n";
@@ -19,6 +14,7 @@ interface WorktreePanelProps {
 }
 
 const MIN_PANEL_WIDTH = 220;
+const DEFAULT_EDITOR_WIDTH = 760;
 const WIDTH_STORAGE_KEY = "hermes:worktreePanelWidth";
 const maxPanelWidth = (): number =>
   Math.max(MIN_PANEL_WIDTH, window.innerWidth - 360);
@@ -27,6 +23,7 @@ interface TreeItemProps {
   entry: FileEntry;
   parentPath: string;
   depth: number;
+  activeFilePath?: string | null;
   onFileClick?: (filePath: string) => void;
 }
 
@@ -50,6 +47,7 @@ function TreeItem({
   entry,
   parentPath,
   depth,
+  activeFilePath,
   onFileClick,
 }: TreeItemProps): React.JSX.Element {
   const { t } = useI18n();
@@ -92,7 +90,7 @@ function TreeItem({
   return (
     <div className="worktree-item">
       <div
-        className={`worktree-row ${!entry.isDirectory ? "worktree-row-file" : ""}`}
+        className={`worktree-row ${!entry.isDirectory ? "worktree-row-file" : ""} ${fullPath === activeFilePath ? "active" : ""}`}
         onClick={handleClick}
         style={{ paddingLeft }}
         title={fullPath}
@@ -139,6 +137,7 @@ function TreeItem({
                 entry={child}
                 parentPath={fullPath}
                 depth={depth + 1}
+                activeFilePath={activeFilePath}
                 onFileClick={onFileClick}
               />
             ))
@@ -149,6 +148,7 @@ function TreeItem({
   );
 }
 
+// @lat: [[code-editor#Project code workspace#Docked explorer and tabs]]
 export const WorktreePanel = memo(function WorktreePanel({
   folderPath,
 }: WorktreePanelProps): React.JSX.Element {
@@ -156,18 +156,48 @@ export const WorktreePanel = memo(function WorktreePanel({
   const [entries, setEntries] = useState<FileEntry[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const [terminalError, setTerminalError] = useState<string | null>(null);
+  const [openFiles, setOpenFiles] = useState<string[]>([]);
+  const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
   const [width, setWidth] = useState<number>(() => {
     const saved = Number(localStorage.getItem(WIDTH_STORAGE_KEY));
     return Number.isFinite(saved) && saved >= MIN_PANEL_WIDTH ? saved : 240;
   });
   const [isResizing, setIsResizing] = useState(false);
+  const errorLoadingText = t("chat.worktree.errorLoading");
+
+  useEffect(() => {
+    setOpenFiles([]);
+    setActiveFilePath(null);
+  }, [folderPath]);
+
+  const openFile = useCallback((filePath: string): void => {
+    setOpenFiles((current) =>
+      current.includes(filePath) ? current : [...current, filePath],
+    );
+    setActiveFilePath(filePath);
+    setWidth((current) =>
+      Math.min(maxPanelWidth(), Math.max(current, DEFAULT_EDITOR_WIDTH)),
+    );
+  }, []);
+
+  const closeFile = useCallback((filePath: string): void => {
+    setOpenFiles((current) => {
+      const closingIndex = current.indexOf(filePath);
+      const next = current.filter((path) => path !== filePath);
+      setActiveFilePath((activePath) => {
+        if (activePath !== filePath) return activePath;
+        if (next.length === 0) return null;
+        return next[Math.min(Math.max(closingIndex, 0), next.length - 1)];
+      });
+      return next;
+    });
+  }, []);
 
   const startResize = (e: React.PointerEvent): void => {
     e.preventDefault();
     const startX = e.clientX;
     const startWidth = width;
+    const minWidth = activeFilePath ? 520 : MIN_PANEL_WIDTH;
     let nextWidth = startWidth;
     setIsResizing(true);
     document.body.style.userSelect = "none";
@@ -178,7 +208,7 @@ export const WorktreePanel = memo(function WorktreePanel({
       const delta = startX - ev.clientX;
       nextWidth = Math.min(
         maxPanelWidth(),
-        Math.max(MIN_PANEL_WIDTH, startWidth + delta),
+        Math.max(minWidth, startWidth + delta),
       );
       setWidth(nextWidth);
     };
@@ -198,13 +228,12 @@ export const WorktreePanel = memo(function WorktreePanel({
     let cancelled = false;
     setIsLoading(true);
     setError(null);
-    setTerminalError(null);
 
     const loadRoot = async (): Promise<void> => {
       const result = await window.hermesAPI.readDirectory(folderPath);
       if (cancelled) return;
       if (result === null) {
-        setError(t("chat.worktree.errorLoading"));
+        setError(errorLoadingText);
       } else {
         // Sort: directories first, then files, both alphabetically
         const sorted = result.sort((a, b) => {
@@ -222,20 +251,19 @@ export const WorktreePanel = memo(function WorktreePanel({
     return () => {
       cancelled = true;
     };
-  }, [folderPath]);
+  }, [errorLoadingText, folderPath]);
 
   // Get the folder name from the path
   const folderName =
     folderPath.split(/[\\/]/).filter(Boolean).pop() || folderPath;
 
-  const handleOpenTerminal = async (): Promise<void> => {
-    setTerminalError(null);
-    const opened = await window.hermesAPI.openTerminal(folderPath);
-    if (!opened) setTerminalError(t("chat.worktree.openTerminalFailed"));
-  };
+  const panelWidth = activeFilePath ? width : MIN_PANEL_WIDTH;
 
   return (
-    <div className="worktree-panel" style={{ width }}>
+    <div
+      className={`code-workspace-panel ${activeFilePath ? "has-editor" : "explorer-only"}`}
+      style={{ width: panelWidth }}
+    >
       <div
         className={`worktree-resize-handle ${
           isResizing ? "worktree-resize-handle-active" : ""
@@ -243,49 +271,43 @@ export const WorktreePanel = memo(function WorktreePanel({
         onPointerDown={startResize}
         title="Drag to resize"
       />
-      <div className="worktree-header">
-        <Folder size={16} className="worktree-header-icon" />
-        <span className="worktree-header-title" title={folderPath}>
-          {folderName}
-        </span>
-        <button
-          type="button"
-          className="btn-ghost worktree-header-action"
-          onClick={() => void handleOpenTerminal()}
-          aria-label={t("chat.worktree.openTerminal")}
-          title={t("chat.worktree.openTerminal")}
-        >
-          <SquareTerminal size={20} />
-        </button>
+      <div className="worktree-panel">
+        <div className="worktree-header">
+          <Folder size={16} className="worktree-header-icon" />
+          <span className="worktree-header-title" title={folderPath}>
+            {folderName}
+          </span>
+        </div>
+        <div className="worktree-content">
+          {isLoading ? (
+            <div className="worktree-loading">
+              {t("chat.worktree.loading")}...
+            </div>
+          ) : error ? (
+            <div className="worktree-error">{error}</div>
+          ) : entries === null || entries.length === 0 ? (
+            <div className="worktree-empty">{t("chat.worktree.empty")}</div>
+          ) : (
+            entries.map((entry) => (
+              <TreeItem
+                key={`${folderPath}/${entry.name}`}
+                entry={entry}
+                parentPath={folderPath}
+                depth={0}
+                activeFilePath={activeFilePath}
+                onFileClick={openFile}
+              />
+            ))
+          )}
+        </div>
       </div>
-      {terminalError && (
-        <div className="worktree-terminal-error">{terminalError}</div>
-      )}
-      <div className="worktree-content">
-        {isLoading ? (
-          <div className="worktree-loading">
-            {t("chat.worktree.loading")}...
-          </div>
-        ) : error ? (
-          <div className="worktree-error">{error}</div>
-        ) : entries === null || entries.length === 0 ? (
-          <div className="worktree-empty">{t("chat.worktree.empty")}</div>
-        ) : (
-          entries.map((entry) => (
-            <TreeItem
-              key={`${folderPath}/${entry.name}`}
-              entry={entry}
-              parentPath={folderPath}
-              depth={0}
-              onFileClick={setSelectedFile}
-            />
-          ))
-        )}
-      </div>
-      {selectedFile && (
+      {activeFilePath && (
         <FileViewer
-          filePath={selectedFile}
-          onClose={() => setSelectedFile(null)}
+          files={openFiles}
+          activeFilePath={activeFilePath}
+          workspaceRoot={folderPath}
+          onSelectFile={setActiveFilePath}
+          onCloseFile={closeFile}
         />
       )}
     </div>

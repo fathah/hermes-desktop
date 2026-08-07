@@ -131,6 +131,30 @@ describe("chat run profile transitions", () => {
   });
 });
 
+it("mints a project chat with its working folder", () => {
+  vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
+    "00000000-0000-4000-8000-000000000003",
+  );
+
+  expect(mintRun("alfie", undefined, "/work/hermes")).toMatchObject({
+    profile: "alfie",
+    sessionId: null,
+    contextFolder: "/work/hermes",
+  });
+});
+
+it("does not treat a folder-scoped blank chat as a reusable scratch", () => {
+  expect(
+    isScratchRun({
+      runId: "project-run",
+      profile: "default",
+      sessionId: null,
+      loading: false,
+      contextFolder: "/work/hermes",
+    }),
+  ).toBe(false);
+});
+
 describe("chrome-style tab shortcuts", () => {
   const three = [run("run-1", "a"), run("run-2", "b"), run("run-3", "c")];
 

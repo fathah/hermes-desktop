@@ -39,6 +39,15 @@ export default {
     dark: "Dark",
     more: "{{count}} more…",
   },
+  softBackground: {
+    label: "Agent background",
+    hint: "Choose a subtle backdrop for this agent, or add your own.",
+    none: "None",
+    add: "Add images",
+    adding: "Adding…",
+    remove: "Remove {{name}}",
+    error: "Could not update custom backgrounds.",
+  },
   roundedCorners: {
     label: "Rounded corners",
     hint: "Turn off for squared-off corners throughout the app",

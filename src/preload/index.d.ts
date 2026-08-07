@@ -21,6 +21,8 @@ import type {
   HermesOneCreditsResult,
 } from "../shared/account";
 import type { AgentSyncResult, AgentSyncStatus } from "../shared/agent-sync";
+import type { WebPreviewShortcutAction } from "../shared/web-preview-shortcuts";
+import type { DesktopProject } from "../shared/projects";
 import type {
   RegistryKind,
   RegistryItem,
@@ -35,6 +37,7 @@ import type {
 } from "../shared/messaging-platforms";
 import type { ChatToolEvent } from "../shared/chat-stream";
 import type { GpuPreferenceMode, GpuStatus } from "../shared/gpu";
+import type { CustomSoftBackground } from "../shared/soft-backgrounds";
 
 interface ElectronAPI {
   process: {
@@ -245,6 +248,9 @@ interface HermesAPI {
   reenableGpu: () => Promise<boolean>;
   setGpuPreference: (mode: GpuPreferenceMode) => Promise<boolean>;
   relaunchApp: () => Promise<void>;
+  listSoftBackgrounds: () => Promise<CustomSoftBackground[]>;
+  addSoftBackgrounds: () => Promise<CustomSoftBackground[]>;
+  removeSoftBackground: (id: string) => Promise<boolean>;
   onInstallProgress: (
     callback: (progress: InstallProgress) => void,
   ) => () => void;
@@ -643,6 +649,9 @@ interface HermesAPI {
     folder: string | null,
   ) => Promise<boolean>;
   listRecentSessionContextFolders: (limit?: number) => Promise<string[]>;
+  listProjects: () => Promise<DesktopProject[]>;
+  addExistingProject: () => Promise<DesktopProject | null>;
+  createProject: (name: string) => Promise<DesktopProject | null>;
   getSessionModelOverride: (
     sessionId: string,
   ) => Promise<SessionModelOverride | null>;
@@ -1091,9 +1100,43 @@ interface HermesAPI {
   readFile: (
     filePath: string,
     maxBytes?: number,
-  ) => Promise<{ content: string; truncated: boolean } | null>;
+    workspaceRoot?: string,
+  ) => Promise<{
+    content: string;
+    truncated: boolean;
+    editToken?: string;
+  } | null>;
+  saveFile: (
+    editToken: string,
+    content: string,
+  ) => Promise<
+    | { success: true }
+    | {
+        success: false;
+        error:
+          | "invalid-token"
+          | "stale"
+          | "too-large"
+          | "not-local"
+          | "write-failed";
+      }
+  >;
   openFileInEditor: (filePath: string) => Promise<boolean>;
   openTerminal: (dirPath: string) => Promise<boolean>;
+  startIntegratedTerminal: (dirPath: string) => Promise<{ id: string } | null>;
+  writeIntegratedTerminal: (id: string, data: string) => void;
+  resizeIntegratedTerminal: (
+    id: string,
+    cols: number,
+    rows: number,
+  ) => Promise<boolean>;
+  stopIntegratedTerminal: (id: string) => Promise<boolean>;
+  onIntegratedTerminalData: (
+    callback: (id: string, data: string) => void,
+  ) => () => void;
+  onIntegratedTerminalExit: (
+    callback: (id: string, exitCode: number) => void,
+  ) => () => void;
   readImageFile: (filePath: string) => Promise<string | null>;
   kanbanAssignTask: (
     taskId: string,
@@ -1153,11 +1196,76 @@ interface HermesAPI {
 
   // Shell
   openExternal: (url: string) => Promise<void>;
+  onWebPreviewShortcut: (
+    callback: (shortcut: WebPreviewShortcutAction) => void,
+  ) => () => void;
   inspectWebPreview: (webContentsId: number) => Promise<{
+    annotationId: number;
     selector: string;
     rect: { left: number; top: number; width: number; height: number };
   } | null>;
+  measureWebPreviewSelections: (webContentsId: number) => Promise<
+    Array<{
+      annotationId: number;
+      rect: {
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+      } | null;
+    }>
+  >;
+  readWebPreviewElementEditState: (
+    webContentsId: number,
+    annotationId: number,
+  ) => Promise<{
+    textContent: string;
+    canEditText: boolean;
+    styles: {
+      color: string;
+      fontFamily: string;
+      fontSize: number;
+      fontWeight: string;
+      letterSpacing: number;
+      lineHeight: number;
+      textAlign: string;
+    };
+    inlineStyles: Record<
+      | "color"
+      | "font-family"
+      | "font-size"
+      | "font-weight"
+      | "letter-spacing"
+      | "line-height"
+      | "text-align",
+      string | null
+    >;
+  } | null>;
+  applyWebPreviewElementEdit: (
+    webContentsId: number,
+    annotationId: number,
+    patch: {
+      textContent?: string;
+      styles?: Partial<
+        Record<
+          | "color"
+          | "font-family"
+          | "font-size"
+          | "font-weight"
+          | "letter-spacing"
+          | "line-height"
+          | "text-align",
+          string | null
+        >
+      >;
+    },
+  ) => Promise<boolean>;
   cancelWebPreviewInspection: (webContentsId: number) => Promise<void>;
+  releaseWebPreviewSelection: (
+    webContentsId: number,
+    annotationId: number,
+  ) => Promise<void>;
+  clearWebPreviewSelections: (webContentsId: number) => Promise<void>;
 
   // Backup / Import
   runHermesBackup: (

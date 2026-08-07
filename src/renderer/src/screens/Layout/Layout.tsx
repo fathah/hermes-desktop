@@ -51,6 +51,7 @@ import {
 } from "../../assets/icons";
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
+import { useSoftBackground } from "../../components/SoftBackgroundProvider";
 
 type View =
   | "chat"
@@ -84,7 +85,14 @@ const FOOTER_NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string }[] = [
 ];
 
 const SIDEBAR_COLLAPSED_KEY = "hermes.sidebar.collapsed";
+const SIDEBAR_WIDTH_KEY = "hermes.sidebar.width";
+const DEFAULT_SIDEBAR_WIDTH = 250;
+const MIN_SIDEBAR_WIDTH = 220;
+const MAX_SIDEBAR_WIDTH = 480;
 const SIDEBAR_SCROLLBAR_HIDE_MS = 700;
+
+const clampSidebarWidth = (width: number): number =>
+  Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width));
 
 interface LayoutProps {
   verifyWarning?: boolean;
@@ -99,12 +107,16 @@ function Layout({
 }: LayoutProps = {}): React.JSX.Element {
   const { t } = useI18n();
   const { openSettings } = useSettingsModal();
+  const { setActiveProfile: setBackgroundActiveProfile } = useSoftBackground();
   const [view, setView] = useState<View>("chat");
   // Multiple conversations coexist (background sessions + multi-agent). Each is
   // a ChatRun; all are mounted, only the active one is shown. Profile switches
   // preserve existing conversations and activate a scratch run for the selected
   // agent so `activeProfile` stays aligned with the visible chat transport.
   const [activeProfile, setActiveProfile] = useState("default");
+  useEffect(() => {
+    setBackgroundActiveProfile(activeProfile);
+  }, [activeProfile, setBackgroundActiveProfile]);
   const [runs, setRuns] = useState<ChatRun[]>(() => [mintRun("default")]);
   const [activeRunId, setActiveRunId] = useState<string>(() => runs[0].runId);
   // While a resume's history is loading, show its spinner immediately.
@@ -255,6 +267,17 @@ function Layout({
       return false;
     }
   });
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    try {
+      const storedWidth = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
+      return Number.isFinite(storedWidth) && storedWidth > 0
+        ? clampSidebarWidth(storedWidth)
+        : DEFAULT_SIDEBAR_WIDTH;
+    } catch {
+      return DEFAULT_SIDEBAR_WIDTH;
+    }
+  });
+  const [sidebarResizing, setSidebarResizing] = useState(false);
   // Full-list sessions modal (opened from the sidebar "Show more" affordance or
   // the Cmd/Ctrl+K menu action). Reuses the Sessions screen inside a modal —
   // there is no longer a top-level Sessions view.
@@ -442,6 +465,26 @@ function Layout({
     goTo("chat");
   }, [runs, activeRunId, activeProfile, goTo]);
 
+  const handleNewProjectChat = useCallback(
+    (contextFolder: string) => {
+      const active = runs.find((r) => r.runId === activeRunId);
+      if (active && isScratchRun(active)) {
+        const run = mintRun(activeProfile, undefined, contextFolder);
+        setRuns((prev) =>
+          prev.map((item) => (item.runId === active.runId ? run : item)),
+        );
+        setActiveRunId(run.runId);
+        goTo("chat");
+        return;
+      }
+      const run = mintRun(activeProfile, undefined, contextFolder);
+      setRuns((prev) => [...prev, run]);
+      setActiveRunId(run.runId);
+      goTo("chat");
+    },
+    [activeProfile, activeRunId, goTo, runs],
+  );
+
   // Listen for menu IPC events (Cmd+N, Cmd+K from app menu)
   useEffect(() => {
     const cleanupNewChat = window.hermesAPI.onMenuNewChat(() => {
@@ -625,10 +668,20 @@ function Layout({
       resumingRef.current.add(sessionId);
       setResumingSessionId(sessionId);
       try {
-        const items = (await window.hermesAPI.getSessionMessages(
-          sessionId,
-        )) as DbHistoryItem[];
-        const run = mintRun(activeProfile, dbItemsToChatMessages(items));
+        const [items, contextFolder] = await Promise.all([
+          window.hermesAPI.getSessionMessages(sessionId) as Promise<
+            DbHistoryItem[]
+          >,
+          window.hermesAPI.getSessionContextFolder(sessionId).catch(() => null),
+        ]);
+        // Hydrate the folder before mounting Chat. Otherwise the composer can
+        // submit a first turn while Chat's own restore effect is still pending,
+        // causing Hermes to build and cache its prompt from the install tree.
+        const run = mintRun(
+          activeProfile,
+          dbItemsToChatMessages(items),
+          contextFolder || undefined,
+        );
         run.sessionId = sessionId;
         setRuns(
           (prev) => openSessionRunTransition(prev, activeRunId, run).runs,
@@ -655,13 +708,96 @@ function Layout({
     });
   }, []);
 
+  const persistSidebarWidth = useCallback((width: number) => {
+    const nextWidth = clampSidebarWidth(width);
+    setSidebarWidth(nextWidth);
+    try {
+      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(Math.round(nextWidth)));
+    } catch {
+      /* ignore persistence failures */
+    }
+  }, []);
+
+  const startSidebarResize = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0 || sidebarCollapsed) return;
+
+      event.preventDefault();
+      const startX = event.clientX;
+      const startWidth = sidebarWidth;
+      const maxWidth = Math.max(
+        MIN_SIDEBAR_WIDTH,
+        Math.min(MAX_SIDEBAR_WIDTH, window.innerWidth - 420),
+      );
+      let nextWidth = startWidth;
+      const previousUserSelect = document.body.style.userSelect;
+      const previousCursor = document.body.style.cursor;
+
+      setSidebarResizing(true);
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "col-resize";
+
+      const onMove = (pointerEvent: PointerEvent): void => {
+        nextWidth = Math.min(
+          maxWidth,
+          Math.max(
+            MIN_SIDEBAR_WIDTH,
+            startWidth + pointerEvent.clientX - startX,
+          ),
+        );
+        setSidebarWidth(nextWidth);
+      };
+
+      const onUp = (): void => {
+        setSidebarResizing(false);
+        document.body.style.userSelect = previousUserSelect;
+        document.body.style.cursor = previousCursor;
+        persistSidebarWidth(nextWidth);
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+        document.removeEventListener("pointercancel", onUp);
+      };
+
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+      document.addEventListener("pointercancel", onUp);
+    },
+    [persistSidebarWidth, sidebarCollapsed, sidebarWidth],
+  );
+
+  const handleSidebarResizeKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      const step = event.shiftKey ? 32 : 16;
+      let nextWidth: number | null = null;
+
+      if (event.key === "ArrowLeft") nextWidth = sidebarWidth - step;
+      if (event.key === "ArrowRight") nextWidth = sidebarWidth + step;
+      if (event.key === "Home") nextWidth = MIN_SIDEBAR_WIDTH;
+      if (event.key === "End") nextWidth = MAX_SIDEBAR_WIDTH;
+
+      if (nextWidth === null) return;
+      event.preventDefault();
+      persistSidebarWidth(nextWidth);
+    },
+    [persistSidebarWidth, sidebarWidth],
+  );
+
   const sidebarToggleLabel = sidebarCollapsed
     ? t("navigation.expandSidebar")
     : t("navigation.collapseSidebar");
 
   return (
     <div className="layout-shell">
-      <div className={`layout ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+      <div
+        className={`layout ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${
+          sidebarResizing ? "sidebar-resizing" : ""
+        }`}
+        style={
+          {
+            "--sidebar-width": `${sidebarWidth}px`,
+          } as React.CSSProperties
+        }
+      >
         <aside className="sidebar">
           <div className="sidebar-brand">
             <button
@@ -729,6 +865,7 @@ function Layout({
                   loadingSessionIds={loadingSessionIds}
                   resumingSessionId={resumingSessionId}
                   onSelect={handleResumeSession}
+                  onNewProjectChat={handleNewProjectChat}
                   onSessionDeleted={(id) => {
                     // If the open chat was the one deleted, drop to a fresh chat
                     // so the user isn't left viewing a now-gone conversation.
@@ -823,6 +960,24 @@ function Layout({
               compact={sidebarCollapsed}
             />
           </div>
+          {!sidebarCollapsed && (
+            <div
+              className={`sidebar-resize-handle ${
+                sidebarResizing ? "active" : ""
+              }`}
+              role="separator"
+              aria-label="Resize sidebar"
+              aria-orientation="vertical"
+              aria-valuemin={MIN_SIDEBAR_WIDTH}
+              aria-valuemax={MAX_SIDEBAR_WIDTH}
+              aria-valuenow={Math.round(sidebarWidth)}
+              tabIndex={0}
+              title="Drag to resize sidebar"
+              onPointerDown={startSidebarResize}
+              onKeyDown={handleSidebarResizeKeyDown}
+              onDoubleClick={() => persistSidebarWidth(DEFAULT_SIDEBAR_WIDTH)}
+            />
+          )}
         </aside>
 
         <main className="content">
@@ -860,6 +1015,7 @@ function Layout({
                   runId={run.runId}
                   initialMessages={run.seed}
                   initialSessionId={run.sessionId}
+                  initialContextFolder={run.contextFolder}
                   active={run.runId === activeRunId}
                   profile={run.profile}
                   onNewChat={handleNewChat}
