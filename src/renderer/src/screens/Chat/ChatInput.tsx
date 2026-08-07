@@ -662,6 +662,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           <textarea
             ref={inputRef}
             className="chat-input"
+            dir="auto"
             placeholder={t("chat.typeMessage")}
             value={input}
             onChange={handleInputChange}

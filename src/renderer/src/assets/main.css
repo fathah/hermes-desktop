@@ -5030,6 +5030,7 @@ body:has(.shell-vibrant),
   border-radius: var(--radius-lg);
   font-size: 14px;
   line-height: 1.65;
+  unicode-bidi: plaintext;
   white-space: pre-wrap;
   word-wrap: break-word;
   overflow-wrap: break-word;
@@ -5083,7 +5084,7 @@ body:has(.shell-vibrant),
 .chat-bubble-actions {
   position: absolute;
   top: 6px;
-  right: 8px;
+  inset-inline-end: 8px;
   display: flex;
   gap: 4px;
   opacity: 0;
@@ -5155,6 +5156,8 @@ body:has(.shell-vibrant),
 .chat-bubble-agent pre,
 .chat-bubble-agent code {
   /* Restore preserved whitespace inside code blocks and inline code. */
+  direction: ltr;
+  unicode-bidi: isolate;
   white-space: pre-wrap;
 }
 
@@ -5734,6 +5737,7 @@ body:has(.shell-vibrant),
   background: none;
   border: none;
   color: var(--text-primary);
+  unicode-bidi: plaintext;
   font-size: 14px;
   font-family: var(--font-sans);
   padding: 4px 6px;

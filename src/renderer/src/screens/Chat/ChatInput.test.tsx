@@ -13,6 +13,7 @@ vi.mock("../../components/useI18n", () => ({
 }));
 
 import { ChatInput } from "./ChatInput";
+import { MessageRow } from "./MessageRow";
 
 afterEach(cleanup);
 
@@ -119,5 +120,34 @@ describe("ChatInput — slash command palette", () => {
     fireEvent.keyDown(textarea, { key: "ArrowUp" });
     expect(screen.getByText("command-999")).toBeTruthy();
     expect(screen.queryByText("command-0")).toBeNull();
+  });
+});
+
+describe("chat bidirectional text rendering", () => {
+  it("lets the prompt textarea pick direction from user text", () => {
+    const { textarea } = renderInput();
+
+    expect(textarea).toHaveAttribute("dir", "auto");
+  });
+
+  it("lets chat bubbles pick direction from message text", () => {
+    render(
+      <MessageRow
+        msg={{
+          id: "rtl-message",
+          kind: "user",
+          role: "user",
+          content: "مرحبا Hermes (123)",
+        }}
+        isLast={false}
+        isLoading={false}
+        onApprove={() => {}}
+        onDeny={() => {}}
+      />,
+    );
+
+    expect(
+      screen.getByText("مرحبا Hermes (123)", { selector: ".chat-bubble" }),
+    ).toHaveAttribute("dir", "auto");
   });
 });
