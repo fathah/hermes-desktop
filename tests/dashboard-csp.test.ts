@@ -18,7 +18,7 @@ const loopbackConnectSources = [
 ];
 
 const packagedAssetSources = [
-  "img-src 'self' data: blob: file: https:",
+  "img-src 'self' data: blob: file: hermes-background: https:",
   "media-src 'self' data: blob: file: https:",
   "font-src 'self' data:",
   "object-src 'none'",

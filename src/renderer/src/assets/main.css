@@ -17720,12 +17720,6 @@ html[data-soft-background]:not([data-soft-background="none"])
   color: var(--text-primary);
 }
 
-.web-preview-tools-guide-skip:focus-visible,
-.web-preview-tools-guide-actions button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
 .web-preview-tools-guide h3 {
   margin: 12px 0 6px;
   font-size: 17px;

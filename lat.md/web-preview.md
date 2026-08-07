@@ -34,7 +34,7 @@ Because guest-page keystrokes do not bubble into React, [[src/main/app/start.ts#
 
 New users see a four-step, non-modal coach card explaining Edit, Comment, Execute, preview controls, and shortcut discovery without blocking the embedded page.
 
-The guide offers Back, Next, Skip, and Got it controls. Skip and completion write `complete` to `localStorage` under [[src/renderer/src/screens/Chat/WebPreviewPanel.tsx#WEB_PREVIEW_GUIDE_STORAGE_KEY]], so the versioned walkthrough appears only once and can evolve under a future key.
+The guide offers Back, Next, Skip, and Got it controls using the app-wide native inset keyboard-focus treatment. Skip and completion write `complete` to `localStorage` under [[src/renderer/src/screens/Chat/WebPreviewPanel.tsx#WEB_PREVIEW_GUIDE_STORAGE_KEY]], so the versioned walkthrough appears only once and can evolve under a future key.
 
 ## Live element editing
 
