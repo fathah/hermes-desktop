@@ -296,13 +296,23 @@ function mergeDbMetadataIntoStreamed(
     !!d.attachments &&
     d.attachments.length > 0 &&
     (!s.attachments || s.attachments.length === 0);
+  // The DB row can hold more complete text than a stream cut short mid-answer.
+  // Compare normalized text, not raw length: a legacy `<file>` wrapper makes
+  // the DB row raw-longer even when `attachments` already covers it.
+  const content =
+    normalizeBubbleContentForMatch(d.content).length >
+    normalizeBubbleContentForMatch(s.content).length
+      ? d.content
+      : undefined;
   if (
     needsAttachments ||
+    content !== undefined ||
     (timestamp !== undefined && timestamp !== s.timestamp)
   ) {
     return {
       ...s,
       ...(needsAttachments ? { attachments: d.attachments } : {}),
+      ...(content !== undefined ? { content } : {}),
       ...(timestamp !== undefined ? { timestamp } : {}),
     };
   }
