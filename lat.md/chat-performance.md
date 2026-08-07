@@ -51,3 +51,11 @@ The fixed heights are an invariant shared with the `.slash-menu-item` and `.slas
 Arrow-key selection does not query or measure command DOM nodes. [[src/renderer/src/screens/Chat/ChatInput.tsx]] computes the selected row's offset and adjusts the list scroll position only when that row leaves the viewport, including wraparound from the first command to the last.
 
 The searchable name and description are normalized once when the command catalog changes rather than once per command on every keystroke. The virtual canvas uses layout and paint containment, and the modal overlay avoids backdrop blur so opening the palette does not trigger a full-window blur pass.
+
+## Table-heavy transcript heap profile
+
+Renderer memory changes require real Chromium heap evidence before a retention fix is attempted; long transcripts legitimately retain their mounted DOM.
+
+Issue #883 was profiled with production `MessageRow`/`AgentMarkdown` rendering and heap snapshots at baseline, 5 table-heavy turns, 50 turns, and after unmount. Used heap rose from 2.50 MB to 6.68 MB while 17,169 transcript nodes were live, then fell to 4.05 MB and 19 nodes after unmount. Detached-node count stayed flat at five after content was mounted and after unmount, so the run did not reproduce a detached DOM leak; the growth was live transcript DOM.
+
+The profile did expose a redundant network request rather than retained objects. [[src/renderer/src/screens/Chat/hooks/useDashboardChatTransport.ts#useDashboardChatTransport]] now reuses the first `model.options` response when no slash command changed model state, while retaining the second read after `slash.exec` because commands can mutate the active model. [[src/renderer/src/screens/Chat/hooks/useDashboardChatTransport.test.tsx]] protects the one-read path.

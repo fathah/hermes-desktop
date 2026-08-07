@@ -42,6 +42,39 @@ describe("remote authentication mode detection", () => {
     ).resolves.toEqual({ authMode: "token", version: null });
   });
 
+  it("falls back to raw gateway health when dashboard status is unsupported", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("missing", { status: 404 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ status: "ok", version: "0.8.0" }), {
+          status: 200,
+        }),
+      );
+
+    await expect(
+      probeRemoteAuthMode("http://127.0.0.1:8642/v1", fetchImpl, "server-key"),
+    ).resolves.toEqual({ authMode: "token", version: "0.8.0" });
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      "http://127.0.0.1:8642/health",
+      expect.objectContaining({
+        headers: { Authorization: "Bearer server-key" },
+      }),
+    );
+  });
+
+  it("classifies an authenticated raw health endpoint as token mode", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("missing", { status: 404 }))
+      .mockResolvedValueOnce(new Response("unauthorized", { status: 401 }));
+
+    await expect(
+      probeRemoteAuthMode("http://127.0.0.1:8642", fetchImpl),
+    ).resolves.toEqual({ authMode: "token", version: null });
+  });
+
   it("rejects unreachable or malformed status responses", async () => {
     const rejected = vi.fn(async () => new Response("no", { status: 503 }));
     await expect(

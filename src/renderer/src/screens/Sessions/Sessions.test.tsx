@@ -91,6 +91,7 @@ function sessionSearchResult(
 
 describe("Sessions tab live refresh (#322)", () => {
   beforeEach(() => {
+    localStorage.clear();
     vi.useFakeTimers();
   });
 
@@ -181,6 +182,45 @@ describe("Sessions tab live refresh (#322)", () => {
 
     expect(screen.getByText("SSH session")).toBeTruthy();
     expect(screen.queryByText("sessions.empty")).toBeNull();
+  });
+
+  it("defaults to chats and persists the automation filter", async () => {
+    vi.useRealTimers();
+    const rows = [
+      {
+        id: "chat-session",
+        title: "Manual chat",
+        startedAt: Math.floor(Date.now() / 1000),
+        source: "desktop",
+        messageCount: 2,
+        model: "gpt-5.5",
+      },
+      {
+        id: "cron-session",
+        title: "Nightly automation",
+        startedAt: Math.floor(Date.now() / 1000),
+        source: "cron",
+        messageCount: 2,
+        model: "gpt-5.5",
+      },
+    ];
+    installHermesAPI(rows);
+    const view = render(<Sessions {...baseProps} visible={true} />);
+    await waitFor(() => expect(screen.getByText("Manual chat")).toBeTruthy());
+    expect(screen.queryByText("Nightly automation")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "sessions.filter.automation" }),
+    );
+    expect(screen.queryByText("Manual chat")).toBeNull();
+    expect(screen.getByText("Nightly automation")).toBeTruthy();
+
+    view.unmount();
+    render(<Sessions {...baseProps} visible={true} />);
+    await waitFor(() =>
+      expect(screen.getByText("Nightly automation")).toBeTruthy(),
+    );
+    expect(screen.queryByText("Manual chat")).toBeNull();
   });
 
   it("clears stale rows and reloads when the connection source changes", async () => {

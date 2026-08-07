@@ -56,7 +56,7 @@ linux:
     with Hermes Agent — a self-improving AI assistant with tool use, multi-platform
     messaging, and a closed learning loop.
 appImage:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${name}-${version}-${arch}.${ext}
 deb:
   # Run chmod 4755 on chrome-sandbox so Electron's setuid sandbox helper
   # works on modern Linux distros that disable unprivileged user

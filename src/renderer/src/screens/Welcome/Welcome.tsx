@@ -59,15 +59,18 @@ function Welcome({
     setRemoteTesting(true);
     setRemoteError(null);
     try {
-      const ok = await window.hermesAPI.testRemoteConnection(url, key);
-      if (ok) {
-        await window.hermesAPI.setConnectionConfig("remote", url, key);
+      const result = await window.hermesAPI.connectRemoteGateway(url, key);
+      if (result.connected) {
         onRecheck();
       } else {
         setRemoteError(t("settings.remoteErrorConnection"));
       }
-    } catch {
-      setRemoteError(t("settings.remoteErrorFailed"));
+    } catch (error) {
+      setRemoteError(
+        error instanceof Error && error.message
+          ? error.message
+          : t("settings.remoteErrorFailed"),
+      );
     } finally {
       setRemoteTesting(false);
     }

@@ -13,6 +13,7 @@ export default {
     },
     appearance: "Appearance",
     language: "Language",
+    notifications: "Notifications",
     privacy: "Privacy",
     connection: "Connection",
     network: "Network",
@@ -80,6 +81,23 @@ export default {
     portuguese: "Portuguese",
     turkish: "Türkçe",
     hint: "Choose the interface language",
+  },
+  notifications: {
+    completionSound: "Play a sound when a response finishes",
+    completionSoundHint:
+      "Applies to active and background conversations. Visual status indicators remain enabled.",
+  },
+  spellcheck: {
+    enable: "Enable spellcheck",
+    enableHint: "Show spelling suggestions in message fields.",
+    useSystem: "Use system languages",
+    useSystemHint:
+      "Use the dictionaries Electron selected from your operating-system language settings.",
+    chooseLanguages: "Choose spellcheck languages",
+    chooseLanguagesHint:
+      "Select one or more installed dictionaries. The selection applies immediately.",
+    unavailable:
+      "No spellcheck dictionaries are available in this installation.",
   },
   analytics: {
     label: "Send anonymous usage analytics",

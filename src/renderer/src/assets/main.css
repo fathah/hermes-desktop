@@ -537,6 +537,37 @@ body {
     color 0.2s ease;
 }
 
+/* Pointer focus should not inherit Chromium's OS-accent ring. Keyboard focus
+   uses an inset desktop-style edge below, following the control's own shape
+   instead of drawing a detached browser outline around it. */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 20%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 7%, transparent);
+  filter: brightness(1.08);
+}
+
+@media (prefers-contrast: more) {
+  :focus-visible {
+    box-shadow: inset 0 0 0 2px var(--text-primary);
+    filter: none;
+  }
+}
+
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+    box-shadow: none;
+    filter: none;
+  }
+}
+
 /* ----- App Shell ----- */
 .app {
   height: 100vh;
@@ -802,8 +833,24 @@ html[data-soft-background]:not([data-soft-background="none"])
    ======================================================================== */
 
 .onboard-screen {
+  color-scheme: dark;
+  --bg-primary: #0d0f17;
+  --bg-secondary: #141824;
+  --bg-tertiary: #1b2030;
+  --bg-elevated: #202638;
+  --bg-hover: #252c40;
+  --bg-active: #2d354c;
+  --text-primary: #eef0f6;
+  --text-secondary: #adb4ca;
+  --text-muted: #7f879d;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-bright: rgba(255, 255, 255, 0.14);
+  --code-bg: #10131d;
+  --selection: rgba(120, 150, 255, 0.5);
   position: relative;
   overflow: hidden;
+  background: var(--bg-primary);
+  color: var(--text-primary);
   -webkit-user-select: none;
   user-select: none;
   cursor: default;
@@ -1918,11 +1965,6 @@ html[data-soft-background]:not([data-soft-background="none"])
   box-shadow: inset 0 0 0 1px var(--accent-text);
 }
 
-.setup-provider-card:focus-visible {
-  outline: 2px solid var(--accent-text);
-  outline-offset: 2px;
-}
-
 .setup-provider-logo {
   display: grid;
   place-items: center;
@@ -2795,6 +2837,11 @@ html[data-soft-background]:not([data-soft-background="none"])
   color: var(--text-primary);
 }
 
+.sidebar-recent-session:focus-visible {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
 .sidebar-recent-session.active {
   /* Active state is shown by the bullet + text color only — no filled
      background (keeps the list visually quiet). */
@@ -2982,6 +3029,12 @@ html[data-soft-background]:not([data-soft-background="none"])
 
 .sidebar-session-menu-item:hover {
   background: var(--bg-tertiary);
+}
+
+.sidebar-session-menu-item:focus-visible,
+.sidebar-session-menu-back:focus-visible {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
 .sidebar-session-menu-item--danger {
@@ -4638,11 +4691,6 @@ html[data-soft-background]:not([data-soft-background="none"])
   scrollbar-width: thin;
 }
 
-.folder-picker-list:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent-text) 38%, transparent);
-  outline-offset: -2px;
-}
-
 .folder-picker-row {
   display: flex;
   width: 100%;
@@ -5126,6 +5174,23 @@ html[data-soft-background]:not([data-soft-background="none"])
   background: var(--user-bubble);
   color: var(--user-bubble-text);
   border-bottom-right-radius: 4px;
+}
+
+/* Sent prompts use the same sanitized Markdown pipeline as agent responses.
+   Paragraphs retain literal line breaks so ordinary plain-text prompts keep
+   their original shape, while whitespace between structural elements stays
+   normal and does not create gaps between list/table rows. */
+.chat-user-markdown {
+  white-space: normal;
+}
+
+.chat-user-markdown p {
+  white-space: pre-wrap;
+}
+
+.chat-user-markdown a {
+  color: inherit;
+  text-decoration: underline;
 }
 
 .chat-bubble-agent {
@@ -11738,6 +11803,63 @@ html[data-soft-background]:not([data-soft-background="none"])
   margin-bottom: 3px;
 }
 
+.settings-spellcheck-mode {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.settings-spellcheck-mode > input {
+  margin-top: 3px;
+}
+
+.settings-spellcheck-mode > span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.settings-spellcheck-mode strong {
+  font-size: 13px;
+}
+
+.settings-spellcheck-mode small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-spellcheck-mode code {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.settings-spellcheck-languages {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  max-height: 220px;
+  margin-top: 8px;
+  padding: 10px;
+  overflow-y: auto;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+
+.settings-spellcheck-languages label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
 @keyframes settings-spin {
   to {
     transform: rotate(360deg);
@@ -12652,6 +12774,108 @@ html[data-soft-background]:not([data-soft-background="none"])
 .sessions-searchbar-clear {
   padding: 2px;
   color: var(--text-muted);
+}
+
+.sessions-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sessions-type-filter {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+
+.sessions-type-filter button {
+  appearance: none;
+  border: 0;
+  border-radius: calc(var(--radius-md) - 3px);
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sessions-type-filter button.active {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.16);
+}
+
+.sessions-source-filter {
+  position: relative;
+  margin-left: auto;
+}
+
+.sessions-source-filter summary {
+  list-style: none;
+  min-width: 112px;
+  padding: 7px 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+}
+
+.sessions-source-filter summary::-webkit-details-marker {
+  display: none;
+}
+
+.sessions-source-filter-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 220px;
+  max-height: 260px;
+  padding: 8px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.28);
+}
+
+.sessions-source-filter-menu button,
+.sessions-source-filter-menu label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sessions-source-filter-menu button:hover,
+.sessions-source-filter-menu label:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.sessions-source-filter-menu label span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Loading & empty states */
@@ -17613,9 +17837,10 @@ html[data-soft-background]:not([data-soft-background="none"])
 }
 
 .web-preview-annotation-composer:focus-within {
-  border-color: color-mix(in srgb, var(--accent) 65%, white 10%);
+  border-color: color-mix(in srgb, var(--text-primary) 20%, var(--border));
   box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 20%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 7%, transparent),
     0 14px 36px rgba(0, 0, 0, 0.42);
 }
 
@@ -17670,6 +17895,11 @@ html[data-soft-background]:not([data-soft-background="none"])
   color: var(--text-muted);
 }
 
+.web-preview-annotation-input:focus-visible {
+  box-shadow: none;
+  filter: none;
+}
+
 .web-preview-annotation-cancel,
 .web-preview-annotation-submit {
   display: inline-flex;
@@ -17706,12 +17936,6 @@ html[data-soft-background]:not([data-soft-background="none"])
 .web-preview-annotation-submit:disabled {
   cursor: not-allowed;
   opacity: 0.38;
-}
-
-.web-preview-annotation-cancel:focus-visible,
-.web-preview-annotation-submit:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 
 .web-preview-annotation-marker {

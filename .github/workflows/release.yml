@@ -203,6 +203,7 @@ jobs:
           name: linux-arm64-artifacts
           path: |
             dist/*.AppImage
+            dist/latest-linux-arm64.yml
 
   release_windows:
     name: Build Windows

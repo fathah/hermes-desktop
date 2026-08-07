@@ -988,6 +988,11 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
             const s = sessions.find((row) => row.id === menuTarget.id);
             if (s) startRename(s);
           }}
+          onCopySessionId={(sessionId) => {
+            void window.hermesAPI
+              .copyToClipboard(sessionId)
+              .catch(() => undefined);
+          }}
           onMoveToProject={(path) =>
             void handleMoveToProject(menuTarget.id, path)
           }

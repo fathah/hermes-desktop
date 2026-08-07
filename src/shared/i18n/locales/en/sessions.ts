@@ -1,6 +1,16 @@
 export default {
   title: "Sessions",
   searchPlaceholder: "Search conversations...",
+  typeFilter: "Session type",
+  filter: {
+    chats: "Chats",
+    automation: "Automation",
+    all: "All",
+  },
+  allSources: "All sources",
+  sourcesSelected: "{{count}} sources",
+  filterEmpty: "No sessions match these filters",
+  filterEmptyHint: "Choose another session type or clear the source filter",
   noResults: "No results found",
   noResultsHint: "Try different search terms",
   empty: "No sessions yet",

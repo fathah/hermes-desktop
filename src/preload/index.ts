@@ -479,6 +479,12 @@ const hermesAPI = {
   testRemoteConnection: (url: string, apiKey?: string): Promise<boolean> =>
     ipcRenderer.invoke("test-remote-connection", url, apiKey),
 
+  connectRemoteGateway: (
+    url: string,
+    apiKey?: string,
+  ): Promise<{ connected: boolean; authMode: "token" | "oauth" }> =>
+    ipcRenderer.invoke("connect-remote-gateway", url, apiKey),
+
   probeRemoteAuthMode: (
     url: string,
   ): Promise<{ authMode: "token" | "oauth"; version: string | null }> =>
@@ -805,6 +811,15 @@ const hermesAPI = {
   gatewayStatus: (): Promise<boolean> => ipcRenderer.invoke("gateway-status"),
   setNativeAppearance: (source: "dark" | "light" | "system"): Promise<void> =>
     ipcRenderer.invoke("set-native-appearance", source),
+
+  getSpellCheckerInfo: (): Promise<{
+    available: string[];
+    selected: string[];
+    system: string[];
+  }> => ipcRenderer.invoke("get-spell-checker-info"),
+
+  setSpellCheckerLanguages: (languages: string[]): Promise<string[]> =>
+    ipcRenderer.invoke("set-spell-checker-languages", languages),
   dashboardStatus: (profile?: string): Promise<DashboardStatus> =>
     ipcRenderer.invoke("dashboard-status", profile),
   freshDashboardWsUrl: (profile?: string): Promise<string> =>

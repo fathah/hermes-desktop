@@ -11,6 +11,7 @@ import {
 import { Square as Stop, Search, Paperclip, Mic, ArrowUp } from "lucide-react";
 import { isImeComposing } from "./keyboard";
 import { useI18n } from "../../components/useI18n";
+import { useChatPreferences } from "../../components/ChatPreferencesProvider";
 import { SLASH_COMMANDS, type SlashCommand } from "./slashCommands";
 import { SlashCommandIcon } from "./slash/SlashCommandIcon";
 import {
@@ -87,6 +88,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     ref,
   ): React.JSX.Element {
     const { t } = useI18n();
+    const { spellcheckEnabled } = useChatPreferences();
     const [input, setInput] = useState("");
     const [slashMenuOpen, setSlashMenuOpen] = useState(false);
     const [slashFilter, setSlashFilter] = useState("");
@@ -672,6 +674,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             }}
             onPaste={handlePaste}
             rows={1}
+            spellCheck={spellcheckEnabled}
             autoFocus
           />
           <div className="chat-input-toolbar">

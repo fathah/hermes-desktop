@@ -4,6 +4,7 @@ This directory defines the high-level concepts, business logic, and architecture
 
 - [[chat-commands]] — how typed slash commands are routed through the gateway's `slash.exec`/`command.dispatch` pipeline instead of being sent as prompt text.
 - [[chat-performance]] — how chat rendering stays responsive through contained transcript rows, batched textarea resizing, and fixed-row slash-command virtualization.
+- [[chat-experience-preferences]] — user-message Markdown plus persisted completion-sound and native multi-language spell-check preferences.
 - [[model-context]] — the per-model context-window override that drives the context gauge and the agent's auto-compaction.
 - [[model-selection]] — the session-scoped in-chat model override that switches the model (and provider) for one conversation without touching the global default.
 - [[reasoning-effort]] — the composer's Faster⟷Smarter effort control: a draggable `role="slider"` over six ordered levels that stays open until dismissed and commits one `onChange` per real change.

@@ -30,6 +30,7 @@ export default {
     pin: "Pin",
     unpin: "Unpin",
     rename: "Rename",
+    copySessionId: "Copy session ID",
     moveToProject: "Move to project",
     newProjectFolder: "New folder…",
     removeFromProject: "Remove from project",

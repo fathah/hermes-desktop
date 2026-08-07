@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   Database,
+  Bell,
   FileText,
   Info,
   Languages,
@@ -22,10 +23,12 @@ import DataPane from "./DataPane";
 import AboutPane from "./AboutPane";
 import CommunityPane from "./CommunityPane";
 import LogsPane from "./LogsPane";
+import NotificationsPane from "./NotificationsPane";
 
 export type SettingsSection =
   | "appearance"
   | "language"
+  | "notifications"
   | "privacy"
   | "connection"
   | "data"
@@ -53,6 +56,12 @@ const SETTINGS_NAV: ReadonlyArray<{
     id: "language",
     labelKey: "settings.nav.language",
     Icon: Languages,
+  },
+  {
+    group: "general",
+    id: "notifications",
+    labelKey: "settings.nav.notifications",
+    Icon: Bell,
   },
   {
     group: "general",
@@ -194,6 +203,7 @@ export default function SettingsModal({
           <SettingsDataContext.Provider value={data}>
             {section === "appearance" && <AppearancePane />}
             {section === "language" && <LanguagePane />}
+            {section === "notifications" && <NotificationsPane />}
             {section === "privacy" && <PrivacyPane />}
             {section === "connection" && <ConnectionPane />}
             {section === "data" && <DataPane />}

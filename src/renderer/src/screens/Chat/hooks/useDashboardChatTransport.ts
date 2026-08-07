@@ -1450,12 +1450,14 @@ export function useDashboardChatTransport({
           );
         }
 
-        const live = await client.request<ModelOptionsResponse>(
-          "model.options",
-          {
-            session_id: targetSessionId,
-          },
-        );
+        // `before` is already the live state for this send. Only re-read after
+        // slash.exec, which is the sole operation above that can change it.
+        // This avoids a duplicate model.options round-trip on every later turn.
+        const live = slashResponse
+          ? await client.request<ModelOptionsResponse>("model.options", {
+              session_id: targetSessionId,
+            })
+          : before;
         if (!dashboardModelMatches(dashboardProvider, model, live)) {
           appliedModelRef.current = null;
           const warning = slashResponse?.warning

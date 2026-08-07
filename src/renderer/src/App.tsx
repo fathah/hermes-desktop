@@ -5,6 +5,7 @@ import { FontProvider } from "./components/FontProvider";
 import { SoftBackgroundProvider } from "./components/SoftBackgroundProvider";
 import { ProfileModalProvider } from "./components/profile/ProfileModalProvider";
 import { SettingsModalProvider } from "./components/settings/SettingsModalProvider";
+import { ChatPreferencesProvider } from "./components/ChatPreferencesProvider";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Welcome from "./screens/Welcome/Welcome";
 import Install from "./screens/Install/Install";
@@ -244,6 +245,7 @@ function App(): React.JSX.Element {
     <ThemeProvider>
       <SoftBackgroundProvider>
         <FontProvider>
+          <ChatPreferencesProvider>
           <ProfileModalProvider>
             <SettingsModalProvider>
               <ErrorBoundary>
@@ -270,6 +272,7 @@ function App(): React.JSX.Element {
               </ErrorBoundary>
             </SettingsModalProvider>
           </ProfileModalProvider>
+          </ChatPreferencesProvider>
         </FontProvider>
       </SoftBackgroundProvider>
     </ThemeProvider>
