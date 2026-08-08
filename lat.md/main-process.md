@@ -8,6 +8,26 @@ The Electron main process keeps the entrypoint small and separates app lifecycle
 
 [[src/main/index.ts]] applies GPU crash preferences, enables the optional CDP testing port, and calls [[src/main/app/start.ts#startMainProcess]]. This keeps one-off process boot concerns separate from windows, menus, updater wiring, and IPC.
 
+## System certificate trust
+
+Remote HTTPS clients retain Node's default roots and add operating-system trusted CAs before any connection starts.
+
+[[src/main/system-ca.ts#configureSystemCertificateTrust]] merges Node's existing default certificate list with its system certificate store. [[src/main/index.ts]] applies the merged list before app startup, covering Node HTTP, fetch, and WebSocket clients used by Remote mode.
+
+Certificate and hostname verification remain enabled: only CAs trusted by Node's defaults or the operating system are accepted. If the system store cannot be read, startup continues with the existing defaults and logs the failure.
+
+### Test specifications
+
+Focused tests protect both the trust-store composition and its startup ordering.
+
+#### Preserves default and system roots
+
+System CAs are appended without removing bundled or extra CAs already present in Node's default list.
+
+#### Runs before main startup
+
+The entrypoint configures TLS defaults before it starts the Electron lifecycle, so no cached connection can retain the old CA list.
+
 ## GPU Fallback
 
 Hardware acceleration is disabled and persisted after a GPU-process crash so machines without a usable GPU avoid an infinite crash → relaunch loop — but only temporarily, so a transient crash can't strand a working GPU on SwiftShader.
