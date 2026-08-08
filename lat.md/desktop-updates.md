@@ -16,4 +16,10 @@ Two GitHub Actions workflows publish builds; only the stable channel reaches end
 
 Linux AppImage names include `${arch}` between version and extension, so x64 and arm64 outputs can coexist without overwriting one another. Stable and beta arm64 jobs also publish their architecture-specific updater feed (`latest-linux-arm64.yml` or `beta-linux-arm64.yml`) beside the installer. [[tests/release-artifacts.test.ts]] locks both invariants.
 
-The isolation is structural: the updater ([[src/main/app/updater.ts#setupUpdater]]) leaves `allowPrerelease` off, so electron-updater's GitHub provider only ever resolves the latest **non-prerelease** release's `latest.yml`. A beta prerelease is therefore invisible to stable clients — testers download the beta installer manually from the prerelease. The beta workflow skips winget + the landing-page rebuild and uses a separate `beta-release` concurrency group so it never cancels a stable release. Cutting a beta for the *next* version requires bumping `package.json` first (a beta of an already-released version sorts lower than its stable tag).
+The isolation is structural: the updater ([[src/main/app/updater.ts#setupUpdater]]) leaves `allowPrerelease` off, so electron-updater's GitHub provider only ever resolves the latest **non-prerelease** release's `latest.yml`. A beta prerelease is therefore invisible to stable clients — testers download the beta installer manually from the prerelease. The beta workflow skips winget + the landing-page rebuild and uses a separate `beta-release` concurrency group so it never cancels a stable release. Cutting a beta for the _next_ version requires bumping `package.json` first (a beta of an already-released version sorts lower than its stable tag).
+
+## Linux package sandboxing
+
+Linux distro packages delegate sandbox setup to electron-builder so Ubuntu's AppArmor restrictions work with the spaced `/opt/Hermes One` install path.
+
+The default `.deb`/`.rpm` post-install hook bundles and installs an AppArmor profile that grants the app a user namespace, falling back to Chromium's SUID sandbox only when needed. Do not replace it with a SUID-only `afterInstall`: Electron's SUID launch path truncates executables at spaces, causing `LaunchProcess: failed to execvp: /opt/Hermes` on hardened Ubuntu releases. [[tests/release-artifacts.test.ts]] protects this packaging contract.
