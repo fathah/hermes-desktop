@@ -55,6 +55,11 @@ import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { type Attachment, escapeXmlAttr } from "../shared/attachments";
 import { type SessionModelOverride } from "../shared/model-override";
 import {
+  normalizeApprovalRequest,
+  type ApprovalChoice,
+  type ChatApprovalRequest,
+} from "../shared/chat-approval";
+import {
   OPENAI_COMPAT_PROVIDERS,
   customProviderEnvKey,
 } from "../shared/url-key-map";
@@ -1066,6 +1071,87 @@ export function clearPendingClarify(requestId: string): void {
   pendingClarify.delete(requestId);
 }
 
+interface PendingApproval {
+  choices: ReadonlySet<ApprovalChoice>;
+  ownerId?: number;
+  responding: boolean;
+  responder: (choice: ApprovalChoice) => Promise<boolean>;
+  runId?: string;
+}
+
+const pendingApprovals = new Map<string, PendingApproval>();
+
+export function registerPendingApproval(
+  choices: readonly ApprovalChoice[],
+  responder: (choice: ApprovalChoice) => Promise<boolean>,
+): string {
+  const requestId = `approval-${randomUUID()}`;
+  pendingApprovals.set(requestId, {
+    choices: new Set(choices),
+    responding: false,
+    responder,
+  });
+  return requestId;
+}
+
+export function bindPendingApproval(
+  requestId: string,
+  owner: { ownerId: number; runId: string },
+): boolean {
+  const pending = pendingApprovals.get(requestId);
+  if (
+    !pending ||
+    pending.ownerId !== undefined ||
+    pending.runId !== undefined
+  ) {
+    return false;
+  }
+  pending.ownerId = owner.ownerId;
+  pending.runId = owner.runId;
+  return true;
+}
+
+export async function resolvePendingApproval(
+  requestId: string,
+  choice: unknown,
+  owner?: { ownerId: number; runId: string },
+): Promise<boolean> {
+  const pending = pendingApprovals.get(requestId);
+  if (
+    !pending ||
+    (pending.ownerId !== undefined && pending.ownerId !== owner?.ownerId) ||
+    (pending.runId !== undefined && pending.runId !== owner?.runId) ||
+    typeof choice !== "string" ||
+    !pending.choices.has(choice as ApprovalChoice) ||
+    pending.responding
+  ) {
+    return false;
+  }
+
+  pending.responding = true;
+  try {
+    const acknowledged = await pending.responder(choice as ApprovalChoice);
+    if (!acknowledged || pendingApprovals.get(requestId) !== pending)
+      return false;
+    pendingApprovals.delete(requestId);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    if (pendingApprovals.get(requestId) === pending) {
+      pending.responding = false;
+    }
+  }
+}
+
+export function clearPendingApproval(requestId: string): void {
+  pendingApprovals.delete(requestId);
+}
+
+export function clearAllPendingApprovals(): void {
+  pendingApprovals.clear();
+}
+
 export interface ChatCallbacks {
   onChunk: (text: string) => void;
   /** Streaming reasoning / thinking tokens, when the provider emits them
@@ -1099,6 +1185,7 @@ export interface ChatCallbacks {
     question: string;
     choices: string[];
   }) => void;
+  onApproval?: (req: ChatApprovalRequest) => boolean | void;
 }
 
 type ChatContent =
@@ -1612,6 +1699,30 @@ function postRunStop(
   req.end();
 }
 
+async function postRunApproval(
+  apiUrl: string,
+  profile: string | undefined,
+  runId: string,
+  choice: ApprovalChoice,
+): Promise<boolean> {
+  const response = await fetch(
+    `${apiUrl}/v1/runs/${encodeURIComponent(runId)}/approval`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getApiAuthHeaders(profile),
+      },
+      body: JSON.stringify({ choice, all: false }),
+    },
+  );
+  if (!response.ok) return false;
+  const result = (await response.json().catch(() => null)) as {
+    resolved?: unknown;
+  } | null;
+  return typeof result?.resolved === "number" && result.resolved > 0;
+}
+
 function sendMessageViaRuns(
   message: string,
   cb: ChatCallbacks,
@@ -1662,12 +1773,24 @@ function sendMessageViaRuns(
   let startReq: http.ClientRequest | null = null;
   let eventsReq: http.ClientRequest | null = null;
   let fallbackHandle: ChatHandle | null = null;
+  let approvalInteraction = false;
+  const pendingApprovalIds = new Set<string>();
+
+  function clearApprovals(): void {
+    for (const requestId of pendingApprovalIds) {
+      clearPendingApproval(requestId);
+    }
+    pendingApprovalIds.clear();
+  }
 
   function finish(error?: string): void {
     if (finished || fallbackStarted) return;
     finished = true;
+    clearApprovals();
     if (error) {
-      cb.onError(error);
+      cb.onError(
+        approvalInteraction ? `Approval flow failed: ${error}` : error,
+      );
     } else {
       cb.onDone(sessionId || undefined);
     }
@@ -1675,6 +1798,12 @@ function sendMessageViaRuns(
 
   function fallbackToChatCompletions(): void {
     if (finished || fallbackStarted) return;
+    if (approvalInteraction) {
+      finish(
+        "Hermes lost the run after requesting approval. The prompt was not replayed.",
+      );
+      return;
+    }
     fallbackStarted = true;
     fallbackHandle = sendMessageViaApi(
       message,
@@ -1757,11 +1886,41 @@ function sendMessageViaRuns(
     }
 
     if (eventName === "approval.request") {
-      // The current renderer's approval controls are wired to the legacy chat
-      // flow and only appear after a response finishes. A run pauses before it
-      // can finish, so fall back to the existing path instead of deadlocking
-      // the user on a hidden approval request.
-      stopRunAndFallback();
+      approvalInteraction = true;
+      let requestId = "";
+      const normalized = normalizeApprovalRequest(raw, "");
+      requestId = registerPendingApproval(
+        normalized.choices,
+        async (choice) => {
+          if (pendingApprovalIds.values().next().value !== requestId) {
+            return false;
+          }
+          const acknowledged = await postRunApproval(
+            apiUrl,
+            profile,
+            runId,
+            choice,
+          );
+          if (acknowledged) pendingApprovalIds.delete(requestId);
+          return acknowledged;
+        },
+      );
+      pendingApprovalIds.add(requestId);
+      const request = { ...normalized, requestId };
+      let delivered = false;
+      try {
+        delivered = cb.onApproval?.(request) !== false && !!cb.onApproval;
+      } catch {
+        delivered = false;
+      }
+      if (!delivered) {
+        clearPendingApproval(requestId);
+        pendingApprovalIds.delete(requestId);
+        if (runId) postRunStop(apiUrl, profile, runId);
+        finish(
+          "Hermes requested approval, but no approval listener is available. The run was stopped without approving.",
+        );
+      }
     }
   }
 
@@ -1813,7 +1972,14 @@ function sendMessageViaRuns(
               }
             }
           }
-          if (!finished) finish();
+          if (!finished && approvalInteraction) {
+            if (runId) postRunStop(apiUrl, profile, runId);
+            finish(
+              "Run event stream ended while approval was pending. The run was stopped without approving.",
+            );
+          } else if (!finished) {
+            finish();
+          }
         });
       },
     );
@@ -1884,6 +2050,7 @@ function sendMessageViaRuns(
   return {
     abort: () => {
       if (finished && !fallbackStarted) return;
+      clearApprovals();
       controller.abort();
       startReq?.destroy();
       eventsReq?.destroy();
@@ -1912,10 +2079,19 @@ async function sendMessageViaTuiGateway(
   let fallbackHandle: ChatHandle | null = null;
   let fallbackStarted = false;
   let promptSubmitted = false;
+  let approvalInteraction = false;
   let cleanup = (): void => undefined;
   // request_id of an in-flight clarify question, if the agent is awaiting an
   // answer. Cleared on turn end so an abandoned turn leaks no stale resolver.
   let pendingClarifyId: string | null = null;
+  const pendingApprovalIds = new Set<string>();
+
+  function clearApprovals(): void {
+    for (const requestId of pendingApprovalIds) {
+      clearPendingApproval(requestId);
+    }
+    pendingApprovalIds.clear();
+  }
 
   function finish(error?: string): void {
     if (finished) return;
@@ -1924,9 +2100,12 @@ async function sendMessageViaTuiGateway(
       clearPendingClarify(pendingClarifyId);
       pendingClarifyId = null;
     }
+    clearApprovals();
     cleanup();
     if (error) {
-      cb.onError(error);
+      cb.onError(
+        approvalInteraction ? `Approval flow failed: ${error}` : error,
+      );
     } else {
       cb.onDone(storedSessionId || undefined);
     }
@@ -1939,11 +2118,18 @@ async function sendMessageViaTuiGateway(
       clearPendingClarify(pendingClarifyId);
       pendingClarifyId = null;
     }
+    clearApprovals();
     cleanup();
   }
 
   function startApiFallback(reason: string): void {
     if (finished || fallbackStarted) return;
+    if (approvalInteraction) {
+      finish(
+        `${reason} The prompt was not replayed after the approval request.`,
+      );
+      return;
+    }
     fallbackStarted = true;
     cleanup();
     client.stop();
@@ -2026,28 +2212,48 @@ async function sendMessageViaTuiGateway(
     }
 
     if (event.type === "approval.request") {
-      // Match the existing local chat posture: Hermes One does not expose a
-      // mid-stream approval dialog, so answer the dashboard protocol once and
-      // keep the transcript focused on the resulting tool call/result events.
-      void client
-        .request(
-          "approval.respond",
-          {
-            session_id: activeSessionId,
-            choice: "once",
-            all: false,
-          },
-          30_000,
-        )
-        .catch((error) => {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          if (!hasGatewayOutput) {
-            startApiFallback(message);
-            return;
+      approvalInteraction = true;
+      let requestId = "";
+      const normalized = normalizeApprovalRequest(event.payload, "");
+      requestId = registerPendingApproval(
+        normalized.choices,
+        async (choice) => {
+          if (pendingApprovalIds.values().next().value !== requestId) {
+            return false;
           }
-          finish(message);
-        });
+          const result = await client.request<{ resolved?: unknown }>(
+            "approval.respond",
+            {
+              session_id: activeSessionId,
+              choice,
+              all: false,
+            },
+            30_000,
+          );
+          const acknowledged =
+            typeof result?.resolved === "number" && result.resolved > 0;
+          if (acknowledged) pendingApprovalIds.delete(requestId);
+          return acknowledged;
+        },
+      );
+      pendingApprovalIds.add(requestId);
+      const request = { ...normalized, requestId };
+      let delivered = false;
+      try {
+        delivered = cb.onApproval?.(request) !== false && !!cb.onApproval;
+      } catch {
+        delivered = false;
+      }
+      if (!delivered) {
+        clearPendingApproval(requestId);
+        pendingApprovalIds.delete(requestId);
+        void client
+          .request("session.interrupt", { session_id: activeSessionId }, 5_000)
+          .catch(() => undefined);
+        finish(
+          "Hermes requested approval, but no approval listener is available. The turn was stopped without approving.",
+        );
+      }
       return;
     }
 

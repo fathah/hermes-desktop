@@ -30,7 +30,6 @@ Because no global loading state is set, the slash branch shows its own feedback:
 
 ## Transport connection lifecycle
 
-
 Every dashboard turn first connects a JSON-RPC WebSocket to the gateway; that handshake must be time-bounded or a stalled socket wedges the whole transport with no error and no fallback (issue #718).
 
 [[src/renderer/src/screens/Chat/dashboardGatewayClient.ts#DashboardGatewayClient#connect]] resolves on `open`, rejects on `error` or an early `close`, **and** rejects on a connect-timeout (default 10s). A WebSocket stuck in `CONNECTING` — TCP accepted but the upgrade never completing, e.g. when a busy renderer starves the handshake — fires none of those events on its own, so without the timer the connect promise never settles. When it never settles, `ensureClient` in [[src/renderer/src/screens/Chat/hooks/useDashboardChatTransport.ts#useDashboardChatTransport]] never resolves, its cached `connectingRef` promise poisons every later send, `setIsLoading(false)` never runs, and the user sees a permanent loading spinner. The timeout makes the promise reject so auto mode falls back to the legacy HTTP transport (and explicit-dashboard mode surfaces a real error) instead of hanging. Per-request calls are separately bounded by their own 30s timeout.
@@ -91,7 +90,15 @@ The canonical time comes from state.db: [[src/renderer/src/screens/Chat/sessionH
 
 A few non-local commands have dedicated desktop handling and must NOT be diverted to the gateway slash pipeline, or they'd lose their behaviour.
 
-The approval responses `/approve` and `/deny` (the `RENDERER_NATIVE_SLASH` set) are excluded from the pipeline and sent as prompt-level input, matching their dedicated button handlers — `slash.exec` rejects pending-input commands anyway.
+The legacy approval responses `/approve` and `/deny` (the `RENDERER_NATIVE_SLASH` set) are excluded from the pipeline and sent as prompt-level input. They remain a compatibility path for text-only backends; structured gateway approvals use the flow below.
+
+## Structured command approvals
+
+Dangerous commands pause the current turn until the user explicitly allows or denies them; the desktop never auto-approves or replays a prompt after an approval request.
+
+[[src/shared/chat-approval.ts#normalizeApprovalRequest]] validates the gateway's offered `once`, `session`, `always`, and `deny` choices and always preserves a deny path. Dashboard chat (local, direct Remote, and SSH) renders [[src/renderer/src/screens/Chat/ApprovalCard.tsx#ApprovalCard]] from `approval.request` and sends `approval.respond` on the same runtime session through [[src/renderer/src/screens/Chat/hooks/useDashboardChatTransport.ts#useDashboardChatTransport]]. Because upstream responses are session-scoped FIFO rather than request-addressed, cards queue in arrival order and only the queue head is actionable; an in-flight guard prevents duplicate clicks from resolving the next command. A card resolves only when the gateway reports a positive resolved count. RPC rejection remains retryable, while connection/session loss marks pending cards unavailable and stops the active turn.
+
+Gateway-only chat uses the run-scoped preload bridge from [[src/main/ipc/register.ts#registerIpcHandlers]]. The TUI WebSocket and `/v1/runs` transports register an opaque pending request through [[src/main/hermes.ts#registerPendingApproval]], bind it to the originating renderer and chat run, then await the renderer's choice before responding upstream. Those queues also resolve in FIFO order. Pending requests are cleared on completion, cancellation, or renderer destruction, and transport failure after a request surfaces an error instead of falling back and potentially repeating earlier tool effects. A caller without an interactive approval UI fails closed. `Always allow` requires a second confirmation in the card because the gateway persists that choice beyond the current session.
 
 ## Side questions (`/btw`)
 

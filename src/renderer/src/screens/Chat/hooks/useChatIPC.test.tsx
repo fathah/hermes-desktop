@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { useRef, useState } from "react";
 import { useChatIPC } from "./useChatIPC";
 import type { ActiveTurn, ChatMessage, UsageState } from "../types";
+import type { ChatApprovalRequest } from "../../../../../shared/chat-approval";
 
 type Callback<T extends unknown[]> = (...args: T) => void;
 
@@ -12,6 +13,7 @@ interface ChatIpcCallbacks {
   reasoning?: Callback<[string, string]>;
   done?: Callback<[string, string]>;
   error?: Callback<[string, string]>;
+  approval?: Callback<[string, ChatApprovalRequest]>;
   toolProgress?: Callback<[string, string]>;
   toolEvent?: Callback<[string, unknown]>;
   usage?: Callback<[string, UsageState]>;
@@ -63,6 +65,10 @@ function installHermesApi(callbacks: ChatIpcCallbacks): {
         return vi.fn();
       },
       onClarifyRequest: vi.fn(() => vi.fn()),
+      onApprovalRequest: (cb: Callback<[string, ChatApprovalRequest]>) => {
+        callbacks.approval = cb;
+        return vi.fn();
+      },
       onChatUsage: (cb: Callback<[string, UsageState]>) => {
         callbacks.usage = cb;
         return vi.fn();
@@ -136,6 +142,30 @@ describe("useChatIPC session scoping", () => {
     expect(api.getSessionMessages).toHaveBeenCalledWith("old-session");
     expect(screen.getByTestId("ids")).toHaveTextContent(
       JSON.stringify(["db-1", "db-2"]),
+    );
+  });
+});
+
+describe("useChatIPC approval requests", () => {
+  it("run-scopes, structures, and dedupes approval cards while loading", async () => {
+    const callbacks: ChatIpcCallbacks = {};
+    installHermesApi(callbacks);
+    render(<Harness sessionScopeId={null} />);
+    const request: ChatApprovalRequest = {
+      requestId: "approval-1",
+      command: "rm temp.txt",
+      description: "Remove a temporary file",
+      choices: ["once", "deny"],
+    };
+
+    await act(async () => {
+      callbacks.approval?.("other-run", request);
+      callbacks.approval?.("run-1", request);
+      callbacks.approval?.("run-1", request);
+    });
+
+    expect(screen.getByTestId("ids")).toHaveTextContent(
+      JSON.stringify(["approval-ipc-approval-1"]),
     );
   });
 });

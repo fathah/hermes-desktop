@@ -52,6 +52,22 @@ export default {
     skipped: "Skipped — Hermes decided",
     error: "Couldn't deliver your answer — the turn may have ended. Try again.",
   },
+  approval: {
+    title: "Command approval required",
+    once: "Allow once",
+    session: "Allow for session",
+    always: "Always allow",
+    deny: "Deny",
+    responded: "Responded",
+    unavailable:
+      "Approval is no longer available because the connection closed.",
+    queued: "Resolve the earlier approval request first.",
+    confirm:
+      "Always allow this command in future sessions? This permission persists until revoked.",
+    cancel: "Cancel",
+    confirmAlways: "Confirm always allow",
+    error: "Couldn't send the approval response. Try again.",
+  },
   thinking: "Thinking…",
   thought: "Thought",
   toolCall: "Tool call",

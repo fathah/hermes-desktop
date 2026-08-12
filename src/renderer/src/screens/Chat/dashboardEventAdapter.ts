@@ -1,4 +1,5 @@
 import type { ChatToolEvent } from "../../../../shared/chat-stream";
+import { normalizeApprovalRequest } from "../../../../shared/chat-approval";
 import { isLossyChunkCopy } from "./lossyText";
 import type { ActiveTurn, ChatBubbleMessage, ChatMessage } from "./types";
 
@@ -15,8 +16,57 @@ export interface DashboardEventState {
 
 interface ApplyDashboardEventOptions {
   activeTurn?: ActiveTurn | null;
+  approvalRequestId?: string;
   now?: number;
   renderAssistantDeltas?: boolean;
+}
+
+export function dashboardApprovalRequestId(
+  event: DashboardStreamEvent,
+  now = Date.now(),
+  fallbackNonce?: number,
+): string {
+  const payload = isRecord(event.payload) ? event.payload : {};
+  const supplied = textFromPayload(payload, "request_id", "id").trim();
+  if (supplied) return supplied;
+  const payloadTime = textFromPayload(
+    payload,
+    "timestamp",
+    "time",
+    "created_at",
+  );
+  if (payloadTime) {
+    return `dashboard-approval-${event.session_id || "session"}-${payloadTime}`;
+  }
+  return `dashboard-approval-${event.session_id || "session"}-${now}${
+    fallbackNonce === undefined ? "" : `-${fallbackNonce}`
+  }`;
+}
+
+function appendApprovalRequest(
+  messages: ReadonlyArray<ChatMessage>,
+  payload: unknown,
+  requestId: string,
+): ChatMessage[] {
+  if (
+    messages.some(
+      (message) =>
+        message.kind === "approval" && message.requestId === requestId,
+    )
+  ) {
+    return [...messages];
+  }
+  const request = normalizeApprovalRequest(payload, requestId);
+  return [
+    ...messages,
+    {
+      id: `approval-dashboard-${requestId}`,
+      kind: "approval",
+      role: "agent",
+      responsePath: "dashboard",
+      ...request,
+    },
+  ];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -704,6 +754,18 @@ export function applyDashboardStreamEvent(
         messages: appendClarifyRequest(state.messages, event.payload, now),
         reasoningSegmentClosed: true,
       };
+    case "approval.request": {
+      const requestId =
+        options.approvalRequestId ?? dashboardApprovalRequestId(event, now);
+      return {
+        messages: appendApprovalRequest(
+          state.messages,
+          event.payload,
+          requestId,
+        ),
+        reasoningSegmentClosed: true,
+      };
+    }
     case "message.complete": {
       const finalText = textFromPayload(event.payload, "text", "rendered");
       const finalReasoning = thinkingTextFromPayload(

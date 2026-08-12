@@ -5459,6 +5459,70 @@ body:has(.shell-vibrant),
   margin-top: 2px;
 }
 
+.chat-approval-card {
+  border-left-color: var(--warning, #d97706);
+}
+
+.chat-approval-heading {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.chat-approval-command {
+  max-height: 180px;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-approval-choice--deny {
+  color: var(--danger, #ef4444);
+}
+
+.chat-approval-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--warning, #d97706);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.chat-approval-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.chat-approval-confirm-actions .chat-clarify-choice,
+.chat-approval-confirm-actions .chat-clarify-send {
+  width: auto;
+  align-self: auto;
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .chat-approval-card {
+    margin-left: 0;
+  }
+}
+
 /* Override Tailwind preflight spacing inside agent bubbles */
 .chat-bubble-agent p {
   margin: 0 0 0.85em !important;
