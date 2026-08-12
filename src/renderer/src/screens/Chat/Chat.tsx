@@ -943,6 +943,7 @@ function Chat({
               onDeny={actions.handleDeny}
               onClarifyResolved={handleClarifyResolved}
               agentAvatar={agentAvatar}
+              profile={profile}
             />
           )}
           <div ref={bottomRef} />

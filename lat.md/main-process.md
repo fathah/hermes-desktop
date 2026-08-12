@@ -66,6 +66,14 @@ Speech-to-text IPC sends recorded desktop audio through the Hermes API server, n
 
 [[src/main/ipc/register.ts#registerIpcHandlers]] exposes `transcribe-audio` for the preload bridge, and [[src/main/hermes.ts#transcribeAudio]] posts a base64 data URL to `/api/audio/transcribe`. If the local gateway lacks that desktop route, it falls back to the Python `tools.transcription_tools.transcribe_audio` dispatcher, so local Whisper, Groq, OpenAI, ElevenLabs, and command/plugin STT providers remain independent from the selected chat model.
 
+## MiniMax speech synthesis
+
+Agent message actions can request spoken audio without exposing speech credentials to the renderer.
+
+[[src/main/ipc/register.ts#registerIpcHandlers]] exposes the context-isolated `synthesize-speech` boundary. [[src/main/minimax-speech.ts#synthesizeMiniMaxSpeech]] selects the configured global or China endpoint and matching credential, validates the selected speech model and audio format, sends the synchronous `t2a_v2` request, and decodes successful hex audio responses.
+
+The Providers screen exposes the existing regional keys plus `tts.minimax.model` and `tts.minimax.region`; changing either selector also makes MiniMax the configured TTS tool provider. [[tests/minimax-speech.test.ts]] protects the default model, regional credential binding, request shape, and response/error parsing.
+
 ## SSH dashboard transport
 
 SSH mode has two chat transports because the remote serves chat from **two different servers**, and the desktop must reach the right one.

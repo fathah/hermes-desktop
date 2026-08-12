@@ -26,6 +26,7 @@ interface MessageListProps {
   /** Appearance of the agent this conversation is with, so idle avatars show
    *  the agent's profile picture instead of the loading gif. */
   agentAvatar?: AgentAvatarInfo;
+  profile?: string;
 }
 
 function TypingIndicator({
@@ -73,6 +74,7 @@ export const MessageList = memo(function MessageList({
   onDeny,
   onClarifyResolved,
   agentAvatar,
+  profile,
 }: MessageListProps): React.JSX.Element {
   // Bubbles with empty content are still hidden (live-stream placeholders).
   // History rows pass through unconditionally.
@@ -164,6 +166,7 @@ export const MessageList = memo(function MessageList({
         onDeny={onDeny}
         showAvatar={showAvatar}
         agent={agentAvatar}
+        profile={profile}
       />,
     );
   }
