@@ -227,9 +227,16 @@ export function useChatIPC({
       reasoningSegmentClosedRef.current = false;
       stopDbPolling();
       const activeTurn = activeTurnRef.current;
-      if (!activeTurn) return;
-      activeTurn.status = "failed";
-      setMessages((prev) => markActiveTurnFailed(prev, error, activeTurn));
+      if (activeTurn) activeTurn.status = "failed";
+      setMessages((prev) =>
+        markActiveTurnFailed(prev, error, activeTurn).map((message) =>
+          message.kind === "approval" &&
+          message.responsePath === "ipc" &&
+          !message.resolved
+            ? { ...message, unavailable: true }
+            : message,
+        ),
+      );
       setToolProgress(null);
       setIsLoading(false);
     });
@@ -257,6 +264,38 @@ export function useChatIPC({
               requestId: req.requestId,
               question: req.question,
               choices: Array.isArray(req.choices) ? req.choices : [],
+            },
+          ];
+        });
+      },
+    );
+
+    const cleanupApproval = window.hermesAPI.onApprovalRequest(
+      (eventRunId, req) => {
+        if (!eventMatchesRun(eventRunId, runId)) return;
+        reasoningSegmentClosedRef.current = true;
+        setToolProgress(null);
+        setIsLoading(true);
+        setMessages((prev) => {
+          if (
+            prev.some(
+              (message) =>
+                message.kind === "approval" &&
+                message.responsePath === "ipc" &&
+                message.requestId === req.requestId,
+            )
+          ) {
+            return prev;
+          }
+          return [
+            ...prev,
+            {
+              id: `approval-ipc-${req.requestId}`,
+              kind: "approval",
+              role: "agent",
+              responsePath: "ipc",
+              runId,
+              ...req,
             },
           ];
         });
@@ -353,6 +392,7 @@ export function useChatIPC({
       cleanupDone();
       cleanupError();
       cleanupClarify();
+      cleanupApproval();
       cleanupToolProgress();
       cleanupToolEvent();
       cleanupUsage();

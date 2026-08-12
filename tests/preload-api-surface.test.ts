@@ -66,6 +66,12 @@ describe("Preload API Surface", () => {
 // ─── New APIs exist ─────────────────────────────────────
 
 describe("New APIs from v0.8/v0.9 features", () => {
+  it("has chat approval APIs", () => {
+    expect(preloadMethods).toContain("onApprovalRequest");
+    expect(typeMethods).toContain("onApprovalRequest");
+    expect(preloadMethods).toContain("respondApproval");
+    expect(typeMethods).toContain("respondApproval");
+  });
   it("has backup/import APIs", () => {
     expect(preloadMethods).toContain("runHermesBackup");
     expect(preloadMethods).toContain("runHermesImport");

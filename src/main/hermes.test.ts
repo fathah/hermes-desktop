@@ -60,12 +60,17 @@ import type { ConnectionConfig } from "./config";
 import { providerListSafe } from "./secrets";
 import {
   getRemoteAuthHeader,
+  bindPendingApproval,
+  clearAllPendingApprovals,
+  registerPendingApproval,
+  resolvePendingApproval,
   sendMessage,
   shouldForceCliForSessionOverride,
   stopHealthPolling,
   transcribeAudio,
 } from "./hermes";
 import type { ChatCallbacks } from "./hermes";
+import { normalizeApprovalRequest } from "../shared/chat-approval";
 
 const mockedGetModelConfig = vi.mocked(getModelConfig);
 const mockedGetApiServerKey = vi.mocked(getApiServerKey);
@@ -73,6 +78,119 @@ const mockedGetConnectionConfig = vi.mocked(getConnectionConfig);
 const mockedReadEnv = vi.mocked(readEnv);
 const mockedProviderListSafe = vi.mocked(providerListSafe);
 const mockedSpawn = vi.mocked(spawn);
+
+describe("chat approval normalization", () => {
+  it("preserves an explicit safe choice subset and always includes deny", () => {
+    expect(
+      normalizeApprovalRequest(
+        {
+          command: "rm -rf build",
+          reason: "recursive delete",
+          choices: ["session", "bogus", "session"],
+        },
+        "opaque-id",
+      ),
+    ).toEqual({
+      requestId: "opaque-id",
+      command: "rm -rf build",
+      description: "recursive delete",
+      choices: ["session", "deny"],
+    });
+  });
+
+  it("does not expose permanent approval when the payload forbids it", () => {
+    expect(
+      normalizeApprovalRequest(
+        {
+          cmd: "chmod 777 file",
+          choices: ["once", "always"],
+          allow_permanent: false,
+        },
+        "opaque-id",
+      ).choices,
+    ).toEqual(["once", "deny"]);
+  });
+});
+
+describe("pending chat approvals", () => {
+  afterEach(() => clearAllPendingApprovals());
+
+  it("validates offered choices and removes only an acknowledged response", async () => {
+    const responder = vi
+      .fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    const requestId = registerPendingApproval(["once", "deny"], responder);
+
+    await expect(resolvePendingApproval(requestId, "always")).resolves.toBe(
+      false,
+    );
+    await expect(resolvePendingApproval(requestId, "once")).resolves.toBe(
+      false,
+    );
+    await expect(resolvePendingApproval(requestId, "deny")).resolves.toBe(true);
+    await expect(resolvePendingApproval(requestId, "deny")).resolves.toBe(
+      false,
+    );
+    expect(responder).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects a duplicate response while acknowledgement is in flight", async () => {
+    let acknowledge!: (value: boolean) => void;
+    const responder = vi.fn(
+      () => new Promise<boolean>((resolve) => (acknowledge = resolve)),
+    );
+    const requestId = registerPendingApproval(["once"], responder);
+    const first = resolvePendingApproval(requestId, "once");
+
+    await expect(resolvePendingApproval(requestId, "once")).resolves.toBe(
+      false,
+    );
+    acknowledge(true);
+    await expect(first).resolves.toBe(true);
+    expect(responder).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not report success after a pending request is cleared", async () => {
+    let acknowledge!: (value: boolean) => void;
+    const requestId = registerPendingApproval(
+      ["once"],
+      () => new Promise<boolean>((resolve) => (acknowledge = resolve)),
+    );
+    const response = resolvePendingApproval(requestId, "once");
+
+    clearAllPendingApprovals();
+    acknowledge(true);
+    await expect(response).resolves.toBe(false);
+  });
+
+  it("scopes an approval response to its renderer and run", async () => {
+    const responder = vi.fn().mockResolvedValue(true);
+    const requestId = registerPendingApproval(["deny"], responder);
+    expect(bindPendingApproval(requestId, { ownerId: 7, runId: "run-1" })).toBe(
+      true,
+    );
+
+    await expect(
+      resolvePendingApproval(requestId, "deny", {
+        ownerId: 8,
+        runId: "run-1",
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      resolvePendingApproval(requestId, "deny", {
+        ownerId: 7,
+        runId: "run-2",
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      resolvePendingApproval(requestId, "deny", {
+        ownerId: 7,
+        runId: "run-1",
+      }),
+    ).resolves.toBe(true);
+  });
+});
 
 function testConnection(
   fields: Partial<ConnectionConfig> = {},

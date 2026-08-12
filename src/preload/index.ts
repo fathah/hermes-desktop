@@ -21,6 +21,10 @@ import type {
 } from "../shared/messaging-platforms";
 import type { ChatToolEvent } from "../shared/chat-stream";
 import type {
+  ApprovalChoice,
+  ChatApprovalRequest,
+} from "../shared/chat-approval";
+import type {
   DeviceCodeInfo,
   EnsureHermesOneKeyResult,
   HermesAccount,
@@ -793,6 +797,25 @@ const hermesAPI = {
    *  autonomously (the gateway treats it as "you decide"). */
   respondClarify: (requestId: string, answer: string): Promise<boolean> =>
     ipcRenderer.invoke("clarify-respond", { requestId, answer }),
+
+  onApprovalRequest: (
+    callback: (runId: string, req: ChatApprovalRequest) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      runId: string,
+      req: ChatApprovalRequest,
+    ): void => callback(runId, req);
+    ipcRenderer.on("chat-approval-request", handler);
+    return () => ipcRenderer.removeListener("chat-approval-request", handler);
+  },
+
+  respondApproval: (
+    requestId: string,
+    choice: ApprovalChoice,
+    runId: string,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("approval-respond", { requestId, choice, runId }),
 
   // Gateway
   startGateway: (): Promise<GatewayStartResult> =>

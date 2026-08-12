@@ -122,7 +122,9 @@ import {
   restartGateway,
   notifyProfileSwitched,
   setSshRemoteApiKey,
+  bindPendingApproval,
   resolvePendingClarify,
+  resolvePendingApproval,
 } from "../hermes";
 import {
   freshDashboardWebSocketUrl,
@@ -1574,7 +1576,7 @@ export function registerIpcHandlers(context: IpcContext): void {
       let fullResponse = "";
       const chatStartTime = Date.now();
       let resolveChat: (v: { response: string; sessionId?: string }) => void;
-      let rejectChat: (reason?: unknown) => void;
+      let rejectChat!: (reason?: unknown) => void;
       const promise = new Promise<{ response: string; sessionId?: string }>(
         (res, rej) => {
           resolveChat = res;
@@ -1601,92 +1603,134 @@ export function registerIpcHandlers(context: IpcContext): void {
       const abortThisRun = (): void => {
         activeRuns.get(chatRunId)?.();
       };
+      const senderId = event.sender.id;
+      let senderDestroyed = false;
+      const handleSenderDestroyed = (): void => {
+        senderDestroyed = true;
+        abortThisRun();
+      };
+      event.sender.once("destroyed", handleSenderDestroyed);
+      const cleanupSender = (): void => {
+        if (!event.sender.isDestroyed()) {
+          event.sender.removeListener("destroyed", handleSenderDestroyed);
+        }
+      };
 
-      const handle = await sendMessage(
-        message,
-        {
-          onChunk: (chunk) => {
-            fullResponse += chunk;
-            if (!safeSend("chat-chunk", chunk)) {
-              // Renderer is gone — stop generating and resolve with what we
-              // have so the awaiting promise doesn't leak.
-              abortThisRun();
-            }
+      let handle;
+      try {
+        handle = await sendMessage(
+          message,
+          {
+            onChunk: (chunk) => {
+              fullResponse += chunk;
+              if (!safeSend("chat-chunk", chunk)) {
+                // Renderer is gone — stop generating and resolve with what we
+                // have so the awaiting promise doesn't leak.
+                abortThisRun();
+              }
+            },
+            onReasoningChunk: (chunk) => {
+              // Forward reasoning/thinking tokens on a dedicated channel so
+              // the renderer can render the thinking bubble live during the
+              // stream rather than waiting for a focus-change refresh (#352).
+              // Same renderer-gone abort guard as the content channel.
+              if (!safeSend("chat-reasoning-chunk", chunk)) {
+                abortThisRun();
+              }
+            },
+            onDone: (sessionId) => {
+              cleanupSender();
+              activeRuns.delete(chatRunId);
+              try {
+                persistPromptImageAttachments(sessionId, message, attachments);
+              } catch (err) {
+                console.warn(
+                  "[sessions] Failed to persist prompt image attachments:",
+                  err,
+                );
+              }
+              safeSend("chat-done", sessionId || "");
+              resolveChat({ response: fullResponse, sessionId });
+              // Desktop notification when window is not focused and response took >10s
+              if (
+                mainWindow &&
+                !mainWindow.isFocused() &&
+                Date.now() - chatStartTime > 10000
+              ) {
+                const preview = fullResponse
+                  .replace(/[#*_`~\n]+/g, " ")
+                  .trim()
+                  .slice(0, 80);
+                new Notification({
+                  title: APP_NAME,
+                  body: preview || "Response ready",
+                }).show();
+              }
+            },
+            onSessionStarted: (sessionId) => {
+              safeSend("chat-session-started", sessionId);
+            },
+            onError: (error) => {
+              cleanupSender();
+              activeRuns.delete(chatRunId);
+              safeSend("chat-error", error);
+              rejectChat(new Error(error));
+              // Notify on error too if window not focused
+              if (mainWindow && !mainWindow.isFocused()) {
+                new Notification({
+                  title: `${APP_NAME} — Error`,
+                  body: error.slice(0, 100),
+                }).show();
+              }
+            },
+            onToolProgress: (tool) => {
+              safeSend("chat-tool-progress", tool);
+            },
+            onToolEvent: (toolEvent) => {
+              safeSend("chat-tool-event", toolEvent);
+            },
+            onUsage: (usage) => {
+              safeSend("chat-usage", usage);
+            },
+            onClarify: (req) => {
+              safeSend("chat-clarify-request", req);
+            },
+            onApproval: (req) => {
+              // Office one-chat omits runId and has no approval UI.
+              if (!runId) return false;
+              if (
+                !bindPendingApproval(req.requestId, {
+                  ownerId: senderId,
+                  runId: chatRunId,
+                })
+              ) {
+                return false;
+              }
+              return safeSend("chat-approval-request", req);
+            },
           },
-          onReasoningChunk: (chunk) => {
-            // Forward reasoning/thinking tokens on a dedicated channel so
-            // the renderer can render the thinking bubble live during the
-            // stream rather than waiting for a focus-change refresh (#352).
-            // Same renderer-gone abort guard as the content channel.
-            if (!safeSend("chat-reasoning-chunk", chunk)) {
-              abortThisRun();
-            }
-          },
-          onDone: (sessionId) => {
-            activeRuns.delete(chatRunId);
-            try {
-              persistPromptImageAttachments(sessionId, message, attachments);
-            } catch (err) {
-              console.warn(
-                "[sessions] Failed to persist prompt image attachments:",
-                err,
-              );
-            }
-            safeSend("chat-done", sessionId || "");
-            resolveChat({ response: fullResponse, sessionId });
-            // Desktop notification when window is not focused and response took >10s
-            if (
-              mainWindow &&
-              !mainWindow.isFocused() &&
-              Date.now() - chatStartTime > 10000
-            ) {
-              const preview = fullResponse
-                .replace(/[#*_`~\n]+/g, " ")
-                .trim()
-                .slice(0, 80);
-              new Notification({
-                title: APP_NAME,
-                body: preview || "Response ready",
-              }).show();
-            }
-          },
-          onSessionStarted: (sessionId) => {
-            safeSend("chat-session-started", sessionId);
-          },
-          onError: (error) => {
-            activeRuns.delete(chatRunId);
-            safeSend("chat-error", error);
-            rejectChat(new Error(error));
-            // Notify on error too if window not focused
-            if (mainWindow && !mainWindow.isFocused()) {
-              new Notification({
-                title: `${APP_NAME} — Error`,
-                body: error.slice(0, 100),
-              }).show();
-            }
-          },
-          onToolProgress: (tool) => {
-            safeSend("chat-tool-progress", tool);
-          },
-          onToolEvent: (toolEvent) => {
-            safeSend("chat-tool-event", toolEvent);
-          },
-          onUsage: (usage) => {
-            safeSend("chat-usage", usage);
-          },
-          onClarify: (req) => {
-            safeSend("chat-clarify-request", req);
-          },
-        },
-        profile,
-        resumeSessionId,
-        history,
-        attachments,
-        contextFolder,
-        modelOverride,
-      );
+          profile,
+          resumeSessionId,
+          history,
+          attachments,
+          contextFolder,
+          modelOverride,
+        );
+      } catch (error) {
+        cleanupSender();
+        throw error;
+      }
 
-      activeRuns.set(chatRunId, handle.abort);
+      const abortRun = (): void => {
+        cleanupSender();
+        handle.abort();
+      };
+      if (senderDestroyed) {
+        abortRun();
+        rejectChat(new Error("Chat renderer closed before the run started."));
+        return promise;
+      }
+      activeRuns.set(chatRunId, abortRun);
       return promise;
     },
   );
@@ -1710,6 +1754,25 @@ export function registerIpcHandlers(context: IpcContext): void {
       return resolvePendingClarify(
         payload?.requestId ?? "",
         payload?.answer ?? "",
+      );
+    },
+  );
+
+  ipcMain.handle(
+    "approval-respond",
+    async (
+      _event,
+      payload:
+        | { requestId?: unknown; choice?: unknown; runId?: unknown }
+        | undefined,
+    ) => {
+      return resolvePendingApproval(
+        typeof payload?.requestId === "string" ? payload.requestId : "",
+        payload?.choice,
+        {
+          ownerId: _event.sender.id,
+          runId: typeof payload?.runId === "string" ? payload.runId : "",
+        },
       );
     },
   );

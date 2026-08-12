@@ -46,7 +46,11 @@ vi.mock("../dashboardGatewayClient", () => ({
 
 interface HarnessApi {
   activeTurnRef?: MutableRefObject<ActiveTurn | null>;
+  abort?: () => void;
   messages?: ChatMessage[];
+  respondApproval?: ReturnType<
+    typeof useDashboardChatTransport
+  >["respondApproval"];
   send?: (text: string) => Promise<boolean>;
   setConnectionMode?: Dispatch<SetStateAction<"local" | "remote" | "ssh">>;
   setMessages?: Dispatch<SetStateAction<ChatMessage[]>>;
@@ -120,7 +124,9 @@ function Harness({
     // holds) without per-prop assignment, which the immutability rule rejects.
     Object.assign(api, {
       activeTurnRef,
+      abort: transport.abort,
       messages,
+      respondApproval: transport.respondApproval,
       send: transport.sendMessage,
       setConnectionMode,
       setMessages,
@@ -134,6 +140,8 @@ function Harness({
     setConnectionMode,
     setMessages,
     transport.sendMessage,
+    transport.respondApproval,
+    transport.abort,
   ]);
 
   return null;
@@ -443,6 +451,174 @@ describe("useDashboardChatTransport recovery", () => {
     expect(requests.map((request) => request.method)).toContain(
       "prompt.submit",
     );
+  });
+});
+
+describe("useDashboardChatTransport approvals", () => {
+  beforeEach(() => {
+    dashboardMock.close.mockClear();
+    dashboardMock.connect.mockClear();
+    dashboardMock.instances.length = 0;
+    dashboardMock.onEvent = null;
+    dashboardMock.request.mockReset();
+    dashboardMock.request.mockImplementation(async (method: string) => {
+      if (method === "session.create") {
+        return { session_id: "live-1", stored_session_id: "stored-1" };
+      }
+      if (method === "approval.respond") return { resolved: 1 };
+      return {};
+    });
+    Object.defineProperty(window, "hermesAPI", {
+      configurable: true,
+      value: {
+        recordSessionContinuation: vi.fn(async () => true),
+        recordSessionLocalError: vi.fn(async () => true),
+        startDashboard: vi.fn(async () => ({
+          connection: { wsUrl: "ws://127.0.0.1:12345" },
+          running: true,
+        })),
+      },
+    });
+  });
+
+  afterEach(() => vi.clearAllMocks());
+
+  it("responds only to the pending offered choice and clears after ack", async () => {
+    const api: HarnessApi = {};
+    render(<Harness api={api} />);
+    await act(async () => {
+      await api.send?.("hello");
+      dashboardMock.onEvent?.({
+        type: "approval.request",
+        session_id: "live-1",
+        payload: {
+          request_id: "approval-1",
+          command: "npm publish",
+          choices: ["once"],
+        },
+      });
+    });
+
+    await expect(api.respondApproval?.("approval-1", "always")).resolves.toBe(
+      false,
+    );
+    await expect(api.respondApproval?.("approval-1", "once")).resolves.toBe(
+      true,
+    );
+    expect(dashboardMock.request).toHaveBeenCalledWith("approval.respond", {
+      session_id: "live-1",
+      choice: "once",
+      all: false,
+    });
+    await expect(api.respondApproval?.("approval-1", "once")).resolves.toBe(
+      false,
+    );
+  });
+
+  it("keeps a failed response pending for retry", async () => {
+    const api: HarnessApi = {};
+    render(<Harness api={api} />);
+    await act(async () => {
+      await api.send?.("hello");
+      dashboardMock.onEvent?.({
+        type: "approval.request",
+        session_id: "live-1",
+        payload: { request_id: "approval-2", choices: ["deny"] },
+      });
+    });
+    dashboardMock.request.mockRejectedValueOnce(new Error("offline"));
+
+    await expect(api.respondApproval?.("approval-2", "deny")).resolves.toBe(
+      false,
+    );
+    dashboardMock.request.mockResolvedValueOnce({ resolved: 1 });
+    await expect(api.respondApproval?.("approval-2", "deny")).resolves.toBe(
+      true,
+    );
+  });
+
+  it("keeps an unresolved response pending for retry", async () => {
+    const api: HarnessApi = {};
+    render(<Harness api={api} />);
+    await act(async () => {
+      await api.send?.("hello");
+      dashboardMock.onEvent?.({
+        type: "approval.request",
+        session_id: "live-1",
+        payload: { request_id: "approval-unresolved", choices: ["deny"] },
+      });
+    });
+    dashboardMock.request.mockResolvedValueOnce({ resolved: 0 });
+
+    await expect(
+      api.respondApproval?.("approval-unresolved", "deny"),
+    ).resolves.toBe(false);
+    dashboardMock.request.mockResolvedValueOnce({ resolved: 1 });
+    await expect(
+      api.respondApproval?.("approval-unresolved", "deny"),
+    ).resolves.toBe(true);
+  });
+
+  it("clears pending approval on completion and abort", async () => {
+    const api: HarnessApi = {};
+    render(<Harness api={api} />);
+    await act(async () => {
+      await api.send?.("hello");
+      dashboardMock.onEvent?.({
+        type: "approval.request",
+        session_id: "live-1",
+        payload: { request_id: "approval-3", choices: ["once"] },
+      });
+      dashboardMock.onEvent?.({
+        type: "message.complete",
+        session_id: "live-1",
+        payload: { text: "complete" },
+      });
+    });
+
+    await expect(api.respondApproval?.("approval-3", "once")).resolves.toBe(
+      false,
+    );
+
+    await act(async () => {
+      dashboardMock.onEvent?.({
+        type: "approval.request",
+        session_id: "live-1",
+        payload: { request_id: "approval-4", choices: ["once"] },
+      });
+      api.abort?.();
+    });
+    await expect(api.respondApproval?.("approval-4", "once")).resolves.toBe(
+      false,
+    );
+  });
+
+  it("answers queued approvals in gateway FIFO order", async () => {
+    const api: HarnessApi = {};
+    render(<Harness api={api} />);
+    await act(async () => {
+      await api.send?.("hello");
+      dashboardMock.onEvent?.({
+        type: "approval.request",
+        session_id: "live-1",
+        payload: { request_id: "approval-first", choices: ["deny"] },
+      });
+      dashboardMock.onEvent?.({
+        type: "approval.request",
+        session_id: "live-1",
+        payload: { request_id: "approval-second", choices: ["once"] },
+      });
+    });
+
+    await expect(
+      api.respondApproval?.("approval-second", "once"),
+    ).resolves.toBe(false);
+    await expect(api.respondApproval?.("approval-first", "deny")).resolves.toBe(
+      true,
+    );
+    await expect(
+      api.respondApproval?.("approval-second", "once"),
+    ).resolves.toBe(true);
   });
 });
 

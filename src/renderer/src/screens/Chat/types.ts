@@ -4,6 +4,7 @@ export type {
 } from "../../../../shared/attachments";
 
 import type { Attachment } from "../../../../shared/attachments";
+import type { ApprovalChoice } from "../../../../shared/chat-approval";
 
 /**
  * Visible chat bubble (user or assistant). Used for live streaming and as
@@ -80,12 +81,28 @@ export interface ClarifyMessage {
   resolved?: boolean;
 }
 
+export interface ApprovalMessage {
+  id: string;
+  kind: "approval";
+  role: "agent";
+  requestId: string;
+  responsePath: "dashboard" | "ipc";
+  runId?: string;
+  command: string;
+  description: string;
+  choices: ApprovalChoice[];
+  choice?: ApprovalChoice;
+  resolved?: boolean;
+  unavailable?: boolean;
+}
+
 export type ChatMessage =
   | ChatBubbleMessage
   | ReasoningMessage
   | ToolCallMessage
   | ToolResultMessage
-  | ClarifyMessage;
+  | ClarifyMessage
+  | ApprovalMessage;
 
 export interface ActiveTurn {
   turnId: string;

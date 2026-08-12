@@ -979,6 +979,34 @@ describe("reconcileStreamedWithDb", () => {
     expect(merged.map((m) => m.id)).toEqual(["clarify-r1", "a-1"]);
   });
 
+  it("keeps a resolved approval card before the resulting agent output", () => {
+    const approval: ChatMessage = {
+      id: "approval-r1",
+      kind: "approval",
+      role: "agent",
+      requestId: "r1",
+      responsePath: "dashboard",
+      command: "npm publish",
+      description: "Publish the package",
+      choices: ["once", "deny"],
+      resolved: true,
+      choice: "once",
+    };
+    const streamed: ChatMessage[] = [
+      STREAMED_USER("publish it", "u-1"),
+      approval,
+      STREAMED_AGENT("Published.", "a-1"),
+    ];
+    const db: ChatMessage[] = [
+      DB_USER("publish it", 1),
+      DB_AGENT("Published.", 2),
+    ];
+
+    const merged = reconcileStreamedWithDb(streamed, db);
+
+    expect(merged.map((m) => m.id)).toEqual(["u-1", "approval-r1", "a-1"]);
+  });
+
   it("keeps a continued restored image prompt before its answer when the DB snapshot briefly misses that user row", () => {
     const answer =
       "It's a cute yellow toy duck in a bathtub filled with blue bathwater.";
