@@ -102,6 +102,7 @@ export function remoteRequestJson<T>(
         method: options.method ?? "GET",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
           "X-Hermes-Session-Token": token,
           ...(body ? { "Content-Length": Buffer.byteLength(body) } : {}),
         },
