@@ -59,4 +59,26 @@ describe("isLossyChunkCopy", () => {
       isLossyChunkCopy("Hello there my friend!", "Hello there my friend, hi!"),
     ).toBe(true);
   });
+
+  it("rejects unrelated CJK text that only coincidentally shares 3-char runs (#793)", () => {
+    // partial and full are independently generated, unrelated strings drawn
+    // from a handful of common single-character CJK particles. Because each
+    // CJK "word" here is only 1 character wide (unlike English, where a
+    // 3-letter run is often a whole word or more), a 3-char run recurs
+    // constantly by chance and the no-backtrack matcher anchors on four
+    // separate coincidental positions, consuming all of `partial` and
+    // returning true even though `full` does not contain `partial`.
+    const partial = "了是我我你我是你是的你是的";
+    const full =
+      "你你的我在了在是是的我的的你你了的我了是我了你的我我你我是你了在我是的你是你的在你你";
+    expect(full.includes(partial)).toBe(false);
+    expect(isLossyChunkCopy(partial, full)).toBe(false);
+  });
+
+  it("still accepts a genuine CJK chunk-dropped copy", () => {
+    const full =
+      "今天天气非常好，阳光明媚，气温适宜，非常适合出门散步和运动锻炼身体。";
+    const partial = "今天天气非常好，阳光明媚非常适合出门散步和运动锻炼身体。";
+    expect(isLossyChunkCopy(partial, full)).toBe(true);
+  });
 });

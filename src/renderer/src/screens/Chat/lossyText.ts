@@ -1,6 +1,36 @@
 // @lat: [[chat-commands#Slash command execution#Completion text reconciliation]]
 
 /**
+ * A CJK "word" is usually 1-2 characters, so a fixed 3-character run is
+ * much weaker evidence of genuine continuity there than in English (where
+ * it is often most of a word): the small effective alphabet per position
+ * lets an unrelated run recur by coincidence. `DENSE_SCRIPT_MIN_RUN` asks
+ * for a longer, exponentially rarer run once dense-script text is involved.
+ */
+const DENSE_SCRIPT_RANGES: Array<[number, number]> = [
+  [0x3040, 0x30ff], // Hiragana + Katakana
+  [0x3400, 0x4dbf], // CJK Unified Ideographs Extension A
+  [0x4e00, 0x9fff], // CJK Unified Ideographs
+  [0xac00, 0xd7a3], // Hangul syllables
+];
+const DENSE_SCRIPT_MIN_RUN = 6;
+
+function isDenseScriptChar(codePoint: number): boolean {
+  return DENSE_SCRIPT_RANGES.some(
+    ([start, end]) => codePoint >= start && codePoint <= end,
+  );
+}
+
+function isDenseScriptHeavy(s: string): boolean {
+  const chars = [...s];
+  if (chars.length === 0) return false;
+  const denseCount = chars.filter((c) =>
+    isDenseScriptChar(c.codePointAt(0)!),
+  ).length;
+  return denseCount / chars.length > 0.3;
+}
+
+/**
  * Detect whether `partial` looks like a chunk-dropped copy of `full`.
  *
  * A stream assembled with dropped delta chunks is a concatenation of
@@ -25,7 +55,7 @@ export function isLossyChunkCopy(
   partial: string,
   full: string,
   {
-    minRun = 3,
+    minRun,
     minLength = 12,
     minCoverage = 0.3,
   }: { minRun?: number; minLength?: number; minCoverage?: number } = {},
@@ -35,17 +65,23 @@ export function isLossyChunkCopy(
   if (partial.length >= full.length) return false;
   if (partial.length < minCoverage * full.length) return false;
 
+  const run =
+    minRun ??
+    (isDenseScriptHeavy(partial) || isDenseScriptHeavy(full)
+      ? DENSE_SCRIPT_MIN_RUN
+      : 3);
+
   let i = 0; // position in partial
   let j = 0; // position in full
   while (i < partial.length) {
     const remaining = partial.length - i;
-    const probeLen = Math.min(minRun, remaining);
+    const probeLen = Math.min(run, remaining);
     const probe = partial.slice(i, i + probeLen);
     const at = full.indexOf(probe, j);
     if (at < 0) return false;
-    // A short trailing probe (the final run) may be under minRun; any other
-    // run must anchor with at least minRun matching characters.
-    if (probeLen < minRun && remaining > probeLen) return false;
+    // A short trailing probe (the final run) may be under `run`; any other
+    // run must anchor with at least `run` matching characters.
+    if (probeLen < run && remaining > probeLen) return false;
     // Extend the run as far as the two texts agree.
     let len = probeLen;
     while (
