@@ -81,4 +81,29 @@ describe("isLossyChunkCopy", () => {
     const partial = "今天天气非常好，阳光明媚非常适合出门散步和运动锻炼身体。";
     expect(isLossyChunkCopy(partial, full)).toBe(true);
   });
+
+  it("treats CJK Compatibility Ideographs and Hangul Jamo as dense-script too", () => {
+    // Same coincidental-3-char-run trap as the #793 test above, but drawn
+    // from the CJK Compatibility Ideographs and Hangul Jamo blocks, which
+    // were missing from DENSE_SCRIPT_RANGES: without them isDenseScriptHeavy
+    // returns false for this text, the matcher falls back to the 3-char
+    // run, and the coincidental match below would be wrongly accepted.
+    const compatFull =
+      "契龜龜滑豈龜龜豈龜滑滑滑龜滑龜滑龜滑龜豈龜豈龜滑豈龜滑龜滑豈豈滑豈滑豈豈滑滑龜滑豈滑龜滑豈";
+    const compatPartial = "豈龜龜滑龜滑龜龜滑豈滑豈滑滑";
+    expect(compatFull.includes(compatPartial)).toBe(false);
+    expect(isLossyChunkCopy(compatPartial, compatFull)).toBe(false);
+
+    const jamoFull =
+      "ᄀᄀᄄᄀᄄᄀᄀᄀᄄᄄᄈᄀᄀᄀᄀᄀᄈᄀᄄᄀᄄᄄᄈᄈᄄᄄᄄᄈᄀᄄᄈᄄᄈᄄᄄᄈᄈᄀᄈᄈᄀᄄᄀᄀᄀ";
+    const jamoPartial = "ᄀᄀᄄᄀᄀᄄᄈᄄᄈᄄᄄᄄᄀᄀ";
+    expect(jamoFull.includes(jamoPartial)).toBe(false);
+    expect(isLossyChunkCopy(jamoPartial, jamoFull)).toBe(false);
+  });
+
+  it("still accepts a genuine chunk-dropped copy in CJK Compatibility Ideographs", () => {
+    const full = "豈更車賈滑串句龜龜契金喇奈懶癩羅蘿螺";
+    const partial = "豈更車賈滑串句龜龜羅蘿螺";
+    expect(isLossyChunkCopy(partial, full)).toBe(true);
+  });
 });

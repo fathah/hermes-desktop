@@ -8,11 +8,22 @@
  * for a longer, exponentially rarer run once dense-script text is involved.
  */
 const DENSE_SCRIPT_RANGES: Array<[number, number]> = [
+  [0x1100, 0x11ff], // Hangul Jamo
   [0x3040, 0x30ff], // Hiragana + Katakana
   [0x3400, 0x4dbf], // CJK Unified Ideographs Extension A
   [0x4e00, 0x9fff], // CJK Unified Ideographs
   [0xac00, 0xd7a3], // Hangul syllables
+  [0xf900, 0xfaff], // CJK Compatibility Ideographs
+  [0x20000, 0x2a6df], // CJK Unified Ideographs Extension B (supplementary plane)
 ];
+// Known limitation: a genuine chunk-dropped copy whose surviving contiguous
+// run between two drops is shorter than this can be missed (false negative,
+// the damaged stream is not reconciled). Lowering the run for dense-script
+// text reopens the false positive this constant exists to prevent (#793):
+// unrelated CJK text can share a 3-char run by coincidence, and a synthetic
+// counterexample sits at a similar coverage (0.31) to a genuine short-run
+// chunk-drop (0.54), so a coverage-gated fallback is not a safe fix without
+// real streaming data to calibrate the threshold against.
 const DENSE_SCRIPT_MIN_RUN = 6;
 
 function isDenseScriptChar(codePoint: number): boolean {
