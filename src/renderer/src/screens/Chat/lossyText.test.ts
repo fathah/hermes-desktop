@@ -106,4 +106,40 @@ describe("isLossyChunkCopy", () => {
     const partial = "豈更車賈滑串句龜龜羅蘿螺";
     expect(isLossyChunkCopy(partial, full)).toBe(true);
   });
+
+  it("treats CJK Unified Ideographs Extension C as dense-script too", () => {
+    // Same coincidental-run trap as the tests above, drawn from Extension C
+    // (U+2A700+, supplementary plane), which was also missing from the
+    // original DENSE_SCRIPT_RANGES table: without it isDenseScriptHeavy
+    // returns false for this text, the matcher falls back to the 3-char
+    // run, and the coincidental match below would be wrongly accepted.
+    const extCFull =
+      "𪜁𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜁𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀";
+    const extCPartial = "𪜁𪜀𪜀𪜀𪜁𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀𪜀";
+    expect(extCFull.includes(extCPartial)).toBe(false);
+    expect(isLossyChunkCopy(extCPartial, extCFull)).toBe(false);
+  });
+
+  it("measures the dense-script run length in characters, not UTF-16 code units", () => {
+    // Extension B and later ideographs are supplementary-plane, i.e. surrogate
+    // pairs: two UTF-16 code units per character. Indexing the raw strings
+    // instead of code-point arrays would measure a 6-unit probe as only 3
+    // real characters here, silently halving DENSE_SCRIPT_MIN_RUN for
+    // exactly the text it was raised to protect, and wrongly accept this
+    // coincidental match.
+    const extBFull =
+      "𠀁𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀁𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀";
+    const extBPartial = "𠀁𠀀𠀀𠀀𠀁𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀𠀀";
+    expect(extBFull.includes(extBPartial)).toBe(false);
+    expect(isLossyChunkCopy(extBPartial, extBFull)).toBe(false);
+  });
+
+  it("still accepts a genuine chunk-dropped copy in supplementary-plane ideographs", () => {
+    const full =
+      "𠀄𠀁𠀄𠀄𠀁𠀄𠀁𠀄𠀀𠀂𠀄𠀂𠀃𠀁𠀄𠀁𠀁𠀀𠀁𠀃𠀃𠀂𠀀𠀂𠀄𠀃𠀁𠀀𠀂𠀀𠀁𠀃𠀃𠀀𠀁𠀄𠀂𠀁𠀁𠀄";
+    const partial =
+      "𠀄𠀁𠀄𠀄𠀁𠀄𠀁𠀄𠀀𠀂𠀄𠀂𠀃𠀁𠀄𠀃𠀁𠀀𠀂𠀀𠀁𠀃𠀃𠀀𠀁𠀄𠀂𠀁𠀁𠀄";
+    expect(full.includes(partial)).toBe(false);
+    expect(isLossyChunkCopy(partial, full)).toBe(true);
+  });
 });

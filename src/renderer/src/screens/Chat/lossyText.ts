@@ -7,15 +7,16 @@
  * lets an unrelated run recur by coincidence. `DENSE_SCRIPT_MIN_RUN` asks
  * for a longer, exponentially rarer run once dense-script text is involved.
  */
-const DENSE_SCRIPT_RANGES: Array<[number, number]> = [
-  [0x1100, 0x11ff], // Hangul Jamo
-  [0x3040, 0x30ff], // Hiragana + Katakana
-  [0x3400, 0x4dbf], // CJK Unified Ideographs Extension A
-  [0x4e00, 0x9fff], // CJK Unified Ideographs
-  [0xac00, 0xd7a3], // Hangul syllables
-  [0xf900, 0xfaff], // CJK Compatibility Ideographs
-  [0x20000, 0x2a6df], // CJK Unified Ideographs Extension B (supplementary plane)
-];
+// A hand-enumerated range table is a fragile way to answer "is this
+// character CJK ideographic": it silently omits whichever block nobody
+// thought to add (Extensions C-I and the Compatibility Ideographs
+// Supplement, missed here originally). \p{Script=...} is the Unicode
+// database itself, so it can't go stale the same way. Han alone covers
+// every Unified/Extension/Compatibility ideograph block, BMP and
+// supplementary plane; Hiragana/Katakana/Hangul are separate scripts and
+// stay listed explicitly.
+const DENSE_SCRIPT_RE =
+  /\p{Script=Han}|\p{Script=Hiragana}|\p{Script=Katakana}|\p{Script=Hangul}/u;
 // Known limitation: a genuine chunk-dropped copy whose surviving contiguous
 // run between two drops is shorter than this can be missed (false negative,
 // the damaged stream is not reconciled). Lowering the run for dense-script
@@ -26,18 +27,14 @@ const DENSE_SCRIPT_RANGES: Array<[number, number]> = [
 // real streaming data to calibrate the threshold against.
 const DENSE_SCRIPT_MIN_RUN = 6;
 
-function isDenseScriptChar(codePoint: number): boolean {
-  return DENSE_SCRIPT_RANGES.some(
-    ([start, end]) => codePoint >= start && codePoint <= end,
-  );
+function isDenseScriptChar(char: string): boolean {
+  return DENSE_SCRIPT_RE.test(char);
 }
 
 function isDenseScriptHeavy(s: string): boolean {
   const chars = [...s];
   if (chars.length === 0) return false;
-  const denseCount = chars.filter((c) =>
-    isDenseScriptChar(c.codePointAt(0)!),
-  ).length;
+  const denseCount = chars.filter(isDenseScriptChar).length;
   return denseCount / chars.length > 0.3;
 }
 
@@ -82,13 +79,22 @@ export function isLossyChunkCopy(
       ? DENSE_SCRIPT_MIN_RUN
       : 3);
 
-  let i = 0; // position in partial
-  let j = 0; // position in full
-  while (i < partial.length) {
-    const remaining = partial.length - i;
+  // `run` counts CHARACTERS, and a JS string index counts UTF-16 code
+  // units: a supplementary-plane ideograph (Extension B and later) is a
+  // surrogate pair, two code units per character. Indexing `partial`/`full`
+  // directly would silently measure a "6-unit" probe as 3 real ideographs
+  // for exactly the dense-script text this run length exists to protect.
+  // Work over code-point arrays instead so `probeLen`/`len` below are
+  // character counts, matching what `run` means.
+  const partialChars = [...partial];
+  const fullChars = [...full];
+
+  let i = 0; // position in partialChars
+  let j = 0; // position in fullChars
+  while (i < partialChars.length) {
+    const remaining = partialChars.length - i;
     const probeLen = Math.min(run, remaining);
-    const probe = partial.slice(i, i + probeLen);
-    const at = full.indexOf(probe, j);
+    const at = indexOfSeq(fullChars, partialChars, i, probeLen, j);
     if (at < 0) return false;
     // A short trailing probe (the final run) may be under `run`; any other
     // run must anchor with at least `run` matching characters.
@@ -96,9 +102,9 @@ export function isLossyChunkCopy(
     // Extend the run as far as the two texts agree.
     let len = probeLen;
     while (
-      i + len < partial.length &&
-      at + len < full.length &&
-      partial[i + len] === full[at + len]
+      i + len < partialChars.length &&
+      at + len < fullChars.length &&
+      partialChars[i + len] === fullChars[at + len]
     ) {
       len++;
     }
@@ -106,4 +112,24 @@ export function isLossyChunkCopy(
     j = at + len;
   }
   return true;
+}
+
+// Find the first index >= `from` in `haystack` where the `len`-character
+// slice `needle[start..start+len)` occurs contiguously, character by
+// character (never joining back to a string, which would reintroduce the
+// UTF-16-code-unit measurement `isLossyChunkCopy` exists to avoid).
+function indexOfSeq(
+  haystack: string[],
+  needle: string[],
+  start: number,
+  len: number,
+  from: number,
+): number {
+  outer: for (let k = from; k <= haystack.length - len; k++) {
+    for (let m = 0; m < len; m++) {
+      if (haystack[k + m] !== needle[start + m]) continue outer;
+    }
+    return k;
+  }
+  return -1;
 }
