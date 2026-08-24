@@ -283,10 +283,15 @@ interface HermesAPI {
   getHermesVersion: (profile?: string) => Promise<string | null>;
   refreshHermesVersion: (profile?: string) => Promise<string | null>;
   getAgentCapabilities: (profile?: string) => Promise<AgentCapabilitySnapshot>;
-  recordAgentRuntimeInfo: (info: unknown, profile?: string) => Promise<boolean>;
+  recordAgentRuntimeInfo: (
+    info: unknown,
+    profile?: string,
+    connectionId?: string,
+  ) => Promise<boolean>;
   recordAgentCommandInventory: (
     catalog: unknown,
     profile?: string,
+    connectionId?: string,
   ) => Promise<boolean>;
   runHermesDoctor: () => Promise<string>;
   runHermesUpdate: () => Promise<{ success: boolean; error?: string }>;
@@ -436,6 +441,7 @@ interface HermesAPI {
   ) => Promise<{ connected: boolean; authMode: "token" | "oauth" }>;
   probeRemoteAuthMode: (
     url: string,
+    connectionId?: string,
   ) => Promise<{ authMode: "token" | "oauth"; version: string | null }>;
   remoteOAuthLogin: () => Promise<{ signedIn: true }>;
   remoteOAuthLogout: () => Promise<{ signedIn: false }>;

@@ -106,7 +106,11 @@ export async function getConnectionStatuses(
       const probe = await probeConnection(connection, profile);
       const evidence =
         connection.connectionId === registry.activeConnectionId
-          ? await getAgentCapabilityEvidence(profile)
+          ? await getAgentCapabilityEvidence(
+              profile,
+              connection.connectionId,
+              connection.config,
+            )
           : getCachedAgentCapabilityEvidence(connection.connectionId, profile);
       const versionText =
         probe.version && /^\d/.test(probe.version)

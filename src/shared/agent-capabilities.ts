@@ -124,6 +124,7 @@ function text(value: unknown): string {
 }
 
 function contractNumber(value: unknown): number | null {
+  if (typeof value !== "number" && typeof value !== "string") return null;
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }

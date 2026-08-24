@@ -119,7 +119,29 @@ export function readDesktopConfig(): Record<string, unknown> {
   }
 }
 
+function readConnectionDesktopConfig(): Record<string, unknown> {
+  const file = desktopConfigFile();
+  if (!existsSync(file)) return {};
+  try {
+    const parsed: unknown = JSON.parse(
+      readFileSync(file, "utf-8").replace(/^\uFEFF/, ""),
+    );
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("invalid root");
+    }
+    return parsed as Record<string, unknown>;
+  } catch {
+    throw new Error(
+      "Hermes Desktop could not read desktop.json; the existing file was left unchanged.",
+    );
+  }
+}
+
 export function writeDesktopConfig(data: Record<string, unknown>): void {
+  // Refuse to replace an unreadable existing document. Callers often perform
+  // read-modify-write updates, and the tolerant read API returns {} on parse
+  // failure for legacy display paths.
+  readConnectionDesktopConfig();
   safeWriteFile(desktopConfigFile(), JSON.stringify(data, null, 2));
 }
 
@@ -183,16 +205,22 @@ function parseConnectionRegistry(value: unknown): ConnectionRegistry | null {
     return null;
   }
 
+  const connectionIds = new Set<string>();
   const connections = candidate.connections.flatMap((record) => {
     if (
       !record ||
       typeof record.connectionId !== "string" ||
-      !record.connectionId ||
+      !/^connection-[0-9a-f]{24}$/.test(record.connectionId) ||
+      connectionIds.has(record.connectionId) ||
       typeof record.name !== "string" ||
-      !record.name
+      !record.name ||
+      !record.config ||
+      typeof record.config !== "object" ||
+      Array.isArray(record.config)
     ) {
       return [];
     }
+    connectionIds.add(record.connectionId);
     return [
       {
         connectionId: record.connectionId,
@@ -201,16 +229,19 @@ function parseConnectionRegistry(value: unknown): ConnectionRegistry | null {
       },
     ];
   });
-  if (connections.length === 0) return null;
+  if (connections.length !== candidate.connections.length) return null;
 
-  const activeConnectionId = connections.some(
-    ({ connectionId }) => connectionId === candidate.activeConnectionId,
-  )
-    ? (candidate.activeConnectionId as string)
-    : connections[0].connectionId;
+  if (
+    typeof candidate.activeConnectionId !== "string" ||
+    !connections.some(
+      ({ connectionId }) => connectionId === candidate.activeConnectionId,
+    )
+  ) {
+    return null;
+  }
   return {
     version: CONNECTION_REGISTRY_VERSION,
-    activeConnectionId,
+    activeConnectionId: candidate.activeConnectionId,
     connections,
   };
 }
@@ -231,6 +262,11 @@ function connectionRegistryFromDesktopConfig(data: Record<string, unknown>): {
 } {
   const existing = parseConnectionRegistry(data.connectionRegistry);
   if (existing) return { registry: existing, migrated: false };
+  if ("connectionRegistry" in data) {
+    throw new Error(
+      "Hermes Desktop found an unsupported or invalid connection registry; the existing file was left unchanged.",
+    );
+  }
 
   const config = legacyConnectionConfig(data);
   const connectionId = `connection-${randomBytes(12).toString("hex")}`;
@@ -257,7 +293,7 @@ function saveConnectionRegistry(
 
 // @lat: [[connections#Versioned registry]]
 export function getConnectionRegistry(): ConnectionRegistry {
-  const data = readDesktopConfig();
+  const data = readConnectionDesktopConfig();
   const { registry, migrated } = connectionRegistryFromDesktopConfig(data);
   if (migrated) {
     saveConnectionRegistry(data, registry);
@@ -325,7 +361,7 @@ export function getPublicConnectionRegistry(): PublicConnectionRegistry {
 }
 
 export function createConnection(): ConnectionRecord {
-  const data = readDesktopConfig();
+  const data = readConnectionDesktopConfig();
   const { registry } = connectionRegistryFromDesktopConfig(data);
   const connection: ConnectionRecord = {
     connectionId: `connection-${randomBytes(12).toString("hex")}`,
@@ -346,7 +382,7 @@ export function renameConnection(connectionId: unknown, name: unknown): void {
   if (typeof connectionId !== "string") {
     throw new Error("Connection not found.");
   }
-  const data = readDesktopConfig();
+  const data = readConnectionDesktopConfig();
   const { registry } = connectionRegistryFromDesktopConfig(data);
   const connection = registry.connections.find(
     (candidate) => candidate.connectionId === connectionId,
@@ -360,7 +396,7 @@ export function selectConnection(connectionId: unknown): void {
   if (typeof connectionId !== "string") {
     throw new Error("Connection not found.");
   }
-  const data = readDesktopConfig();
+  const data = readConnectionDesktopConfig();
   const { registry } = connectionRegistryFromDesktopConfig(data);
   if (
     !registry.connections.some(
@@ -377,7 +413,7 @@ export function removeConnection(connectionId: unknown): void {
   if (typeof connectionId !== "string") {
     throw new Error("Connection not found.");
   }
-  const data = readDesktopConfig();
+  const data = readConnectionDesktopConfig();
   const { registry } = connectionRegistryFromDesktopConfig(data);
   if (registry.connections.length === 1) {
     throw new Error("The last connection cannot be removed.");
@@ -394,7 +430,7 @@ export function removeConnection(connectionId: unknown): void {
 }
 
 export function setConnectionConfig(config: ConnectionConfig): void {
-  const data = readDesktopConfig();
+  const data = readConnectionDesktopConfig();
   const { registry } = connectionRegistryFromDesktopConfig(data);
   const activeIndex = registry.connections.findIndex(
     ({ connectionId }) => connectionId === registry.activeConnectionId,

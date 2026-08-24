@@ -126,6 +126,9 @@ describe("Agent capability evidence cache", () => {
     recordAgentCommandInventory({ pairs: [["/steer", "Steer"]] });
     expect(recordAgentCommandInventory(undefined)).toBe(false);
     expect((await getAgentCapabilityEvidence()).commandNames).toBeNull();
+
+    expect(recordAgentRuntimeInfo(undefined)).toBe(false);
+    expect((await getAgentCapabilityEvidence()).runtimeInfo).toBeNull();
     clearAgentCapabilityEvidence();
   });
 
@@ -136,7 +139,11 @@ describe("Agent capability evidence cache", () => {
       name: "A",
       config: testConnection(),
     });
-    recordAgentRuntimeInfo({ desktop_contract: 6, version: "0.20.0" });
+    recordAgentRuntimeInfo(
+      { desktop_contract: 6, version: "0.20.0" },
+      undefined,
+      "connection-a",
+    );
 
     mockedGetActiveConnection.mockReturnValue({
       connectionId: "connection-b",

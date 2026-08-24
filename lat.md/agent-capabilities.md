@@ -23,7 +23,9 @@ Only compatibility metadata from `session.info` crosses back into the main-proce
 
 [[src/main/hermes.ts#recordAgentRuntimeInfo]] retains `desktop_contract`, `version`, `release_date`, `update_behind`, and `update_command`. Model state, tools, prompts, paths, and other session data are discarded by [[src/shared/agent-capabilities.ts#sanitizeAgentRuntimeInfo]].
 
-[[src/main/hermes.ts#getAgentCapabilityEvidence]] combines the cached runtime evidence with the existing `/v1/capabilities` probe. Evidence is keyed by stable connection ID plus profile; configuration changes clear only that record, while inactive status snapshots reuse bounded cached evidence without probing the active endpoint.
+[[src/main/hermes.ts#getAgentCapabilityEvidence]] combines the cached runtime evidence with the existing `/v1/capabilities` probe. Evidence is keyed by the run's stable connection ID plus profile, and missing reconnect evidence clears stale runtime and command claims.
+
+API probe caching includes a one-way credential scope, so two records that share an endpoint but use different credentials cannot reuse each other's capability result. Inactive status snapshots reuse only bounded evidence already observed for their own identity.
 
 ## Bounded command inventory
 

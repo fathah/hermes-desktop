@@ -27,20 +27,25 @@ function isSessionLocation(value: unknown): value is SessionLocation {
 }
 
 function readStore(): SessionLocationData {
+  const file = storePath();
+  if (!existsSync(file)) return { version: 1, sessions: [] };
   try {
-    const file = storePath();
-    if (!existsSync(file)) return { version: 1, sessions: [] };
-    const parsed = JSON.parse(
-      readFileSync(file, "utf-8"),
-    ) as Partial<SessionLocationData>;
-    return {
-      version: 1,
-      sessions: Array.isArray(parsed.sessions)
-        ? parsed.sessions.filter(isSessionLocation)
-        : [],
-    };
+    const parsed: unknown = JSON.parse(readFileSync(file, "utf-8"));
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed) ||
+      (parsed as Partial<SessionLocationData>).version !== 1 ||
+      !Array.isArray((parsed as Partial<SessionLocationData>).sessions) ||
+      !(parsed as SessionLocationData).sessions.every(isSessionLocation)
+    ) {
+      throw new Error("invalid store");
+    }
+    return parsed as SessionLocationData;
   } catch {
-    return { version: 1, sessions: [] };
+    throw new Error(
+      "Hermes Desktop could not read session-locations.json; the existing file was left unchanged.",
+    );
   }
 }
 

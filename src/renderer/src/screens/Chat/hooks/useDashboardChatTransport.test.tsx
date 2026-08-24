@@ -71,6 +71,7 @@ const activeRecoveryTurn: ActiveTurn = {
 function Harness({
   api,
   connectionId,
+  connectionRevision,
   fallbackOnUnavailable = false,
   initialConnectionMode = "local",
   onDashboardUnavailable,
@@ -78,6 +79,7 @@ function Harness({
 }: {
   api: HarnessApi;
   connectionId?: string;
+  connectionRevision?: number;
   fallbackOnUnavailable?: boolean;
   initialConnectionMode?: "local" | "remote" | "ssh";
   onDashboardUnavailable?: (reason: string) => void;
@@ -100,6 +102,7 @@ function Harness({
   const transport = useDashboardChatTransport({
     activeTurnRef,
     connectionId,
+    connectionRevision,
     contextFolder: null,
     connectionMode,
     enabled: true,
@@ -534,6 +537,39 @@ describe("useDashboardChatTransport unavailable fallback (issue #667)", () => {
     });
     await act(async () => {
       await api.send?.("after change");
+    });
+    expect(startDashboard).toHaveBeenCalledTimes(2);
+  });
+
+  it("re-probes after the selected connection is edited in place", async () => {
+    const startDashboard = mockStartDashboard();
+    const api: HarnessApi = {};
+    const { rerender } = render(
+      <Harness
+        api={api}
+        connectionId="connection-a"
+        connectionRevision={0}
+        initialConnectionMode="ssh"
+        fallbackOnUnavailable
+      />,
+    );
+
+    await act(async () => {
+      await api.send?.("hello");
+    });
+    expect(startDashboard).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <Harness
+        api={api}
+        connectionId="connection-a"
+        connectionRevision={1}
+        initialConnectionMode="ssh"
+        fallbackOnUnavailable
+      />,
+    );
+    await act(async () => {
+      await api.send?.("after edit");
     });
     expect(startDashboard).toHaveBeenCalledTimes(2);
   });

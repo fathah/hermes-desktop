@@ -194,13 +194,28 @@ const hermesAPI = {
     ipcRenderer.invoke("refresh-hermes-version", profile),
   getAgentCapabilities: (profile?: string): Promise<AgentCapabilitySnapshot> =>
     ipcRenderer.invoke("get-agent-capabilities", profile),
-  recordAgentRuntimeInfo: (info: unknown, profile?: string): Promise<boolean> =>
-    ipcRenderer.invoke("record-agent-runtime-info", info, profile),
+  recordAgentRuntimeInfo: (
+    info: unknown,
+    profile?: string,
+    connectionId?: string,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke(
+      "record-agent-runtime-info",
+      info,
+      profile,
+      connectionId,
+    ),
   recordAgentCommandInventory: (
     catalog: unknown,
     profile?: string,
+    connectionId?: string,
   ): Promise<boolean> =>
-    ipcRenderer.invoke("record-agent-command-inventory", catalog, profile),
+    ipcRenderer.invoke(
+      "record-agent-command-inventory",
+      catalog,
+      profile,
+      connectionId,
+    ),
   runHermesDoctor: (): Promise<string> =>
     ipcRenderer.invoke("run-hermes-doctor"),
   runHermesUpdate: (): Promise<{ success: boolean; error?: string }> =>
@@ -481,8 +496,9 @@ const hermesAPI = {
 
   probeRemoteAuthMode: (
     url: string,
+    connectionId?: string,
   ): Promise<{ authMode: "token" | "oauth"; version: string | null }> =>
-    ipcRenderer.invoke("probe-remote-auth-mode", url),
+    ipcRenderer.invoke("probe-remote-auth-mode", url, connectionId),
 
   remoteOAuthLogin: (): Promise<{ signedIn: true }> =>
     ipcRenderer.invoke("remote-oauth-login"),

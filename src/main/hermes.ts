@@ -1,5 +1,5 @@
 import { ChildProcess, spawn } from "child_process";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import {
   existsSync,
   readFileSync,
@@ -221,8 +221,11 @@ function capabilityCacheKey(
   profile?: string,
   conn: ConnectionConfig = getConnectionConfig(),
 ): string {
-  const auth = getApiAuthHeaders(profile, conn).Authorization ? "auth" : "anon";
-  return `${getApiUrl(profile, conn)}|${auth}`;
+  const auth = getApiAuthHeaders(profile, conn).Authorization ?? "";
+  const authScope = auth
+    ? createHash("sha256").update(auth).digest("hex")
+    : "anon";
+  return `${getApiUrl(profile, conn)}|${authScope}`;
 }
 
 async function getApiCapabilities(
@@ -966,10 +969,16 @@ function agentCapabilityLocationKey(
 export function recordAgentRuntimeInfo(
   value: unknown,
   profile?: string,
+  connectionId?: string,
 ): boolean {
+  const location = agentCapabilityLocationKey(profile, connectionId);
   const info = sanitizeAgentRuntimeInfo(value);
-  if (!info) return false;
-  const location = agentCapabilityLocationKey(profile);
+  if (!info) {
+    agentRuntimeInfoCache.delete(location);
+    agentCommandInventoryCache.delete(location);
+    capabilitiesCache.clear();
+    return false;
+  }
   const previous = agentRuntimeInfoCache.get(location);
   if (
     previous &&
@@ -989,9 +998,10 @@ export function recordAgentRuntimeInfo(
 export function recordAgentCommandInventory(
   value: unknown,
   profile?: string,
+  connectionId?: string,
 ): boolean {
   const commands = sanitizeAgentCommandInventory(value);
-  const location = agentCapabilityLocationKey(profile);
+  const location = agentCapabilityLocationKey(profile, connectionId);
   if (!commands) {
     agentCommandInventoryCache.delete(location);
     return false;
@@ -1000,13 +1010,17 @@ export function recordAgentCommandInventory(
   return true;
 }
 
-export async function getAgentCapabilityEvidence(profile?: string): Promise<{
+export async function getAgentCapabilityEvidence(
+  profile?: string,
+  connectionId = getActiveConnection().connectionId,
+  conn: ConnectionConfig = getConnectionConfig(connectionId),
+): Promise<{
   apiRunsTransport: boolean | null;
   commandNames: string[] | null;
   runtimeInfo: Record<string, unknown> | null;
 }> {
-  const capabilities = await getApiCapabilities(profile);
-  const location = agentCapabilityLocationKey(profile);
+  const capabilities = await getApiCapabilities(profile, conn);
+  const location = agentCapabilityLocationKey(profile, connectionId);
   return {
     apiRunsTransport: capabilities
       ? supportsHermesRunsTransport(capabilities)
@@ -2034,6 +2048,7 @@ async function sendMessageViaTuiGateway(
   history?: Array<{ role: string; content: string }>,
   contextFolder?: string,
   conn: ConnectionConfig = getConnectionConfig(),
+  connectionId?: string,
 ): Promise<ChatHandle> {
   const client = getTuiGatewayClient(profile);
   let activeSessionId = "";
@@ -2109,7 +2124,9 @@ async function sendMessageViaTuiGateway(
     if (event.session_id && event.session_id !== activeSessionId) return;
 
     if (event.type === "session.info") {
-      recordAgentRuntimeInfo(event.payload, profile);
+      if (connectionId) {
+        recordAgentRuntimeInfo(event.payload, profile, connectionId);
+      }
       hasSessionInfo = true;
       return;
     }
@@ -2316,7 +2333,9 @@ async function sendMessageViaTuiGateway(
       activeSessionId = String(resumed.session_id || "");
       storedSessionId = String(resumed.resumed || resumeSessionId);
       hasSessionInfo = !!resumed.info;
-      recordAgentRuntimeInfo(resumed.info, profile);
+      if (connectionId) {
+        recordAgentRuntimeInfo(resumed.info, profile, connectionId);
+      }
     } else {
       const created = await client.request<{
         info?: unknown;
@@ -2330,7 +2349,9 @@ async function sendMessageViaTuiGateway(
       activeSessionId = String(created.session_id || "");
       storedSessionId = String(created.stored_session_id || activeSessionId);
       hasSessionInfo = !!created.info;
-      recordAgentRuntimeInfo(created.info, profile);
+      if (connectionId) {
+        recordAgentRuntimeInfo(created.info, profile, connectionId);
+      }
     }
 
     if (!activeSessionId) {
@@ -2829,6 +2850,7 @@ async function sendMessageViaBestApi(
   contextFolder?: string,
   override?: SessionModelOverride,
   conn: ConnectionConfig = getConnectionConfig(),
+  connectionId?: string,
 ): Promise<ChatHandle> {
   const approvalCommand = /^\/(?:approve|deny)\b/i.test(message.trim());
   // Skip the TUI gateway when a session-scoped model override is active — the
@@ -2850,6 +2872,7 @@ async function sendMessageViaBestApi(
         history,
         contextFolder,
         conn,
+        connectionId,
       );
     } catch (error) {
       console.warn(
@@ -2882,6 +2905,7 @@ async function sendMessageViaBestApiWithLocalRecovery(
   contextFolder?: string,
   override?: SessionModelOverride,
   conn: ConnectionConfig = getConnectionConfig(),
+  connectionId?: string,
 ): Promise<ChatHandle> {
   let aborted = false;
   let retrying = false;
@@ -2928,6 +2952,7 @@ async function sendMessageViaBestApiWithLocalRecovery(
         contextFolder,
         override,
         conn,
+        connectionId,
       );
       return;
     }
@@ -3018,6 +3043,7 @@ async function sendMessageViaBestApiWithLocalRecovery(
     contextFolder,
     override,
     conn,
+    connectionId,
   );
 
   return handle;
@@ -3034,6 +3060,7 @@ export async function sendMessage(
   contextFolder?: string,
   override?: SessionModelOverride,
   conn: ConnectionConfig = getConnectionConfig(),
+  connectionId?: string,
 ): Promise<ChatHandle> {
   ensureInitialized();
 
@@ -3050,6 +3077,7 @@ export async function sendMessage(
       contextFolder,
       override,
       conn,
+      connectionId,
     );
   }
 
@@ -3092,6 +3120,7 @@ export async function sendMessage(
       contextFolder,
       override,
       conn,
+      connectionId,
     );
   }
 

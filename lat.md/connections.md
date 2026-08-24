@@ -13,6 +13,8 @@ Desktop connections use main-process-owned, versioned records so durable identit
 
 [[src/main/config.ts#writeDesktopConfig]] uses a same-directory temporary file and atomic rename so registry and preference updates cannot leave partially written JSON.
 
+Malformed or newer registry documents fail closed and remain untouched. The desktop never rewrites an unreadable or unsupported registry as a fresh Local record, preventing silent credential and preference loss.
+
 The renderer receives the active `connectionId`, name, and SSH target metadata through [[src/main/config.ts#getPublicConnectionConfig]]. [[src/main/config.ts#getPublicConnectionRegistry]] applies the same redaction to every saved record. API keys, private-key contents, OAuth cookies, and tunnel tokens remain outside those bounded public shapes; see [[remote-dashboard-oauth#Credential boundary]].
 
 ## Named connection management
@@ -59,6 +61,8 @@ Dashboard startup and WebSocket refresh resolve the chat's stable connection ID 
 
 [[src/main/dashboard.ts#startDashboard]] and [[src/main/dashboard.ts#freshDashboardWebSocketUrl]] allow direct-Remote clients to remain independent. An inactive SSH record returns a bounded unavailable status rather than stealing the one shared tunnel described by [[main-process#SSH dashboard transport]].
 
+Editing a record invalidates the matching renderer transport even when its mode and identity are unchanged, preventing an open WebSocket from continuing to use the previous endpoint or authentication state.
+
 ### Connection-explicit legacy transport
 
 Legacy API sends retain one resolved connection configuration for URL, authentication, capability probing, fallbacks, event streaming, and cancellation.
@@ -68,6 +72,8 @@ Legacy API sends retain one resolved connection configuration for URL, authentic
 ### Desktop metadata
 
 [[src/main/session-location-store.ts#recordSessionLocation]] stores validated tuples in the global desktop directory, independent of the currently selected profile database, and uses atomic writes without credentials.
+
+Unreadable or newer session-location documents remain untouched and reject writes, preventing best-effort metadata recording from replacing recoverable history with an empty store.
 
 ### Composite identity persistence
 
@@ -96,3 +102,11 @@ Simultaneous legacy sends to distinct direct-Remote records retain separate endp
 ### Connection-explicit transcript routing
 
 Transcript reconciliation forwards the chat's saved connection and profile rather than reading from whichever connection or profile is currently selected.
+
+### Non-destructive registry recovery
+
+Malformed, duplicate-identity, and newer-version registries are rejected without changing `desktop.json`, so recovery cannot erase credentials or unrelated preferences.
+
+### Non-destructive session metadata recovery
+
+Malformed and newer-version session-location stores reject new records without changing the existing file, preserving metadata for repair or a compatible desktop.

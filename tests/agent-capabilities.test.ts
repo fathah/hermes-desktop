@@ -111,6 +111,13 @@ describe("buildAgentCapabilitySnapshot", () => {
     expect(snapshot.features.fileAttach.state).toBe("supported");
     expect(snapshot.features.approvalsMode.state).toBe("unsupported");
     expect(snapshot.features.runsTransport.state).toBe("unknown");
+
+    expect(
+      buildAgentCapabilitySnapshot({
+        connectionMode: "local",
+        runtimeInfo: { desktop_contract: true },
+      }).desktopContract,
+    ).toBeNull();
   });
 
   it("parses legacy version output without declaring unknown features unsupported", () => {

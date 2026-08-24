@@ -791,10 +791,11 @@ export function registerIpcHandlers(context: IpcContext): void {
   });
   // @lat: [[agent-capabilities#Compatibility policy]]
   ipcMain.handle("get-agent-capabilities", async (_event, profile?: string) => {
-    const conn = getConnectionConfig();
+    const activeConnection = getActiveConnection();
+    const conn = activeConnection.config;
     const [versionText, evidence] = await Promise.all([
       hermesVersionForConnection(conn, profile),
-      getAgentCapabilityEvidence(profile),
+      getAgentCapabilityEvidence(profile, activeConnection.connectionId, conn),
     ]);
     return buildAgentCapabilitySnapshot({
       ...evidence,
@@ -804,13 +805,13 @@ export function registerIpcHandlers(context: IpcContext): void {
   });
   ipcMain.handle(
     "record-agent-runtime-info",
-    (_event, info: unknown, profile?: string) =>
-      recordAgentRuntimeInfo(info, profile),
+    (_event, info: unknown, profile?: string, connectionId?: string) =>
+      recordAgentRuntimeInfo(info, profile, connectionId),
   );
   ipcMain.handle(
     "record-agent-command-inventory",
-    (_event, catalog: unknown, profile?: string) =>
-      recordAgentCommandInventory(catalog, profile),
+    (_event, catalog: unknown, profile?: string, connectionId?: string) =>
+      recordAgentCommandInventory(catalog, profile, connectionId),
   );
   ipcMain.handle("run-hermes-doctor", () => {
     const conn = getConnectionConfig();
@@ -1507,23 +1508,30 @@ export function registerIpcHandlers(context: IpcContext): void {
     },
   );
 
-  ipcMain.handle("probe-remote-auth-mode", async (_event, url: string) => {
-    const conn = getConnectionConfig();
-    const storedKey =
-      conn.mode === "remote" && conn.remoteUrl.trim() === url.trim()
-        ? conn.apiKey
-        : "";
-    const result = await probeRemoteAuthMode(url, fetch, storedKey);
-    if (
-      conn.mode === "remote" &&
-      conn.remoteUrl.trim() === url.trim() &&
-      conn.remoteAuthMode !== result.authMode
-    ) {
-      setConnectionConfig({ ...conn, remoteAuthMode: result.authMode });
-      notifyConnectionConfigChanged();
-    }
-    return result;
-  });
+  ipcMain.handle(
+    "probe-remote-auth-mode",
+    async (_event, url: string, connectionId?: string) => {
+      const conn = getConnectionConfig(connectionId);
+      const storedKey =
+        conn.mode === "remote" && conn.remoteUrl.trim() === url.trim()
+          ? conn.apiKey
+          : "";
+      const result = await probeRemoteAuthMode(url, fetch, storedKey);
+      if (
+        conn.mode === "remote" &&
+        conn.remoteUrl.trim() === url.trim() &&
+        conn.remoteAuthMode !== result.authMode
+      ) {
+        // Explicit IDs are read-only probes for an existing chat. Settings calls
+        // without an ID may update the active record's detected auth mode.
+        if (connectionId === undefined) {
+          setConnectionConfig({ ...conn, remoteAuthMode: result.authMode });
+          notifyConnectionConfigChanged();
+        }
+      }
+      return result;
+    },
+  );
 
   ipcMain.handle("remote-oauth-login", async () => {
     const loginConfig = getConnectionConfig();
@@ -1811,6 +1819,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         contextFolder,
         modelOverride,
         conn,
+        chatConnectionId,
       );
 
       activeRuns.set(chatRunKey, handle.abort);

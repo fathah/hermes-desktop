@@ -204,6 +204,7 @@ function Chat({
     "auto" | "dashboard" | "legacy"
   >("auto");
   const [connectionModeLoaded, setConnectionModeLoaded] = useState(false);
+  const [connectionRevision, setConnectionRevision] = useState(0);
   // Working folder bound to this conversation (issue #27). Per-conversation;
   // persisted per session so a re-opened conversation restores its folder, and
   // reset on new chat below.
@@ -288,7 +289,10 @@ function Chat({
         if (conn.mode === "remote" && conn.remoteUrl.trim()) {
           try {
             remoteAuthMode = (
-              await window.hermesAPI.probeRemoteAuthMode(conn.remoteUrl)
+              await window.hermesAPI.probeRemoteAuthMode(
+                conn.remoteUrl,
+                connectionId,
+              )
             ).authMode;
           } catch {
             // Keep stored transport choice when public status is unreachable.
@@ -320,6 +324,7 @@ function Chat({
     void loadConnectionConfig();
     const unsubscribe = window.hermesAPI.onConnectionConfigChanged((conn) => {
       if (conn.connectionId !== connectionId) return;
+      setConnectionRevision((revision) => revision + 1);
       setConnectionModeLoaded(true);
       setConnectionMode(conn.mode);
       setRemoteMode(conn.mode !== "local");
@@ -636,6 +641,7 @@ function Chat({
   const dashboardTransport = useDashboardChatTransport({
     activeTurnRef,
     connectionId,
+    connectionRevision,
     contextFolder,
     connectionMode,
     enabled: dashboardChatEnabled,
@@ -672,7 +678,9 @@ function Chat({
         setAgentCommandCatalog(catalog);
         const recordInventory = window.hermesAPI.recordAgentCommandInventory;
         if (typeof recordInventory === "function") {
-          void recordInventory(catalog, profile).catch(() => undefined);
+          void recordInventory(catalog, profile, connectionId).catch(
+            () => undefined,
+          );
         }
       })
       .catch(() => {
@@ -680,13 +688,15 @@ function Chat({
         setAgentCommandCatalog(null);
         const recordInventory = window.hermesAPI.recordAgentCommandInventory;
         if (typeof recordInventory === "function") {
-          void recordInventory(null, profile).catch(() => undefined);
+          void recordInventory(null, profile, connectionId).catch(
+            () => undefined,
+          );
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [active, commandCatalogEnabled, getCommandCatalog, profile]);
+  }, [active, commandCatalogEnabled, connectionId, getCommandCatalog, profile]);
 
   const slashCatalog = useMemo(() => {
     const desktopCommands = [

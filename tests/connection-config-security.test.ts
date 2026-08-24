@@ -286,6 +286,49 @@ describe("connection config secret exposure", () => {
     });
   });
 
+  it.each([
+    ["malformed JSON", "{"],
+    [
+      "a newer registry version",
+      JSON.stringify({
+        connectionRegistry: {
+          version: 2,
+          activeConnectionId: "future",
+          connections: [],
+        },
+      }),
+    ],
+    [
+      "duplicate connection identities",
+      JSON.stringify({
+        connectionRegistry: {
+          version: 1,
+          activeConnectionId: "connection-000000000000000000000000",
+          connections: [
+            {
+              connectionId: "connection-000000000000000000000000",
+              name: "A",
+              config: {},
+            },
+            {
+              connectionId: "connection-000000000000000000000000",
+              name: "B",
+              config: {},
+            },
+          ],
+        },
+      }),
+    ],
+  ])("preserves desktop.json when it contains %s", async (_label, contents) => {
+    // @lat: [[connections#Test specifications#Non-destructive registry recovery]]
+    const file = join(testHome, "desktop.json");
+    writeFileSync(file, contents, "utf-8");
+    const { getConnectionRegistry } = await loadConnectionConfigModule();
+
+    expect(() => getConnectionRegistry()).toThrow(/left unchanged/);
+    expect(readFileSync(file, "utf-8")).toBe(contents);
+  });
+
   it("uses the stored remote API key for main-process connection tests", async () => {
     const { setConnectionConfig } = await loadConnectionConfigModule();
     const { testRemoteConnection } = await import("../src/main/hermes");

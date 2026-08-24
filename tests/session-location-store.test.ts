@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, rmSync } from "fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -50,4 +56,27 @@ describe("desktop session locations", () => {
       false,
     );
   });
+
+  it.each([
+    ["malformed JSON", "{"],
+    ["a newer version", JSON.stringify({ version: 2, sessions: [] })],
+  ])(
+    "preserves session metadata when it contains %s",
+    async (_label, contents) => {
+      // @lat: [[connections#Test specifications#Non-destructive session metadata recovery]]
+      const file = join(testHome, "desktop", "session-locations.json");
+      mkdirSync(join(testHome, "desktop"), { recursive: true });
+      writeFileSync(file, contents, "utf-8");
+      const store = await loadStore();
+
+      expect(() =>
+        store.recordSessionLocation({
+          connectionId: "connection-a",
+          profile: "default",
+          sessionId: "session-a",
+        }),
+      ).toThrow(/left unchanged/);
+      expect(readFileSync(file, "utf-8")).toBe(contents);
+    },
+  );
 });

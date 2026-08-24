@@ -82,6 +82,7 @@ interface EnsureDashboardRuntimeSessionResult {
 interface UseDashboardChatTransportArgs {
   activeTurnRef: React.MutableRefObject<ActiveTurn | null>;
   connectionId?: string;
+  connectionRevision?: number;
   contextFolder: string | null;
   connectionMode: DashboardConnectionMode;
   enabled: boolean;
@@ -897,6 +898,7 @@ export function dashboardContinuationItemsFromTranscript(
 export function useDashboardChatTransport({
   activeTurnRef,
   connectionId,
+  connectionRevision,
   contextFolder,
   connectionMode,
   enabled,
@@ -984,7 +986,7 @@ export function useDashboardChatTransport({
     pendingClarifyRequestIdRef.current = null;
     pendingRecoveredContinuationRef.current = [];
     lastSyncedCwdRef.current = null;
-  }, [connectionId, connectionMode, profile]);
+  }, [connectionId, connectionMode, connectionRevision, profile]);
 
   const handleGatewayEvent = useCallback(
     (event: DashboardStreamEvent): void => {
@@ -1002,7 +1004,9 @@ export function useDashboardChatTransport({
       if (event.type === "session.info") {
         const recordRuntimeInfo = window.hermesAPI.recordAgentRuntimeInfo;
         if (typeof recordRuntimeInfo === "function") {
-          void recordRuntimeInfo(event.payload, profile).catch(() => undefined);
+          void recordRuntimeInfo(event.payload, profile, connectionId).catch(
+            () => undefined,
+          );
         }
         return;
       }
@@ -1129,6 +1133,7 @@ export function useDashboardChatTransport({
     },
     [
       activeTurnRef,
+      connectionId,
       connectionMode,
       profile,
       setIsLoading,
@@ -1284,7 +1289,9 @@ export function useDashboardChatTransport({
         });
         const recordRuntimeInfo = window.hermesAPI.recordAgentRuntimeInfo;
         if (typeof recordRuntimeInfo === "function") {
-          void recordRuntimeInfo(response.info, profile).catch(() => undefined);
+          void recordRuntimeInfo(response.info, profile, connectionId).catch(
+            () => undefined,
+          );
         }
 
         if (stored && response.created) {
@@ -1326,7 +1333,7 @@ export function useDashboardChatTransport({
 
       return targetSessionId;
     },
-    [activeTurnRef, contextFolder, profile, setHermesSessionId],
+    [activeTurnRef, connectionId, contextFolder, profile, setHermesSessionId],
   );
 
   const ensureSelectedModel = useCallback(
