@@ -4,6 +4,35 @@ import ConnectionPane from "./ConnectionPane";
 
 const settings = vi.hoisted(() => ({
   profile: undefined,
+  connections: [
+    {
+      connectionId: "connection-local",
+      name: "Local",
+      mode: "local" as const,
+    },
+    {
+      connectionId: "connection-remote",
+      name: "Production",
+      mode: "remote" as const,
+    },
+  ],
+  connectionStatuses: [
+    {
+      connectionId: "connection-remote",
+      health: "online" as const,
+      latencyMs: 42,
+      authentication: "authenticated" as const,
+      capabilities: {
+        version: "1.2.3",
+        compatibility: "compatible" as const,
+      },
+    },
+  ],
+  connectionStatusesLoading: false,
+  refreshConnectionStatuses: vi.fn(),
+  connectionId: "connection-remote",
+  connectionName: "Production",
+  setConnectionName: vi.fn(),
   connMode: "remote" as const,
   setConnMode: vi.fn(),
   connStatus: null,
@@ -37,6 +66,10 @@ const settings = vi.hoisted(() => ({
   sshRemotePort: "",
   setSshRemotePort: vi.fn(),
   handleSaveConnection: vi.fn(),
+  handleCreateConnection: vi.fn(),
+  handleRenameConnection: vi.fn(),
+  handleSelectConnection: vi.fn(),
+  handleRemoveConnection: vi.fn(),
   handleTestConnection: vi.fn(),
   handleChatTransportChange: vi.fn(),
   handleRemoteOAuthLogin: vi.fn(),
@@ -91,5 +124,31 @@ describe("ConnectionPane remote OAuth", () => {
       target: { value: "https://new.example" },
     });
     expect(settings.setRemoteAuthMode).toHaveBeenCalledWith("auto");
+  });
+
+  it("manages named connections above the existing mode editor", () => {
+    render(<ConnectionPane />);
+
+    fireEvent.change(screen.getByLabelText("settings.savedConnections"), {
+      target: { value: "connection-local" },
+    });
+    fireEvent.click(screen.getByText("settings.addConnection"));
+    fireEvent.change(screen.getByLabelText("settings.connectionName"), {
+      target: { value: "Renamed" },
+    });
+    fireEvent.click(screen.getByText("settings.renameConnection"));
+    fireEvent.click(screen.getByText("settings.remove"));
+
+    expect(settings.handleSelectConnection).toHaveBeenCalledWith(
+      "connection-local",
+    );
+    expect(settings.handleCreateConnection).toHaveBeenCalledTimes(1);
+    expect(settings.setConnectionName).toHaveBeenCalledWith("Renamed");
+    expect(settings.handleRenameConnection).toHaveBeenCalledTimes(1);
+    expect(settings.handleRemoveConnection).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Online")).toBeTruthy();
+    expect(screen.getByText("42 ms")).toBeTruthy();
+    fireEvent.click(screen.getByText("Refresh status"));
+    expect(settings.refreshConnectionStatuses).toHaveBeenCalledTimes(1);
   });
 });

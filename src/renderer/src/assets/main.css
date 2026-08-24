@@ -11525,6 +11525,16 @@ body:has(.shell-vibrant),
   gap: 7px;
 }
 
+.settings-connection-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-connection-row .input {
+  flex: 1 1 220px;
+}
+
 /* Subsection within a pane — a divider + icon'd label grouping related
    fields (e.g. the Network block inside Connection). */
 .settings-subsection {

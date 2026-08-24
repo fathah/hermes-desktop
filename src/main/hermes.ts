@@ -27,6 +27,7 @@ import {
 } from "./installer";
 import {
   getApiServerKey,
+  getActiveConnection,
   getConnectionConfig,
   getConfigValue,
   getModelConfig,
@@ -84,6 +85,10 @@ import {
   hostDerivedEnvKeyForUrl,
   shouldPruneOpenRouterApiKey,
 } from "./host-derived-env";
+import {
+  sanitizeAgentCommandInventory,
+  sanitizeAgentRuntimeInfo,
+} from "../shared/agent-capabilities";
 
 /**
  * Resolve which profile a gateway call targets. An explicit profile always
@@ -925,6 +930,107 @@ const capabilitiesCache = new Map<
   string,
   { expiresAt: number; value: HermesApiCapabilities | null }
 >();
+
+const agentRuntimeInfoCache = new Map<string, Record<string, unknown>>();
+const agentCommandInventoryCache = new Map<string, string[]>();
+
+function agentCapabilityLocationKey(
+  profile?: string,
+  connectionId = getActiveConnection().connectionId,
+): string {
+  return `${connectionId}:${profileKey(profile)}`;
+}
+
+/**
+ * Keep only the bounded compatibility fields from gateway session.info. The
+ * renderer already receives this payload, but the main process never retains
+ * model prompts, tools, paths, or other session data just to gate desktop UI.
+ */
+// @lat: [[agent-capabilities#Bounded runtime evidence]]
+export function recordAgentRuntimeInfo(
+  value: unknown,
+  profile?: string,
+): boolean {
+  const info = sanitizeAgentRuntimeInfo(value);
+  if (!info) return false;
+  const location = agentCapabilityLocationKey(profile);
+  const previous = agentRuntimeInfoCache.get(location);
+  if (
+    previous &&
+    (previous.version !== info.version ||
+      previous.desktop_contract !== info.desktop_contract)
+  ) {
+    agentCommandInventoryCache.delete(location);
+  }
+  agentRuntimeInfoCache.set(location, info);
+  // session.info is emitted again after reconnect, so the API feature probe
+  // must not retain evidence from the previous Agent process.
+  capabilitiesCache.clear();
+  return true;
+}
+
+// @lat: [[agent-capabilities#Bounded command inventory]]
+export function recordAgentCommandInventory(
+  value: unknown,
+  profile?: string,
+): boolean {
+  const commands = sanitizeAgentCommandInventory(value);
+  const location = agentCapabilityLocationKey(profile);
+  if (!commands) {
+    agentCommandInventoryCache.delete(location);
+    return false;
+  }
+  agentCommandInventoryCache.set(location, commands);
+  return true;
+}
+
+export async function getAgentCapabilityEvidence(profile?: string): Promise<{
+  apiRunsTransport: boolean | null;
+  commandNames: string[] | null;
+  runtimeInfo: Record<string, unknown> | null;
+}> {
+  const capabilities = await getApiCapabilities(profile);
+  const location = agentCapabilityLocationKey(profile);
+  return {
+    apiRunsTransport: capabilities
+      ? supportsHermesRunsTransport(capabilities)
+      : null,
+    commandNames: agentCommandInventoryCache.get(location) ?? null,
+    runtimeInfo: agentRuntimeInfoCache.get(location) ?? null,
+  };
+}
+
+export function getCachedAgentCapabilityEvidence(
+  connectionId: string,
+  profile?: string,
+): {
+  apiRunsTransport: null;
+  commandNames: string[] | null;
+  runtimeInfo: Record<string, unknown> | null;
+} {
+  const location = agentCapabilityLocationKey(profile, connectionId);
+  return {
+    apiRunsTransport: null,
+    commandNames: agentCommandInventoryCache.get(location) ?? null,
+    runtimeInfo: agentRuntimeInfoCache.get(location) ?? null,
+  };
+}
+
+export function clearAgentCapabilityEvidence(connectionId?: string): void {
+  capabilitiesCache.clear();
+  if (!connectionId) {
+    agentCommandInventoryCache.clear();
+    agentRuntimeInfoCache.clear();
+    return;
+  }
+  const prefix = `${connectionId}:`;
+  for (const key of agentCommandInventoryCache.keys()) {
+    if (key.startsWith(prefix)) agentCommandInventoryCache.delete(key);
+  }
+  for (const key of agentRuntimeInfoCache.keys()) {
+    if (key.startsWith(prefix)) agentRuntimeInfoCache.delete(key);
+  }
+}
 
 // ────────────────────────────────────────────────────
 //  API Server health check
@@ -1972,6 +2078,12 @@ async function sendMessageViaTuiGateway(
   cleanup = client.onEvent((event) => {
     if (event.session_id && event.session_id !== activeSessionId) return;
 
+    if (event.type === "session.info") {
+      recordAgentRuntimeInfo(event.payload, profile);
+      hasSessionInfo = true;
+      return;
+    }
+
     const delta = gatewayMessageDelta(event);
     if (delta) {
       streamedText += delta;
@@ -2174,6 +2286,7 @@ async function sendMessageViaTuiGateway(
       activeSessionId = String(resumed.session_id || "");
       storedSessionId = String(resumed.resumed || resumeSessionId);
       hasSessionInfo = !!resumed.info;
+      recordAgentRuntimeInfo(resumed.info, profile);
     } else {
       const created = await client.request<{
         info?: unknown;
@@ -2187,6 +2300,7 @@ async function sendMessageViaTuiGateway(
       activeSessionId = String(created.session_id || "");
       storedSessionId = String(created.stored_session_id || activeSessionId);
       hasSessionInfo = !!created.info;
+      recordAgentRuntimeInfo(created.info, profile);
     }
 
     if (!activeSessionId) {

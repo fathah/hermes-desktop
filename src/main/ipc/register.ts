@@ -15,6 +15,7 @@ import { readdir, readFile, stat } from "fs/promises";
 import { getActiveProfileNameSync } from "../utils";
 import type { Attachment } from "../../shared/attachments";
 import type { SessionModelOverride } from "../../shared/model-override";
+import type { SessionLocation } from "../../shared/session-location";
 import type { AppLocale } from "../../shared/i18n/types";
 import type {
   DesktopSessionContinuationItem,
@@ -39,6 +40,7 @@ import {
   getSessionModelOverride,
   setSessionModelOverride,
 } from "../session-model-override-store";
+import { recordSessionLocation } from "../session-location-store";
 import {
   materializeDataUrlToTemp,
   readMediaAsDataUrl,
@@ -53,6 +55,8 @@ import {
   relaunchApp,
 } from "../gpu-fallback";
 import type { GpuPreferenceMode } from "../../shared/gpu";
+import { buildAgentCapabilitySnapshot } from "../../shared/agent-capabilities";
+import { getConnectionStatuses } from "../connection-status";
 import {
   checkInstallStatus,
   verifyInstall,
@@ -123,6 +127,10 @@ import {
   notifyProfileSwitched,
   setSshRemoteApiKey,
   resolvePendingClarify,
+  clearAgentCapabilityEvidence,
+  getAgentCapabilityEvidence,
+  recordAgentCommandInventory,
+  recordAgentRuntimeInfo,
 } from "../hermes";
 import {
   freshDashboardWebSocketUrl,
@@ -175,10 +183,16 @@ import {
   hasOAuthCredentials,
   setCredentialPool,
   addCredentialPoolEntry,
+  createConnection,
   getConnectionConfig,
+  getActiveConnection,
   getPublicConnectionConfig,
+  getPublicConnectionRegistry,
   normalizeRemoteChatTransport,
+  removeConnection,
+  renameConnection,
   resolveConnectionApiKeyUpdate,
+  selectConnection,
   setConnectionConfig,
   getPlatformEnabled,
   setPlatformEnabled,
@@ -470,6 +484,27 @@ function activeSshProfile(profile?: string): string {
   return profile?.trim() || getActiveProfileNameSync();
 }
 
+async function hermesVersionForConnection(
+  conn: ConnectionConfig,
+  profile?: string,
+  refresh = false,
+): Promise<string | null> {
+  if (conn.mode === "remote") {
+    return remoteGetHermesVersion({ ...conn, profile });
+  }
+  if (conn.mode === "ssh" && conn.ssh) {
+    const sshProfile = activeSshProfile(profile);
+    return withSshDashboardSessions(
+      conn,
+      (config) => remoteGetHermesVersion(config),
+      () => sshGetHermesVersion(conn.ssh),
+      sshProfile,
+    );
+  }
+  if (refresh) clearVersionCache();
+  return getHermesVersion();
+}
+
 /**
  * Establish the SSH tunnel to the correct endpoint and cache the matching
  * credential — the remote dashboard (/api/* + chat WS; dashboard-token auth)
@@ -725,31 +760,37 @@ export function registerIpcHandlers(context: IpcContext): void {
   ipcMain.handle("relaunch-app", () => relaunchApp());
 
   // Hermes engine info
-  ipcMain.handle("get-hermes-version", async () => {
+  ipcMain.handle("get-hermes-version", async (_event, profile?: string) => {
     const conn = getConnectionConfig();
-    if (conn.mode === "remote") return remoteGetHermesVersion(conn);
-    if (conn.mode === "ssh" && conn.ssh)
-      return withSshDashboardSessions(
-        conn,
-        (config) => remoteGetHermesVersion(config),
-        () => sshGetHermesVersion(conn.ssh),
-        activeSshProfile(),
-      );
-    return getHermesVersion();
+    return hermesVersionForConnection(conn, profile);
   });
-  ipcMain.handle("refresh-hermes-version", async () => {
+  ipcMain.handle("refresh-hermes-version", async (_event, profile?: string) => {
     const conn = getConnectionConfig();
-    if (conn.mode === "remote") return remoteGetHermesVersion(conn);
-    if (conn.mode === "ssh" && conn.ssh)
-      return withSshDashboardSessions(
-        conn,
-        (config) => remoteGetHermesVersion(config),
-        () => sshGetHermesVersion(conn.ssh),
-        activeSshProfile(),
-      );
-    clearVersionCache();
-    return getHermesVersion();
+    return hermesVersionForConnection(conn, profile, true);
   });
+  // @lat: [[agent-capabilities#Compatibility policy]]
+  ipcMain.handle("get-agent-capabilities", async (_event, profile?: string) => {
+    const conn = getConnectionConfig();
+    const [versionText, evidence] = await Promise.all([
+      hermesVersionForConnection(conn, profile),
+      getAgentCapabilityEvidence(profile),
+    ]);
+    return buildAgentCapabilitySnapshot({
+      ...evidence,
+      connectionMode: conn.mode,
+      versionText,
+    });
+  });
+  ipcMain.handle(
+    "record-agent-runtime-info",
+    (_event, info: unknown, profile?: string) =>
+      recordAgentRuntimeInfo(info, profile),
+  );
+  ipcMain.handle(
+    "record-agent-command-inventory",
+    (_event, catalog: unknown, profile?: string) =>
+      recordAgentCommandInventory(catalog, profile),
+  );
   ipcMain.handle("run-hermes-doctor", () => {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh) return sshRunDoctor(conn.ssh);
@@ -758,6 +799,13 @@ export function registerIpcHandlers(context: IpcContext): void {
   ipcMain.handle("run-hermes-update", async (event) => {
     try {
       const conn = getConnectionConfig();
+      if (conn.mode === "remote") {
+        return {
+          success: false,
+          error:
+            "Update this Hermes Agent on its remote host, then reconnect the desktop.",
+        };
+      }
       if (conn.mode === "ssh" && conn.ssh) {
         event.sender.send("install-progress", {
           step: 1,
@@ -785,6 +833,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         // getSshDashboardSessionConfig); conn.apiKey is remote-mode-only.
         const key = (await sshReadRemoteApiKey(conn.ssh)).trim();
         setSshRemoteApiKey(key);
+        clearAgentCapabilityEvidence(getActiveConnection().connectionId);
         return { success: true };
       }
       await runHermesUpdate((progress: InstallProgress) => {
@@ -802,6 +851,7 @@ export function registerIpcHandlers(context: IpcContext): void {
           }\n`,
         });
       }
+      clearAgentCapabilityEvidence(getActiveConnection().connectionId);
       return { success: true };
     } catch (err) {
       return { success: false, error: (err as Error).message };
@@ -1275,7 +1325,49 @@ export function registerIpcHandlers(context: IpcContext): void {
   // Connection mode (local / remote / ssh)
   ipcMain.handle("is-remote-mode", () => isRemoteMode());
   ipcMain.handle("is-remote-only-mode", () => isRemoteOnlyMode());
-  ipcMain.handle("get-connection-config", () => getPublicConnectionConfig());
+  ipcMain.handle("get-connection-config", (_event, connectionId?: unknown) =>
+    getPublicConnectionConfig(connectionId),
+  );
+  ipcMain.handle("get-connection-registry", () =>
+    getPublicConnectionRegistry(),
+  );
+  ipcMain.handle("get-connection-statuses", (_event, profile?: string) =>
+    getConnectionStatuses(profile),
+  );
+  ipcMain.handle("create-connection", () => {
+    stopSshTunnel();
+    createConnection();
+    resetSshDashboardAvailability();
+    notifyConnectionConfigChanged();
+    return true;
+  });
+  ipcMain.handle("rename-connection", (_event, connectionId, name) => {
+    renameConnection(connectionId, name);
+    notifyConnectionConfigChanged();
+    return true;
+  });
+  ipcMain.handle("select-connection", (_event, connectionId) => {
+    const changed = getActiveConnection().connectionId !== connectionId;
+    selectConnection(connectionId);
+    if (changed) stopSshTunnel();
+    resetSshDashboardAvailability();
+    notifyConnectionConfigChanged();
+    return true;
+  });
+  ipcMain.handle("remove-connection", (_event, connectionId) => {
+    const removedActive = getActiveConnection().connectionId === connectionId;
+    removeConnection(connectionId);
+    if (removedActive) stopSshTunnel();
+    for (const [runKey, abort] of activeRuns) {
+      if (!runKey.startsWith(`${connectionId}:`)) continue;
+      abort();
+      activeRuns.delete(runKey);
+    }
+    resetSshDashboardAvailability();
+    clearAgentCapabilityEvidence(connectionId);
+    notifyConnectionConfigChanged();
+    return true;
+  });
   ipcMain.handle("is-ssh-tunnel-active", () => isSshTunnelActive());
 
   ipcMain.handle(
@@ -1301,6 +1393,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         ),
       });
       resetSshDashboardAvailability();
+      clearAgentCapabilityEvidence(getActiveConnection().connectionId);
       notifyConnectionConfigChanged();
       return true;
     },
@@ -1316,6 +1409,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         sshChatTransport: normalizeRemoteChatTransport(sshChatTransport),
       });
       resetSshDashboardAvailability();
+      clearAgentCapabilityEvidence(getActiveConnection().connectionId);
       notifyConnectionConfigChanged();
       return true;
     },
@@ -1348,6 +1442,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         },
       });
       resetSshDashboardAvailability();
+      clearAgentCapabilityEvidence(getActiveConnection().connectionId);
       notifyConnectionConfigChanged();
       return true;
     },
@@ -1385,6 +1480,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         ),
       });
       resetSshDashboardAvailability();
+      clearAgentCapabilityEvidence(getActiveConnection().connectionId);
       notifyConnectionConfigChanged();
       return { connected: true, authMode: detected.authMode };
     },
@@ -1549,10 +1645,19 @@ export function registerIpcHandlers(context: IpcContext): void {
       contextFolder?: string,
       runId?: string,
       modelOverride?: SessionModelOverride,
+      connectionId?: string,
     ) => {
       // Each conversation has a stable runId minted by the renderer. Fall back
       // to a generated id for legacy callers so the run is still tracked.
       const chatRunId = runId || `run-${randomUUID()}`;
+      const activeConnectionId = getActiveConnection().connectionId;
+      const chatConnectionId = connectionId?.trim() || activeConnectionId;
+      if (chatConnectionId !== activeConnectionId) {
+        throw new Error(
+          `Chat run belongs to inactive connection ${chatConnectionId}.`,
+        );
+      }
+      const chatRunKey = `${chatConnectionId}:${chatRunId}`;
       if (!isRemoteMode() && !isGatewayRunning(profile)) {
         startGateway(profile);
       }
@@ -1568,7 +1673,7 @@ export function registerIpcHandlers(context: IpcContext): void {
       // Abort only a prior run under the SAME runId (a re-send in the same
       // conversation). Sibling runs — other background sessions / agents —
       // keep streaming untouched.
-      const existing = activeRuns.get(chatRunId);
+      const existing = activeRuns.get(chatRunKey);
       if (existing) existing();
 
       let fullResponse = "";
@@ -1599,7 +1704,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         }
       };
       const abortThisRun = (): void => {
-        activeRuns.get(chatRunId)?.();
+        activeRuns.get(chatRunKey)?.();
       };
 
       const handle = await sendMessage(
@@ -1623,7 +1728,7 @@ export function registerIpcHandlers(context: IpcContext): void {
             }
           },
           onDone: (sessionId) => {
-            activeRuns.delete(chatRunId);
+            activeRuns.delete(chatRunKey);
             try {
               persistPromptImageAttachments(sessionId, message, attachments);
             } catch (err) {
@@ -1654,7 +1759,7 @@ export function registerIpcHandlers(context: IpcContext): void {
             safeSend("chat-session-started", sessionId);
           },
           onError: (error) => {
-            activeRuns.delete(chatRunId);
+            activeRuns.delete(chatRunKey);
             safeSend("chat-error", error);
             rejectChat(new Error(error));
             // Notify on error too if window not focused
@@ -1686,21 +1791,31 @@ export function registerIpcHandlers(context: IpcContext): void {
         modelOverride,
       );
 
-      activeRuns.set(chatRunId, handle.abort);
+      activeRuns.set(chatRunKey, handle.abort);
       return promise;
     },
   );
 
-  ipcMain.handle("abort-chat", (_event, runId?: string) => {
-    // Abort one run when given its id; with no id (legacy callers) abort all.
-    if (runId) {
-      activeRuns.get(runId)?.();
-      activeRuns.delete(runId);
-      return;
-    }
-    for (const abort of activeRuns.values()) abort();
-    activeRuns.clear();
-  });
+  ipcMain.handle(
+    "abort-chat",
+    (_event, runId?: string, connectionId?: string) => {
+      // Abort one run when given its id; with no id (legacy callers) abort all.
+      if (runId) {
+        const activeConnectionId = getActiveConnection().connectionId;
+        const runKey = `${connectionId?.trim() || activeConnectionId}:${runId}`;
+        activeRuns.get(runKey)?.();
+        activeRuns.delete(runKey);
+        return;
+      }
+      for (const abort of activeRuns.values()) abort();
+      activeRuns.clear();
+    },
+  );
+
+  ipcMain.handle(
+    "record-session-location",
+    (_event, location: SessionLocation) => recordSessionLocation(location),
+  );
 
   // Renderer's answer to an inline clarify card. Resolves the pending gateway
   // request for this request_id, which forwards the answer to `clarify.respond`.
@@ -1933,14 +2048,20 @@ export function registerIpcHandlers(context: IpcContext): void {
 
   // Dashboard/WebSocket transport probe. This is intentionally separate from
   // the current chat path while we validate the ordered event stream.
-  ipcMain.handle("dashboard-status", (_event, profile?: string) =>
-    getDashboardStatus(profile),
+  ipcMain.handle(
+    "dashboard-status",
+    (_event, profile?: string, connectionId?: unknown) =>
+      getDashboardStatus(profile, connectionId),
   );
-  ipcMain.handle("fresh-dashboard-ws-url", (_event, profile?: string) =>
-    freshDashboardWebSocketUrl(profile),
+  ipcMain.handle(
+    "fresh-dashboard-ws-url",
+    (_event, profile?: string, connectionId?: unknown) =>
+      freshDashboardWebSocketUrl(profile, connectionId),
   );
-  ipcMain.handle("start-dashboard", (_event, profile?: string) =>
-    startDashboard(profile),
+  ipcMain.handle(
+    "start-dashboard",
+    (_event, profile?: string, connectionId?: unknown) =>
+      startDashboard(profile, connectionId),
   );
   ipcMain.handle("stop-dashboard", (_event, profile?: string) =>
     stopDashboard(profile),

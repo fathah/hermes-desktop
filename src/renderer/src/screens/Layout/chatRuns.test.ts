@@ -16,6 +16,7 @@ function run(
 ): ChatRun {
   return {
     runId,
+    connectionId: "connection-main",
     profile,
     sessionId: null,
     loading: false,
@@ -27,7 +28,12 @@ describe("chat run profile transitions", () => {
   it("re-homes a scratch run when switching profiles", () => {
     const runs = [run("run-a", "kitt")];
 
-    const next = selectProfileRunTransition(runs, "run-a", "alfie");
+    const next = selectProfileRunTransition(
+      runs,
+      "run-a",
+      "connection-main",
+      "alfie",
+    );
 
     expect(next.activeRunId).toBe("run-a");
     expect(next.runs).toEqual([{ ...runs[0], profile: "alfie" }]);
@@ -39,7 +45,12 @@ describe("chat run profile transitions", () => {
       run("run-alfie", "alfie"),
     ];
 
-    const next = selectProfileRunTransition(runs, "run-kitt", "alfie");
+    const next = selectProfileRunTransition(
+      runs,
+      "run-kitt",
+      "connection-main",
+      "alfie",
+    );
 
     expect(next.activeRunId).toBe("run-alfie");
     expect(next.runs).toBe(runs);
@@ -51,18 +62,44 @@ describe("chat run profile transitions", () => {
       .mockReturnValue("00000000-0000-4000-8000-000000000001");
     const runs = [run("run-kitt", "kitt", { sessionId: "session-kitt" })];
 
-    const next = selectProfileRunTransition(runs, "run-kitt", "alfie");
+    const next = selectProfileRunTransition(
+      runs,
+      "run-kitt",
+      "connection-main",
+      "alfie",
+    );
 
     expect(next.activeRunId).toBe("run-00000000-0000-4000-8000-000000000001");
     expect(next.runs).toEqual([
       runs[0],
       {
         runId: "run-00000000-0000-4000-8000-000000000001",
+        connectionId: "connection-main",
         profile: "alfie",
         sessionId: null,
         loading: false,
       },
     ]);
+    randomUUID.mockRestore();
+  });
+
+  it("does not reuse a scratch run from another connection", () => {
+    const randomUUID = vi
+      .spyOn(crypto, "randomUUID")
+      .mockReturnValue("00000000-0000-4000-8000-000000000003");
+    const scratch = run("run-a", "alfie");
+
+    const next = selectProfileRunTransition(
+      [scratch],
+      scratch.runId,
+      "connection-other",
+      "alfie",
+    );
+
+    expect(next.runs.at(-1)).toMatchObject({
+      connectionId: "connection-other",
+      profile: "alfie",
+    });
     randomUUID.mockRestore();
   });
 
@@ -84,8 +121,9 @@ describe("chat run profile transitions", () => {
       .spyOn(crypto, "randomUUID")
       .mockReturnValue("00000000-0000-4000-8000-000000000002");
 
-    expect(mintRun("alfie")).toEqual({
+    expect(mintRun("connection-main", "alfie")).toEqual({
       runId: "run-00000000-0000-4000-8000-000000000002",
+      connectionId: "connection-main",
       profile: "alfie",
       sessionId: null,
       loading: false,

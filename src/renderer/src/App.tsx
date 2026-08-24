@@ -25,6 +25,7 @@ function App(): React.JSX.Element {
   const [connectionMode, setConnectionMode] = useState<
     "local" | "remote" | "ssh"
   >("local");
+  const [connectionId, setConnectionId] = useState("");
   // Soft warning: install files exist but the deep `verifyInstall` probe
   // failed (e.g. slow Python startup, restricted network). We surface this
   // as a dismissible banner instead of bouncing the user back to Welcome,
@@ -52,6 +53,7 @@ function App(): React.JSX.Element {
       const conn = await window.hermesAPI.getConnectionConfig();
       isRemote = conn.mode === "remote" || conn.mode === "ssh";
       setConnectionMode(conn.mode);
+      setConnectionId(conn.connectionId);
 
       if (conn.mode === "ssh" && conn.ssh) {
         setSplashStatus("Starting SSH tunnel…");
@@ -140,6 +142,15 @@ function App(): React.JSX.Element {
   useEffect(() => {
     runInstallCheck();
   }, [runInstallCheck]);
+
+  useEffect(
+    () =>
+      window.hermesAPI.onConnectionConfigChanged((connection) => {
+        setConnectionMode(connection.mode);
+        setConnectionId(connection.connectionId);
+      }),
+    [],
+  );
 
   // Track screen views for analytics
   useEffect(() => {
@@ -232,6 +243,7 @@ function App(): React.JSX.Element {
       case "main":
         return (
           <Layout
+            connectionId={connectionId}
             verifyWarning={verifyWarning}
             onReinstall={handleVerifyReinstall}
             onDismissVerifyWarning={handleDismissVerifyWarning}

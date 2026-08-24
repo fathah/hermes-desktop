@@ -29,6 +29,9 @@ import type {
 } from "../shared/account";
 import type { AgentSyncResult, AgentSyncStatus } from "../shared/agent-sync";
 import type { GpuPreferenceMode, GpuStatus } from "../shared/gpu";
+import type { AgentCapabilitySnapshot } from "../shared/agent-capabilities";
+import type { ConnectionStatusSnapshot } from "../shared/connection-status";
+import type { SessionLocation } from "../shared/session-location";
 import type {
   SshHermesTargetInspection,
   SshDockerProvisionResult,
@@ -81,6 +84,33 @@ interface DashboardStatus {
   error?: string;
   logPath?: string;
   needsOAuthLogin?: boolean;
+}
+
+interface PublicConnectionConfig {
+  connectionId: string;
+  name: string;
+  mode: "local" | "remote" | "ssh";
+  remoteUrl: string;
+  remoteAuthMode: "auto" | "token" | "oauth";
+  remoteChatTransport: "auto" | "dashboard" | "legacy";
+  sshChatTransport: "auto" | "dashboard" | "legacy";
+  hasApiKey: boolean;
+  apiKeyLength: number;
+  ssh: {
+    host: string;
+    port: number;
+    username: string;
+    keyPath: string;
+    remotePort: number;
+    localPort: number;
+    dockerContainerName?: string;
+  };
+}
+
+interface PublicConnectionRegistry {
+  version: 1;
+  activeConnectionId: string;
+  connections: PublicConnectionConfig[];
 }
 
 const electronAPI = {
@@ -158,10 +188,19 @@ const hermesAPI = {
   },
 
   // Hermes engine info
-  getHermesVersion: (): Promise<string | null> =>
-    ipcRenderer.invoke("get-hermes-version"),
-  refreshHermesVersion: (): Promise<string | null> =>
-    ipcRenderer.invoke("refresh-hermes-version"),
+  getHermesVersion: (profile?: string): Promise<string | null> =>
+    ipcRenderer.invoke("get-hermes-version", profile),
+  refreshHermesVersion: (profile?: string): Promise<string | null> =>
+    ipcRenderer.invoke("refresh-hermes-version", profile),
+  getAgentCapabilities: (profile?: string): Promise<AgentCapabilitySnapshot> =>
+    ipcRenderer.invoke("get-agent-capabilities", profile),
+  recordAgentRuntimeInfo: (info: unknown, profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("record-agent-runtime-info", info, profile),
+  recordAgentCommandInventory: (
+    catalog: unknown,
+    profile?: string,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("record-agent-command-inventory", catalog, profile),
   runHermesDoctor: (): Promise<string> =>
     ipcRenderer.invoke("run-hermes-doctor"),
   runHermesUpdate: (): Promise<{ success: boolean; error?: string }> =>
@@ -327,24 +366,24 @@ const hermesAPI = {
   isRemoteMode: (): Promise<boolean> => ipcRenderer.invoke("is-remote-mode"),
   isRemoteOnlyMode: (): Promise<boolean> =>
     ipcRenderer.invoke("is-remote-only-mode"),
-  getConnectionConfig: (): Promise<{
-    mode: "local" | "remote" | "ssh";
-    remoteUrl: string;
-    remoteAuthMode: "auto" | "token" | "oauth";
-    remoteChatTransport: "auto" | "dashboard" | "legacy";
-    sshChatTransport: "auto" | "dashboard" | "legacy";
-    hasApiKey: boolean;
-    apiKeyLength: number;
-    ssh: {
-      host: string;
-      port: number;
-      username: string;
-      keyPath: string;
-      remotePort: number;
-      localPort: number;
-      dockerContainerName?: string;
-    };
-  }> => ipcRenderer.invoke("get-connection-config"),
+  getConnectionConfig: (
+    connectionId?: string,
+  ): Promise<PublicConnectionConfig> =>
+    ipcRenderer.invoke("get-connection-config", connectionId),
+  getConnectionRegistry: (): Promise<PublicConnectionRegistry> =>
+    ipcRenderer.invoke("get-connection-registry"),
+  getConnectionStatuses: (
+    profile?: string,
+  ): Promise<ConnectionStatusSnapshot[]> =>
+    ipcRenderer.invoke("get-connection-statuses", profile),
+  createConnection: (): Promise<boolean> =>
+    ipcRenderer.invoke("create-connection"),
+  renameConnection: (connectionId: string, name: string): Promise<boolean> =>
+    ipcRenderer.invoke("rename-connection", connectionId, name),
+  selectConnection: (connectionId: string): Promise<boolean> =>
+    ipcRenderer.invoke("select-connection", connectionId),
+  removeConnection: (connectionId: string): Promise<boolean> =>
+    ipcRenderer.invoke("remove-connection", connectionId),
 
   setConnectionConfig: (
     mode: "local" | "remote" | "ssh",
@@ -364,49 +403,12 @@ const hermesAPI = {
     ),
 
   onConnectionConfigChanged: (
-    callback: (config: {
-      mode: "local" | "remote" | "ssh";
-      remoteUrl: string;
-      remoteAuthMode: "auto" | "token" | "oauth";
-      remoteChatTransport: "auto" | "dashboard" | "legacy";
-      sshChatTransport: "auto" | "dashboard" | "legacy";
-      hasApiKey: boolean;
-      apiKeyLength: number;
-      ssh: {
-        host: string;
-        port: number;
-        username: string;
-        keyPath: string;
-        remotePort: number;
-        localPort: number;
-        dockerContainerName?: string;
-      };
-    }) => void,
+    callback: (config: PublicConnectionConfig) => void,
   ): (() => void) => {
     const handler = (
       _event: Electron.IpcRendererEvent,
       config: unknown,
-    ): void =>
-      callback(
-        config as {
-          mode: "local" | "remote" | "ssh";
-          remoteUrl: string;
-          remoteAuthMode: "auto" | "token" | "oauth";
-          remoteChatTransport: "auto" | "dashboard" | "legacy";
-          sshChatTransport: "auto" | "dashboard" | "legacy";
-          hasApiKey: boolean;
-          apiKeyLength: number;
-          ssh: {
-            host: string;
-            port: number;
-            username: string;
-            keyPath: string;
-            remotePort: number;
-            localPort: number;
-            dockerContainerName?: string;
-          };
-        },
-      );
+    ): void => callback(config as PublicConnectionConfig);
     ipcRenderer.on("connection-config-changed", handler);
     return () =>
       ipcRenderer.removeListener("connection-config-changed", handler);
@@ -525,6 +527,7 @@ const hermesAPI = {
     contextFolder?: string,
     runId?: string,
     modelOverride?: SessionModelOverride,
+    connectionId?: string,
   ): Promise<{ response: string; sessionId?: string }> =>
     ipcRenderer.invoke(
       "send-message",
@@ -536,10 +539,14 @@ const hermesAPI = {
       contextFolder,
       runId,
       modelOverride,
+      connectionId,
     ),
 
-  abortChat: (runId?: string): Promise<void> =>
-    ipcRenderer.invoke("abort-chat", runId),
+  abortChat: (runId?: string, connectionId?: string): Promise<void> =>
+    ipcRenderer.invoke("abort-chat", runId, connectionId),
+
+  recordSessionLocation: (location: SessionLocation): Promise<boolean> =>
+    ipcRenderer.invoke("record-session-location", location),
 
   transcribeAudio: (
     audio: Uint8Array,
@@ -812,12 +819,21 @@ const hermesAPI = {
 
   setSpellCheckerLanguages: (languages: string[]): Promise<string[]> =>
     ipcRenderer.invoke("set-spell-checker-languages", languages),
-  dashboardStatus: (profile?: string): Promise<DashboardStatus> =>
-    ipcRenderer.invoke("dashboard-status", profile),
-  freshDashboardWsUrl: (profile?: string): Promise<string> =>
-    ipcRenderer.invoke("fresh-dashboard-ws-url", profile),
-  startDashboard: (profile?: string): Promise<DashboardStatus> =>
-    ipcRenderer.invoke("start-dashboard", profile),
+  dashboardStatus: (
+    profile?: string,
+    connectionId?: string,
+  ): Promise<DashboardStatus> =>
+    ipcRenderer.invoke("dashboard-status", profile, connectionId),
+  freshDashboardWsUrl: (
+    profile?: string,
+    connectionId?: string,
+  ): Promise<string> =>
+    ipcRenderer.invoke("fresh-dashboard-ws-url", profile, connectionId),
+  startDashboard: (
+    profile?: string,
+    connectionId?: string,
+  ): Promise<DashboardStatus> =>
+    ipcRenderer.invoke("start-dashboard", profile, connectionId),
   stopDashboard: (profile?: string): Promise<boolean> =>
     ipcRenderer.invoke("stop-dashboard", profile),
 

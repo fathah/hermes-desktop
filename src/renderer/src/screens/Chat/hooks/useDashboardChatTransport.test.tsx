@@ -70,12 +70,14 @@ const activeRecoveryTurn: ActiveTurn = {
 
 function Harness({
   api,
+  connectionId,
   fallbackOnUnavailable = false,
   initialConnectionMode = "local",
   onDashboardUnavailable,
   setUsage = vi.fn() as SetUsageMock,
 }: {
   api: HarnessApi;
+  connectionId?: string;
   fallbackOnUnavailable?: boolean;
   initialConnectionMode?: "local" | "remote" | "ssh";
   onDashboardUnavailable?: (reason: string) => void;
@@ -97,6 +99,7 @@ function Harness({
   const activeTurnRef = useRef<ActiveTurn | null>({ ...activeBadTurn });
   const transport = useDashboardChatTransport({
     activeTurnRef,
+    connectionId,
     contextFolder: null,
     connectionMode,
     enabled: true,
@@ -168,13 +171,27 @@ describe("useDashboardChatTransport recovery", () => {
       return {};
     });
     const api: HarnessApi = {};
-    render(<Harness api={api} initialConnectionMode="remote" />);
+    render(
+      <Harness
+        api={api}
+        connectionId="connection-two"
+        initialConnectionMode="remote"
+      />,
+    );
 
     await act(async () => {
       await api.send?.("hello");
     });
 
     expect(window.hermesAPI.freshDashboardWsUrl).toHaveBeenCalledTimes(1);
+    expect(window.hermesAPI.startDashboard).toHaveBeenCalledWith(
+      undefined,
+      "connection-two",
+    );
+    expect(window.hermesAPI.freshDashboardWsUrl).toHaveBeenCalledWith(
+      undefined,
+      "connection-two",
+    );
     expect(dashboardMock.connect).toHaveBeenCalledWith("ws://fresh-dashboard");
   });
 

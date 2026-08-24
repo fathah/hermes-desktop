@@ -74,12 +74,14 @@ interface EnsureDashboardRuntimeSessionParams {
 
 interface EnsureDashboardRuntimeSessionResult {
   created: boolean;
+  info?: unknown;
   runtimeSessionId: string;
   storedSessionId: string;
 }
 
 interface UseDashboardChatTransportArgs {
   activeTurnRef: React.MutableRefObject<ActiveTurn | null>;
+  connectionId?: string;
   contextFolder: string | null;
   connectionMode: DashboardConnectionMode;
   enabled: boolean;
@@ -243,6 +245,7 @@ export async function ensureDashboardRuntimeSession(
       }
       return {
         created: false,
+        ...(resumed.info !== undefined ? { info: resumed.info } : {}),
         runtimeSessionId: resumed.session_id,
         storedSessionId: resumed.stored_session_id || resumed.resumed || stored,
       };
@@ -268,6 +271,7 @@ export async function ensureDashboardRuntimeSession(
 
   return {
     created: true,
+    ...(created.info !== undefined ? { info: created.info } : {}),
     runtimeSessionId: created.session_id,
     storedSessionId: created.stored_session_id || created.session_id,
   };
@@ -892,6 +896,7 @@ export function dashboardContinuationItemsFromTranscript(
 
 export function useDashboardChatTransport({
   activeTurnRef,
+  connectionId,
   contextFolder,
   connectionMode,
   enabled,
@@ -979,7 +984,7 @@ export function useDashboardChatTransport({
     pendingClarifyRequestIdRef.current = null;
     pendingRecoveredContinuationRef.current = [];
     lastSyncedCwdRef.current = null;
-  }, [connectionMode, profile]);
+  }, [connectionId, connectionMode, profile]);
 
   const handleGatewayEvent = useCallback(
     (event: DashboardStreamEvent): void => {
@@ -993,6 +998,14 @@ export function useDashboardChatTransport({
         return;
       }
       logDashboardEvent(event, "accepted", runtimeSessionId);
+
+      if (event.type === "session.info") {
+        const recordRuntimeInfo = window.hermesAPI.recordAgentRuntimeInfo;
+        if (typeof recordRuntimeInfo === "function") {
+          void recordRuntimeInfo(event.payload, profile).catch(() => undefined);
+        }
+        return;
+      }
 
       // Background (`/btw`) prompts run on a separate agent and report back via
       // `background.complete` — outside the main turn lifecycle, so render the
@@ -1117,6 +1130,7 @@ export function useDashboardChatTransport({
     [
       activeTurnRef,
       connectionMode,
+      profile,
       setIsLoading,
       setMessages,
       setToolProgress,
@@ -1147,7 +1161,10 @@ export function useDashboardChatTransport({
         // negative flag and lets the caller drop to legacy gateway /v1.
         let lastConnectErr: unknown = null;
         for (let attempt = 0; attempt < 3; attempt++) {
-          const status = await window.hermesAPI.startDashboard(profile);
+          const status = await window.hermesAPI.startDashboard(
+            profile,
+            connectionId,
+          );
           if (clientGenerationRef.current !== generation) {
             throw new Error("Hermes dashboard connection was superseded");
           }
@@ -1185,7 +1202,10 @@ export function useDashboardChatTransport({
           });
           try {
             const freshUrl = window.hermesAPI.freshDashboardWsUrl
-              ? await window.hermesAPI.freshDashboardWsUrl(profile)
+              ? await window.hermesAPI.freshDashboardWsUrl(
+                  profile,
+                  connectionId,
+                )
               : status.connection.wsUrl;
             if (!freshUrl) {
               throw new Error("Hermes dashboard WebSocket URL is unavailable");
@@ -1232,6 +1252,7 @@ export function useDashboardChatTransport({
     }, [
       handleGatewayEvent,
       profile,
+      connectionId,
       connectionMode,
       fallbackOnUnavailable,
       onDashboardUnavailable,
@@ -1261,6 +1282,10 @@ export function useDashboardChatTransport({
           profile,
           storedSessionId: stored,
         });
+        const recordRuntimeInfo = window.hermesAPI.recordAgentRuntimeInfo;
+        if (typeof recordRuntimeInfo === "function") {
+          void recordRuntimeInfo(response.info, profile).catch(() => undefined);
+        }
 
         if (stored && response.created) {
           pendingRecoveredContinuationRef.current =

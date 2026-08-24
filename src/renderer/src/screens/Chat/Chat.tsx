@@ -87,6 +87,8 @@ interface ChatProps {
   /** Stable id for this conversation/run. One <Chat> is mounted per run; all
    *  remain mounted (background sessions) and only the active one is shown. */
   runId: string;
+  /** Stable Hermes machine identity for this run. */
+  connectionId: string;
   /** Seed transcript when re-opening a session from history; empty for new chats. */
   initialMessages?: ChatMessage[];
   /** Gateway session id when resuming a known session; null for a new chat. */
@@ -115,6 +117,7 @@ interface ChatProps {
 
 function Chat({
   runId,
+  connectionId,
   initialMessages,
   initialSessionId,
   active = true,
@@ -168,6 +171,16 @@ function Chat({
   useEffect(() => {
     onSessionIdChange?.(runId, hermesSessionId);
   }, [runId, hermesSessionId, onSessionIdChange]);
+  useEffect(() => {
+    if (!hermesSessionId) return;
+    void window.hermesAPI
+      .recordSessionLocation({
+        connectionId,
+        profile: profile ?? "default",
+        sessionId: hermesSessionId,
+      })
+      .catch(() => undefined);
+  }, [connectionId, profile, hermesSessionId]);
   // Best-effort title from the first user bubble (for the active-sessions bar).
   const reportedTitleRef = useRef(false);
   useEffect(() => {
@@ -270,7 +283,7 @@ function Chat({
     let cancelled = false;
     const loadConnectionConfig = async (): Promise<void> => {
       try {
-        const conn = await window.hermesAPI.getConnectionConfig();
+        const conn = await window.hermesAPI.getConnectionConfig(connectionId);
         let remoteAuthMode = conn.remoteAuthMode ?? "auto";
         if (conn.mode === "remote" && conn.remoteUrl.trim()) {
           try {
@@ -306,6 +319,7 @@ function Chat({
     };
     void loadConnectionConfig();
     const unsubscribe = window.hermesAPI.onConnectionConfigChanged((conn) => {
+      if (conn.connectionId !== connectionId) return;
       setConnectionModeLoaded(true);
       setConnectionMode(conn.mode);
       setRemoteMode(conn.mode !== "local");
@@ -323,7 +337,7 @@ function Chat({
       cancelled = true;
       unsubscribe();
     };
-  }, []);
+  }, [connectionId]);
 
   const { containerRef, bottomRef } = useChatScroll(messages);
   const modelConfig = useModelConfig(profile);
@@ -567,7 +581,7 @@ function Chat({
 
   const handleClear = useCallback(() => {
     if (isLoading) {
-      window.hermesAPI.abortChat(runId);
+      window.hermesAPI.abortChat(runId, connectionId);
       setIsLoading(false);
     }
     const idToDelete = hermesSessionId;
@@ -587,7 +601,14 @@ function Chat({
     setToolProgress(null);
     queueRef.current = [];
     setQueuedMessages([]);
-  }, [isLoading, runId, hermesSessionId, setMessages, modelConfig.reload]);
+  }, [
+    isLoading,
+    runId,
+    connectionId,
+    hermesSessionId,
+    setMessages,
+    modelConfig.reload,
+  ]);
 
   const localCommands = useLocalCommands({
     profile,
@@ -611,6 +632,7 @@ function Chat({
 
   const dashboardTransport = useDashboardChatTransport({
     activeTurnRef,
+    connectionId,
     contextFolder,
     connectionMode,
     enabled: dashboardChatEnabled,
@@ -643,10 +665,20 @@ function Chat({
     let cancelled = false;
     void getCommandCatalog()
       .then((catalog) => {
-        if (!cancelled) setAgentCommandCatalog(catalog);
+        if (cancelled) return;
+        setAgentCommandCatalog(catalog);
+        const recordInventory = window.hermesAPI.recordAgentCommandInventory;
+        if (typeof recordInventory === "function") {
+          void recordInventory(catalog, profile).catch(() => undefined);
+        }
       })
       .catch(() => {
-        if (!cancelled) setAgentCommandCatalog(null);
+        if (cancelled) return;
+        setAgentCommandCatalog(null);
+        const recordInventory = window.hermesAPI.recordAgentCommandInventory;
+        if (typeof recordInventory === "function") {
+          void recordInventory(null, profile).catch(() => undefined);
+        }
       });
     return () => {
       cancelled = true;
@@ -712,6 +744,7 @@ function Chat({
 
   const actions = useChatActions({
     runId,
+    connectionId,
     profile,
     hermesSessionId,
     messages,
