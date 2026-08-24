@@ -881,6 +881,8 @@ const hermesAPI = {
 
   getSessionMessages: (
     sessionId: string,
+    connectionId?: string,
+    profile?: string,
   ): Promise<
     Array<{
       id: number;
@@ -889,7 +891,13 @@ const hermesAPI = {
       timestamp: number;
       attachments?: Attachment[];
     }>
-  > => ipcRenderer.invoke("get-session-messages", sessionId),
+  > =>
+    ipcRenderer.invoke(
+      "get-session-messages",
+      sessionId,
+      connectionId,
+      profile,
+    ),
 
   recordSessionContinuation: (
     sessionId: string,
@@ -1146,8 +1154,12 @@ const hermesAPI = {
 
   updateSessionTitle: (sessionId: string, title: string): Promise<void> =>
     ipcRenderer.invoke("update-session-title", sessionId, title),
-  deleteSession: (sessionId: string): Promise<void> =>
-    ipcRenderer.invoke("delete-session", sessionId),
+  deleteSession: (
+    sessionId: string,
+    connectionId?: string,
+    profile?: string,
+  ): Promise<void> =>
+    ipcRenderer.invoke("delete-session", sessionId, connectionId, profile),
   deleteSessions: (
     sessionIds: string[],
   ): Promise<{ requested: number; deleted: number }> =>

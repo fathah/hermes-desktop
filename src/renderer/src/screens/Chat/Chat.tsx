@@ -461,6 +461,8 @@ function Chat({
 
   useChatIPC({
     runId,
+    connectionId,
+    profile,
     sessionScopeId: visibleSessionScopeId,
     setMessages,
     setHermesSessionId,
@@ -586,7 +588,7 @@ function Chat({
     }
     const idToDelete = hermesSessionId;
     if (idToDelete) {
-      void window.hermesAPI.deleteSession(idToDelete);
+      void window.hermesAPI.deleteSession(idToDelete, connectionId, profile);
       void window.hermesAPI.clearStagedAttachments(idToDelete);
     }
     setMessages([]);
@@ -605,6 +607,7 @@ function Chat({
     isLoading,
     runId,
     connectionId,
+    profile,
     hermesSessionId,
     setMessages,
     modelConfig.reload,

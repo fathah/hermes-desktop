@@ -621,7 +621,11 @@ interface HermesAPI {
       preview: string;
     }>
   >;
-  getSessionMessages: (sessionId: string) => Promise<
+  getSessionMessages: (
+    sessionId: string,
+    connectionId?: string,
+    profile?: string,
+  ) => Promise<
     Array<
       | {
           kind: "user";
@@ -855,7 +859,11 @@ interface HermesAPI {
     }>
   >;
   updateSessionTitle: (sessionId: string, title: string) => Promise<void>;
-  deleteSession: (sessionId: string) => Promise<void>;
+  deleteSession: (
+    sessionId: string,
+    connectionId?: string,
+    profile?: string,
+  ) => Promise<void>;
   deleteSessions: (
     sessionIds: string[],
   ) => Promise<{ requested: number; deleted: number }>;

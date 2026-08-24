@@ -5733,7 +5733,9 @@ body:has(.shell-vibrant),
   width: 100%;
   background: none;
   border: none;
+  box-shadow: none;
   color: var(--text-primary);
+  filter: none;
   font-size: 14px;
   font-family: var(--font-sans);
   padding: 4px 6px;

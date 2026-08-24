@@ -645,6 +645,8 @@ function Layout({
       try {
         const items = (await window.hermesAPI.getSessionMessages(
           sessionId,
+          connectionId,
+          activeProfile,
         )) as DbHistoryItem[];
         const run = mintRun(
           connectionId,

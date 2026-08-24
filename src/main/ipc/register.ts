@@ -484,6 +484,27 @@ function activeSshProfile(profile?: string): string {
   return profile?.trim() || getActiveProfileNameSync();
 }
 
+function sessionConnection(connectionId?: unknown): ConnectionConfig {
+  const conn = getConnectionConfig(connectionId);
+  if (
+    conn.mode === "ssh" &&
+    connectionId &&
+    connectionId !== getActiveConnection().connectionId
+  ) {
+    throw new Error(
+      "Select this SSH connection before reading its sessions; Hermes Desktop uses one SSH tunnel at a time.",
+    );
+  }
+  return conn;
+}
+
+function scopedRemoteSessionConfig(
+  conn: ConnectionConfig,
+  profile?: string,
+): ConnectionConfig & { profile: string } {
+  return { ...conn, profile: activeSshProfile(profile) };
+}
+
 async function hermesVersionForConnection(
   conn: ConnectionConfig,
   profile?: string,
@@ -1652,17 +1673,17 @@ export function registerIpcHandlers(context: IpcContext): void {
       const chatRunId = runId || `run-${randomUUID()}`;
       const activeConnectionId = getActiveConnection().connectionId;
       const chatConnectionId = connectionId?.trim() || activeConnectionId;
-      if (chatConnectionId !== activeConnectionId) {
+      const conn = getConnectionConfig(chatConnectionId);
+      if (conn.mode === "ssh" && chatConnectionId !== activeConnectionId) {
         throw new Error(
-          `Chat run belongs to inactive connection ${chatConnectionId}.`,
+          "Select this SSH connection before sending; Hermes Desktop uses one SSH tunnel at a time.",
         );
       }
       const chatRunKey = `${chatConnectionId}:${chatRunId}`;
-      if (!isRemoteMode() && !isGatewayRunning(profile)) {
+      if (conn.mode === "local" && !isGatewayRunning(profile)) {
         startGateway(profile);
       }
 
-      const conn = getConnectionConfig();
       if (conn.mode === "ssh" && conn.ssh) {
         // Tunnel to the dashboard (/api/* + chat WS; NOT /v1) and cache its
         // token, else the gateway api_server (/v1) — via the shared preparer
@@ -1789,6 +1810,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         attachments,
         contextFolder,
         modelOverride,
+        conn,
       );
 
       activeRuns.set(chatRunKey, handle.abort);
@@ -2224,27 +2246,45 @@ export function registerIpcHandlers(context: IpcContext): void {
     return listSessions(limit, offset);
   });
 
-  ipcMain.handle("get-session-messages", (_event, sessionId: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "remote")
-      return remoteGetSessionMessages(conn, sessionId).then((items) =>
-        applySessionLocalOverlays(sessionId, items),
-      );
-    if (conn.mode === "ssh" && conn.ssh)
-      return withSshDashboardSessions(
-        conn,
-        (config) =>
-          remoteGetSessionMessages(config, sessionId).then((items) =>
-            applySessionLocalOverlays(sessionId, items),
-          ),
-        () =>
-          sshGetSessionMessages(conn.ssh, sessionId).then((items) =>
-            applySessionLocalOverlays(sessionId, items),
-          ),
-        activeSshProfile(),
-      );
-    return getSessionMessages(sessionId);
-  });
+  ipcMain.handle(
+    "get-session-messages",
+    (_event, sessionId: string, connectionId?: string, profile?: string) => {
+      const conn = sessionConnection(connectionId);
+      const scopedProfile = activeSshProfile(profile);
+      if (conn.mode === "remote")
+        return remoteGetSessionMessages(
+          scopedRemoteSessionConfig(conn, scopedProfile),
+          sessionId,
+        ).then((items) =>
+          applySessionLocalOverlays(sessionId, items, undefined, scopedProfile),
+        );
+      if (conn.mode === "ssh" && conn.ssh)
+        return withSshDashboardSessions(
+          conn,
+          (config) =>
+            remoteGetSessionMessages(config, sessionId).then((items) =>
+              applySessionLocalOverlays(
+                sessionId,
+                items,
+                undefined,
+                scopedProfile,
+              ),
+            ),
+          () =>
+            sshGetSessionMessages(conn.ssh, sessionId, scopedProfile).then(
+              (items) =>
+                applySessionLocalOverlays(
+                  sessionId,
+                  items,
+                  undefined,
+                  scopedProfile,
+                ),
+            ),
+          scopedProfile,
+        );
+      return getSessionMessages(sessionId, scopedProfile);
+    },
+  );
 
   ipcMain.handle(
     "record-session-continuation",
@@ -2310,18 +2350,26 @@ export function registerIpcHandlers(context: IpcContext): void {
     },
   );
 
-  ipcMain.handle("delete-session", (_event, sessionId: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "remote") return remoteDeleteSession(conn, sessionId);
-    if (conn.mode === "ssh" && conn.ssh)
-      return withSshDashboardSessions(
-        conn,
-        (config) => remoteDeleteSession(config, sessionId),
-        undefined,
-        activeSshProfile(),
-      );
-    return deleteSession(sessionId);
-  });
+  ipcMain.handle(
+    "delete-session",
+    (_event, sessionId: string, connectionId?: string, profile?: string) => {
+      const conn = sessionConnection(connectionId);
+      const scopedProfile = activeSshProfile(profile);
+      if (conn.mode === "remote")
+        return remoteDeleteSession(
+          scopedRemoteSessionConfig(conn, scopedProfile),
+          sessionId,
+        );
+      if (conn.mode === "ssh" && conn.ssh)
+        return withSshDashboardSessions(
+          conn,
+          (config) => remoteDeleteSession(config, sessionId),
+          undefined,
+          scopedProfile,
+        );
+      return deleteSession(sessionId, scopedProfile);
+    },
+  );
 
   ipcMain.handle("delete-sessions", (_event, sessionIds: string[]) => {
     const ids = Array.isArray(sessionIds) ? sessionIds : [];

@@ -145,7 +145,7 @@ R1 creates the identities and extension seams required by every later feature.
 - [ ] Add connection create, edit, test, reconnect, remove, and select workflows. Create, edit, test, remove, and select are complete; isolated reconnect remains.
 - [ ] Add a fleet overview with connection-specific update actions.
 
-Progress (2026-08-24): Settings now manages redacted named records through main-process CRUD IPC and exposes manual per-record health, latency, authentication, version, and capability snapshots. Direct-Remote dashboard chats now keep their saved connection when another record is selected. Inactive SSH probes and chats do not retarget the global tunnel; removal aborts only that record's legacy runs. Legacy inactive routing and isolated reconnect remain pending before simultaneous-connection support is complete.
+Progress (2026-08-24): Settings now manages redacted named records through main-process CRUD IPC and exposes manual per-record health, latency, authentication, version, and capability snapshots. Dashboard and legacy Local/direct-Remote chats now keep an immutable saved connection while other records are selected, including URL, authentication, capability probes, fallbacks, cancellation, resumed transcript reads, live transcript reconciliation, and chat deletion. Local transcript operations also retain their profile, while inactive SSH operations do not retarget the global tunnel. Remaining session browsing, desktop metadata, model/command routing, and isolated reconnect are pending before simultaneous-connection support is complete.
 
 #### Verification
 
@@ -164,7 +164,7 @@ Progress (2026-08-24): Settings now manages redacted named records through main-
 
 - PR/commit: branch `codex/hermes-enhanced-desktop-roadmap`; M1 registry foundation in progress.
 - Decisions: version 1 lives inside the existing `desktop.json`; current callers keep using `getConnectionConfig()` as an active-record adapter. Session locations use a credential-free global desktop metadata file instead of the active profile's Agent database, so background runs cannot persist under the wrong profile. Status refresh is initial/manual rather than polling so saved SSH targets do not spawn recurring background probes.
-- Verified 2026-08-24: `npm test -- --reporter=json --maxWorkers=2` (191 files, 1,920 passed, 3 skipped), `npm run typecheck`, focused ESLint, and `npm run build`. Full multi-connection routing remains pending.
+- Verified 2026-08-24: `npm test -- --reporter=json --maxWorkers=2` (191 files, 1,921 passed, 3 skipped), `npm run typecheck`, focused ESLint, and `npm run build`. Full multi-connection routing remains pending.
 
 ### M2 — Internal contribution framework
 

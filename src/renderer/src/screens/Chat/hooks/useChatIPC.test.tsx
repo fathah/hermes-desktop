@@ -87,6 +87,8 @@ function Harness({
 
   useChatIPC({
     runId: "run-1",
+    connectionId: "connection-one",
+    profile: "work",
     sessionScopeId,
     setMessages,
     setHermesSessionId,
@@ -133,7 +135,12 @@ describe("useChatIPC session scoping", () => {
       callbacks.done?.("run-1", "old-session");
     });
 
-    expect(api.getSessionMessages).toHaveBeenCalledWith("old-session");
+    // @lat: [[connections#Test specifications#Connection-explicit transcript routing]]
+    expect(api.getSessionMessages).toHaveBeenCalledWith(
+      "old-session",
+      "connection-one",
+      "work",
+    );
     expect(screen.getByTestId("ids")).toHaveTextContent(
       JSON.stringify(["db-1", "db-2"]),
     );

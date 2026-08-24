@@ -49,13 +49,21 @@ Desktop chat identity is the tuple `{ connectionId, profile, sessionId }`, preve
 
 [[src/renderer/src/screens/Layout/chatRuns.ts#ChatRun]] carries an immutable connection and profile before its Agent session ID resolves. [[src/renderer/src/screens/Layout/chatRuns.ts#findRunByLocation]] reattaches only on an exact tuple match.
 
-Legacy `send-message` IPC scopes its abort handle by connection plus renderer run ID and rejects a run whose connection is no longer active. Dashboard chats resolve their saved direct-Remote record by `connectionId`, so selecting another connection does not retarget an existing client. Inactive SSH chats cannot retarget the singleton tunnel. Both transports persist the tuple when [[src/renderer/src/screens/Chat/Chat.tsx#Chat]] learns a session ID.
+Legacy `send-message` IPC scopes its abort handle by connection plus renderer run ID and resolves Local or direct-Remote transport from that connection's immutable main-process config snapshot. Dashboard chats use the same stable identity. Inactive SSH chats cannot retarget the singleton tunnel. Both transports persist the tuple when [[src/renderer/src/screens/Chat/Chat.tsx#Chat]] learns a session ID.
+
+Resumed-chat reads, live transcript reconciliation, and chat deletion carry the same immutable connection and profile through preload IPC. Direct Remote requests therefore retain their endpoint and authentication, Local reads open the requested profile database, and inactive SSH reads fail without retargeting the shared tunnel.
 
 ### Connection-explicit dashboard transport
 
 Dashboard startup and WebSocket refresh resolve the chat's stable connection ID instead of consulting whichever record is currently selected.
 
 [[src/main/dashboard.ts#startDashboard]] and [[src/main/dashboard.ts#freshDashboardWebSocketUrl]] allow direct-Remote clients to remain independent. An inactive SSH record returns a bounded unavailable status rather than stealing the one shared tunnel described by [[main-process#SSH dashboard transport]].
+
+### Connection-explicit legacy transport
+
+Legacy API sends retain one resolved connection configuration for URL, authentication, capability probing, fallbacks, event streaming, and cancellation.
+
+[[src/main/hermes.ts#sendMessage]] accepts the main-process-owned snapshot selected by `send-message` IPC. Concurrent direct-Remote runs therefore cannot inherit a later UI selection or each other's credentials; inactive SSH remains blocked before tunnel preparation.
 
 ### Desktop metadata
 
@@ -80,3 +88,11 @@ Local, Remote, and SSH records report separate health and authentication outcome
 ### Connection-explicit dashboard routing
 
 Direct-Remote dashboard status and WebSocket lookup use the chat's saved connection ID instead of the currently selected record, while inactive SSH records cannot retarget the singleton tunnel.
+
+### Concurrent legacy Remote routes
+
+Simultaneous legacy sends to distinct direct-Remote records retain separate endpoint URLs and bearer credentials throughout capability probing and chat submission.
+
+### Connection-explicit transcript routing
+
+Transcript reconciliation forwards the chat's saved connection and profile rather than reading from whichever connection or profile is currently selected.

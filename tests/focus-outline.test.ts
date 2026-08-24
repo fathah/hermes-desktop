@@ -21,6 +21,11 @@ describe("native focus treatment", () => {
     expect(keyboardRule).toContain("inset 0 0 0 1px");
     expect(keyboardRule).toContain("filter: brightness(1.08)");
     expect(CSS).not.toMatch(/outline:\s*\d+px solid var\(--accent\)/);
+    const composerInputRule = CSS.match(
+      /\.chat-input\s*\{(?<body>[\s\S]*?)\n\}/,
+    )?.groups?.body;
+    expect(composerInputRule).toContain("box-shadow: none");
+    expect(composerInputRule).toContain("filter: none");
     const annotationFocusRule = CSS.match(
       /\.web-preview-annotation-composer:focus-within\s*\{(?<body>[\s\S]*?)\n\}/,
     )?.groups?.body;
