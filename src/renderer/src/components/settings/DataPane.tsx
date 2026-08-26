@@ -2,6 +2,19 @@ import { Download, Upload } from "lucide-react";
 import { useI18n } from "../useI18n";
 import { useSettings } from "./SettingsDataContext";
 
+// Escape a runtime value before interpolating it into a translation string
+// that is rendered via dangerouslySetInnerHTML (i18next runs with
+// escapeValue: false, so nothing escapes it for us). The translation markup
+// itself (<code>) is trusted; only the runtime path must be escaped.
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 /**
  * Export / import a full Hermes backup archive, plus the OpenClaw → Hermes
  * migration (which imports config, keys, sessions, and skills — a data import,
@@ -81,7 +94,7 @@ export default function DataPane(): React.JSX.Element {
                 className="settings-migration-desc"
                 dangerouslySetInnerHTML={{
                   __html: t("settings.migrationDesc", {
-                    path: openclawPath || "",
+                    path: escapeHtml(openclawPath || ""),
                   }),
                 }}
               />
