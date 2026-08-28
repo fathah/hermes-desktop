@@ -10,7 +10,10 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
 import type { DashboardRpcEvent } from "../dashboardGatewayClient";
-import { useDashboardChatTransport } from "./useDashboardChatTransport";
+import {
+  dashboardModelMatches,
+  useDashboardChatTransport,
+} from "./useDashboardChatTransport";
 import type { ActiveTurn, ChatMessage, UsageState } from "../types";
 
 type SetUsageMock = Mock<(value: SetStateAction<UsageState | null>) => void>;
@@ -731,5 +734,58 @@ describe("useDashboardChatTransport context gauge estimate (no usage payload)", 
     });
 
     expect(setUsage).not.toHaveBeenCalled();
+  });
+});
+
+describe("dashboardModelMatches named-custom provider equivalence (issue: omlx vs custom)", () => {
+  const MODEL = "Qwen3.8-Whittle-MoE-27B-MLX-4bit";
+  const live = {
+    model: MODEL,
+    provider: "custom",
+    providers: [
+      { slug: "omlx", models: [MODEL], base_url: "http://127.0.0.1:9999/v1" },
+      {
+        slug: "custom:lm",
+        models: ["other"],
+        base_url: "http://127.0.0.1:1234/v1",
+      },
+    ],
+  };
+
+  it("accepts a named provider the agent normalizes to bare custom", () => {
+    expect(dashboardModelMatches("omlx", MODEL, live)).toBe(true);
+  });
+
+  it("accepts custom:<slug> live spelling for the same named provider", () => {
+    expect(
+      dashboardModelMatches("lm", MODEL, {
+        ...live,
+        provider: "custom:lm",
+        providers: [
+          {
+            slug: "custom:lm",
+            models: [MODEL],
+            base_url: "http://127.0.0.1:1234/v1",
+          },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  it("still rejects a genuinely different model", () => {
+    expect(dashboardModelMatches("omlx", "Some-Other-Model", live)).toBe(false);
+  });
+
+  it("still rejects a named provider absent from the live inventory", () => {
+    expect(dashboardModelMatches("other", MODEL, live)).toBe(false);
+  });
+
+  it("does not match a provider row that does not list the model", () => {
+    expect(
+      dashboardModelMatches("lm", MODEL, {
+        ...live,
+        providers: [{ slug: "lm", models: ["different"] }],
+      }),
+    ).toBe(false);
   });
 });
