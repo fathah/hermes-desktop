@@ -1,0 +1,16 @@
+{
+  "worktree": { "setup": "npm ci" },
+  "scripts": {
+    "dev": { "command": "npm run dev" },
+    "test": { "command": "npm run test" },
+    "typecheck": { "command": "npm run typecheck" },
+    "lint": { "command": "npm run lint" },
+    "build": { "command": "npm run build" }
+  },
+  "metadataGeneration": {
+    "title": { "instructions": "Use a short, outcome-focused title." },
+    "branchName": { "instructions": "Use a task-appropriate feat/, fix/, chore/, or docs/ prefix followed by a short kebab-case English description." },
+    "commitMessage": { "instructions": "Use Conventional Commits with an appropriate scope and an imperative subject." },
+    "pullRequest": { "instructions": "Start with a one-sentence summary, then include a Testing section with the commands run and their results." }
+  }
+}
