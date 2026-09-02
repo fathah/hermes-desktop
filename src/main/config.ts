@@ -57,7 +57,23 @@ export interface ConnectionConfig {
   ssh: SshConnectionConfig;
 }
 
+export const CONNECTION_REGISTRY_VERSION = 1 as const;
+
+export interface ConnectionRecord {
+  connectionId: string;
+  name: string;
+  config: ConnectionConfig;
+}
+
+export interface ConnectionRegistry {
+  version: typeof CONNECTION_REGISTRY_VERSION;
+  activeConnectionId: string;
+  connections: ConnectionRecord[];
+}
+
 export interface PublicConnectionConfig {
+  connectionId: string;
+  name: string;
   mode: "local" | "remote" | "ssh";
   remoteUrl: string;
   remoteAuthMode: RemoteAuthMode;
@@ -69,6 +85,12 @@ export interface PublicConnectionConfig {
   // leaves the main process. 0 when no key is set.
   apiKeyLength: number;
   ssh: SshConnectionConfig;
+}
+
+export interface PublicConnectionRegistry {
+  version: typeof CONNECTION_REGISTRY_VERSION;
+  activeConnectionId: string;
+  connections: PublicConnectionConfig[];
 }
 
 // Lazy getter — avoids circular dependency with installer.ts
@@ -97,38 +119,221 @@ export function readDesktopConfig(): Record<string, unknown> {
   }
 }
 
-export function writeDesktopConfig(data: Record<string, unknown>): void {
-  if (!existsSync(HERMES_HOME)) {
-    mkdirSync(HERMES_HOME, { recursive: true });
+function readConnectionDesktopConfig(): Record<string, unknown> {
+  const file = desktopConfigFile();
+  if (!existsSync(file)) return {};
+  try {
+    const parsed: unknown = JSON.parse(
+      readFileSync(file, "utf-8").replace(/^\uFEFF/, ""),
+    );
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("invalid root");
+    }
+    return parsed as Record<string, unknown>;
+  } catch {
+    throw new Error(
+      "Hermes Desktop could not read desktop.json; the existing file was left unchanged.",
+    );
   }
-  writeFileSync(desktopConfigFile(), JSON.stringify(data, null, 2), "utf-8");
 }
 
-export function getConnectionConfig(): ConnectionConfig {
-  const data = readDesktopConfig();
-  const ssh = (data.sshConfig as Partial<SshConnectionConfig>) ?? {};
+export function writeDesktopConfig(data: Record<string, unknown>): void {
+  // Refuse to replace an unreadable existing document. Callers often perform
+  // read-modify-write updates, and the tolerant read API returns {} on parse
+  // failure for legacy display paths.
+  readConnectionDesktopConfig();
+  safeWriteFile(desktopConfigFile(), JSON.stringify(data, null, 2));
+}
+
+function normalizeConnectionConfig(
+  value: Partial<ConnectionConfig>,
+): ConnectionConfig {
+  const ssh: Partial<SshConnectionConfig> = value.ssh ?? {};
   return {
-    mode: (data.connectionMode as "local" | "remote" | "ssh") || "local",
-    remoteUrl: (data.remoteUrl as string) || "",
-    apiKey: (data.remoteApiKey as string) || "",
-    remoteAuthMode: normalizeRemoteAuthMode(data.remoteAuthMode),
-    remoteChatTransport: normalizeRemoteChatTransport(data.remoteChatTransport),
-    sshChatTransport: normalizeRemoteChatTransport(data.sshChatTransport),
+    mode:
+      value.mode === "remote" || value.mode === "ssh" ? value.mode : "local",
+    remoteUrl: typeof value.remoteUrl === "string" ? value.remoteUrl : "",
+    apiKey: typeof value.apiKey === "string" ? value.apiKey : "",
+    remoteAuthMode: normalizeRemoteAuthMode(value.remoteAuthMode),
+    remoteChatTransport: normalizeRemoteChatTransport(
+      value.remoteChatTransport,
+    ),
+    sshChatTransport: normalizeRemoteChatTransport(value.sshChatTransport),
     ssh: {
-      host: (ssh.host as string) || "",
-      port: (ssh.port as number) || 22,
-      username: (ssh.username as string) || "",
-      keyPath: (ssh.keyPath as string) || "",
-      remotePort: (ssh.remotePort as number) || 8642,
-      localPort: (ssh.localPort as number) || 18642,
-      dockerContainerName: (ssh.dockerContainerName as string) || "",
+      host: typeof ssh.host === "string" ? ssh.host : "",
+      port: typeof ssh.port === "number" ? ssh.port : 22,
+      username: typeof ssh.username === "string" ? ssh.username : "",
+      keyPath: typeof ssh.keyPath === "string" ? ssh.keyPath : "",
+      remotePort: typeof ssh.remotePort === "number" ? ssh.remotePort : 8642,
+      localPort: typeof ssh.localPort === "number" ? ssh.localPort : 18642,
+      dockerContainerName:
+        typeof ssh.dockerContainerName === "string"
+          ? ssh.dockerContainerName
+          : "",
     },
   };
 }
 
-export function getPublicConnectionConfig(): PublicConnectionConfig {
-  const config = getConnectionConfig();
+function legacyConnectionConfig(
+  data: Record<string, unknown>,
+): ConnectionConfig {
+  return normalizeConnectionConfig({
+    mode: data.connectionMode as ConnectionConfig["mode"],
+    remoteUrl: data.remoteUrl as string,
+    apiKey: data.remoteApiKey as string,
+    remoteAuthMode: data.remoteAuthMode as RemoteAuthMode,
+    remoteChatTransport: data.remoteChatTransport as RemoteChatTransport,
+    sshChatTransport: data.sshChatTransport as RemoteChatTransport,
+    ssh: data.sshConfig as SshConnectionConfig,
+  });
+}
+
+function migratedConnectionName(config: ConnectionConfig): string {
+  if (config.mode === "remote") return "Remote";
+  if (config.mode === "ssh") return "SSH";
+  return "Local";
+}
+
+function parseConnectionRegistry(value: unknown): ConnectionRegistry | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<ConnectionRegistry>;
+  if (
+    candidate.version !== CONNECTION_REGISTRY_VERSION ||
+    !Array.isArray(candidate.connections) ||
+    candidate.connections.length === 0
+  ) {
+    return null;
+  }
+
+  const connectionIds = new Set<string>();
+  const connections = candidate.connections.flatMap((record) => {
+    if (
+      !record ||
+      typeof record.connectionId !== "string" ||
+      !/^connection-[0-9a-f]{24}$/.test(record.connectionId) ||
+      connectionIds.has(record.connectionId) ||
+      typeof record.name !== "string" ||
+      !record.name ||
+      !record.config ||
+      typeof record.config !== "object" ||
+      Array.isArray(record.config)
+    ) {
+      return [];
+    }
+    connectionIds.add(record.connectionId);
+    return [
+      {
+        connectionId: record.connectionId,
+        name: record.name,
+        config: normalizeConnectionConfig(record.config ?? {}),
+      },
+    ];
+  });
+  if (connections.length !== candidate.connections.length) return null;
+
+  if (
+    typeof candidate.activeConnectionId !== "string" ||
+    !connections.some(
+      ({ connectionId }) => connectionId === candidate.activeConnectionId,
+    )
+  ) {
+    return null;
+  }
   return {
+    version: CONNECTION_REGISTRY_VERSION,
+    activeConnectionId: candidate.activeConnectionId,
+    connections,
+  };
+}
+
+function deleteLegacyConnectionFields(data: Record<string, unknown>): void {
+  delete data.connectionMode;
+  delete data.remoteUrl;
+  delete data.remoteApiKey;
+  delete data.remoteAuthMode;
+  delete data.remoteChatTransport;
+  delete data.sshChatTransport;
+  delete data.sshConfig;
+}
+
+function connectionRegistryFromDesktopConfig(data: Record<string, unknown>): {
+  registry: ConnectionRegistry;
+  migrated: boolean;
+} {
+  const existing = parseConnectionRegistry(data.connectionRegistry);
+  if (existing) return { registry: existing, migrated: false };
+  if ("connectionRegistry" in data) {
+    throw new Error(
+      "Hermes Desktop found an unsupported or invalid connection registry; the existing file was left unchanged.",
+    );
+  }
+
+  const config = legacyConnectionConfig(data);
+  const connectionId = `connection-${randomBytes(12).toString("hex")}`;
+  return {
+    registry: {
+      version: CONNECTION_REGISTRY_VERSION,
+      activeConnectionId: connectionId,
+      connections: [
+        { connectionId, name: migratedConnectionName(config), config },
+      ],
+    },
+    migrated: true,
+  };
+}
+
+function saveConnectionRegistry(
+  data: Record<string, unknown>,
+  registry: ConnectionRegistry,
+): void {
+  data.connectionRegistry = registry;
+  deleteLegacyConnectionFields(data);
+  writeDesktopConfig(data);
+}
+
+// @lat: [[connections#Versioned registry]]
+export function getConnectionRegistry(): ConnectionRegistry {
+  const data = readConnectionDesktopConfig();
+  const { registry, migrated } = connectionRegistryFromDesktopConfig(data);
+  if (migrated) {
+    saveConnectionRegistry(data, registry);
+  }
+  return registry;
+}
+
+function getConnection(connectionId?: unknown): ConnectionRecord {
+  const registry = getConnectionRegistry();
+  if (
+    connectionId !== undefined &&
+    (typeof connectionId !== "string" || !connectionId)
+  ) {
+    throw new Error("Connection not found.");
+  }
+  const targetConnectionId = connectionId ?? registry.activeConnectionId;
+  const connection = registry.connections.find(
+    (candidate) => candidate.connectionId === targetConnectionId,
+  );
+  if (!connection) {
+    throw new Error(`Unknown connection: ${targetConnectionId}`);
+  }
+  return connection;
+}
+
+export function getActiveConnection(): ConnectionRecord {
+  return getConnection();
+}
+
+export function getConnectionConfig(connectionId?: unknown): ConnectionConfig {
+  return getConnection(connectionId).config;
+}
+
+function publicConnectionConfig(
+  connection: ConnectionRecord,
+): PublicConnectionConfig {
+  const config = connection.config;
+  return {
+    connectionId: connection.connectionId,
+    name: connection.name,
     mode: config.mode,
     remoteUrl: config.remoteUrl,
     remoteAuthMode: config.remoteAuthMode,
@@ -140,24 +345,116 @@ export function getPublicConnectionConfig(): PublicConnectionConfig {
   };
 }
 
-export function setConnectionConfig(config: ConnectionConfig): void {
-  const data = readDesktopConfig();
-  data.connectionMode = config.mode;
-  if (config.mode === "remote" || config.remoteUrl.trim()) {
-    data.remoteUrl = config.remoteUrl;
+export function getPublicConnectionConfig(
+  connectionId?: unknown,
+): PublicConnectionConfig {
+  return publicConnectionConfig(getConnection(connectionId));
+}
+
+export function getPublicConnectionRegistry(): PublicConnectionRegistry {
+  const registry = getConnectionRegistry();
+  return {
+    version: registry.version,
+    activeConnectionId: registry.activeConnectionId,
+    connections: registry.connections.map(publicConnectionConfig),
+  };
+}
+
+export function createConnection(): ConnectionRecord {
+  const data = readConnectionDesktopConfig();
+  const { registry } = connectionRegistryFromDesktopConfig(data);
+  const connection: ConnectionRecord = {
+    connectionId: `connection-${randomBytes(12).toString("hex")}`,
+    name: `New connection ${registry.connections.length + 1}`,
+    config: normalizeConnectionConfig({}),
+  };
+  registry.connections.push(connection);
+  registry.activeConnectionId = connection.connectionId;
+  saveConnectionRegistry(data, registry);
+  return connection;
+}
+
+export function renameConnection(connectionId: unknown, name: unknown): void {
+  const nextName = typeof name === "string" ? name.trim() : "";
+  if (!nextName || nextName.length > 80) {
+    throw new Error("Connection names must be between 1 and 80 characters.");
   }
-  if (config.mode === "remote" || config.apiKey.trim()) {
-    data.remoteApiKey = config.apiKey;
+  if (typeof connectionId !== "string") {
+    throw new Error("Connection not found.");
   }
-  data.remoteAuthMode = normalizeRemoteAuthMode(config.remoteAuthMode);
-  data.remoteChatTransport = normalizeRemoteChatTransport(
-    config.remoteChatTransport,
+  const data = readConnectionDesktopConfig();
+  const { registry } = connectionRegistryFromDesktopConfig(data);
+  const connection = registry.connections.find(
+    (candidate) => candidate.connectionId === connectionId,
   );
-  data.sshChatTransport = normalizeRemoteChatTransport(config.sshChatTransport);
-  if (config.mode === "ssh") {
-    data.sshConfig = config.ssh;
+  if (!connection) throw new Error("Connection not found.");
+  connection.name = nextName;
+  saveConnectionRegistry(data, registry);
+}
+
+export function selectConnection(connectionId: unknown): void {
+  if (typeof connectionId !== "string") {
+    throw new Error("Connection not found.");
   }
-  writeDesktopConfig(data);
+  const data = readConnectionDesktopConfig();
+  const { registry } = connectionRegistryFromDesktopConfig(data);
+  if (
+    !registry.connections.some(
+      (connection) => connection.connectionId === connectionId,
+    )
+  ) {
+    throw new Error("Connection not found.");
+  }
+  registry.activeConnectionId = connectionId;
+  saveConnectionRegistry(data, registry);
+}
+
+export function removeConnection(connectionId: unknown): void {
+  if (typeof connectionId !== "string") {
+    throw new Error("Connection not found.");
+  }
+  const data = readConnectionDesktopConfig();
+  const { registry } = connectionRegistryFromDesktopConfig(data);
+  if (registry.connections.length === 1) {
+    throw new Error("The last connection cannot be removed.");
+  }
+  const index = registry.connections.findIndex(
+    (connection) => connection.connectionId === connectionId,
+  );
+  if (index === -1) throw new Error("Connection not found.");
+  registry.connections.splice(index, 1);
+  if (registry.activeConnectionId === connectionId) {
+    registry.activeConnectionId = registry.connections[0].connectionId;
+  }
+  saveConnectionRegistry(data, registry);
+}
+
+export function setConnectionConfig(config: ConnectionConfig): void {
+  const data = readConnectionDesktopConfig();
+  const { registry } = connectionRegistryFromDesktopConfig(data);
+  const activeIndex = registry.connections.findIndex(
+    ({ connectionId }) => connectionId === registry.activeConnectionId,
+  );
+  const active = registry.connections[activeIndex];
+  const previousDefaultName = migratedConnectionName(active.config);
+  const nextConfig = normalizeConnectionConfig({
+    ...config,
+    remoteUrl:
+      config.mode === "remote" || config.remoteUrl.trim()
+        ? config.remoteUrl
+        : active.config.remoteUrl,
+    apiKey:
+      config.mode === "remote" || config.apiKey.trim()
+        ? config.apiKey
+        : active.config.apiKey,
+    ssh: config.mode === "ssh" ? config.ssh : active.config.ssh,
+  });
+  active.config = nextConfig;
+  if (active.name === previousDefaultName) {
+    active.name = migratedConnectionName(nextConfig);
+  }
+  registry.connections[activeIndex] = active;
+  saveConnectionRegistry(data, registry);
 }
 
 export function resolveConnectionApiKeyUpdate(

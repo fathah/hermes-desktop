@@ -38,6 +38,7 @@ interface UseChatActionsArgs {
   /** This conversation's run id — threaded to the main process so its events
    *  are tagged and its abort targets only this run. */
   runId: string;
+  connectionId: string;
   profile?: string;
   hermesSessionId: string | null;
   messages: ChatMessage[];
@@ -108,6 +109,7 @@ interface UseChatActionsResult {
 // @lat: [[chat-commands#Slash command execution#Local vs gateway commands]]
 export function useChatActions({
   runId,
+  connectionId,
   profile,
   hermesSessionId,
   messages,
@@ -175,12 +177,20 @@ export function useChatActions({
           contextFolder ?? undefined,
           runId,
           sessionModelRef.current || undefined,
+          connectionId,
         );
       } catch {
         // onChatError IPC already surfaces this to the user
       }
     },
-    [runId, profile, hermesSessionId, contextFolder, sendViaDashboard],
+    [
+      runId,
+      connectionId,
+      profile,
+      hermesSessionId,
+      contextFolder,
+      sendViaDashboard,
+    ],
   );
 
   // Shared "side question" flow (the 💭 quick-ask button and a typed `/btw`).
@@ -401,11 +411,18 @@ export function useChatActions({
 
   const handleAbort = useCallback(() => {
     abortDashboard?.();
-    window.hermesAPI.abortChat(runId);
+    window.hermesAPI.abortChat(runId, connectionId);
     activeTurnRef.current = null;
     setIsLoading(false);
     setTimeout(() => chatInputRef.current?.focus(), 50);
-  }, [abortDashboard, runId, activeTurnRef, chatInputRef, setIsLoading]);
+  }, [
+    abortDashboard,
+    runId,
+    connectionId,
+    activeTurnRef,
+    chatInputRef,
+    setIsLoading,
+  ]);
 
   const handleApprove = useCallback(() => {
     chatInputRef.current?.clear();

@@ -1,4 +1,5 @@
 import type { ChatMessage } from "../Chat/Chat";
+import type { SessionLocation } from "../../../../shared/session-location";
 
 /**
  * One concurrently-running (or open) conversation. Several runs coexist so the
@@ -8,6 +9,8 @@ import type { ChatMessage } from "../Chat/Chat";
  */
 export interface ChatRun {
   runId: string;
+  /** Immutable: the Hermes machine this run was started against. */
+  connectionId: string;
   /** Immutable: the profile/agent this run was started under. */
   profile: string;
   /** Gateway session id, known once the first turn reports it. */
@@ -26,12 +29,17 @@ export function isScratchRun(r: ChatRun): boolean {
 }
 
 /** Mint a fresh, empty run under the given profile. */
-export function mintRun(profile: string, seed?: ChatMessage[]): ChatRun {
+export function mintRun(
+  connectionId: string,
+  profile: string,
+  seed?: ChatMessage[],
+): ChatRun {
   return {
     runId:
       typeof crypto !== "undefined" && "randomUUID" in crypto
         ? `run-${crypto.randomUUID()}`
         : `run-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    connectionId,
     profile,
     sessionId: null,
     loading: false,
@@ -58,26 +66,35 @@ export function patchRun(
 export function selectProfileRunTransition(
   runs: ChatRun[],
   activeRunId: string,
+  connectionId: string,
   profile: string,
 ): { activeRunId: string; runs: ChatRun[] } {
   const active = runs.find((r) => r.runId === activeRunId);
-  if (!active || active.profile === profile) {
+  if (
+    !active ||
+    (active.connectionId === connectionId && active.profile === profile)
+  ) {
     return { activeRunId, runs };
   }
 
-  if (isScratchRun(active)) {
+  if (active.connectionId === connectionId && isScratchRun(active)) {
     return {
       activeRunId,
       runs: runs.map((r) => (r.runId === activeRunId ? { ...r, profile } : r)),
     };
   }
 
-  const scratch = runs.find((r) => r.profile === profile && isScratchRun(r));
+  const scratch = runs.find(
+    (r) =>
+      r.connectionId === connectionId &&
+      r.profile === profile &&
+      isScratchRun(r),
+  );
   if (scratch) {
     return { activeRunId: scratch.runId, runs };
   }
 
-  const next = mintRun(profile);
+  const next = mintRun(connectionId, profile);
   return { activeRunId: next.runId, runs: [...runs, next] };
 }
 
@@ -94,7 +111,12 @@ export function openSessionRunTransition(
   run: ChatRun,
 ): { activeRunId: string; runs: ChatRun[] } {
   const active = runs.find((r) => r.runId === activeRunId);
-  if (active && active.profile === run.profile && isScratchRun(active)) {
+  if (
+    active &&
+    active.connectionId === run.connectionId &&
+    active.profile === run.profile &&
+    isScratchRun(active)
+  ) {
     return {
       activeRunId: run.runId,
       runs: runs.map((r) => (r.runId === activeRunId ? run : r)),
@@ -133,12 +155,17 @@ export function runIdAtOrdinal(
   return idx >= 0 && idx < runs.length ? runs[idx].runId : null;
 }
 
-/** The first live run already bound to a given gateway session id, if any. */
-export function findRunBySession(
+/** The first live run bound to the exact machine/profile/session tuple. */
+export function findRunByLocation(
   runs: ChatRun[],
-  sessionId: string,
+  location: SessionLocation,
 ): ChatRun | undefined {
-  return runs.find((r) => r.sessionId === sessionId);
+  return runs.find(
+    (run) =>
+      run.connectionId === location.connectionId &&
+      run.profile === location.profile &&
+      run.sessionId === location.sessionId,
+  );
 }
 
 /** Session ids of every currently-loading run (for sidebar spinners). */

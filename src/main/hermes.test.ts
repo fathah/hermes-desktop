@@ -13,6 +13,11 @@ vi.mock("./installer", () => ({
 }));
 vi.mock("./config", () => ({
   getApiServerKey: vi.fn(() => ""),
+  getActiveConnection: vi.fn(() => ({
+    connectionId: "connection-test",
+    name: "Test",
+    config: {},
+  })),
   getConnectionConfig: vi.fn(() => ({
     mode: "local",
     remoteUrl: "",
@@ -52,6 +57,7 @@ vi.mock("child_process", () => {
 import { spawn } from "child_process";
 import {
   getApiServerKey,
+  getActiveConnection,
   getConnectionConfig,
   getModelConfig,
   readEnv,
@@ -59,7 +65,12 @@ import {
 import type { ConnectionConfig } from "./config";
 import { providerListSafe } from "./secrets";
 import {
+  clearAgentCapabilityEvidence,
+  getAgentCapabilityEvidence,
+  getCachedAgentCapabilityEvidence,
   getRemoteAuthHeader,
+  recordAgentCommandInventory,
+  recordAgentRuntimeInfo,
   sendMessage,
   shouldForceCliForSessionOverride,
   stopHealthPolling,
@@ -69,6 +80,7 @@ import type { ChatCallbacks } from "./hermes";
 
 const mockedGetModelConfig = vi.mocked(getModelConfig);
 const mockedGetApiServerKey = vi.mocked(getApiServerKey);
+const mockedGetActiveConnection = vi.mocked(getActiveConnection);
 const mockedGetConnectionConfig = vi.mocked(getConnectionConfig);
 const mockedReadEnv = vi.mocked(readEnv);
 const mockedProviderListSafe = vi.mocked(providerListSafe);
@@ -95,6 +107,59 @@ function testConnection(
     ...fields,
   };
 }
+
+describe("Agent capability evidence cache", () => {
+  // @lat: [[agent-capabilities#Test specifications#Evidence invalidation]]
+  it("drops command evidence after catalog failure or Agent contract changes", async () => {
+    clearAgentCapabilityEvidence();
+    recordAgentRuntimeInfo({ desktop_contract: 5, version: "0.19.0" });
+    expect(recordAgentCommandInventory({ pairs: [["/queue", "Queue"]] })).toBe(
+      true,
+    );
+    expect((await getAgentCapabilityEvidence()).commandNames).toEqual([
+      "queue",
+    ]);
+
+    recordAgentRuntimeInfo({ desktop_contract: 6, version: "0.20.0" });
+    expect((await getAgentCapabilityEvidence()).commandNames).toBeNull();
+
+    recordAgentCommandInventory({ pairs: [["/steer", "Steer"]] });
+    expect(recordAgentCommandInventory(undefined)).toBe(false);
+    expect((await getAgentCapabilityEvidence()).commandNames).toBeNull();
+
+    expect(recordAgentRuntimeInfo(undefined)).toBe(false);
+    expect((await getAgentCapabilityEvidence()).runtimeInfo).toBeNull();
+    clearAgentCapabilityEvidence();
+  });
+
+  it("keeps evidence attached to a stable connection identity", () => {
+    clearAgentCapabilityEvidence();
+    mockedGetActiveConnection.mockReturnValue({
+      connectionId: "connection-a",
+      name: "A",
+      config: testConnection(),
+    });
+    recordAgentRuntimeInfo(
+      { desktop_contract: 6, version: "0.20.0" },
+      undefined,
+      "connection-a",
+    );
+
+    mockedGetActiveConnection.mockReturnValue({
+      connectionId: "connection-b",
+      name: "B",
+      config: testConnection(),
+    });
+
+    expect(
+      getCachedAgentCapabilityEvidence("connection-a").runtimeInfo,
+    ).toEqual({ desktop_contract: 6, version: "0.20.0" });
+    expect(
+      getCachedAgentCapabilityEvidence("connection-b").runtimeInfo,
+    ).toBeNull();
+    clearAgentCapabilityEvidence();
+  });
+});
 
 describe("remote authentication headers", () => {
   // @lat: [[remote-dashboard-oauth#Test specifications#OAuth bearer suppression]]

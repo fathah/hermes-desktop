@@ -16,6 +16,8 @@ interface UseChatIPCArgs {
   /** This conversation's run id. Events tagged with a different runId belong
    *  to another mounted/background chat and are ignored. */
   runId: string;
+  connectionId: string;
+  profile?: string;
   /** The session currently visible in this Chat, if already known. */
   sessionScopeId: string | null;
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
@@ -44,6 +46,8 @@ export function eventMatchesRun(eventRunId: string, ownRunId: string): boolean {
  */
 export function useChatIPC({
   runId,
+  connectionId,
+  profile,
   sessionScopeId,
   setMessages,
   setHermesSessionId,
@@ -89,6 +93,8 @@ export function useChatIPC({
       try {
         const items = (await window.hermesAPI.getSessionMessages(
           sessionId,
+          connectionId,
+          profile,
         )) as DbHistoryItem[];
         if (
           disposed ||
@@ -202,6 +208,8 @@ export function useChatIPC({
         try {
           const items = (await window.hermesAPI.getSessionMessages(
             sessionId,
+            connectionId,
+            profile,
           )) as DbHistoryItem[];
           const dbMessages = dbItemsToChatMessages(items);
           if (dbMessages.length > 0) {
@@ -359,6 +367,8 @@ export function useChatIPC({
     };
   }, [
     runId,
+    connectionId,
+    profile,
     setMessages,
     setHermesSessionId,
     setToolProgress,

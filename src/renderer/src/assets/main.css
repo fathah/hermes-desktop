@@ -5733,7 +5733,9 @@ body:has(.shell-vibrant),
   width: 100%;
   background: none;
   border: none;
+  box-shadow: none;
   color: var(--text-primary);
+  filter: none;
   font-size: 14px;
   font-family: var(--font-sans);
   padding: 4px 6px;
@@ -11523,6 +11525,16 @@ body:has(.shell-vibrant),
   align-items: center;
   justify-content: center;
   gap: 7px;
+}
+
+.settings-connection-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-connection-row .input {
+  flex: 1 1 220px;
 }
 
 /* Subsection within a pane — a divider + icon'd label grouping related

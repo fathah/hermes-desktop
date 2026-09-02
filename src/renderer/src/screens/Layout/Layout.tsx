@@ -11,7 +11,7 @@ import {
   isScratchRun,
   openSessionRunTransition,
   selectProfileRunTransition,
-  findRunBySession,
+  findRunByLocation,
   cycleRunId,
   runIdAtOrdinal,
   loadingSessionIds as deriveLoadingSessionIds,
@@ -87,16 +87,18 @@ const SIDEBAR_COLLAPSED_KEY = "hermes.sidebar.collapsed";
 const SIDEBAR_SCROLLBAR_HIDE_MS = 700;
 
 interface LayoutProps {
+  connectionId: string;
   verifyWarning?: boolean;
   onReinstall?: () => void;
   onDismissVerifyWarning?: () => void;
 }
 
 function Layout({
+  connectionId,
   verifyWarning,
   onReinstall,
   onDismissVerifyWarning,
-}: LayoutProps = {}): React.JSX.Element {
+}: LayoutProps): React.JSX.Element {
   const { t } = useI18n();
   const { openSettings } = useSettingsModal();
   const [view, setView] = useState<View>("chat");
@@ -105,7 +107,9 @@ function Layout({
   // preserve existing conversations and activate a scratch run for the selected
   // agent so `activeProfile` stays aligned with the visible chat transport.
   const [activeProfile, setActiveProfile] = useState("default");
-  const [runs, setRuns] = useState<ChatRun[]>(() => [mintRun("default")]);
+  const [runs, setRuns] = useState<ChatRun[]>(() => [
+    mintRun(connectionId, "default"),
+  ]);
   const [activeRunId, setActiveRunId] = useState<string>(() => runs[0].runId);
   // While a resume's history is loading, show its spinner immediately.
   const [resumingSessionId, setResumingSessionId] = useState<string | null>(
@@ -432,15 +436,20 @@ function Layout({
     // current chat is already a blank scratch, reuse it instead of stacking
     // another empty tab.
     const active = runs.find((r) => r.runId === activeRunId);
-    if (active && !active.sessionId && !active.loading && !active.title) {
+    if (
+      active?.connectionId === connectionId &&
+      !active.sessionId &&
+      !active.loading &&
+      !active.title
+    ) {
       goTo("chat");
       return;
     }
-    const run = mintRun(activeProfile);
+    const run = mintRun(connectionId, activeProfile);
     setRuns((prev) => [...prev, run]);
     setActiveRunId(run.runId);
     goTo("chat");
-  }, [runs, activeRunId, activeProfile, goTo]);
+  }, [runs, activeRunId, connectionId, activeProfile, goTo]);
 
   // Listen for menu IPC events (Cmd+N, Cmd+K from app menu)
   useEffect(() => {
@@ -474,11 +483,16 @@ function Layout({
       // to a scratch run for the selected profile so the footer and transport
       // never point at different agents.
       setActiveProfile(name);
-      const next = selectProfileRunTransition(runs, activeRunId, name);
+      const next = selectProfileRunTransition(
+        runs,
+        activeRunId,
+        connectionId,
+        name,
+      );
       setRuns(next.runs);
       setActiveRunId(next.activeRunId);
     },
-    [runs, activeRunId],
+    [runs, activeRunId, connectionId],
   );
 
   // The "Chat" affordance: start (or reuse a blank) conversation with an agent
@@ -487,20 +501,20 @@ function Layout({
     (name: string) => {
       setActiveProfile(name);
       const active = runs.find((r) => r.runId === activeRunId);
-      if (active && isScratchRun(active)) {
+      if (active?.connectionId === connectionId && isScratchRun(active)) {
         setRuns((prev) =>
           prev.map((r) =>
             r.runId === active.runId ? { ...r, profile: name } : r,
           ),
         );
       } else {
-        const run = mintRun(name);
+        const run = mintRun(connectionId, name);
         setRuns((prev) => [...prev, run]);
         setActiveRunId(run.runId);
       }
       goTo("chat");
     },
-    [runs, activeRunId, goTo],
+    [runs, activeRunId, connectionId, goTo],
   );
 
   // Jump to an already-open run (e.g. from the active-sessions bar), switching
@@ -521,11 +535,11 @@ function Layout({
   // open so the chat view is never empty.
   const handleCloseRun = useCallback(
     (runId: string) => {
-      window.hermesAPI.abortChat(runId);
       const idx = runs.findIndex((r) => r.runId === runId);
+      window.hermesAPI.abortChat(runId, runs[idx]?.connectionId);
       const remaining = runs.filter((r) => r.runId !== runId);
       if (remaining.length === 0) {
-        const fresh = mintRun(activeProfile);
+        const fresh = mintRun(connectionId, activeProfile);
         setRuns([fresh]);
         setActiveRunId(fresh.runId);
         return;
@@ -537,7 +551,7 @@ function Layout({
         setActiveProfile(neighbour.profile);
       }
     },
-    [runs, activeRunId, activeProfile],
+    [runs, activeRunId, connectionId, activeProfile],
   );
 
   // Chrome/iTerm-style tab shortcuts for the conversation tabs: Ctrl+Tab /
@@ -613,7 +627,11 @@ function Layout({
   const handleResumeSession = useCallback(
     async (sessionId: string) => {
       // Already open as a live run? Re-attach to it (keeps live streaming).
-      const live = findRunBySession(runs, sessionId);
+      const live = findRunByLocation(runs, {
+        connectionId,
+        profile: activeProfile,
+        sessionId,
+      });
       if (live) {
         handleActivateRun(live.runId);
         return;
@@ -627,8 +645,14 @@ function Layout({
       try {
         const items = (await window.hermesAPI.getSessionMessages(
           sessionId,
+          connectionId,
+          activeProfile,
         )) as DbHistoryItem[];
-        const run = mintRun(activeProfile, dbItemsToChatMessages(items));
+        const run = mintRun(
+          connectionId,
+          activeProfile,
+          dbItemsToChatMessages(items),
+        );
         run.sessionId = sessionId;
         setRuns(
           (prev) => openSessionRunTransition(prev, activeRunId, run).runs,
@@ -640,7 +664,7 @@ function Layout({
         setResumingSessionId(null);
       }
     },
-    [runs, activeRunId, handleActivateRun, activeProfile, goTo],
+    [runs, activeRunId, handleActivateRun, connectionId, activeProfile, goTo],
   );
 
   const toggleSidebar = useCallback(() => {
@@ -858,6 +882,7 @@ function Layout({
               >
                 <Chat
                   runId={run.runId}
+                  connectionId={run.connectionId}
                   initialMessages={run.seed}
                   initialSessionId={run.sessionId}
                   active={run.runId === activeRunId}
