@@ -22,3 +22,28 @@ describe("Linux release artifacts", () => {
     expect(source).toContain(`dist/${feed}`);
   });
 });
+
+describe("Release quality gates", () => {
+  // @lat: [[desktop-updates#Stable and beta release channels#Release security and quality gates]]
+  it("blocks CI on high-severity production advisories and lint warnings", () => {
+    const packageJson = JSON.parse(
+      readFileSync(join(ROOT, "package.json"), "utf-8"),
+    ) as { scripts: Record<string, string> };
+    const workflow = readFileSync(
+      join(ROOT, ".github/workflows/ci.yml"),
+      "utf-8",
+    );
+
+    expect(packageJson.scripts["audit:prod"]).toBe(
+      "npm audit --omit=dev --audit-level=high",
+    );
+    expect(packageJson.scripts.lint).toContain("--max-warnings=0");
+    expect(packageJson.scripts.test).toContain("--maxWorkers=4");
+    expect(packageJson.scripts.postinstall).toContain("install-electron --no");
+    expect(workflow).toContain("run: npm run audit:prod");
+    expect(workflow).toContain("run: npm run lint");
+    expect(workflow).not.toMatch(
+      /- name: Lint\s+run: npm run lint\s+continue-on-error: true/,
+    );
+  });
+});

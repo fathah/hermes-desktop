@@ -34,6 +34,12 @@ The confirm view (eyebrow "SETUP", title "Before installing") shows the target p
 
 The progress view (`wide`) shows a step + percent header with a progress bar, then a **fixed-size** terminal log window (`.onboard-terminal`): its body has a constant height and scrolls internally, so streaming log lines never reflow the surrounding layout. The log auto-scrolls to the newest line.
 
+### Single-run installation
+
+After confirmation, one mounted install screen starts exactly one installer run even if the active locale changes while that run is pending.
+
+The running effect is keyed only by its phase. A current translation reference supplies localized fallback errors without making translation identity an effect dependency, which prevents language changes from restarting installation. [[src/renderer/src/screens/Install/Install.test.tsx]] covers the invariant.
+
 ## Startup splash
 
 The very first frame on launch is still [[src/renderer/src/screens/SplashScreen/SplashScreen.tsx]], shown by [[src/renderer/src/App.tsx#App]] while `runInstallCheck` runs. It is separate from the onboarding chrome above — see [[main-process]] for its "Switch to local mode" escape hatch.

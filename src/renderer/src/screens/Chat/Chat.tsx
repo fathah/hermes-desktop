@@ -346,6 +346,7 @@ function Chat({
 
   const { containerRef, bottomRef } = useChatScroll(messages);
   const modelConfig = useModelConfig(profile);
+  const { reload: reloadModelConfig, selectModel } = modelConfig;
   const chatCurrentModel =
     sessionModelOverride?.model ?? modelConfig.currentModel;
   const chatCurrentProvider =
@@ -368,7 +369,7 @@ function Chat({
           await window.hermesAPI.getSessionModelOverride(initialSessionId);
         if (!cancelled && override) {
           setSessionModelOverride(override);
-          await modelConfig.selectModel(
+          await selectModel(
             override.provider,
             override.model,
             override.baseUrl,
@@ -384,7 +385,7 @@ function Chat({
     return () => {
       cancelled = true;
     };
-  }, [initialSessionId, modelConfig.selectModel]);
+  }, [initialSessionId, selectModel]);
 
   // Persist the chat-local model/provider once a session exists. This stores
   // only routing identity, never API keys, and is gated so a resumed session's
@@ -602,7 +603,7 @@ function Chat({
     // Clearing the conversation reverts to the global default model — the
     // session-scoped pick belongs to the conversation being cleared (#688).
     setSessionModelOverride(undefined);
-    void modelConfig.reload();
+    void reloadModelConfig();
     activeTurnRef.current = null;
     setUsage(null);
     setToolProgress(null);
@@ -615,7 +616,7 @@ function Chat({
     profile,
     hermesSessionId,
     setMessages,
-    modelConfig.reload,
+    reloadModelConfig,
   ]);
 
   const localCommands = useLocalCommands({
@@ -866,7 +867,7 @@ function Chat({
   // don't re-render on every streaming chunk (each chunk re-renders <Chat>).
   const handleSelectModel = useCallback(
     (provider: string, model: string, baseUrl: string) => {
-      void modelConfig.selectModel(provider, model, baseUrl, {
+      void selectModel(provider, model, baseUrl, {
         persist: false,
       });
       // Carry the full identity (not just the model name) so a cross-provider
@@ -882,7 +883,7 @@ function Chat({
           : undefined,
       );
     },
-    [modelConfig.selectModel],
+    [selectModel],
   );
 
   const handleSelectRecentFolder = useCallback((path: string) => {
@@ -1034,7 +1035,7 @@ function Chat({
                 currentBaseUrl={chatCurrentBaseUrl}
                 modelGroups={modelConfig.modelGroups}
                 displayModel={chatDisplayModel}
-                onOpen={modelConfig.reload}
+                onOpen={reloadModelConfig}
                 onSelectModel={handleSelectModel}
               />
               <ReasoningEffortPicker
