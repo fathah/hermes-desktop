@@ -660,13 +660,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             {voice.error}
           </div>
         )}
-        <BorderBeam
-          className="chat-input-beam"
-          size="pulse-inner"
-          colorVariant="mono"
-          strength={0.7}
-          theme={beamTheme}
-        >
+        <div className="chat-input-shell">
           <div className="chat-input-wrapper">
             <input
               ref={fileInputRef}
@@ -774,7 +768,17 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               )}
             </div>
           </div>
-        </BorderBeam>
+          <BorderBeam
+            aria-hidden="true"
+            className="chat-input-beam"
+            size="pulse-inner"
+            colorVariant="mono"
+            strength={0.7}
+            theme={beamTheme}
+          >
+            <span className="chat-input-beam-surface" />
+          </BorderBeam>
+        </div>
       </>
     );
   },
