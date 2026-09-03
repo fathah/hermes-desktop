@@ -22,4 +22,4 @@ The isolation is structural: the updater ([[src/main/app/updater.ts#setupUpdater
 
 Pull requests and main-branch pushes must have no lint warnings and no high-severity production dependency advisories before release work can proceed.
 
-The CI workflow installs the locked dependency tree, runs `npm run audit:prod`, type-checks, tests, and treats lint as blocking. [[tests/release-artifacts.test.ts]] protects the audit threshold and zero-warning lint policy from accidental removal.
+The CI workflow installs the locked dependency tree, runs `npm run audit:prod`, type-checks, tests, and treats lint as blocking. The install step fetches the pinned Electron runtime once before tests, and the suite uses four workers so parallel imports never race a lazy binary download or starve short tests. [[tests/release-artifacts.test.ts]] protects these controls, the audit threshold, and the zero-warning lint policy from accidental removal.

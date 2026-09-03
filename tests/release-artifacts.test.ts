@@ -38,6 +38,8 @@ describe("Release quality gates", () => {
       "npm audit --omit=dev --audit-level=high",
     );
     expect(packageJson.scripts.lint).toContain("--max-warnings=0");
+    expect(packageJson.scripts.test).toContain("--maxWorkers=4");
+    expect(packageJson.scripts.postinstall).toContain("install-electron --no");
     expect(workflow).toContain("run: npm run audit:prod");
     expect(workflow).toContain("run: npm run lint");
     expect(workflow).not.toMatch(
