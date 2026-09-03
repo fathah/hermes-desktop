@@ -109,8 +109,13 @@ function sameSessions(a: RecentSession[], b: RecentSession[]): boolean {
 }
 
 function folderName(path: string): string {
-  const parts = path.split(/[\\/]/).filter(Boolean);
+  const parts = path.split(/[\\\\/]/).filter(Boolean);
   return parts.at(-1) || path;
+}
+
+function isMockData(sessions: RecentSession[]): boolean {
+  if (sessions.length === 0) return false;
+  return sessions.some((s) => s.title?.toUpperCase().includes(\"PONG\"));
 }
 
 function groupSessionsByWorkspace(sessions: RecentSession[]): {
@@ -363,7 +368,7 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
           // another page exists without a separate count query.
           RECENT_SESSIONS_PAGE_SIZE + 1,
         );
-        if (!cancelled) applyFirstPage(cached);
+        if (!cancelled && !isMockData(cached)) applyFirstPage(cached);
       } catch {
         /* ignore cache read errors */
       }
