@@ -115,7 +115,11 @@ function folderName(path: string): string {
 
 function isMockData(sessions: RecentSession[]): boolean {
   if (sessions.length === 0) return false;
-  return sessions.some((s) => s.title?.toUpperCase().includes(\"PONG\"));
+  // Real sessions utilize UUIDs for their IDs. Mock data typically uses
+  // simple, short, or sequential IDs. We check the first session's ID
+  // to determine if the cached list is likely mock data.
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return !uuidRegex.test(sessions[0].id);
 }
 
 function groupSessionsByWorkspace(sessions: RecentSession[]): {
