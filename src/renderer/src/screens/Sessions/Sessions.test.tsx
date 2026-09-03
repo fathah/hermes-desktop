@@ -103,7 +103,7 @@ describe("Sessions tab live refresh (#322)", () => {
     vi.useRealTimers();
   });
 
-  // @lat: [[connections#Test specifications#Connection-explicit session browsing]]
+  // @lat: [[connections#Test specifications#Connection-explicit session browsing#Routes renderer operations]]
   it("routes browsing and rename operations through the selected connection and profile", async () => {
     vi.useRealTimers();
     const api = installHermesAPI([

@@ -113,6 +113,18 @@ Transcript reconciliation forwards the chat's saved connection and profile rathe
 
 Sidebar and Sessions-screen list, sync, search, rename, single-delete, and bulk-delete requests retain the selected connection and profile, including Local cache/database routing and SSH pagination.
 
+#### Routes renderer operations
+
+The Sessions-screen integration test verifies that sync, search, and rename calls carry the selected connection ID and profile through the preload boundary.
+
+#### Scopes Remote list requests
+
+Remote profile-list requests send the selected profile to the Agent dashboard instead of silently requesting the cross-profile `all` aggregate.
+
+#### Keeps Local profile caches isolated
+
+Local cache synchronization reads the selected profile database, writes that profile's desktop cache, and cannot leak the default profile's sessions into the result.
+
 ### Non-destructive registry recovery
 
 Malformed, duplicate-identity, and newer-version registries are rejected without changing `desktop.json`, so recovery cannot erase credentials or unrelated preferences.

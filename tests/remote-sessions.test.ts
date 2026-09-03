@@ -375,18 +375,20 @@ describe("remote session REST bridge", () => {
     ]);
   });
 
-  it("uses the persistent OAuth session for direct Remote session lists", async () => {
+  // @lat: [[connections#Test specifications#Connection-explicit session browsing#Scopes Remote list requests]]
+  it("uses the persistent OAuth session and selected profile for direct Remote session lists", async () => {
     const connection = {
       mode: "remote",
       remoteUrl: "https://remote.example",
       apiKey: "",
       remoteAuthMode: "oauth",
+      profile: "work profile",
     } as ConnectionConfig;
     requestRemoteOAuthJson.mockResolvedValue({ sessions: [] });
 
     await expect(remoteListCachedSessions(connection)).resolves.toEqual([]);
     expect(requestRemoteOAuthJson).toHaveBeenCalledWith(
-      "https://remote.example/api/profiles/sessions?limit=50&offset=0&min_messages=0&archived=exclude&order=recent&profile=all",
+      "https://remote.example/api/profiles/sessions?limit=50&offset=0&min_messages=0&archived=exclude&order=recent&profile=work%20profile",
       {},
     );
     expect(requests).toEqual([]);

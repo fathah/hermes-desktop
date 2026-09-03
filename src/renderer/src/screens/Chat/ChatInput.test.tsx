@@ -74,8 +74,8 @@ describe("ChatInput — border beam", () => {
     const { textarea } = renderInput();
     const beam = screen.getByTestId("chat-input-beam");
 
-    expect(beam.dataset.size).toBe("line");
-    expect(beam.dataset.colorVariant).toBe("colorful");
+    expect(beam.dataset.size).toBe("pulse-inner");
+    expect(beam.dataset.colorVariant).toBe("mono");
     expect(beam.dataset.strength).toBe("0.7");
     expect(beam.dataset.theme).toBe("dark");
     expect(beam.contains(textarea)).toBe(true);
