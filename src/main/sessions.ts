@@ -260,8 +260,12 @@ function getDb(readonly = true, profile?: unknown): Database.Database | null {
   return getDbConnection(readonly, profile);
 }
 
-export function listSessions(limit = 30, offset = 0): SessionSummary[] {
-  const db = getDb();
+export function listSessions(
+  limit = 30,
+  offset = 0,
+  profile?: unknown,
+): SessionSummary[] {
+  const db = getDb(true, profile);
   if (!db) return [];
 
   // Simple query without correlated subquery — titles come from session cache
@@ -301,8 +305,12 @@ export function listSessions(limit = 30, offset = 0): SessionSummary[] {
   }));
 }
 
-export function searchSessions(query: string, limit = 20): SearchResult[] {
-  const db = getDb();
+export function searchSessions(
+  query: string,
+  limit = 20,
+  profile?: unknown,
+): SearchResult[] {
+  const db = getDb(true, profile);
   if (!db) return [];
 
   try {
@@ -770,9 +778,9 @@ function deleteSessionRows(db: Database.Database, sessionId: string): number {
   return result.changes;
 }
 
-function cleanupDeletedSession(sessionId: string): void {
+function cleanupDeletedSession(sessionId: string, profile?: unknown): void {
   clearStagedAttachments(sessionId);
-  removeSessionFromCache(sessionId);
+  removeSessionFromCache(sessionId, profile);
 }
 
 export function deleteSession(sessionId: string, profile?: unknown): void {
@@ -788,7 +796,7 @@ export function deleteSession(sessionId: string, profile?: unknown): void {
     tx(id);
   }
 
-  cleanupDeletedSession(id);
+  cleanupDeletedSession(id, profile);
 }
 
 export function deleteSessions(
@@ -810,7 +818,7 @@ export function deleteSessions(
   }
 
   for (const id of ids) {
-    cleanupDeletedSession(id);
+    cleanupDeletedSession(id, profile);
   }
 
   return { requested: ids.length, deleted };

@@ -145,7 +145,7 @@ R1 creates the identities and extension seams required by every later feature.
 - [ ] Add connection create, edit, test, reconnect, remove, and select workflows. Create, edit, test, remove, and select are complete; isolated reconnect remains.
 - [ ] Add a fleet overview with connection-specific update actions.
 
-Progress (2026-08-24): Settings now manages redacted named records through main-process CRUD IPC and exposes manual per-record health, latency, authentication, version, and capability snapshots. Dashboard and legacy Local/direct-Remote chats now keep an immutable saved connection while other records are selected, including URL, authentication, capability probes, fallbacks, cancellation, resumed transcript reads, live transcript reconciliation, and chat deletion. Local transcript operations also retain their profile, while inactive SSH operations do not retarget the global tunnel. Remaining session browsing, desktop metadata, model/command routing, and isolated reconnect are pending before simultaneous-connection support is complete.
+Progress (2026-09-02): Settings now manages redacted named records through main-process CRUD IPC and exposes manual per-record health, latency, authentication, version, and capability snapshots. Dashboard and legacy Local/direct-Remote chats keep an immutable saved connection while other records are selected, including URL, authentication, capability probes, fallbacks, cancellation, resumed transcript reads, and live transcript reconciliation. Sidebar and full-list browsing now route list, cache sync, pagination, search, rename, single delete, and bulk delete through the selected connection and profile; Local cache and database access retain that explicit profile, while inactive SSH operations cannot retarget the global tunnel. Remaining desktop metadata, attachments, model/command routing, isolated reconnect, and true simultaneous connection lifecycles are pending.
 
 #### Verification
 
@@ -165,6 +165,7 @@ Progress (2026-08-24): Settings now manages redacted named records through main-
 - PR/commit: branch `codex/hermes-enhanced-desktop-roadmap`; M1 registry foundation in progress.
 - Decisions: version 1 lives inside the existing `desktop.json`; current callers keep using `getConnectionConfig()` as an active-record adapter. Session locations use a credential-free global desktop metadata file instead of the active profile's Agent database, so background runs cannot persist under the wrong profile. Status refresh is initial/manual rather than polling so saved SSH targets do not spawn recurring background probes.
 - Verified 2026-08-24: `npm test -- --reporter=json --maxWorkers=2` (191 files, 1,921 passed, 3 skipped), `npm run typecheck`, focused ESLint, and `npm run build`. Full multi-connection routing remains pending.
+- Verified 2026-09-02: connection-explicit session browsing passed 192 focused tests across renderer, cache, database deletion, and preload contracts; focused ESLint and the production build also pass.
 
 ### M2 — Internal contribution framework
 

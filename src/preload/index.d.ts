@@ -615,6 +615,8 @@ interface HermesAPI {
   listSessions: (
     limit?: number,
     offset?: number,
+    connectionId?: string,
+    profile?: string,
   ) => Promise<
     Array<{
       id: string;
@@ -842,6 +844,8 @@ interface HermesAPI {
   listCachedSessions: (
     limit?: number,
     offset?: number,
+    connectionId?: string,
+    profile?: string,
   ) => Promise<
     Array<{
       id: string;
@@ -853,7 +857,10 @@ interface HermesAPI {
       contextFolder: string | null;
     }>
   >;
-  syncSessionCache: () => Promise<
+  syncSessionCache: (
+    connectionId?: string,
+    profile?: string,
+  ) => Promise<
     Array<{
       id: string;
       title: string;
@@ -864,7 +871,12 @@ interface HermesAPI {
       contextFolder: string | null;
     }>
   >;
-  updateSessionTitle: (sessionId: string, title: string) => Promise<void>;
+  updateSessionTitle: (
+    sessionId: string,
+    title: string,
+    connectionId?: string,
+    profile?: string,
+  ) => Promise<void>;
   deleteSession: (
     sessionId: string,
     connectionId?: string,
@@ -872,12 +884,16 @@ interface HermesAPI {
   ) => Promise<void>;
   deleteSessions: (
     sessionIds: string[],
+    connectionId?: string,
+    profile?: string,
   ) => Promise<{ requested: number; deleted: number }>;
 
   // Session search
   searchSessions: (
     query: string,
     limit?: number,
+    connectionId?: string,
+    profile?: string,
   ) => Promise<
     Array<{
       sessionId: string;

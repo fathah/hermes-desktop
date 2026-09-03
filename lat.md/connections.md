@@ -55,6 +55,12 @@ Legacy `send-message` IPC scopes its abort handle by connection plus renderer ru
 
 Resumed-chat reads, live transcript reconciliation, and chat deletion carry the same immutable connection and profile through preload IPC. Direct Remote requests therefore retain their endpoint and authentication, Local reads open the requested profile database, and inactive SSH reads fail without retargeting the shared tunnel.
 
+Sidebar and full-list session browsing carry the selected connection and profile through [[src/preload/index.ts]] to [[src/main/ipc/register.ts#registerIpcHandlers]] for list, cache sync, pagination, search, rename, single delete, and bulk delete. Each handler resolves the saved connection record named by that stable ID instead of consulting a later UI selection.
+
+Direct Remote requests build a profile-scoped session configuration. SSH dashboard and CLI fallbacks retain the requested profile, and [[src/main/ssh-remote.ts#sshListCachedSessions]] forwards the requested cache offset instead of restarting pagination at zero.
+
+Local [[src/main/session-cache.ts#syncSessionCache]], [[src/main/session-cache.ts#listCachedSessions]], [[src/main/sessions.ts#listSessions]], [[src/main/sessions.ts#searchSessions]], title mutation, deletion cleanup, and batched context-folder reads resolve `state.db` and `sessions.json` from the explicit profile. Omitted IDs retain the active connection/profile fallback for legacy callers.
+
 ### Connection-explicit dashboard transport
 
 Dashboard startup and WebSocket refresh resolve the chat's stable connection ID instead of consulting whichever record is currently selected.
@@ -102,6 +108,10 @@ Simultaneous legacy sends to distinct direct-Remote records retain separate endp
 ### Connection-explicit transcript routing
 
 Transcript reconciliation forwards the chat's saved connection and profile rather than reading from whichever connection or profile is currently selected.
+
+### Connection-explicit session browsing
+
+Sidebar and Sessions-screen list, sync, search, rename, single-delete, and bulk-delete requests retain the selected connection and profile, including Local cache/database routing and SSH pagination.
 
 ### Non-destructive registry recovery
 
