@@ -16,4 +16,10 @@ Two GitHub Actions workflows publish builds; only the stable channel reaches end
 
 Linux AppImage names include `${arch}` between version and extension, so x64 and arm64 outputs can coexist without overwriting one another. Stable and beta arm64 jobs also publish their architecture-specific updater feed (`latest-linux-arm64.yml` or `beta-linux-arm64.yml`) beside the installer. [[tests/release-artifacts.test.ts]] locks both invariants.
 
-The isolation is structural: the updater ([[src/main/app/updater.ts#setupUpdater]]) leaves `allowPrerelease` off, so electron-updater's GitHub provider only ever resolves the latest **non-prerelease** release's `latest.yml`. A beta prerelease is therefore invisible to stable clients — testers download the beta installer manually from the prerelease. The beta workflow skips winget + the landing-page rebuild and uses a separate `beta-release` concurrency group so it never cancels a stable release. Cutting a beta for the *next* version requires bumping `package.json` first (a beta of an already-released version sorts lower than its stable tag).
+The isolation is structural: the updater ([[src/main/app/updater.ts#setupUpdater]]) leaves `allowPrerelease` off, so electron-updater's GitHub provider only ever resolves the latest **non-prerelease** release's `latest.yml`. A beta prerelease is therefore invisible to stable clients — testers download the beta installer manually from the prerelease. The beta workflow skips winget + the landing-page rebuild and uses a separate `beta-release` concurrency group so it never cancels a stable release. Cutting a beta for the _next_ version requires bumping `package.json` first (a beta of an already-released version sorts lower than its stable tag).
+
+### Release security and quality gates
+
+Pull requests and main-branch pushes must have no lint warnings and no high-severity production dependency advisories before release work can proceed.
+
+The CI workflow installs the locked dependency tree, runs `npm run audit:prod`, type-checks, tests, and treats lint as blocking. [[tests/release-artifacts.test.ts]] protects the audit threshold and zero-warning lint policy from accidental removal.

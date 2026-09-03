@@ -34,6 +34,12 @@ Remote and SSH chats use an in-app picker so users do not accidentally select a 
 
 ## Muted tree icons
 
-The tree keeps file-type icon shapes but normalizes their colors so the explorer reads quietly in the chat sidebar.
+The tree keeps category-specific file icon shapes but normalizes their colors so the explorer reads quietly in the chat sidebar.
 
-The `@wesbos/code-icons` SVGs render inside `.worktree-file-icon-wrapper`; CSS overrides inline fills/strokes to `currentColor` while preserving `fill:none` outlines, and folder icons use the same low-opacity white tone.
+Lucide SVGs render inside `.worktree-file-icon-wrapper` with the same low-opacity white tone as folder icons.
+
+### Browser-safe file icons
+
+Worktree file icons must remain renderer-only, avoid runtime filesystem access and raw SVG injection, and preserve useful category distinctions.
+
+[[src/renderer/src/screens/Chat/WorktreePanel.tsx#worktreeFileIconKind]] maps common source, text, image, archive, and spreadsheet names to bundled Lucide components. Unknown files receive a generic icon. [[src/renderer/src/screens/Chat/WorktreePanel.test.tsx]] protects representative mappings.

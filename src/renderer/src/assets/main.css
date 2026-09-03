@@ -4378,7 +4378,7 @@ body:has(.shell-vibrant),
   color: var(--accent-text);
 }
 
-/* File icon wrapper for react-file-icon */
+/* Browser-safe Lucide file-type icons in the worktree. */
 .worktree-file-icon-wrapper {
   width: 18px;
   height: 18px;
