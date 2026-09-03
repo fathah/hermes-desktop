@@ -1,5 +1,34 @@
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { PropsWithChildren } from "react";
+
+vi.mock("border-beam", () => ({
+  BorderBeam: ({
+    children,
+    className,
+    size,
+    colorVariant,
+    strength,
+    theme,
+  }: PropsWithChildren<{
+    className?: string;
+    size?: string;
+    colorVariant?: string;
+    strength?: number;
+    theme?: string;
+  }>) => (
+    <div
+      className={className}
+      data-testid="chat-input-beam"
+      data-size={size}
+      data-color-variant={colorVariant}
+      data-strength={strength}
+      data-theme={theme}
+    >
+      {children}
+    </div>
+  ),
+}));
 
 // ChatInput pulls translations through useI18n (which requires the i18next
 // provider). Stub it so the component can render in isolation; the keys are
@@ -38,6 +67,21 @@ function renderInput(
   ) as HTMLTextAreaElement;
   return { onSubmit, textarea };
 }
+
+describe("ChatInput — border beam", () => {
+  // @lat: [[chat-input#Animated composer border#Uses the requested beam preset]]
+  it("wraps the complete composer in the requested border beam", () => {
+    const { textarea } = renderInput();
+    const beam = screen.getByTestId("chat-input-beam");
+
+    expect(beam.dataset.size).toBe("line");
+    expect(beam.dataset.colorVariant).toBe("colorful");
+    expect(beam.dataset.strength).toBe("0.7");
+    expect(beam.dataset.theme).toBe("dark");
+    expect(beam.contains(textarea)).toBe(true);
+    expect(beam.querySelector(".chat-input-toolbar")).not.toBeNull();
+  });
+});
 
 describe("ChatInput — CJK IME Enter handling", () => {
   // Repro: typing Korean (or any CJK IME), the final syllable stays in

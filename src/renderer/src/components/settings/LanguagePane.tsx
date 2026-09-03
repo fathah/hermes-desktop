@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
+import { Toggle } from "../common/Toggle";
 import { useI18n } from "../useI18n";
 import { APP_LOCALES, type AppLocale } from "../../../../shared/i18n";
 import { LANGUAGE_NATIVE_NAMES } from "./settingsHelpers";
@@ -49,15 +50,11 @@ export default function LanguagePane(): React.JSX.Element {
             {t("settings.spellcheck.enableHint")}
           </div>
         </div>
-        <label className="tools-toggle">
-          <input
-            type="checkbox"
-            aria-label={t("settings.spellcheck.enable")}
-            checked={spellcheckEnabled}
-            onChange={(event) => setSpellcheckEnabled(event.target.checked)}
-          />
-          <span className="tools-toggle-track" />
-        </label>
+        <Toggle
+          checked={spellcheckEnabled}
+          label={t("settings.spellcheck.enable")}
+          onCheckedChange={setSpellcheckEnabled}
+        />
       </div>
 
       {spellcheckEnabled && (

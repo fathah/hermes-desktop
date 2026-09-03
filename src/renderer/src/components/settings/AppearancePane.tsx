@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
+import { Toggle } from "../common/Toggle";
 import { useTheme } from "../ThemeProvider";
 import { useFont } from "../FontProvider";
 import { THEMES, FONT_OPTIONS } from "../../constants";
@@ -117,17 +118,11 @@ export default function AppearancePane(): React.JSX.Element {
             </div>
           </div>
           <div className="settings-row-control">
-            <label
-              className="tools-toggle"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <input
-                type="checkbox"
-                checked={rounded}
-                onChange={() => setRounded(!rounded)}
-              />
-              <span className="tools-toggle-track" />
-            </label>
+            <Toggle
+              checked={rounded}
+              label={t("settings.roundedCorners.label")}
+              onCheckedChange={setRounded}
+            />
           </div>
         </div>
 

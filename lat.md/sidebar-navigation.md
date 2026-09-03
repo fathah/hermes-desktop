@@ -156,6 +156,12 @@ The Appearance preference markup and stylesheet must retain a shared responsive 
 
 Appearance rows must use logical spacing and separators for RTL mirroring, while the narrow-container rule changes the shared grid to a stacked row and aligns controls at the logical start.
 
+### Shared animated toggle
+
+Settings boolean preferences use one accessible controlled switch with consistent motion, sizing, disabled behavior, and switch semantics.
+
+[[src/renderer/src/components/common/Toggle.tsx#Toggle]] exposes `role="switch"` and `aria-checked`, gates the bounce until interaction so initial hydration stays still, and disables keyframes for reduced-motion users. Settings panes pass their existing localized labels and state mutations through `onCheckedChange`.
+
 ## Provisional fresh sessions
 
 Fresh chat session ids are provisional until a turn produces output or completes successfully, so provider errors do not create visible recent-session rows.

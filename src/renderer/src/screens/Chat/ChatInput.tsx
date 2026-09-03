@@ -9,9 +9,12 @@ import {
   useImperativeHandle,
 } from "react";
 import { Square as Stop, Search, Paperclip, Mic, ArrowUp } from "lucide-react";
+import { BorderBeam } from "border-beam";
 import { isImeComposing } from "./keyboard";
 import { useI18n } from "../../components/useI18n";
 import { useChatPreferences } from "../../components/ChatPreferencesProvider";
+import { useTheme } from "../../components/ThemeProvider";
+import { THEMES } from "../../constants";
 import { SLASH_COMMANDS, type SlashCommand } from "./slashCommands";
 import { SlashCommandIcon } from "./slash/SlashCommandIcon";
 import {
@@ -30,6 +33,10 @@ import {
 import { AttachmentChip } from "../../components/AttachmentChip";
 import { ContextGauge, type ContextUsage } from "./ContextGauge";
 import type { Attachment } from "../../../../shared/attachments";
+
+const THEME_APPEARANCE = new Map(
+  THEMES.map((theme) => [theme.id, theme.appearance]),
+);
 
 export interface ChatInputHandle {
   setText(text: string): void;
@@ -89,6 +96,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
   ): React.JSX.Element {
     const { t } = useI18n();
     const { spellcheckEnabled } = useChatPreferences();
+    const { resolved: resolvedTheme } = useTheme();
+    const beamTheme = THEME_APPEARANCE.get(resolvedTheme) ?? "dark";
     const [input, setInput] = useState("");
     const [slashMenuOpen, setSlashMenuOpen] = useState(false);
     const [slashFilter, setSlashFilter] = useState("");
@@ -651,113 +660,121 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             {voice.error}
           </div>
         )}
-        <div className="chat-input-wrapper">
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            style={{ display: "none" }}
-            onChange={handleFileInputChange}
-          />
-          <textarea
-            ref={inputRef}
-            className="chat-input"
-            placeholder={t("chat.typeMessage")}
-            value={input}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            onCompositionStart={() => {
-              composingRef.current = true;
-            }}
-            onCompositionEnd={() => {
-              composingRef.current = false;
-            }}
-            onPaste={handlePaste}
-            rows={1}
-            spellCheck={spellcheckEnabled}
-            autoFocus
-          />
-          <div className="chat-input-toolbar">
-            <button
-              className="chat-attach-btn"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading}
-              title={t("chat.attach")}
-              aria-label={t("chat.attach")}
-              type="button"
-            >
-              <Paperclip size={16} />
-            </button>
-            {voice.supported && (
+        <BorderBeam
+          className="chat-input-beam"
+          size="pulse-inner"
+          colorVariant="mono"
+          strength={0.7}
+          theme={beamTheme}
+        >
+          <div className="chat-input-wrapper">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              style={{ display: "none" }}
+              onChange={handleFileInputChange}
+            />
+            <textarea
+              ref={inputRef}
+              className="chat-input"
+              placeholder={t("chat.typeMessage")}
+              value={input}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              onCompositionStart={() => {
+                composingRef.current = true;
+              }}
+              onCompositionEnd={() => {
+                composingRef.current = false;
+              }}
+              onPaste={handlePaste}
+              rows={1}
+              spellCheck={spellcheckEnabled}
+              autoFocus
+            />
+            <div className="chat-input-toolbar">
               <button
-                className={`chat-mic-btn${
-                  voice.recording ? " chat-mic-btn--recording" : ""
-                }`}
-                onClick={() => {
-                  // Snapshot the current text so live results append to it.
-                  if (!voice.recording && !voice.transcribing) {
-                    voiceBaseRef.current = input;
-                  }
-                  voice.toggle();
-                }}
-                disabled={voice.transcribing}
-                title={
-                  voice.transcribing
-                    ? t("chat.voiceTranscribing")
-                    : voice.recording
-                      ? t("chat.voiceStop")
-                      : t("chat.voiceInput")
-                }
-                aria-label={
-                  voice.recording ? t("chat.voiceStop") : t("chat.voiceInput")
-                }
-                aria-pressed={voice.recording}
+                className="chat-attach-btn"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoading}
+                title={t("chat.attach")}
+                aria-label={t("chat.attach")}
                 type="button"
               >
-                <Mic size={16} />
+                <Paperclip size={16} />
               </button>
-            )}
-            {toolbarExtras && (
-              <>
-                <span className="chat-input-toolbar-divider" aria-hidden />
-                {toolbarExtras}
-              </>
-            )}
-            <div className="chat-input-toolbar-spacer" />
-            {contextUsage && contextUsage.used > 0 && (
-              <ContextGauge {...contextUsage} />
-            )}
-            {isLoading ? (
-              <button
-                className="chat-send-btn chat-stop-btn"
-                onClick={onAbort}
-                title={t("common.stop")}
-              >
-                <Stop size={14} />
-              </button>
-            ) : (
-              <>
-                {input.trim() && hasSession && (
-                  <button
-                    className="chat-btw-btn"
-                    onClick={handleQuickAsk}
-                    title={t("chat.quickAskTitle")}
-                  >
-                    💭
-                  </button>
-                )}
+              {voice.supported && (
                 <button
-                  className="chat-send-btn"
-                  onClick={handleSend}
-                  disabled={!canSend}
-                  title={t("chat.send")}
+                  className={`chat-mic-btn${
+                    voice.recording ? " chat-mic-btn--recording" : ""
+                  }`}
+                  onClick={() => {
+                    // Snapshot the current text so live results append to it.
+                    if (!voice.recording && !voice.transcribing) {
+                      voiceBaseRef.current = input;
+                    }
+                    voice.toggle();
+                  }}
+                  disabled={voice.transcribing}
+                  title={
+                    voice.transcribing
+                      ? t("chat.voiceTranscribing")
+                      : voice.recording
+                        ? t("chat.voiceStop")
+                        : t("chat.voiceInput")
+                  }
+                  aria-label={
+                    voice.recording ? t("chat.voiceStop") : t("chat.voiceInput")
+                  }
+                  aria-pressed={voice.recording}
+                  type="button"
                 >
-                  <ArrowUp size={20} />
+                  <Mic size={16} />
                 </button>
-              </>
-            )}
+              )}
+              {toolbarExtras && (
+                <>
+                  <span className="chat-input-toolbar-divider" aria-hidden />
+                  {toolbarExtras}
+                </>
+              )}
+              <div className="chat-input-toolbar-spacer" />
+              {contextUsage && contextUsage.used > 0 && (
+                <ContextGauge {...contextUsage} />
+              )}
+              {isLoading ? (
+                <button
+                  className="chat-send-btn chat-stop-btn"
+                  onClick={onAbort}
+                  title={t("common.stop")}
+                >
+                  <Stop size={14} />
+                </button>
+              ) : (
+                <>
+                  {input.trim() && hasSession && (
+                    <button
+                      className="chat-btw-btn"
+                      onClick={handleQuickAsk}
+                      title={t("chat.quickAskTitle")}
+                    >
+                      💭
+                    </button>
+                  )}
+                  <button
+                    className="chat-send-btn"
+                    onClick={handleSend}
+                    disabled={!canSend}
+                    title={t("chat.send")}
+                  >
+                    <ArrowUp size={20} />
+                  </button>
+                </>
+              )}
+            </div>
           </div>
-        </div>
+        </BorderBeam>
       </>
     );
   },

@@ -1,4 +1,5 @@
 import { Laptop, Server, Terminal, Wifi } from "lucide-react";
+import { Toggle } from "../common/Toggle";
 import { useI18n } from "../useI18n";
 import { useSettings } from "./SettingsDataContext";
 import { CHAT_TRANSPORT_OPTIONS } from "./settingsHelpers";
@@ -551,34 +552,29 @@ export default function ConnectionPane(): React.JSX.Element {
             <span className="settings-saved">{t("settings.saved")}</span>
           )}
         </div>
-        <div className="settings-field">
-          <label className="settings-field-label">
-            {t("settings.forceIpv4")}
-            <label
-              className="tools-toggle"
-              style={{ marginLeft: 12, verticalAlign: "middle" }}
-            >
-              <input
-                type="checkbox"
-                checked={forceIpv4}
-                onChange={async (e) => {
-                  const val = e.target.checked;
-                  setForceIpv4(val);
-                  await window.hermesAPI.setConfig(
-                    "network.force_ipv4",
-                    val ? "true" : "false",
-                    profile,
-                  );
-                  setNetworkSaved(true);
-                  setTimeout(() => setNetworkSaved(false), 2000);
-                }}
-              />
-              <span className="tools-toggle-track" />
-            </label>
-          </label>
-          <div className="settings-field-hint">
-            {t("settings.forceIpv4Hint")}
+        <div className="settings-field settings-toggle-row">
+          <div className="settings-toggle-text">
+            <div className="settings-toggle-title">
+              {t("settings.forceIpv4")}
+            </div>
+            <div className="settings-field-hint">
+              {t("settings.forceIpv4Hint")}
+            </div>
           </div>
+          <Toggle
+            checked={forceIpv4}
+            label={t("settings.forceIpv4")}
+            onCheckedChange={async (enabled) => {
+              setForceIpv4(enabled);
+              await window.hermesAPI.setConfig(
+                "network.force_ipv4",
+                enabled ? "true" : "false",
+                profile,
+              );
+              setNetworkSaved(true);
+              setTimeout(() => setNetworkSaved(false), 2000);
+            }}
+          />
         </div>
         <div className="settings-field">
           <label className="settings-field-label">
