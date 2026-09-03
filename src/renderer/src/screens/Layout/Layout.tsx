@@ -748,6 +748,7 @@ function Layout({
               <div className="sidebar-chat-scroll" ref={sidebarChatScrollRef}>
                 <SidebarRecentSessions
                   open={!sidebarCollapsed}
+                  connectionId={connectionId}
                   activeProfile={activeProfile}
                   currentSessionId={currentSessionId}
                   loadingSessionIds={loadingSessionIds}
@@ -910,6 +911,8 @@ function Layout({
                 onClick={(e) => e.stopPropagation()}
               >
                 <Sessions
+                  connectionId={connectionId}
+                  profile={activeProfile}
                   onResumeSession={(id) => {
                     setSessionsModalOpen(false);
                     void handleResumeSession(id);

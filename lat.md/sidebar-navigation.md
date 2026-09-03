@@ -4,6 +4,8 @@ The sidebar starts with New Chat, keeps app destinations pinned, then gives conv
 
 [[src/renderer/src/screens/Layout/Layout.tsx#Layout]] renders a New Chat action before Discover, Office, Kanban, and Schedules from `PINNED_NAV_ITEMS`, then renders [[src/renderer/src/screens/Layout/SidebarRecentSessions.tsx]] inside a flexible `.sidebar-chat-section`. New Chat is active when the visible Chat view has no session id yet. The standalone `sessions` view is still absent from the `View` union; the full list opens from the Cmd/Ctrl+K menu action.
 
+Layout passes the selected connection ID and profile into both session surfaces. Cache reads, sync, pagination, search, rename, and deletion therefore remain on that machine/profile instead of consulting a later global selection; see [[connections#Session locations]].
+
 ## Collapse toggle brand mark
 
 The sidebar header's collapse control doubles as the brand mark: collapsed it shows a circular dot that swaps to the expand icon on hover; expanded it is just the collapse icon, parked top-right for a clean, logo-free header.
@@ -153,6 +155,12 @@ The Appearance preference markup and stylesheet must retain a shared responsive 
 ### RTL and narrow preference layout
 
 Appearance rows must use logical spacing and separators for RTL mirroring, while the narrow-container rule changes the shared grid to a stacked row and aligns controls at the logical start.
+
+### Shared animated toggle
+
+Settings boolean preferences use one accessible controlled switch with consistent motion, sizing, disabled behavior, and switch semantics.
+
+[[src/renderer/src/components/common/Toggle.tsx#Toggle]] exposes `role="switch"` and `aria-checked`, gates the bounce until interaction so initial hydration stays still, and disables keyframes for reduced-motion users. Settings panes pass their existing localized labels and state mutations through `onCheckedChange`.
 
 ## Provisional fresh sessions
 

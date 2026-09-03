@@ -52,7 +52,7 @@ describe("chat preferences", () => {
       </Wrapper>,
     );
 
-    const toggle = screen.getByRole("checkbox", {
+    const toggle = screen.getByRole("switch", {
       name: "Play a sound when a response finishes",
     });
     expect(toggle).toBeChecked();
@@ -88,9 +88,7 @@ describe("chat preferences", () => {
     );
     expect(screen.getByRole("status")).toHaveTextContent("en-US,nl-NL");
 
-    fireEvent.click(
-      screen.getByRole("checkbox", { name: "Enable spellcheck" }),
-    );
+    fireEvent.click(screen.getByRole("switch", { name: "Enable spellcheck" }));
     await waitFor(() =>
       expect(setSpellCheckerLanguages).toHaveBeenLastCalledWith([]),
     );

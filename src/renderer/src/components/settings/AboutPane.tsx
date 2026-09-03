@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "../useI18n";
 import BrandLogo from "../common/BrandLogo";
+import { Toggle } from "../common/Toggle";
 import hermesIcon from "../../assets/hermes-icon.svg";
 import pythonLogo from "../../assets/logos/python.svg";
 import openaiLogo from "../../assets/logos/openai.svg";
@@ -292,14 +293,11 @@ export default function AboutPane(): React.JSX.Element {
                 {t("settings.autoUpgradeDesktopHint")}
               </div>
             </div>
-            <label className="tools-toggle">
-              <input
-                type="checkbox"
-                checked={autoUpgradeEnabled}
-                onChange={(e) => void handleAutoUpgradeChange(e.target.checked)}
-              />
-              <span className="tools-toggle-track" />
-            </label>
+            <Toggle
+              checked={autoUpgradeEnabled}
+              label={t("settings.autoUpgradeDesktop")}
+              onCheckedChange={handleAutoUpgradeChange}
+            />
           </div>
         </div>
       </section>

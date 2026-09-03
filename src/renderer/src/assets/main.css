@@ -4763,7 +4763,7 @@ body:has(.shell-vibrant),
   color: var(--text-primary);
 }
 
-.chat-fast-popover span {
+.chat-fast-popover > span {
   display: block;
   font-size: 11px;
   line-height: 1.5;
@@ -5723,10 +5723,19 @@ body:has(.shell-vibrant),
     box-shadow var(--transition);
 }
 
+.chat-input-beam {
+  width: 100%;
+  transition: box-shadow var(--transition);
+}
+
+.chat-input-beam:focus-within {
+  box-shadow: 0 0 0 3px var(--accent-subtle);
+}
+
 .chat-input-wrapper:focus-within {
   /* Soft accent glow on focus instead of a saturated electric-blue stroke. */
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border-bright));
-  box-shadow: 0 0 0 3px var(--accent-subtle);
+  box-shadow: none;
 }
 
 .chat-input {
@@ -15088,7 +15097,105 @@ body:has(.shell-vibrant),
   }
 }
 
-/* Toggle switch */
+/* Shared settings toggle — adapted from Transitions.dev. The interaction gate
+   prevents the off animation from playing during initial settings hydration. */
+.app-toggle {
+  --toggle-duration: 350ms;
+  --toggle-travel: 18px;
+  --toggle-overshoot: 1px;
+  --toggle-settle: 0px;
+  --toggle-track-duration: 0ms;
+  --toggle-ease: cubic-bezier(0.34, 1.35, 0.64, 1);
+  appearance: none;
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  width: 40px;
+  height: 22px;
+  padding: 3px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text-primary) 16%, transparent);
+  cursor: pointer;
+  transition: background var(--toggle-track-duration) var(--toggle-ease);
+}
+
+.app-toggle:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-primary) 24%, transparent);
+}
+
+.app-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.app-toggle-thumb {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: currentColor;
+  translate: 0 0;
+  will-change: translate;
+}
+
+.app-toggle[data-on="true"] {
+  color: #fff;
+  background: var(--accent);
+}
+
+.app-toggle[data-on="true"] .app-toggle-thumb {
+  translate: var(--toggle-travel) 0;
+}
+
+.app-toggle.is-init[data-on="true"] .app-toggle-thumb {
+  animation: app-toggle-on var(--toggle-duration) var(--toggle-ease) both;
+}
+
+.app-toggle.is-init[data-on="false"] .app-toggle-thumb {
+  animation: app-toggle-off var(--toggle-duration) var(--toggle-ease) both;
+}
+
+@keyframes app-toggle-on {
+  0% {
+    translate: 0 0;
+  }
+  55% {
+    translate: calc(var(--toggle-travel) + var(--toggle-overshoot)) 0;
+  }
+  80% {
+    translate: calc(var(--toggle-travel) - var(--toggle-settle)) 0;
+  }
+  100% {
+    translate: var(--toggle-travel) 0;
+  }
+}
+
+@keyframes app-toggle-off {
+  0% {
+    translate: var(--toggle-travel) 0;
+  }
+  55% {
+    translate: calc(0px - var(--toggle-overshoot)) 0;
+  }
+  80% {
+    translate: var(--toggle-settle) 0;
+  }
+  100% {
+    translate: 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-toggle-thumb {
+    animation: none !important;
+    will-change: auto;
+  }
+}
+
+/* Legacy switch markup used outside the Settings modal. */
 .tools-toggle {
   position: relative;
   display: inline-flex;

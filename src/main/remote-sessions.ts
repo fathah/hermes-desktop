@@ -285,9 +285,10 @@ async function remoteSessionListPage(
   limit: number,
   offset: number,
 ): Promise<unknown> {
+  const profile = config.profile?.trim() || "all";
   const profileEndpoint =
     `/api/profiles/sessions?limit=${limit}&offset=${offset}` +
-    "&min_messages=0&archived=exclude&order=recent&profile=all";
+    `&min_messages=0&archived=exclude&order=recent&profile=${encodeURIComponent(profile)}`;
 
   try {
     return await remoteRequestJson(config, profileEndpoint);

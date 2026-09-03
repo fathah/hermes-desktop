@@ -882,6 +882,8 @@ const hermesAPI = {
   listSessions: (
     limit?: number,
     offset?: number,
+    connectionId?: string,
+    profile?: string,
   ): Promise<
     Array<{
       id: string;
@@ -893,7 +895,8 @@ const hermesAPI = {
       title: string | null;
       preview: string;
     }>
-  > => ipcRenderer.invoke("list-sessions", limit, offset),
+  > =>
+    ipcRenderer.invoke("list-sessions", limit, offset, connectionId, profile),
 
   getSessionMessages: (
     sessionId: string,
@@ -1144,6 +1147,8 @@ const hermesAPI = {
   listCachedSessions: (
     limit?: number,
     offset?: number,
+    connectionId?: string,
+    profile?: string,
   ): Promise<
     Array<{
       id: string;
@@ -1154,9 +1159,19 @@ const hermesAPI = {
       model: string;
       contextFolder: string | null;
     }>
-  > => ipcRenderer.invoke("list-cached-sessions", limit, offset),
+  > =>
+    ipcRenderer.invoke(
+      "list-cached-sessions",
+      limit,
+      offset,
+      connectionId,
+      profile,
+    ),
 
-  syncSessionCache: (): Promise<
+  syncSessionCache: (
+    connectionId?: string,
+    profile?: string,
+  ): Promise<
     Array<{
       id: string;
       title: string;
@@ -1166,10 +1181,21 @@ const hermesAPI = {
       model: string;
       contextFolder: string | null;
     }>
-  > => ipcRenderer.invoke("sync-session-cache"),
+  > => ipcRenderer.invoke("sync-session-cache", connectionId, profile),
 
-  updateSessionTitle: (sessionId: string, title: string): Promise<void> =>
-    ipcRenderer.invoke("update-session-title", sessionId, title),
+  updateSessionTitle: (
+    sessionId: string,
+    title: string,
+    connectionId?: string,
+    profile?: string,
+  ): Promise<void> =>
+    ipcRenderer.invoke(
+      "update-session-title",
+      sessionId,
+      title,
+      connectionId,
+      profile,
+    ),
   deleteSession: (
     sessionId: string,
     connectionId?: string,
@@ -1178,13 +1204,17 @@ const hermesAPI = {
     ipcRenderer.invoke("delete-session", sessionId, connectionId, profile),
   deleteSessions: (
     sessionIds: string[],
+    connectionId?: string,
+    profile?: string,
   ): Promise<{ requested: number; deleted: number }> =>
-    ipcRenderer.invoke("delete-sessions", sessionIds),
+    ipcRenderer.invoke("delete-sessions", sessionIds, connectionId, profile),
 
   // Session search
   searchSessions: (
     query: string,
     limit?: number,
+    connectionId?: string,
+    profile?: string,
   ): Promise<
     Array<{
       sessionId: string;
@@ -1195,7 +1225,8 @@ const hermesAPI = {
       model: string;
       snippet: string;
     }>
-  > => ipcRenderer.invoke("search-sessions", query, limit),
+  > =>
+    ipcRenderer.invoke("search-sessions", query, limit, connectionId, profile),
 
   // Credential Pool (profile-aware: reads/writes the named profile's
   // auth.json; defaults to the currently active profile when omitted)

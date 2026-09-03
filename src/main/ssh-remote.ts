@@ -3320,9 +3320,9 @@ export async function sshListCachedSessions(
   config: SshConfig,
   limit = 50,
   offset = 0,
+  profile?: string,
 ): Promise<CachedSession[]> {
-  void offset;
-  const sessions = await sshListSessions(config, limit, 0);
+  const sessions = await sshListSessions(config, limit, offset, profile);
   return sessions.map((s) => ({
     id: s.id,
     title: s.title || s.id,
