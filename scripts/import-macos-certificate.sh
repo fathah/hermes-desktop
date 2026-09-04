@@ -9,14 +9,16 @@ set -euo pipefail
 
 signing_dir="$RUNNER_TEMP/hermes-macos-signing"
 certificate_path="$signing_dir/developer-id.p12"
-keychain_path="$signing_dir/hermes-signing.keychain-db"
+keychain_path="$signing_dir/hermes-signing.keychain"
 keychain_password="${MACOS_KEYCHAIN_PASSWORD:-$(openssl rand -hex 32)}"
 
 mkdir -p "$signing_dir"
 chmod 700 "$signing_dir"
 
 cleanup_certificate() {
+  local status=$?
   rm -f "$certificate_path"
+  exit "$status"
 }
 trap cleanup_certificate EXIT
 
@@ -27,6 +29,25 @@ chmod 600 "$certificate_path"
 security create-keychain -p "$keychain_password" "$keychain_path"
 security unlock-keychain -p "$keychain_password" "$keychain_path"
 security set-keychain-settings -lut 21600 "$keychain_path"
+
+# Keep the temporary keychain in the user search list. On macOS 26.6,
+# `security find-identity <keychain>` can see an imported identity while
+# `codesign --keychain <keychain>` still rejects it unless it is also listed.
+existing_keychains=()
+while IFS= read -r existing_keychain; do
+  existing_keychain="${existing_keychain#"${existing_keychain%%[![:space:]]*}"}"
+  existing_keychain="${existing_keychain#\"}"
+  existing_keychain="${existing_keychain%\"}"
+  if [ -n "$existing_keychain" ] && [ "$existing_keychain" != "$keychain_path" ]; then
+    existing_keychains+=("$existing_keychain")
+  fi
+done < <(security list-keychains -d user)
+if [ "${#existing_keychains[@]}" -gt 0 ]; then
+  security list-keychains -d user -s "$keychain_path" "${existing_keychains[@]}"
+else
+  security list-keychains -d user -s "$keychain_path"
+fi
+
 security import "$certificate_path" \
   -k "$keychain_path" \
   -P "$CSC_KEY_PASSWORD" \

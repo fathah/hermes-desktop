@@ -68,7 +68,7 @@ fi
     const log = readFileSync(securityLog, "utf-8");
     const keychain = join(
       runnerTemp,
-      "hermes-macos-signing/hermes-signing.keychain-db",
+      "hermes-macos-signing/hermes-signing.keychain",
     );
 
     expect(log).toContain(
@@ -77,6 +77,7 @@ fi
     expect(log).toContain(
       `import ${runnerTemp}/hermes-macos-signing/developer-id.p12`,
     );
+    expect(log).toContain(`list-keychains -d user -s ${keychain}`);
     expect(log).toContain("-P certificate-password");
     expect(log).toContain(
       `set-key-partition-list -S apple-tool:,apple:,codesign: -s -k test-keychain-password ${keychain}`,
