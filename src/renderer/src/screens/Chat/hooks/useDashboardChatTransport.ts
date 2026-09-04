@@ -580,7 +580,25 @@ export function dashboardModelMatches(
 
   // Named custom providers can be reported by Hermes Agent as custom:<slug>
   // while Hermes One's older model config still treats them as custom rows.
-  return provider === "custom" && liveProvider.startsWith("custom:");
+  if (provider === "custom" && liveProvider.startsWith("custom:")) return true;
+
+  // The reverse direction: Hermes Agent normalizes every named provider from
+  // config.yaml `providers:` (e.g. `omlx`, `lmstudio`) down to the bare
+  // billing namespace "custom" when it reports the live model, while the
+  // desktop requested the entry by its configured name. If the requested
+  // provider exists in the live inventory as a row that lists the requested
+  // model, the two identities describe the same endpoint and the string
+  // mismatch is a namespace artifact — not a failed switch. Without this,
+  // sending after a profile switch throws a false "did not switch" error.
+  const requestedRow =
+    liveProvider === "custom" || liveProvider.startsWith("custom:")
+      ? (live?.providers ?? []).find(
+          (row) =>
+            row.slug?.toLowerCase() === provider ||
+            row.slug?.toLowerCase() === `custom:${provider}`,
+        )
+      : undefined;
+  return !!requestedRow && modelIsListedByProvider(requestedRow, model);
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
