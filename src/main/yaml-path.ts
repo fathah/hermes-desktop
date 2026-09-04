@@ -27,47 +27,54 @@ export function getYamlPath(content: string, dottedKey: string): string | null {
   if (parts.length === 0) return null;
 
   const lines = content.split(/\r?\n/);
-  // Stack of (indent, key) frames describing the parent path being walked.
-  // The current frame is the deepest one we've descended into; siblings or
-  // dedents pop it.
-  const stack: { indent: number; key: string }[] = [];
-  let pathIdx = 0;
 
-  for (const raw of lines) {
-    const trimmed = raw.trimStart();
-    if (!trimmed || trimmed.startsWith("#")) continue;
+  // Walk the path one segment at a time. `searchStart` is the first line to
+  // scan for the current segment; `parentIndent` bounds the parent's block —
+  // children live at indent strictly greater than it. The first segment uses
+  // parentIndent = -1, so only column-0 keys match (a flat/single-segment key
+  // is pinned to the top level and never resolves a nested occurrence).
+  let searchStart = 0;
+  let parentIndent = -1;
 
-    const indent = raw.length - trimmed.length;
-    // Pop stack frames whose indent is >= the current line's indent — those
-    // are siblings/cousins of the current node, not parents.
-    while (stack.length > 0 && stack[stack.length - 1].indent >= indent) {
-      stack.pop();
+  for (let p = 0; p < parts.length; p++) {
+    const isLeaf = p === parts.length - 1;
+    // The shallowest non-blank line inside the block is the direct-child
+    // depth. Lines deeper than that are grandchildren and are skipped, so a
+    // segment only matches a *direct* child of its parent.
+    let directChildIndent: number | null = null;
+    let descendInto = -1;
+
+    let i = searchStart;
+    for (; i < lines.length; i++) {
+      const raw = lines[i];
+      const trimmed = raw.trimStart();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+
+      const indent = raw.length - trimmed.length;
+      // A non-blank line at or shallower than the parent closes the block.
+      if (indent <= parentIndent) break;
+
+      if (directChildIndent === null) directChildIndent = indent;
+      if (indent !== directChildIndent) continue; // grandchild — skip
+
+      const colon = trimmed.indexOf(":");
+      if (colon < 0) continue;
+      const rawKey = trimmed.slice(0, colon).trim();
+      if (!rawKey) continue;
+      // Quoted keys aren't used in Hermes config but strip the wrapping just
+      // in case so `"memory": ...` would still match.
+      if (stripQuotes(rawKey) !== parts[p]) continue;
+
+      if (isLeaf) return parseScalar(trimmed.slice(colon + 1));
+      descendInto = i;
+      break;
     }
-    // If we've already drilled into a deeper level than where the current
-    // pathIdx parent lives, the dotted path is broken (we walked past it
-    // without finding the next part), so reset pathIdx to the depth we are
-    // actually at — i.e. number of parts already matched in stack.
-    pathIdx = stack.length;
 
-    const colon = trimmed.indexOf(":");
-    if (colon < 0) continue;
-    const rawKey = trimmed.slice(0, colon).trim();
-    if (!rawKey) continue;
-    // Quoted keys aren't used in Hermes config but strip the wrapping just in
-    // case so `"memory": ...` would still match.
-    const key = stripQuotes(rawKey);
-    const remainder = trimmed.slice(colon + 1);
-
-    if (pathIdx < parts.length && key === parts[pathIdx]) {
-      const isLeaf = pathIdx === parts.length - 1;
-      if (isLeaf) {
-        return parseScalar(remainder);
-      }
-      // Intermediate key — push onto the stack and look for the next part
-      // among its children.
-      stack.push({ indent, key });
-      pathIdx = stack.length;
-    }
+    // Leaf not found among the direct children, or an intermediate segment
+    // is missing → the path doesn't resolve.
+    if (isLeaf || descendInto < 0) return null;
+    searchStart = descendInto + 1;
+    parentIndent = directChildIndent as number;
   }
   return null;
 }
