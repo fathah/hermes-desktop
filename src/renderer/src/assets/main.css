@@ -5125,7 +5125,8 @@ body:has(.shell-vibrant),
   opacity: 1;
 }
 
-.chat-bubble-copy {
+.chat-bubble-copy,
+.chat-bubble-speech {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -5140,10 +5141,15 @@ body:has(.shell-vibrant),
   transition: all var(--transition);
 }
 
-.chat-bubble-copy:hover {
+.chat-bubble-copy:hover,
+.chat-bubble-speech:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
   border-color: var(--border-focus, var(--accent));
+}
+
+.chat-bubble-speech.is-loading svg {
+  animation: spin 0.8s linear infinite;
 }
 
 .chat-error-message {
