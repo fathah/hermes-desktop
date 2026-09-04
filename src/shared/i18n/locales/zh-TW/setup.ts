@@ -1,5 +1,5 @@
 export default {
-  title: "設定你的 AI 供應商",
+  title: "設定 AI 供應商",
   subtitle: "選擇供應商並完成設定即可開始使用",
   providerCards: {
     openrouter: { name: "OpenRouter", desc: "200+ 模型", tag: "建議" },
@@ -22,7 +22,9 @@ export default {
     together: "Together AI",
     fireworks: "Fireworks",
     cerebras: "Cerebras",
+    atlascloud: "AtlasCloud",
     mistral: "Mistral",
+    aimlapi: "AIML API",
   },
   serverPreset: "伺服器預設",
   localGroupLabel: "本機服務",
@@ -39,8 +41,10 @@ export default {
   saveFailed: "儲存設定失敗",
   noKeyHint: "還沒有 Key？點此取得",
   continue: "繼續",
-  saving: "儲存中...",
+  saving: "儲存中…",
   apiKeyLabel: "{{provider}} API Key",
+  noApiKeyRequired:
+    "{{provider}} 不需要 API Key。Hermes 會使用本機 CLI/OAuth 設定。",
   localNoKeyNeeded: "無需 API Key",
   localLlm: "本機模型",
   modelBaseUrlPlaceholder: "http://localhost:1234/v1",
