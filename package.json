@@ -1,6 +1,6 @@
 {
   "name": "hermes-desktop",
-  "version": "0.7.4",
+  "version": "0.7.7",
   "description": "Hermes Agent Desktop — self-improving AI assistant",
   "main": "./out/main/index.js",
   "author": "fathah",
@@ -8,7 +8,7 @@
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache --max-warnings=0 .",
-    "audit:prod": "npm audit --omit=dev --audit-level=high",
+    "audit:prod": "node scripts/audit-production-dependencies.mjs",
     "test": "vitest run --maxWorkers=4",
     "test:coverage": "vitest run --coverage",
     "test:sandbox": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/hermes-sandbox.ps1 test",
