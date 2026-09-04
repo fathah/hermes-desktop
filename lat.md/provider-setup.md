@@ -4,6 +4,8 @@ The first-run screen where the user picks an AI provider and enters credentials 
 
 The provider list is data-driven from `PROVIDERS.setup` in [[src/renderer/src/constants.ts]]. Each entry carries an `envKey`, `configProvider`, `baseUrl`, and `needsKey`; selecting a card drives which form fields show (API key, or the Local server/base-URL flow).
 
+The first-run gate is profile-aware: `checkInstall` decides whether setup is needed for the active profile, so [[src/renderer/src/App.tsx#App]] passes that profile into [[src/renderer/src/screens/Setup/Setup.tsx#Setup]]. Setup writes both `.env` and `config.yaml` to the same profile, preventing a named active profile from losing the key to the default workspace.
+
 ## Hermes One is the first-priority provider
 
 **Hermes One Inference** (`https://inference.hermesone.org/v1`) is Hermes One's own OpenAI-compatible gateway, listed **first** in `PROVIDERS.setup`, `PROVIDER_CARDS`, and the `SETTINGS_SECTIONS` "LLM Providers" items — so it leads the Add-provider picker.
