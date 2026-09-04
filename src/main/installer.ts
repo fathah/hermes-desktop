@@ -937,10 +937,30 @@ export async function runInstall(
       // then run the official install script. Electron apps launched from Finder
       // don't inherit the terminal environment.
       const shellProfile = getShellProfile(home);
+
+      // [SECURITY 2026-07-03] Pin the installer to a specific commit and verify
+      // its SHA-256 before executing, instead of piping a mutable `main` branch
+      // straight into bash. To update: bump PINNED_INSTALL_SHA to the reviewed
+      // commit and set EXPECTED_INSTALL_SHA256 to the sha256 of scripts/install.sh
+      // at that commit ( curl -fsSL <raw-url> | sha256sum ).
+      const PINNED_INSTALL_SHA = "528159f7aa6a0c234c61685f552cb45f22849c52";
+      const EXPECTED_INSTALL_SHA256 =
+        "a93c65b01ea392e179cf872e182bd01a2b65c0c15f17833e9f9569033ef10e07";
+      const pinnedInstallUrl = `https://raw.githubusercontent.com/NousResearch/hermes-agent/${PINNED_INSTALL_SHA}/scripts/install.sh`;
+      const verifiedInstall = [
+        "set -e",
+        'TMP="$(mktemp)"',
+        `curl -fsSL ${pinnedInstallUrl} -o "$TMP"`,
+        // portable checksum: sha256sum (Linux) or shasum -a 256 (macOS)
+        `ACTUAL="$( (sha256sum "$TMP" 2>/dev/null || shasum -a 256 "$TMP") | awk '{print $1}' )"`,
+        `if [ "$ACTUAL" != "${EXPECTED_INSTALL_SHA256}" ]; then echo "hermes install.sh checksum mismatch (expected ${EXPECTED_INSTALL_SHA256}, got $ACTUAL) - aborting" >&2; rm -f "$TMP"; exit 87; fi`,
+        'bash "$TMP" --skip-setup',
+        'rm -f "$TMP"',
+      ].join("\n");
       const installCmd = [
         shellProfile ? `source "${shellProfile}" 2>/dev/null;` : "",
-        "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash -s -- --skip-setup",
-      ].join(" ");
+        verifiedInstall,
+      ].join("\n");
 
       const basePath = getEnhancedPath();
       const proc = spawn("bash", ["-c", installCmd], {
