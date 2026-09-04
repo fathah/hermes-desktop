@@ -109,8 +109,17 @@ function sameSessions(a: RecentSession[], b: RecentSession[]): boolean {
 }
 
 function folderName(path: string): string {
-  const parts = path.split(/[\\/]/).filter(Boolean);
+  const parts = path.split(/[\\\\/]/).filter(Boolean);
   return parts.at(-1) || path;
+}
+
+function isMockData(sessions: RecentSession[]): boolean {
+  if (sessions.length === 0) return false;
+  // Real sessions utilize UUIDs for their IDs. Mock data typically uses
+  // simple, short, or sequential IDs. We check the first session's ID
+  // to determine if the cached list is likely mock data.
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return !uuidRegex.test(sessions[0].id);
 }
 
 function groupSessionsByWorkspace(sessions: RecentSession[]): {
@@ -374,7 +383,7 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
           connectionId,
           activeProfile,
         );
-        if (!cancelled) applyFirstPage(cached);
+        if (!cancelled && !isMockData(cached)) applyFirstPage(cached);
       } catch {
         /* ignore cache read errors */
       }
