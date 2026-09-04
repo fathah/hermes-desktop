@@ -19,6 +19,7 @@ interface RecordedRequest {
   method: string;
   url: string;
   token: string;
+  authorization: string;
   body: string;
 }
 
@@ -39,6 +40,7 @@ describe("remote session REST bridge", () => {
           method: req.method || "GET",
           url: req.url || "",
           token: String(req.headers["x-hermes-session-token"] || ""),
+          authorization: String(req.headers["authorization"] || ""),
           body,
         });
 
@@ -311,6 +313,15 @@ describe("remote session REST bridge", () => {
     ]);
   });
 
+  it("sends Authorization: Bearer alongside the legacy session token header", async () => {
+    await remoteListSessions(config(), 2, 3);
+
+    expect(requests[0]).toMatchObject({
+      token: "test-token",
+      authorization: "Bearer test-token",
+    });
+  });
+
   it("falls back to the legacy session list endpoint for older dashboards", async () => {
     const originalHandler = server.listeners("request")[0];
     server.removeListener("request", originalHandler);
@@ -319,6 +330,7 @@ describe("remote session REST bridge", () => {
         method: req.method || "GET",
         url: req.url || "",
         token: String(req.headers["x-hermes-session-token"] || ""),
+        authorization: String(req.headers["authorization"] || ""),
         body: "",
       });
 
