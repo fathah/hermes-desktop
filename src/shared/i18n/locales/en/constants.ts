@@ -41,6 +41,7 @@ export default {
   fireworks: "Fireworks",
   cerebras: "Cerebras",
   atlascloud: "AtlasCloud",
+  novita: "NovitaAI",
   mistral: "Mistral",
   // Theme
   themeSystem: "System",
@@ -100,6 +101,8 @@ export default {
   cerebrasHint: "Ultra-fast inference on Cerebras hardware",
   atlascloudApiKey: "AtlasCloud API Key",
   atlascloudHint: "Claude, GPT & open models via AtlasCloud",
+  novitaApiKey: "Novita API Key",
+  novitaHint: "90+ open and commercial models via Novita",
   mistralApiKey: "Mistral API Key",
   mistralHint: "Mistral and Codestral models",
   perplexityApiKey: "Perplexity API Key",
