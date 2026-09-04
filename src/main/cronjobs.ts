@@ -40,8 +40,8 @@ function normalizeJob(job: Record<string, unknown>): CronJob | null {
   if (!job.id) return null;
   const enabled = job.enabled !== false;
   let state: CronJob["state"] = "active";
-  if (job.state === "paused" || !enabled) state = "paused";
-  else if (job.state === "completed") state = "completed";
+  if (job.state === "completed") state = "completed";
+  else if (job.state === "paused" || !enabled) state = "paused";
   const schedule = job.schedule as { value?: string } | string | undefined;
   return {
     id: String(job.id),
