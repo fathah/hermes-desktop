@@ -117,6 +117,19 @@ describe("OAuth provider model discovery", () => {
     expect(result.models).toContain("gemini-3-pro-preview");
   });
 
+  it("includes the current MiniMax models when the Python call fails", async () => {
+    behavior.err = new Error("python: command not found");
+    const result = await discoverProviderModels(
+      "minimax-oauth",
+      undefined,
+      undefined,
+      undefined,
+    );
+    expect(result.status).toBe("ok");
+    expect(result.models).toContain("MiniMax-M3");
+    expect(result.models).toContain("MiniMax-M2.7");
+  });
+
   it("caches the result so a second call skips the Python spawn", async () => {
     behavior.stdout = '["gpt-5.5"]';
     const first = await discoverProviderModels(
