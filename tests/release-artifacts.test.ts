@@ -46,4 +46,27 @@ describe("Release quality gates", () => {
       /- name: Lint\s+run: npm run lint\s+continue-on-error: true/,
     );
   });
+
+  // @lat: [[desktop-updates#Stable and beta release channels#macOS signing keychain]]
+  it.each([
+    ["stable", ".github/workflows/release.yml", "release_mac"],
+    ["beta", ".github/workflows/beta-release.yml", "beta_mac"],
+  ])(
+    "imports the %s macOS certificate into an explicit keychain",
+    (_channel, workflow, jobName) => {
+      const source = readFileSync(join(ROOT, workflow), "utf-8");
+      const packageStep = source.match(
+        /- name: Package macOS artifacts[\s\S]*?(?=\n\s+- name:)/,
+      )?.[0];
+
+      expect(source).toContain("run: bash scripts/import-macos-certificate.sh");
+      expect(source).toContain('security delete-keychain "$CSC_KEYCHAIN"');
+      expect(source).toMatch(
+        new RegExp(`${jobName}:[\\s\\S]*?strategy:\\s*\\n\\s+fail-fast: false`),
+      );
+      expect(packageStep).toBeDefined();
+      expect(packageStep).not.toContain("CSC_LINK:");
+      expect(packageStep).not.toContain("CSC_KEY_PASSWORD:");
+    },
+  );
 });

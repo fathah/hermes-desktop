@@ -66,6 +66,7 @@ jobs:
     if: needs.prepare.outputs.tag_exists == 'false'
     runs-on: macos-latest
     strategy:
+      fail-fast: false
       matrix:
         arch: [x64, arm64]
     steps:
@@ -109,13 +110,24 @@ jobs:
           chmod 600 "$KEY_PATH"
           echo "APPLE_API_KEY=$KEY_PATH" >> "$GITHUB_ENV"
 
-      - name: Package macOS artifacts
+      - name: Import macOS signing certificate
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: bash scripts/import-macos-certificate.sh
+
+      - name: Package macOS artifacts
+        env:
           APPLE_API_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.ASC_ISSUER_ID }}
         run: npx electron-builder --mac dmg zip --${{ matrix.arch }} --publish never
+
+      - name: Remove macOS signing keychain
+        if: always()
+        run: |
+          if [ -n "${CSC_KEYCHAIN:-}" ]; then
+            security delete-keychain "$CSC_KEYCHAIN" || true
+          fi
 
       - name: Verify native module architecture
         run: |

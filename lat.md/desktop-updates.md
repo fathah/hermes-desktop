@@ -23,3 +23,9 @@ The isolation is structural: the updater ([[src/main/app/updater.ts#setupUpdater
 Pull requests and main-branch pushes must have no lint warnings and no high-severity production dependency advisories before release work can proceed.
 
 The CI workflow installs the locked dependency tree, runs `npm run audit:prod`, type-checks, tests, and treats lint as blocking. The install step fetches the pinned Electron runtime once before tests, and the suite uses four workers so parallel imports never race a lazy binary download or starve short tests. [[tests/release-artifacts.test.ts]] protects these controls, the audit threshold, and the zero-warning lint policy from accidental removal.
+
+### macOS signing keychain
+
+Stable and beta release jobs import the Developer ID certificate into a workflow-owned temporary keychain before packaging, making signing reliable across GitHub runner updates.
+
+`scripts/import-macos-certificate.sh` creates a random keychain password, imports the `.p12` with `CSC_KEY_PASSWORD`, and grants `codesign` access with the distinct keychain password required by macOS 26.6. Electron Builder receives only `CSC_KEYCHAIN`, so it cannot recreate the broken password mix-up. Both architecture jobs run even if one fails, verify that a Developer ID Application identity exists before packaging, and delete the temporary keychain afterward. [[tests/macos-signing.test.ts]] exercises the password separation and credential cleanup; [[tests/release-artifacts.test.ts]] prevents either release channel from bypassing the staging flow.
