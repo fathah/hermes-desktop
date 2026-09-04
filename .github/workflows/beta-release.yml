@@ -155,17 +155,7 @@ jobs:
           fi
 
       - name: Verify native module architecture
-        run: |
-          set -euo pipefail
-          NODE_FILE="dist/mac-${{ matrix.arch }}/Hermes One.app/Contents/Resources/app.asar.unpacked/node_modules/better-sqlite3/build/Release/better_sqlite3.node"
-          if [ ! -f "$NODE_FILE" ]; then
-            NODE_FILE="dist/mac/Hermes One.app/Contents/Resources/app.asar.unpacked/node_modules/better-sqlite3/build/Release/better_sqlite3.node"
-          fi
-          file "$NODE_FILE"
-          case "${{ matrix.arch }}" in
-            x64) file "$NODE_FILE" | grep -q "x86_64" ;;
-            arm64) file "$NODE_FILE" | grep -q "arm64" ;;
-          esac
+        run: bash scripts/verify-native-module-architecture.sh "${{ matrix.arch }}"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
