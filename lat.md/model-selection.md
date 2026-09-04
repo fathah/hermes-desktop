@@ -24,6 +24,18 @@ The override is a `SessionModelOverride` (`{provider, model, baseUrl}`), not a b
 
 The picker builds it via [[src/renderer/src/screens/Chat/hooks/useModelConfig.ts#effectiveOverrideBaseUrl]], the same baseUrl rule `selectModel` applies (keep the URL only for `custom`/`ollama-cloud`; clear it for named providers that have a canonical base URL), so the session pick and a persisted save can't drift. It is threaded renderer → preload IPC → main `sendMessage` as `modelOverride`.
 
+## Readiness follows conversation model
+
+Pre-send readiness validates the current conversation's effective full routing identity, including session-only picker state, instead of rereading a stale global default.
+
+[[src/renderer/src/screens/Chat/Chat.tsx#Chat]] passes `{provider, model, baseUrl}` through preload IPC to [[src/main/validation.ts#validateChatReadiness]]. Main process remains responsible for provider policy and credential lookup.
+
+### Credential checks stay on owning host
+
+Desktop checks credential presence only in Local mode because Remote and SSH credentials belong to the other host and are not observable through local `.env` or `auth.json` files.
+
+[[src/main/ipc/register.ts#registerIpcHandlers]] derives credential scope from `ConnectionConfig.mode`. [[src/main/validation.ts#validateChatReadiness]] still rejects an empty effective model in every mode, then skips only local credential probes for Remote and SSH.
+
 ## Desktop-only persistence
 
 The selected model/provider is saved in a desktop-owned table keyed by session id, without storing API keys.

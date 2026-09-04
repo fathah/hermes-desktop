@@ -312,6 +312,7 @@ const hermesAPI = {
 
   validateChatReadiness: (
     profile?: string,
+    modelOverride?: SessionModelOverride,
   ): Promise<{
     ok: boolean;
     code?:
@@ -323,7 +324,7 @@ const hermesAPI = {
     message?: string;
     fixLocation?: "providers" | "models" | "gateway" | "setup";
     expectedEnvKey?: string;
-  }> => ipcRenderer.invoke("validate-chat-readiness", profile),
+  }> => ipcRenderer.invoke("validate-chat-readiness", profile, modelOverride),
 
   getConfigHealth: (profile?: string): Promise<unknown> =>
     ipcRenderer.invoke("get-config-health", profile),
