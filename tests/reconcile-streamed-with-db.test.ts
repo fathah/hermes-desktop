@@ -270,6 +270,34 @@ describe("reconcileStreamedWithDb", () => {
     expect(merged[3].id).toBe("db-tr-4");
   });
 
+  it("adopts the DB's content when the streamed text was truncated past the match-key window", () => {
+    // reconciliationKey only compares the first 200 chars, so a stream cut
+    // off mid-answer (dropped chunk, or the open gatewayCompletionSuffix
+    // bug) still matches its DB row; the merge must adopt the full text.
+    const full = "x".repeat(220) + " the rest of the answer that streamed short.";
+    const truncated = full.slice(0, 200);
+
+    const streamed: ChatMessage[] = [STREAMED_AGENT(truncated, "a-1")];
+    const db: ChatMessage[] = [DB_AGENT(full, 5)];
+
+    const merged = reconcileStreamedWithDb(streamed, db);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0].id).toBe("a-1"); // streamed React identity kept
+    expect("content" in merged[0] ? merged[0].content : "").toBe(full);
+  });
+
+  it("keeps the streamed content when it is not shorter than the DB row (no needless overwrite)", () => {
+    const streamed: ChatMessage[] = [STREAMED_AGENT("It's 3pm in Tokyo.", "a-1")];
+    const db: ChatMessage[] = [DB_AGENT("It's 3pm in Tokyo.", 5)];
+
+    const merged = reconcileStreamedWithDb(streamed, db);
+
+    expect("content" in merged[0] ? merged[0].content : "").toBe(
+      "It's 3pm in Tokyo.",
+    );
+  });
+
   it("duplicate content across turns is matched in order (FIFO, not collapse)", () => {
     // User asked "ping" twice in two separate turns. The merge must not
     // collapse both DB "ping" rows onto the first streamed "ping".
