@@ -5,6 +5,7 @@ import { useI18n } from "../../components/useI18n";
 import {
   Check,
   ChevronRight,
+  Copy,
   Folder,
   FolderInput,
   Pencil,
@@ -70,6 +71,7 @@ function SidebarSessionMenu({
   onClose,
   onTogglePin,
   onRename,
+  onCopySessionId,
   onMoveToProject,
   onPickNewFolder,
   onDelete,
@@ -87,6 +89,7 @@ function SidebarSessionMenu({
   onClose: () => void;
   onTogglePin: () => void;
   onRename: () => void;
+  onCopySessionId: (sessionId: string) => void;
   onMoveToProject: (path: string | null) => void;
   onPickNewFolder: () => void;
   onDelete: () => void;
@@ -220,6 +223,18 @@ function SidebarSessionMenu({
                     >
                       <Pencil size={15} />
                       <span>{t("navigation.sessionMenu.rename")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="sidebar-session-menu-item"
+                      onClick={() => {
+                        onCopySessionId(target.id);
+                        requestClose();
+                      }}
+                    >
+                      <Copy size={15} />
+                      <span>{t("navigation.sessionMenu.copySessionId")}</span>
                     </button>
                     <button
                       type="button"

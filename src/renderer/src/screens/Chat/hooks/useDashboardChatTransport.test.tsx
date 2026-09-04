@@ -70,12 +70,16 @@ const activeRecoveryTurn: ActiveTurn = {
 
 function Harness({
   api,
+  connectionId,
+  connectionRevision,
   fallbackOnUnavailable = false,
   initialConnectionMode = "local",
   onDashboardUnavailable,
   setUsage = vi.fn() as SetUsageMock,
 }: {
   api: HarnessApi;
+  connectionId?: string;
+  connectionRevision?: number;
   fallbackOnUnavailable?: boolean;
   initialConnectionMode?: "local" | "remote" | "ssh";
   onDashboardUnavailable?: (reason: string) => void;
@@ -97,6 +101,8 @@ function Harness({
   const activeTurnRef = useRef<ActiveTurn | null>({ ...activeBadTurn });
   const transport = useDashboardChatTransport({
     activeTurnRef,
+    connectionId,
+    connectionRevision,
     contextFolder: null,
     connectionMode,
     enabled: true,
@@ -168,14 +174,53 @@ describe("useDashboardChatTransport recovery", () => {
       return {};
     });
     const api: HarnessApi = {};
-    render(<Harness api={api} initialConnectionMode="remote" />);
+    render(
+      <Harness
+        api={api}
+        connectionId="connection-two"
+        initialConnectionMode="remote"
+      />,
+    );
 
     await act(async () => {
       await api.send?.("hello");
     });
 
     expect(window.hermesAPI.freshDashboardWsUrl).toHaveBeenCalledTimes(1);
+    expect(window.hermesAPI.startDashboard).toHaveBeenCalledWith(
+      undefined,
+      "connection-two",
+    );
+    expect(window.hermesAPI.freshDashboardWsUrl).toHaveBeenCalledWith(
+      undefined,
+      "connection-two",
+    );
     expect(dashboardMock.connect).toHaveBeenCalledWith("ws://fresh-dashboard");
+  });
+
+  it("does not request model.options twice when no model switch runs", async () => {
+    dashboardMock.request.mockImplementation(async (method) => {
+      if (method === "session.create") {
+        return { session_id: "live", stored_session_id: "stored" };
+      }
+      if (method === "model.options") {
+        return { model: "bad-model", provider: "bad-provider", providers: [] };
+      }
+      return {};
+    });
+    const api: HarnessApi = {};
+    render(<Harness api={api} />);
+
+    await act(async () => {
+      await api.send?.("first");
+      await api.send?.("second");
+    });
+
+    const methods = dashboardMock.request.mock.calls.map(([method]) => method);
+    expect(methods.filter((method) => method === "slash.exec")).toHaveLength(1);
+    expect(methods.filter((method) => method === "model.options")).toHaveLength(
+      3,
+    );
   });
 
   it("surfaces OAuth login requirements without legacy fallback", async () => {
@@ -492,6 +537,39 @@ describe("useDashboardChatTransport unavailable fallback (issue #667)", () => {
     });
     await act(async () => {
       await api.send?.("after change");
+    });
+    expect(startDashboard).toHaveBeenCalledTimes(2);
+  });
+
+  it("re-probes after the selected connection is edited in place", async () => {
+    const startDashboard = mockStartDashboard();
+    const api: HarnessApi = {};
+    const { rerender } = render(
+      <Harness
+        api={api}
+        connectionId="connection-a"
+        connectionRevision={0}
+        initialConnectionMode="ssh"
+        fallbackOnUnavailable
+      />,
+    );
+
+    await act(async () => {
+      await api.send?.("hello");
+    });
+    expect(startDashboard).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <Harness
+        api={api}
+        connectionId="connection-a"
+        connectionRevision={1}
+        initialConnectionMode="ssh"
+        fallbackOnUnavailable
+      />,
+    );
+    await act(async () => {
+      await api.send?.("after edit");
     });
     expect(startDashboard).toHaveBeenCalledTimes(2);
   });

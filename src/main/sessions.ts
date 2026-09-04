@@ -256,12 +256,16 @@ function decodeSearchSnippet(
   );
 }
 
-function getDb(readonly = true): Database.Database | null {
-  return getDbConnection(readonly);
+function getDb(readonly = true, profile?: unknown): Database.Database | null {
+  return getDbConnection(readonly, profile);
 }
 
-export function listSessions(limit = 30, offset = 0): SessionSummary[] {
-  const db = getDb();
+export function listSessions(
+  limit = 30,
+  offset = 0,
+  profile?: unknown,
+): SessionSummary[] {
+  const db = getDb(true, profile);
   if (!db) return [];
 
   // Simple query without correlated subquery — titles come from session cache
@@ -301,8 +305,12 @@ export function listSessions(limit = 30, offset = 0): SessionSummary[] {
   }));
 }
 
-export function searchSessions(query: string, limit = 20): SearchResult[] {
-  const db = getDb();
+export function searchSessions(
+  query: string,
+  limit = 20,
+  profile?: unknown,
+): SearchResult[] {
+  const db = getDb(true, profile);
   if (!db) return [];
 
   try {
@@ -667,8 +675,11 @@ export function mergeStoredPromptImageAttachments(
   });
 }
 
-export function getSessionMessages(sessionId: string): HistoryItem[] {
-  const db = getDb();
+export function getSessionMessages(
+  sessionId: string,
+  profile?: unknown,
+): HistoryItem[] {
+  const db = getDb(true, profile);
   if (!db) return [];
 
   const rows = db
@@ -694,8 +705,9 @@ export function applySessionLocalOverlays(
   sessionId: string,
   items: HistoryItem[],
   existingDb?: Database.Database | null,
+  profile?: unknown,
 ): HistoryItem[] {
-  const db = existingDb ?? getDb();
+  const db = existingDb ?? getDb(true, profile);
   if (!db) return items;
   const canonical = mergeStoredPromptImageAttachments(
     items,
@@ -766,16 +778,16 @@ function deleteSessionRows(db: Database.Database, sessionId: string): number {
   return result.changes;
 }
 
-function cleanupDeletedSession(sessionId: string): void {
+function cleanupDeletedSession(sessionId: string, profile?: unknown): void {
   clearStagedAttachments(sessionId);
-  removeSessionFromCache(sessionId);
+  removeSessionFromCache(sessionId, profile);
 }
 
-export function deleteSession(sessionId: string): void {
+export function deleteSession(sessionId: string, profile?: unknown): void {
   const id = normalizeSessionIds([sessionId])[0];
   if (!id) return;
 
-  const db = getDb(false);
+  const db = getDb(false, profile);
 
   if (db) {
     const tx = db.transaction((sessionIdToDelete: string) => {
@@ -784,14 +796,17 @@ export function deleteSession(sessionId: string): void {
     tx(id);
   }
 
-  cleanupDeletedSession(id);
+  cleanupDeletedSession(id, profile);
 }
 
-export function deleteSessions(sessionIds: string[]): DeleteSessionsResult {
+export function deleteSessions(
+  sessionIds: string[],
+  profile?: unknown,
+): DeleteSessionsResult {
   const ids = normalizeSessionIds(sessionIds);
   let deleted = 0;
 
-  const db = getDb(false);
+  const db = getDb(false, profile);
 
   if (db) {
     const tx = db.transaction((idsToDelete: string[]) => {
@@ -803,7 +818,7 @@ export function deleteSessions(sessionIds: string[]): DeleteSessionsResult {
   }
 
   for (const id of ids) {
-    cleanupDeletedSession(id);
+    cleanupDeletedSession(id, profile);
   }
 
   return { requested: ids.length, deleted };

@@ -20,6 +20,12 @@ export interface OfficeProfileInput {
   gatewayRunning?: boolean;
 }
 
+/** Minimal Kanban task shape needed to derive live Office activity. */
+export interface OfficeTaskInput {
+  assignee?: string | null;
+  status?: string | null;
+}
+
 // Stable, pleasant accent colors keyed off the profile name so each agent keeps
 // the same color between renders.
 const AGENT_COLORS = [
@@ -43,10 +49,15 @@ function hashName(name: string): number {
 }
 
 /**
- * Map a desktop profile to an office agent. Each profile becomes one 3D agent;
- * a running gateway reads as "working" (green), otherwise "idle" (amber).
+ * Map a desktop profile to an office agent. When Kanban activity is available,
+ * a running assignment reads as "working" (green), otherwise "idle" (amber).
+ * Gateway liveness is retained as separate metadata and as a compatibility
+ * fallback for connection modes that cannot query Kanban.
  */
-export function profileToOfficeAgent(profile: OfficeProfileInput): OfficeAgent {
+export function profileToOfficeAgent(
+  profile: OfficeProfileInput,
+  activeTaskCount?: number,
+): OfficeAgent {
   const id = profile.id || profile.name;
   const seed = id || "agent";
   const agentName = profile.name;
@@ -56,21 +67,54 @@ export function profileToOfficeAgent(profile: OfficeProfileInput): OfficeAgent {
     id,
     name: agentName,
     subtitle: profile.model || profile.provider || null,
-    status: profile.gatewayRunning ? "working" : "idle",
+    status:
+      activeTaskCount === undefined
+        ? profile.gatewayRunning
+          ? "working"
+          : "idle"
+        : activeTaskCount > 0
+          ? "working"
+          : "idle",
     color,
     item: "desk",
     avatarProfile: createAgentAvatarProfileFromSeed(seed),
     model: profile.model,
     provider: profile.provider,
     gatewayRunning: profile.gatewayRunning,
+    activeTaskCount,
     position: "employee",
   };
 }
 
+function normalizeProfileId(value: string): string {
+  return value.trim().replace(/^@/, "").toLowerCase();
+}
+
+export function countRunningTasksByAssignee(
+  tasks: OfficeTaskInput[],
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const task of tasks) {
+    if (task.status !== "running" || !task.assignee?.trim()) continue;
+    const assignee = normalizeProfileId(task.assignee);
+    counts.set(assignee, (counts.get(assignee) ?? 0) + 1);
+  }
+  return counts;
+}
+
 export function profilesToOfficeAgents(
   profiles: OfficeProfileInput[],
+  tasks?: OfficeTaskInput[] | null,
 ): OfficeAgent[] {
-  return profiles.map(profileToOfficeAgent);
+  if (tasks == null) {
+    return profiles.map((profile) => profileToOfficeAgent(profile));
+  }
+
+  const activeTasks = countRunningTasksByAssignee(tasks);
+  return profiles.map((profile) => {
+    const id = normalizeProfileId(profile.id || profile.name);
+    return profileToOfficeAgent(profile, activeTasks.get(id) ?? 0);
+  });
 }
 
 export function officeAgentsChanged(
@@ -88,7 +132,8 @@ export function officeAgentsChanged(
       before.status !== agent.status ||
       before.model !== agent.model ||
       before.provider !== agent.provider ||
-      before.gatewayRunning !== agent.gatewayRunning
+      before.gatewayRunning !== agent.gatewayRunning ||
+      before.activeTaskCount !== agent.activeTaskCount
     );
   });
 }

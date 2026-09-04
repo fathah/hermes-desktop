@@ -66,6 +66,29 @@ describe("Preload API Surface", () => {
 // ─── New APIs exist ─────────────────────────────────────
 
 describe("New APIs from v0.8/v0.9 features", () => {
+  it("has bounded Agent capability APIs", () => {
+    expect(preloadMethods).toContain("getAgentCapabilities");
+    expect(typeMethods).toContain("getAgentCapabilities");
+    expect(preloadMethods).toContain("recordAgentRuntimeInfo");
+    expect(typeMethods).toContain("recordAgentRuntimeInfo");
+    expect(preloadMethods).toContain("recordAgentCommandInventory");
+    expect(typeMethods).toContain("recordAgentCommandInventory");
+  });
+
+  it("has named connection registry APIs", () => {
+    for (const method of [
+      "getConnectionRegistry",
+      "getConnectionStatuses",
+      "createConnection",
+      "renameConnection",
+      "selectConnection",
+      "removeConnection",
+    ]) {
+      expect(preloadMethods).toContain(method);
+      expect(typeMethods).toContain(method);
+    }
+  });
+
   it("has backup/import APIs", () => {
     expect(preloadMethods).toContain("runHermesBackup");
     expect(preloadMethods).toContain("runHermesImport");
@@ -105,6 +128,11 @@ describe("New APIs from v0.8/v0.9 features", () => {
     expect(typeMethods).toContain("discoverMemoryProviders");
   });
 
+  it("has OAuth provider status API", () => {
+    expect(preloadMethods).toContain("getOAuthProviderStatuses");
+    expect(typeMethods).toContain("getOAuthProviderStatuses");
+  });
+
   it("has dashboard transport probe APIs", () => {
     expect(preloadMethods).toContain("dashboardStatus");
     expect(typeMethods).toContain("dashboardStatus");
@@ -116,6 +144,8 @@ describe("New APIs from v0.8/v0.9 features", () => {
     expect(typeMethods).toContain("setConnectionChatTransports");
     expect(preloadMethods).toContain("probeRemoteAuthMode");
     expect(typeMethods).toContain("probeRemoteAuthMode");
+    expect(preloadMethods).toContain("connectRemoteGateway");
+    expect(typeMethods).toContain("connectRemoteGateway");
     expect(preloadMethods).toContain("remoteOAuthLogin");
     expect(typeMethods).toContain("remoteOAuthLogin");
     expect(preloadMethods).toContain("remoteOAuthLogout");

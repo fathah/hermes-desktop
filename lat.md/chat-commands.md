@@ -30,7 +30,6 @@ Because no global loading state is set, the slash branch shows its own feedback:
 
 ## Transport connection lifecycle
 
-
 Every dashboard turn first connects a JSON-RPC WebSocket to the gateway; that handshake must be time-bounded or a stalled socket wedges the whole transport with no error and no fallback (issue #718).
 
 [[src/renderer/src/screens/Chat/dashboardGatewayClient.ts#DashboardGatewayClient#connect]] resolves on `open`, rejects on `error` or an early `close`, **and** rejects on a connect-timeout (default 10s). A WebSocket stuck in `CONNECTING` — TCP accepted but the upgrade never completing, e.g. when a busy renderer starves the handshake — fires none of those events on its own, so without the timer the connect promise never settles. When it never settles, `ensureClient` in [[src/renderer/src/screens/Chat/hooks/useDashboardChatTransport.ts#useDashboardChatTransport]] never resolves, its cached `connectingRef` promise poisons every later send, `setIsLoading(false)` never runs, and the user sees a permanent loading spinner. The timeout makes the promise reject so auto mode falls back to the legacy HTTP transport (and explicit-dashboard mode surfaces a real error) instead of hanging. Per-request calls are separately bounded by their own 30s timeout.
@@ -106,6 +105,8 @@ The central slash command architecture in [[src/renderer/src/screens/Chat/slash/
 The router's attachment guard rejects a command run with staged attachments unless it declares `supportsAttachments`, but `target: "desktop"` commands are exempt — they are local UI actions / info displays that never consume attachments (the files stay in the composer for the next message), matching the pre-router behavior where local commands ran unconditionally. Only `agent`/`model` commands, which route content upstream, are gated.
 
 The command palette and executor share a catalog built by [[src/renderer/src/screens/Chat/slash/commandCatalog.ts#createSlashCatalog]]. Hermes Agent metadata comes from `commands.catalog`; Desktop commands are merged after collision validation, and upstream names/aliases are normalized from `/name` to the router's canonical `name`.
+
+The same successful catalog read is recorded through the bounded compatibility bridge described by [[agent-capabilities#Bounded command inventory]]. Only normalized names reach the main-process cache; a failed read clears prior command evidence so capability gates become unknown rather than stale.
 
 [[src/renderer/src/screens/Chat/slash/commandCatalog.ts#reconcileSlashCatalog]] merges the backend catalog with the in-repo desktop commands into a conflict-free catalog before it reaches `createSlashCatalog`. Desktop commands are authored in-repo and win deterministically; the backend catalog is untrusted runtime data, so a collision there must never crash the app. Any backend command whose name equals a desktop command **name or alias** is dropped (missing the alias check let a backend `/commands` command squat `help`'s `commands` alias and crash startup — #813), and a `canon` alias that targets a desktop command becomes an agent-visible alias entry instead.
 

@@ -13,6 +13,7 @@ export default {
     },
     appearance: "Appearance",
     language: "Language",
+    notifications: "Notifications",
     privacy: "Privacy",
     connection: "Connection",
     network: "Network",
@@ -71,6 +72,23 @@ export default {
     portuguese: "Portuguese",
     turkish: "Türkçe",
     hint: "Choose the interface language",
+  },
+  notifications: {
+    completionSound: "Play a sound when a response finishes",
+    completionSoundHint:
+      "Applies to active and background conversations. Visual status indicators remain enabled.",
+  },
+  spellcheck: {
+    enable: "Enable spellcheck",
+    enableHint: "Show spelling suggestions in message fields.",
+    useSystem: "Use system languages",
+    useSystemHint:
+      "Use the dictionaries Electron selected from your operating-system language settings.",
+    chooseLanguages: "Choose spellcheck languages",
+    chooseLanguagesHint:
+      "Select one or more installed dictionaries. The selection applies immediately.",
+    unavailable:
+      "No spellcheck dictionaries are available in this installation.",
   },
   analytics: {
     label: "Send anonymous usage analytics",
@@ -143,6 +161,17 @@ export default {
   apiKeyPlaceholder: "API Key",
   labelPlaceholder: "Label ({{optional}})",
   connectionSection: "Connection",
+  savedConnections: "Saved connections",
+  savedConnectionsHint:
+    "Select which Hermes installation new chats and settings use.",
+  addConnection: "Add connection",
+  connectionName: "Connection name",
+  renameConnection: "Rename",
+  removeConnectionConfirm: 'Remove the connection "{{name}}"?',
+  connectionCreated: "Connection created.",
+  connectionRenamed: "Connection renamed.",
+  connectionSelected: "Connection selected.",
+  connectionRemoved: "Connection removed.",
   modeLocal: "Local",
   modeRemote: "Remote",
   modeLocalHint: "Using Hermes installed on this device",
@@ -237,6 +266,36 @@ export default {
   remoteErrorFailed: "Connection test failed.",
   sshSuccess: "SSH tunnel connected!",
   sshErrorRequiredSimple: "Host and username are required",
+  sshDockerTitle: "Remote Hermes install",
+  sshDockerDetect: "Detect remote install",
+  sshDockerDetecting: "Detecting…",
+  sshDockerDetectHint:
+    "Checks the SSH host for a Hermes install — including Hermes running inside a Docker container (Coolify, Compose, NAS).",
+  sshDockerHostInstall: "Hermes CLI found on the host — no extra setup needed.",
+  sshDockerNoDocker:
+    "No host Hermes install found, and Docker is not available for this SSH user.",
+  sshDockerNoContainers:
+    "No host Hermes install found, and no running Hermes Docker containers were detected.",
+  sshDockerContainersFound: "Hermes Docker containers on this host:",
+  sshDockerSelectPrompt:
+    "Several Hermes containers are running — pick the one this connection should use.",
+  sshDockerNoDataMount: "no data volume mounted at /opt/data",
+  sshDockerPortMatch: "publishes port {{port}}",
+  sshDockerConfigured:
+    'Docker access is set up for container "{{name}}" — the Hermes CLI and data are reachable over SSH.',
+  sshDockerConfiguredOther:
+    'The remote launcher currently routes to container "{{name}}". Run setup again to switch it.',
+  sshDockerCustomLauncher:
+    "A custom remote launcher exists on this host (~/.config/hermes-desktop/remote-hermes). Hermes Desktop will use it as-is and won't overwrite it.",
+  sshDockerHomeDirConflict:
+    "~/.hermes exists as a real directory on the host, so it can't be linked to the container data volume. Move it aside (e.g. mv ~/.hermes ~/.hermes.host-backup) and detect again.",
+  sshDockerSetup: "Set up Docker access",
+  sshDockerSettingUp: "Setting up…",
+  sshDockerSetupHint:
+    "Writes two files on the SSH host as {{user}}: a launcher at ~/.config/hermes-desktop/remote-hermes that runs the Hermes CLI inside the selected container, and a ~/.hermes symlink to the container's data volume. Nothing inside the container is modified.",
+  sshDockerSetupDone: "Docker access ready — {{version}}",
+  sshDockerSetupFailed: "Setup failed: {{msg}}",
+  sshDockerInspectFailed: "Could not inspect the remote host: {{msg}}",
   remoteSuccess: "Connected successfully!",
   remoteErrorRequiredSimple: "Please enter a URL",
   remoteErrorFailedSimple: "Could not reach server",

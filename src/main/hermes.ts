@@ -1,5 +1,5 @@
 import { ChildProcess, spawn } from "child_process";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import {
   existsSync,
   readFileSync,
@@ -27,10 +27,12 @@ import {
 } from "./installer";
 import {
   getApiServerKey,
+  getActiveConnection,
   getConnectionConfig,
   getConfigValue,
   getModelConfig,
   readEnv,
+  type ConnectionConfig,
 } from "./config";
 import {
   getSshTunnelUrl,
@@ -84,6 +86,10 @@ import {
   hostDerivedEnvKeyForUrl,
   shouldPruneOpenRouterApiKey,
 } from "./host-derived-env";
+import {
+  sanitizeAgentCommandInventory,
+  sanitizeAgentRuntimeInfo,
+} from "../shared/agent-capabilities";
 
 /**
  * Resolve which profile a gateway call targets. An explicit profile always
@@ -122,8 +128,10 @@ export function normaliseRemoteUrl(raw: string): string {
   return url;
 }
 
-export function getApiUrl(profile?: string): string {
-  const conn = getConnectionConfig();
+export function getApiUrl(
+  profile?: string,
+  conn: ConnectionConfig = getConnectionConfig(),
+): string {
   if (conn.mode === "ssh") {
     const sshUrl = getSshTunnelUrl();
     if (sshUrl) return normaliseRemoteUrl(sshUrl);
@@ -139,14 +147,18 @@ export function getApiUrl(profile?: string): string {
   return `http://127.0.0.1:${getProfilePort(resolveProfile(profile))}`;
 }
 
-export function isRemoteMode(): boolean {
-  const mode = getConnectionConfig().mode;
+export function isRemoteMode(
+  conn: ConnectionConfig = getConnectionConfig(),
+): boolean {
+  const mode = conn.mode;
   return mode === "remote" || mode === "ssh";
 }
 
 /** True only for pure remote HTTP — SSH tunnel has full local access via SSH exec */
-export function isRemoteOnlyMode(): boolean {
-  return getConnectionConfig().mode === "remote";
+export function isRemoteOnlyMode(
+  conn: ConnectionConfig = getConnectionConfig(),
+): boolean {
+  return conn.mode === "remote";
 }
 
 // Cached API key read from the remote .env when SSH tunnel starts
@@ -156,8 +168,9 @@ export function setSshRemoteApiKey(key: string): void {
   _sshRemoteApiKey = key;
 }
 
-export function getRemoteAuthHeader(): Record<string, string> {
-  const conn = getConnectionConfig();
+export function getRemoteAuthHeader(
+  conn: ConnectionConfig = getConnectionConfig(),
+): Record<string, string> {
   if (conn.mode === "ssh") {
     if (_sshRemoteApiKey)
       return { Authorization: `Bearer ${_sshRemoteApiKey}` };
@@ -173,14 +186,17 @@ export function getRemoteAuthHeader(): Record<string, string> {
   return {};
 }
 
-function getApiAuthHeaders(profile?: string): Record<string, string> {
+function getApiAuthHeaders(
+  profile?: string,
+  conn: ConnectionConfig = getConnectionConfig(),
+): Record<string, string> {
   const headers: Record<string, string> = {
-    ...getRemoteAuthHeader(),
+    ...getRemoteAuthHeader(conn),
   };
   // Local API server key (API_SERVER_KEY in the profile's .env /
   // config.yaml) only applies in local mode — in remote/SSH mode the
   // remote endpoint's own auth header is authoritative.
-  if (!isRemoteMode()) {
+  if (!isRemoteMode(conn)) {
     const apiServerKey = getApiServerKey(profile);
     if (apiServerKey) {
       headers.Authorization = `Bearer ${apiServerKey}`;
@@ -192,32 +208,40 @@ function getApiAuthHeaders(profile?: string): Record<string, string> {
 function getJsonApiHeaders(
   profile: string | undefined,
   bodyBuf: Buffer,
+  conn: ConnectionConfig = getConnectionConfig(),
 ): Record<string, string> {
   return {
     "Content-Type": "application/json",
     "Content-Length": String(bodyBuf.length),
-    ...getApiAuthHeaders(profile),
+    ...getApiAuthHeaders(profile, conn),
   };
 }
 
-function capabilityCacheKey(profile?: string): string {
-  const auth = getApiAuthHeaders(profile).Authorization ? "auth" : "anon";
-  return `${getApiUrl(profile)}|${auth}`;
+function capabilityCacheKey(
+  profile?: string,
+  conn: ConnectionConfig = getConnectionConfig(),
+): string {
+  const auth = getApiAuthHeaders(profile, conn).Authorization ?? "";
+  const authScope = auth
+    ? createHash("sha256").update(auth).digest("hex")
+    : "anon";
+  return `${getApiUrl(profile, conn)}|${authScope}`;
 }
 
 async function getApiCapabilities(
   profile?: string,
+  conn: ConnectionConfig = getConnectionConfig(),
 ): Promise<HermesApiCapabilities | null> {
   let key: string;
   try {
-    key = capabilityCacheKey(profile);
+    key = capabilityCacheKey(profile, conn);
   } catch {
     return null;
   }
   const cached = capabilitiesCache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
 
-  const url = `${getApiUrl(profile)}/v1/capabilities`;
+  const url = `${getApiUrl(profile, conn)}/v1/capabilities`;
   const requester = url.startsWith("https") ? https : http;
   const value = await new Promise<HermesApiCapabilities | null>((resolve) => {
     let done = false;
@@ -232,7 +256,7 @@ async function getApiCapabilities(
       url,
       {
         method: "GET",
-        headers: getApiAuthHeaders(profile),
+        headers: getApiAuthHeaders(profile, conn),
         timeout: CAPABILITIES_TIMEOUT_MS,
       },
       (res) => {
@@ -926,18 +950,137 @@ const capabilitiesCache = new Map<
   { expiresAt: number; value: HermesApiCapabilities | null }
 >();
 
+const agentRuntimeInfoCache = new Map<string, Record<string, unknown>>();
+const agentCommandInventoryCache = new Map<string, string[]>();
+
+function agentCapabilityLocationKey(
+  profile?: string,
+  connectionId = getActiveConnection().connectionId,
+): string {
+  return `${connectionId}:${profileKey(profile)}`;
+}
+
+/**
+ * Keep only the bounded compatibility fields from gateway session.info. The
+ * renderer already receives this payload, but the main process never retains
+ * model prompts, tools, paths, or other session data just to gate desktop UI.
+ */
+// @lat: [[agent-capabilities#Bounded runtime evidence]]
+export function recordAgentRuntimeInfo(
+  value: unknown,
+  profile?: string,
+  connectionId?: string,
+): boolean {
+  const location = agentCapabilityLocationKey(profile, connectionId);
+  const info = sanitizeAgentRuntimeInfo(value);
+  if (!info) {
+    agentRuntimeInfoCache.delete(location);
+    agentCommandInventoryCache.delete(location);
+    capabilitiesCache.clear();
+    return false;
+  }
+  const previous = agentRuntimeInfoCache.get(location);
+  if (
+    previous &&
+    (previous.version !== info.version ||
+      previous.desktop_contract !== info.desktop_contract)
+  ) {
+    agentCommandInventoryCache.delete(location);
+  }
+  agentRuntimeInfoCache.set(location, info);
+  // session.info is emitted again after reconnect, so the API feature probe
+  // must not retain evidence from the previous Agent process.
+  capabilitiesCache.clear();
+  return true;
+}
+
+// @lat: [[agent-capabilities#Bounded command inventory]]
+export function recordAgentCommandInventory(
+  value: unknown,
+  profile?: string,
+  connectionId?: string,
+): boolean {
+  const commands = sanitizeAgentCommandInventory(value);
+  const location = agentCapabilityLocationKey(profile, connectionId);
+  if (!commands) {
+    agentCommandInventoryCache.delete(location);
+    return false;
+  }
+  agentCommandInventoryCache.set(location, commands);
+  return true;
+}
+
+export async function getAgentCapabilityEvidence(
+  profile?: string,
+  connectionId = getActiveConnection().connectionId,
+  conn: ConnectionConfig = getConnectionConfig(connectionId),
+): Promise<{
+  apiRunsTransport: boolean | null;
+  commandNames: string[] | null;
+  runtimeInfo: Record<string, unknown> | null;
+}> {
+  const capabilities = await getApiCapabilities(profile, conn);
+  const location = agentCapabilityLocationKey(profile, connectionId);
+  return {
+    apiRunsTransport: capabilities
+      ? supportsHermesRunsTransport(capabilities)
+      : null,
+    commandNames: agentCommandInventoryCache.get(location) ?? null,
+    runtimeInfo: agentRuntimeInfoCache.get(location) ?? null,
+  };
+}
+
+export function getCachedAgentCapabilityEvidence(
+  connectionId: string,
+  profile?: string,
+): {
+  apiRunsTransport: null;
+  commandNames: string[] | null;
+  runtimeInfo: Record<string, unknown> | null;
+} {
+  const location = agentCapabilityLocationKey(profile, connectionId);
+  return {
+    apiRunsTransport: null,
+    commandNames: agentCommandInventoryCache.get(location) ?? null,
+    runtimeInfo: agentRuntimeInfoCache.get(location) ?? null,
+  };
+}
+
+export function clearAgentCapabilityEvidence(connectionId?: string): void {
+  capabilitiesCache.clear();
+  if (!connectionId) {
+    agentCommandInventoryCache.clear();
+    agentRuntimeInfoCache.clear();
+    return;
+  }
+  const prefix = `${connectionId}:`;
+  for (const key of agentCommandInventoryCache.keys()) {
+    if (key.startsWith(prefix)) agentCommandInventoryCache.delete(key);
+  }
+  for (const key of agentRuntimeInfoCache.keys()) {
+    if (key.startsWith(prefix)) agentRuntimeInfoCache.delete(key);
+  }
+}
+
 // ────────────────────────────────────────────────────
 //  API Server health check
 // ────────────────────────────────────────────────────
 
-function isApiServerReady(profile?: string): Promise<boolean> {
+function isApiServerReady(
+  profile?: string,
+  conn: ConnectionConfig = getConnectionConfig(),
+): Promise<boolean> {
   return new Promise((resolve) => {
     try {
-      const url = `${getApiUrl(profile)}/health`;
+      const url = `${getApiUrl(profile, conn)}/health`;
       const mod = url.startsWith("https") ? https : http;
       const req = mod.request(
         url,
-        { method: "GET", timeout: 1500, headers: getRemoteAuthHeader() },
+        {
+          method: "GET",
+          timeout: 1500,
+          headers: getRemoteAuthHeader(conn),
+        },
         (res) => {
           resolve(res.statusCode === 200);
           res.resume();
@@ -1210,6 +1353,7 @@ function sendMessageViaApi(
   attachments?: Attachment[],
   contextFolder?: string,
   override?: SessionModelOverride,
+  conn: ConnectionConfig = getConnectionConfig(),
 ): ChatHandle {
   const mc = effectiveModelConfig(profile, override);
   const controller = new AbortController();
@@ -1260,7 +1404,7 @@ function sendMessageViaApi(
   //     client_max_size overflow path. See #405.
   const bodyBuf = Buffer.from(body, "utf-8");
 
-  const headers = getJsonApiHeaders(profile, bodyBuf);
+  const headers = getJsonApiHeaders(profile, bodyBuf, conn);
 
   // Session id: always send via `X-Hermes-Session-Id` so the gateway
   // doesn't fall back to its `_derive_chat_session_id` fingerprint —
@@ -1343,7 +1487,7 @@ function sendMessageViaApi(
       ...headers,
       "Content-Length": String(probeBodyBuf.length),
     };
-    const probeUrl = `${getApiUrl(profile)}/v1/chat/completions`;
+    const probeUrl = `${getApiUrl(profile, conn)}/v1/chat/completions`;
     const probeMod = probeUrl.startsWith("https") ? https : http;
     const probeReq = probeMod.request(
       probeUrl,
@@ -1471,7 +1615,7 @@ function sendMessageViaApi(
     return false;
   }
 
-  const chatUrl = `${getApiUrl(profile)}/v1/chat/completions`;
+  const chatUrl = `${getApiUrl(profile, conn)}/v1/chat/completions`;
   const requester = chatUrl.startsWith("https") ? https.request : http.request;
   const req = requester(
     chatUrl,
@@ -1599,12 +1743,13 @@ function postRunStop(
   apiUrl: string,
   profile: string | undefined,
   runId: string,
+  conn: ConnectionConfig = getConnectionConfig(),
 ): void {
   const url = `${apiUrl}/v1/runs/${encodeURIComponent(runId)}/stop`;
   const requester = url.startsWith("https") ? https : http;
   const req = requester.request(url, {
     method: "POST",
-    headers: getApiAuthHeaders(profile),
+    headers: getApiAuthHeaders(profile, conn),
     timeout: 3000,
   });
   req.on("error", () => undefined);
@@ -1621,11 +1766,12 @@ function sendMessageViaRuns(
   attachments?: Attachment[],
   contextFolder?: string,
   override?: SessionModelOverride,
+  conn: ConnectionConfig = getConnectionConfig(),
 ): ChatHandle {
   const mc = effectiveModelConfig(profile, override);
   const controller = new AbortController();
-  const apiUrl = getApiUrl(profile);
-  const headersForAuth = getApiAuthHeaders(profile);
+  const apiUrl = getApiUrl(profile, conn);
+  const headersForAuth = getApiAuthHeaders(profile, conn);
   const sessionId =
     resumeSessionId ||
     (headersForAuth.Authorization ? `desk-${Date.now()}-${randomUUID()}` : "");
@@ -1640,7 +1786,7 @@ function sendMessageViaRuns(
   if (sessionId) bodyObj.session_id = sessionId;
   if (ctxSystem) bodyObj.instructions = ctxSystem.content;
   const bodyBuf = Buffer.from(JSON.stringify(bodyObj), "utf-8");
-  const headers = getJsonApiHeaders(profile, bodyBuf);
+  const headers = getJsonApiHeaders(profile, bodyBuf, conn);
   if (sessionId) {
     headers["X-Hermes-Session-Id"] = sessionId;
   }
@@ -1685,12 +1831,13 @@ function sendMessageViaRuns(
       attachments,
       contextFolder,
       override,
+      conn,
     );
   }
 
   function stopRunAndFallback(): void {
     if (finished || fallbackStarted) return;
-    if (runId) postRunStop(apiUrl, profile, runId);
+    if (runId) postRunStop(apiUrl, profile, runId, conn);
     eventsReq?.destroy();
     fallbackToChatCompletions();
   }
@@ -1772,7 +1919,7 @@ function sendMessageViaRuns(
       eventsUrl,
       {
         method: "GET",
-        headers: getApiAuthHeaders(profile),
+        headers: getApiAuthHeaders(profile, conn),
         signal: controller.signal,
         timeout: 120000,
       },
@@ -1888,7 +2035,7 @@ function sendMessageViaRuns(
       startReq?.destroy();
       eventsReq?.destroy();
       fallbackHandle?.abort();
-      if (runId) postRunStop(apiUrl, profile, runId);
+      if (runId) postRunStop(apiUrl, profile, runId, conn);
     },
   };
 }
@@ -1900,6 +2047,8 @@ async function sendMessageViaTuiGateway(
   resumeSessionId?: string,
   history?: Array<{ role: string; content: string }>,
   contextFolder?: string,
+  conn: ConnectionConfig = getConnectionConfig(),
+  connectionId?: string,
 ): Promise<ChatHandle> {
   const client = getTuiGatewayClient(profile);
   let activeSessionId = "";
@@ -1959,6 +2108,8 @@ async function sendMessageViaTuiGateway(
       history,
       undefined,
       contextFolder,
+      undefined,
+      conn,
     )
       .then((handle) => {
         fallbackHandle = handle;
@@ -1971,6 +2122,14 @@ async function sendMessageViaTuiGateway(
 
   cleanup = client.onEvent((event) => {
     if (event.session_id && event.session_id !== activeSessionId) return;
+
+    if (event.type === "session.info") {
+      if (connectionId) {
+        recordAgentRuntimeInfo(event.payload, profile, connectionId);
+      }
+      hasSessionInfo = true;
+      return;
+    }
 
     const delta = gatewayMessageDelta(event);
     if (delta) {
@@ -2174,6 +2333,9 @@ async function sendMessageViaTuiGateway(
       activeSessionId = String(resumed.session_id || "");
       storedSessionId = String(resumed.resumed || resumeSessionId);
       hasSessionInfo = !!resumed.info;
+      if (connectionId) {
+        recordAgentRuntimeInfo(resumed.info, profile, connectionId);
+      }
     } else {
       const created = await client.request<{
         info?: unknown;
@@ -2187,6 +2349,9 @@ async function sendMessageViaTuiGateway(
       activeSessionId = String(created.session_id || "");
       storedSessionId = String(created.stored_session_id || activeSessionId);
       hasSessionInfo = !!created.info;
+      if (connectionId) {
+        recordAgentRuntimeInfo(created.info, profile, connectionId);
+      }
     }
 
     if (!activeSessionId) {
@@ -2642,10 +2807,11 @@ async function sendMessageViaNonGatewayApi(
   attachments?: Attachment[],
   contextFolder?: string,
   override?: SessionModelOverride,
+  conn: ConnectionConfig = getConnectionConfig(),
 ): Promise<ChatHandle> {
   const approvalCommand = /^\/(?:approve|deny)\b/i.test(message.trim());
   if (!attachments?.length && !approvalCommand) {
-    const capabilities = await getApiCapabilities(profile);
+    const capabilities = await getApiCapabilities(profile, conn);
     if (supportsHermesRunsTransport(capabilities)) {
       return sendMessageViaRuns(
         message,
@@ -2656,6 +2822,7 @@ async function sendMessageViaNonGatewayApi(
         attachments,
         contextFolder,
         override,
+        conn,
       );
     }
   }
@@ -2669,6 +2836,7 @@ async function sendMessageViaNonGatewayApi(
     attachments,
     contextFolder,
     override,
+    conn,
   );
 }
 
@@ -2681,6 +2849,8 @@ async function sendMessageViaBestApi(
   attachments?: Attachment[],
   contextFolder?: string,
   override?: SessionModelOverride,
+  conn: ConnectionConfig = getConnectionConfig(),
+  connectionId?: string,
 ): Promise<ChatHandle> {
   const approvalCommand = /^\/(?:approve|deny)\b/i.test(message.trim());
   // Skip the TUI gateway when a session-scoped model override is active — the
@@ -2688,7 +2858,7 @@ async function sendMessageViaBestApi(
   // override mechanism. The API path below already honours the override.
   if (
     shouldUseTuiGatewayClient() &&
-    !isRemoteMode() &&
+    !isRemoteMode(conn) &&
     !attachments?.length &&
     !approvalCommand &&
     !override
@@ -2701,6 +2871,8 @@ async function sendMessageViaBestApi(
         resumeSessionId,
         history,
         contextFolder,
+        conn,
+        connectionId,
       );
     } catch (error) {
       console.warn(
@@ -2719,6 +2891,7 @@ async function sendMessageViaBestApi(
     attachments,
     contextFolder,
     override,
+    conn,
   );
 }
 
@@ -2731,6 +2904,8 @@ async function sendMessageViaBestApiWithLocalRecovery(
   attachments?: Attachment[],
   contextFolder?: string,
   override?: SessionModelOverride,
+  conn: ConnectionConfig = getConnectionConfig(),
+  connectionId?: string,
 ): Promise<ChatHandle> {
   let aborted = false;
   let retrying = false;
@@ -2776,6 +2951,8 @@ async function sendMessageViaBestApiWithLocalRecovery(
         attachments,
         contextFolder,
         override,
+        conn,
+        connectionId,
       );
       return;
     }
@@ -2865,11 +3042,14 @@ async function sendMessageViaBestApiWithLocalRecovery(
     attachments,
     contextFolder,
     override,
+    conn,
+    connectionId,
   );
 
   return handle;
 }
 
+// @lat: [[connections#Session locations#Connection-explicit legacy transport]]
 export async function sendMessage(
   message: string,
   cb: ChatCallbacks,
@@ -2879,12 +3059,14 @@ export async function sendMessage(
   attachments?: Attachment[],
   contextFolder?: string,
   override?: SessionModelOverride,
+  conn: ConnectionConfig = getConnectionConfig(),
+  connectionId?: string,
 ): Promise<ChatHandle> {
   ensureInitialized();
 
   // Remote mode: always use API, no CLI fallback. Cross-provider session
   // overrides are limited to the model string here (no CLI transport remotely).
-  if (isRemoteMode()) {
+  if (isRemoteMode(conn)) {
     return sendMessageViaBestApi(
       message,
       cb,
@@ -2894,6 +3076,8 @@ export async function sendMessage(
       attachments,
       contextFolder,
       override,
+      conn,
+      connectionId,
     );
   }
 
@@ -2919,7 +3103,7 @@ export async function sendMessage(
   // transport error wrapper handle a stale cache caused by external lifecycle
   // events such as `hermes update` or Windows sleep/resume.
   if (apiServerAvailable === null || apiServerAvailable === false) {
-    apiServerAvailable = await isApiServerReady(profile);
+    apiServerAvailable = await isApiServerReady(profile, conn);
     if (!apiServerAvailable) {
       apiServerAvailable = await startGatewayWithRecovery(profile);
     }
@@ -2935,6 +3119,8 @@ export async function sendMessage(
       attachments,
       contextFolder,
       override,
+      conn,
+      connectionId,
     );
   }
 

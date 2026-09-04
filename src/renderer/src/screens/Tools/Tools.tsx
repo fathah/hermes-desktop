@@ -377,7 +377,7 @@ function Tools({
     } finally {
       setLoading(false);
     }
-  }, [profile, showPlatformToolsets]);
+  }, [profile, showPlatformToolsets, t]);
 
   useEffect(() => {
     if (visible) loadToolsets();

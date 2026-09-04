@@ -537,6 +537,37 @@ body {
     color 0.2s ease;
 }
 
+/* Pointer focus should not inherit Chromium's OS-accent ring. Keyboard focus
+   uses an inset desktop-style edge below, following the control's own shape
+   instead of drawing a detached browser outline around it. */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 20%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 7%, transparent);
+  filter: brightness(1.08);
+}
+
+@media (prefers-contrast: more) {
+  :focus-visible {
+    box-shadow: inset 0 0 0 2px var(--text-primary);
+    filter: none;
+  }
+}
+
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+    box-shadow: none;
+    filter: none;
+  }
+}
+
 /* ----- App Shell ----- */
 .app {
   height: 100vh;
@@ -744,12 +775,709 @@ body:has(.shell-vibrant),
    WELCOME SCREEN
    ======================================================================== */
 .welcome-screen {
+  position: relative;
   text-align: center;
   gap: 0;
 }
 
 .welcome-logo {
   border-radius: var(--radius-lg);
+}
+
+/* ========================================================================
+   ONBOARDING HERO (shared) — Welcome / Install / Setup
+   A dark, cinematic branded chrome: aurora wash, twinkling starfield, and a
+   Hermes emblem. On the intro screen the emblem draws itself big in the centre,
+   then flies up + shrinks into its slot before the eyebrow / title / content
+   cascade in. Non-intro screens skip straight to the settled state.
+   Driven by <OnboardHero>; phase lives on [data-phase] (draw|settle|done).
+   ======================================================================== */
+
+.onboard-screen {
+  color-scheme: dark;
+  --bg-primary: #0d0f17;
+  --bg-secondary: #141824;
+  --bg-tertiary: #1b2030;
+  --bg-elevated: #202638;
+  --bg-hover: #252c40;
+  --bg-active: #2d354c;
+  --text-primary: #eef0f6;
+  --text-secondary: #adb4ca;
+  --text-muted: #7f879d;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-bright: rgba(255, 255, 255, 0.14);
+  --code-bg: #10131d;
+  --selection: rgba(120, 150, 255, 0.5);
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+
+/* The onboarding surfaces are non-selectable chrome, not documents. */
+.welcome-screen,
+.install-screen,
+.setup-screen {
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+
+/* Keep editable / copyable content selectable despite the screen-wide guard. */
+.onboard-screen input,
+.onboard-screen textarea,
+.onboard-screen code,
+.onboard-screen [data-selectable],
+.welcome-screen input,
+.welcome-screen textarea,
+.welcome-screen code,
+.install-screen input,
+.install-screen textarea,
+.install-screen code,
+.setup-screen input,
+.setup-screen textarea,
+.setup-screen code {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.onboard-fx {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.onboard-aurora {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      1100px 620px at 50% -8%,
+      rgba(64, 94, 190, 0.22) 0%,
+      rgba(64, 94, 190, 0.07) 45%,
+      rgba(0, 0, 0, 0) 70%
+    ),
+    radial-gradient(
+      900px 500px at 50% 115%,
+      rgba(30, 40, 80, 0.25) 0%,
+      rgba(0, 0, 0, 0) 65%
+    );
+  animation: onboardFade 1.6s ease 0.2s both;
+}
+
+.onboard-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at 50% 50%,
+    rgba(0, 0, 0, 0) 55%,
+    rgba(0, 0, 0, 0.5) 100%
+  );
+}
+
+.onboard-particle {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(200, 214, 255, 0.9);
+  opacity: 0;
+}
+
+.onboard-hero {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 640px;
+  margin: auto;
+  text-align: center;
+}
+
+/* ---- Settled emblem slot (holds layout; the flying logo lands here) ---- */
+.onboard-emblem {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  flex-shrink: 0;
+  opacity: 0;
+}
+
+.onboard-emblem-glow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 260px;
+  height: 260px;
+  margin: -130px 0 0 -130px;
+  pointer-events: none;
+  background: radial-gradient(
+    circle,
+    rgba(120, 150, 255, 0.14) 0%,
+    rgba(120, 150, 255, 0.04) 45%,
+    rgba(0, 0, 0, 0) 70%
+  );
+}
+
+.onboard-emblem svg {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  fill: #f2f4fa;
+  filter: drop-shadow(0 4px 22px rgba(120, 150, 255, 0.35));
+}
+
+/* ---- Flying / intro logo (big centre → draws → flies to the slot) ---- */
+.onboard-fly {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: 180px;
+  height: 180px;
+  z-index: 6;
+  pointer-events: none;
+  transform-origin: center;
+  transform: translate(-50%, -50%);
+  transition: transform 0.95s cubic-bezier(0.22, 1, 0.3, 1);
+}
+
+.onboard-fly-glow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 400px;
+  height: 400px;
+  margin: -200px 0 0 -200px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(120, 150, 255, 0.16) 0%,
+    rgba(120, 150, 255, 0.05) 45%,
+    rgba(0, 0, 0, 0) 70%
+  );
+  animation:
+    onboardFade 1.4s ease 0.5s both,
+    onboardBreath 3.2s ease 2s infinite;
+}
+
+.onboard-fly svg {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: drop-shadow(0 0 26px rgba(130, 160, 255, 0.35));
+}
+
+.onboard-fly path {
+  fill: #f2f4fa;
+  fill-opacity: 0;
+  stroke: #dfe6ff;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+}
+
+.onboard-fp1 {
+  stroke-width: 13;
+  animation:
+    onboardDraw 1.05s cubic-bezier(0.4, 0, 0.2, 1) 0.3s both,
+    onboardFill 0.7s ease 1.15s both,
+    onboardStrokeOut 0.5s ease 1.5s both;
+}
+.onboard-fp2 {
+  stroke-width: 13;
+  animation:
+    onboardDraw 1.05s cubic-bezier(0.4, 0, 0.2, 1) 0.45s both,
+    onboardFill 0.7s ease 1.25s both,
+    onboardStrokeOut 0.5s ease 1.6s both;
+}
+.onboard-fp3 {
+  stroke-width: 11;
+  animation:
+    onboardDraw 1.05s cubic-bezier(0.4, 0, 0.2, 1) 0.6s both,
+    onboardFill 0.7s ease 1.4s both,
+    onboardStrokeOut 0.5s ease 1.75s both;
+}
+.onboard-fp4 {
+  stroke-width: 11;
+  animation:
+    onboardDraw 1.05s cubic-bezier(0.4, 0, 0.2, 1) 0.75s both,
+    onboardFill 0.7s ease 1.5s both,
+    onboardStrokeOut 0.5s ease 1.85s both;
+}
+
+/* ---- Eyebrow + title ---- */
+.onboard-eyebrow {
+  margin-top: 30px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.4em;
+  text-indent: 0.4em;
+  color: #7d88ab;
+  text-transform: uppercase;
+  opacity: 0;
+}
+
+.onboard-title {
+  margin: 14px 0 0;
+  font-size: clamp(26px, 3.2vw, 38px);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+  color: #eef0f6;
+  opacity: 0;
+}
+
+.onboard-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  opacity: 0;
+}
+
+/* ---- Reveal cascade once the logo has settled ---- */
+.onboard-screen[data-phase="done"] .onboard-emblem {
+  animation: onboardFade 0.4s ease both;
+  opacity: 1;
+}
+.onboard-screen[data-phase="done"] .onboard-eyebrow {
+  animation: onboardRise 0.85s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
+}
+.onboard-screen[data-phase="done"] .onboard-title {
+  animation: onboardRise 0.85s cubic-bezier(0.22, 1, 0.36, 1) 0.28s both;
+}
+.onboard-screen[data-phase="done"] .onboard-body {
+  animation: onboardRise 0.85s cubic-bezier(0.22, 1, 0.36, 1) 0.42s both;
+}
+
+/* ---- Shared content pieces ---- */
+.onboard-subtitle {
+  margin: 26px 0 0;
+  max-width: 480px;
+  font-size: 16px;
+  line-height: 1.65;
+  color: #8b91a5;
+  text-wrap: pretty;
+}
+
+/* A standalone text action (e.g. Cancel installation) needs its own breathing
+   room since it isn't wrapped in .onboard-actions. */
+.onboard-body > .onboard-btn-text {
+  margin-top: 30px;
+}
+
+.onboard-note {
+  margin-top: 14px;
+  font-size: 13px;
+  color: #6c7186;
+}
+
+.onboard-divider {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  max-width: 420px;
+  gap: 16px;
+  margin: 38px 0 0;
+  color: #666c80;
+  font-size: 13px;
+}
+.onboard-divider::before,
+.onboard-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+}
+.onboard-divider::before {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.12) 100%
+  );
+}
+.onboard-divider::after {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.12) 0%,
+    rgba(255, 255, 255, 0) 100%
+  );
+}
+
+/* ---- Buttons ---- */
+.onboard-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.25s ease,
+    transform 0.2s ease,
+    filter 0.2s ease;
+}
+.onboard-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.onboard-btn-primary {
+  padding: 15px 40px;
+  border: none;
+  background: linear-gradient(180deg, #4a72dd 0%, #3253b4 100%);
+  color: #f4f7ff;
+  font-size: 17px;
+  font-weight: 600;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 14px 44px rgba(74, 114, 221, 0.35);
+}
+.onboard-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.12);
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.1),
+    0 16px 54px rgba(74, 114, 221, 0.5);
+}
+.onboard-btn-primary:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+.onboard-btn-glass {
+  padding: 12px 26px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #c3c8d8;
+  font-size: 15px;
+  font-weight: 500;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.onboard-btn-glass:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+.onboard-btn-text {
+  padding: 12px 22px;
+  border: none;
+  background: transparent;
+  color: #8b91a5;
+  font-size: 15px;
+  font-weight: 500;
+}
+.onboard-btn-text:hover:not(:disabled) {
+  color: #c3c8d8;
+}
+
+.onboard-cta-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 42px;
+}
+
+.onboard-connect-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 30px;
+}
+
+.onboard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin-top: 32px;
+}
+
+/* ---- Field + info card (Install / Setup) ---- */
+.onboard-field-label {
+  align-self: flex-start;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #7d88ab;
+  margin: 32px 0 10px;
+}
+
+.onboard-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 16px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #e8eaf0;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  text-align: left;
+  box-sizing: border-box;
+}
+.onboard-field svg {
+  flex-shrink: 0;
+  color: #8b91a5;
+}
+.onboard-field code,
+.onboard-field span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.onboard-note-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  width: 100%;
+  margin-top: 20px;
+  padding: 18px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.02);
+  text-align: left;
+  box-sizing: border-box;
+}
+.onboard-note-card svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: #6f7cc0;
+}
+.onboard-note-card-title {
+  font-size: 15px;
+  color: #e2e5f0;
+  line-height: 1.45;
+}
+.onboard-note-card-sub {
+  margin-top: 4px;
+  font-size: 13.5px;
+  color: #8b91a5;
+  line-height: 1.5;
+}
+
+.onboard-hint {
+  margin-top: 26px;
+  max-width: 520px;
+  font-size: 13.5px;
+  color: #6c7186;
+  line-height: 1.55;
+}
+.onboard-hint code {
+  font-family: var(--font-mono);
+  color: #aab4d4;
+}
+
+.onboard-error {
+  margin-top: 14px;
+  color: var(--error, #e5484d);
+  font-size: 13.5px;
+}
+
+/* ---- Wider hero (installing progress / terminal log) ---- */
+.onboard-hero--wide {
+  max-width: 820px;
+}
+
+/* ---- Progress (installing) ---- */
+.onboard-progress {
+  width: 100%;
+  margin-top: 52px;
+}
+
+.onboard-progress-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.onboard-progress-step {
+  font-size: 15px;
+  font-weight: 600;
+  color: #dfe3ef;
+}
+.onboard-progress-step b {
+  font-weight: 600;
+  color: #5b7ce0;
+}
+
+.onboard-progress-percent {
+  font-size: 15px;
+  font-weight: 600;
+  color: #5b7ce0;
+  font-variant-numeric: tabular-nums;
+}
+
+.onboard-progress-track {
+  margin-top: 12px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.onboard-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #3253b4 0%, #5b7ce0 100%);
+  transition: width 0.35s ease;
+}
+.onboard-progress-fill--error {
+  background: var(--error, #e5484d);
+}
+
+.onboard-progress-detail {
+  margin-top: 14px;
+  font-size: 15px;
+  color: #8b91a5;
+  line-height: 1.5;
+}
+
+/* ---- Terminal log window ----
+   Fixed width (fills the wide column) and fixed body height so the layout
+   never shifts as log lines stream in — the body scrolls internally. */
+.onboard-terminal {
+  width: 100%;
+  margin-top: 26px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(8, 10, 16, 0.6);
+  overflow: hidden;
+  text-align: left;
+}
+
+.onboard-terminal-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.onboard-terminal-dots {
+  display: flex;
+  gap: 7px;
+}
+.onboard-terminal-dots span {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.onboard-terminal-title {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: #6c7186;
+}
+
+.onboard-terminal-body {
+  height: 230px;
+  overflow-y: auto;
+  padding: 16px 20px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: #aeb4c6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ---- Keyframes ---- */
+@keyframes onboardFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes onboardRise {
+  from {
+    opacity: 0;
+    transform: translateY(26px);
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0px);
+  }
+}
+@keyframes onboardTwinkle {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+@keyframes onboardDraw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes onboardFill {
+  to {
+    fill-opacity: 1;
+  }
+}
+@keyframes onboardStrokeOut {
+  to {
+    stroke-opacity: 0;
+  }
+}
+@keyframes onboardBreath {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onboard-aurora,
+  .onboard-fly-glow,
+  .onboard-emblem,
+  .onboard-eyebrow,
+  .onboard-title,
+  .onboard-body {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+  .onboard-particle {
+    display: none;
+  }
+  .onboard-fly {
+    display: none;
+  }
+  .onboard-fly path {
+    fill-opacity: 1;
+    stroke-opacity: 0;
+    stroke-dashoffset: 0;
+  }
 }
 
 .welcome-title {
@@ -1196,11 +1924,6 @@ body:has(.shell-vibrant),
   border-color: var(--accent-text);
   background: var(--accent-subtle);
   box-shadow: inset 0 0 0 1px var(--accent-text);
-}
-
-.setup-provider-card:focus-visible {
-  outline: 2px solid var(--accent-text);
-  outline-offset: 2px;
 }
 
 .setup-provider-logo {
@@ -1980,6 +2703,11 @@ body:has(.shell-vibrant),
   color: var(--text-primary);
 }
 
+.sidebar-recent-session:focus-visible {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
 .sidebar-recent-session.active {
   /* Active state is shown by the bullet + text color only — no filled
      background (keeps the list visually quiet). */
@@ -2167,6 +2895,12 @@ body:has(.shell-vibrant),
 
 .sidebar-session-menu-item:hover {
   background: var(--bg-tertiary);
+}
+
+.sidebar-session-menu-item:focus-visible,
+.sidebar-session-menu-back:focus-visible {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
 .sidebar-session-menu-item--danger {
@@ -2692,7 +3426,8 @@ body:has(.shell-vibrant),
   align-items: center;
   gap: 10px;
   padding: 14px 16px;
-  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 7%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--text-primary) 7%, transparent);
 }
 .profile-switch-search-icon {
   flex-shrink: 0;
@@ -3643,7 +4378,7 @@ body:has(.shell-vibrant),
   color: var(--accent-text);
 }
 
-/* File icon wrapper for react-file-icon */
+/* Browser-safe Lucide file-type icons in the worktree. */
 .worktree-file-icon-wrapper {
   width: 18px;
   height: 18px;
@@ -3826,11 +4561,6 @@ body:has(.shell-vibrant),
   scrollbar-width: thin;
 }
 
-.folder-picker-list:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent-text) 38%, transparent);
-  outline-offset: -2px;
-}
-
 .folder-picker-row {
   display: flex;
   width: 100%;
@@ -4011,10 +4741,13 @@ body:has(.shell-vibrant),
   color: var(--text-secondary);
   background: color-mix(in srgb, var(--text-primary) 10%, transparent);
 }
-/* Block removes the inline-SVG baseline gap that otherwise makes the bolt sit
-   low; the lucide Zap glyph is centred in its own viewBox. */
+/* `display:block` removes the inline-SVG baseline gap that otherwise makes the
+   bolt sit low. The lucide Zap is geometrically centred in its viewBox, but its
+   thin right arm pulls the geometric centre right of the visual mass, so the
+   bolt reads as left-shifted — a 1px nudge optically re-centres it in the chip. */
 .chat-fast-popover-icon svg {
   display: block;
+  transform: translateX(1px);
 }
 /* On state: a solid amber badge with a dark glyph — high contrast, and it
    signals "active" the way the toggle button does. */
@@ -4030,7 +4763,7 @@ body:has(.shell-vibrant),
   color: var(--text-primary);
 }
 
-.chat-fast-popover span {
+.chat-fast-popover > span {
   display: block;
   font-size: 11px;
   line-height: 1.5;
@@ -4311,6 +5044,23 @@ body:has(.shell-vibrant),
   background: var(--user-bubble);
   color: var(--user-bubble-text);
   border-bottom-right-radius: 4px;
+}
+
+/* Sent prompts use the same sanitized Markdown pipeline as agent responses.
+   Paragraphs retain literal line breaks so ordinary plain-text prompts keep
+   their original shape, while whitespace between structural elements stays
+   normal and does not create gaps between list/table rows. */
+.chat-user-markdown {
+  white-space: normal;
+}
+
+.chat-user-markdown p {
+  white-space: pre-wrap;
+}
+
+.chat-user-markdown a {
+  color: inherit;
+  text-decoration: underline;
 }
 
 .chat-bubble-agent {
@@ -4959,6 +5709,12 @@ body:has(.shell-vibrant),
   flex-shrink: 0;
 }
 
+.chat-input-shell {
+  position: relative;
+  width: 100%;
+  overflow: visible;
+}
+
 .chat-input-wrapper {
   display: flex;
   flex-direction: column;
@@ -4973,17 +5729,39 @@ body:has(.shell-vibrant),
     box-shadow var(--transition);
 }
 
+.chat-input-shell > .chat-input-beam {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  pointer-events: none;
+  transition: box-shadow var(--transition);
+}
+
+.chat-input-beam-surface {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-lg);
+}
+
+.chat-input-shell:focus-within > .chat-input-beam {
+  box-shadow: 0 0 0 3px var(--accent-subtle);
+}
+
 .chat-input-wrapper:focus-within {
   /* Soft accent glow on focus instead of a saturated electric-blue stroke. */
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border-bright));
-  box-shadow: 0 0 0 3px var(--accent-subtle);
+  box-shadow: none;
 }
 
 .chat-input {
   width: 100%;
   background: none;
   border: none;
+  box-shadow: none;
   color: var(--text-primary);
+  filter: none;
   font-size: 14px;
   font-family: var(--font-sans);
   padding: 4px 6px;
@@ -7284,6 +8062,47 @@ body:has(.shell-vibrant),
   color: var(--warning, #f59e0b);
 }
 
+.ssh-docker-container-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.ssh-docker-container-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  cursor: pointer;
+}
+
+.ssh-docker-container-option input {
+  margin-top: 3px;
+}
+
+.ssh-docker-container-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ssh-docker-container-name {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.ssh-docker-container-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
 .settings-input-row {
   display: flex;
   gap: 8px;
@@ -9464,19 +10283,24 @@ body:has(.shell-vibrant),
 
 /* Grouped preferences — one quiet card, hairline row dividers, macOS-style. */
 .settings-group {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) fit-content(52%);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--text-primary) 4%, transparent);
   overflow: hidden;
 }
 .settings-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 13px 16px;
+  column-gap: 16px;
+  padding-block: 13px;
+  padding-inline: 16px;
 }
 .settings-row + .settings-row {
-  border-top: 1px solid var(--border);
+  border-block-start: 1px solid var(--border);
 }
 .settings-row-text {
   min-width: 0;
@@ -9484,18 +10308,31 @@ body:has(.shell-vibrant),
 .settings-row-label {
   font-size: 13px;
   font-weight: 600;
+  line-height: 1.35;
   color: var(--text-primary);
+  overflow-wrap: anywhere;
 }
 .settings-row-hint {
-  margin-top: 2px;
+  margin-block-start: 2px;
   font-size: 12px;
+  line-height: 1.35;
   color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.settings-row-control {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 /* Segmented control (font, hardware accel) — a track with pill segments. */
 .settings-seg {
   display: inline-flex;
-  flex-shrink: 0;
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 2px;
   padding: 2px;
   border-radius: var(--radius-sm);
@@ -9510,7 +10347,8 @@ body:has(.shell-vibrant),
   font-size: 12.5px;
   font-weight: 500;
   font-family: var(--font-sans);
-  white-space: nowrap;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
   cursor: pointer;
   transition:
     background var(--transition),
@@ -9522,6 +10360,20 @@ body:has(.shell-vibrant),
 .settings-seg-btn.active {
   background: color-mix(in srgb, var(--text-primary) 12%, transparent);
   color: var(--text-primary);
+}
+
+/* When translated labels and controls cannot share two useful columns, keep
+   each row aligned by moving its control below the copy at the logical start. */
+@container (max-width: 560px) {
+  .settings-row {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 10px;
+  }
+
+  .settings-row-control,
+  .settings-seg {
+    justify-content: flex-start;
+  }
 }
 
 /* Language picker dropdown */
@@ -10560,6 +11412,63 @@ body:has(.shell-vibrant),
   margin-bottom: 3px;
 }
 
+.settings-spellcheck-mode {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.settings-spellcheck-mode > input {
+  margin-top: 3px;
+}
+
+.settings-spellcheck-mode > span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.settings-spellcheck-mode strong {
+  font-size: 13px;
+}
+
+.settings-spellcheck-mode small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-spellcheck-mode code {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.settings-spellcheck-languages {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  max-height: 220px;
+  margin-top: 8px;
+  padding: 10px;
+  overflow-y: auto;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+
+.settings-spellcheck-languages label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
 @keyframes settings-spin {
   to {
     transform: rotate(360deg);
@@ -10642,6 +11551,16 @@ body:has(.shell-vibrant),
   align-items: center;
   justify-content: center;
   gap: 7px;
+}
+
+.settings-connection-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-connection-row .input {
+  flex: 1 1 220px;
 }
 
 /* Subsection within a pane — a divider + icon'd label grouping related
@@ -11474,6 +12393,108 @@ body:has(.shell-vibrant),
 .sessions-searchbar-clear {
   padding: 2px;
   color: var(--text-muted);
+}
+
+.sessions-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sessions-type-filter {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+
+.sessions-type-filter button {
+  appearance: none;
+  border: 0;
+  border-radius: calc(var(--radius-md) - 3px);
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sessions-type-filter button.active {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.16);
+}
+
+.sessions-source-filter {
+  position: relative;
+  margin-left: auto;
+}
+
+.sessions-source-filter summary {
+  list-style: none;
+  min-width: 112px;
+  padding: 7px 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+}
+
+.sessions-source-filter summary::-webkit-details-marker {
+  display: none;
+}
+
+.sessions-source-filter-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 220px;
+  max-height: 260px;
+  padding: 8px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.28);
+}
+
+.sessions-source-filter-menu button,
+.sessions-source-filter-menu label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sessions-source-filter-menu button:hover,
+.sessions-source-filter-menu label:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.sessions-source-filter-menu label span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Loading & empty states */
@@ -14093,7 +15114,105 @@ body:has(.shell-vibrant),
   }
 }
 
-/* Toggle switch */
+/* Shared settings toggle — adapted from Transitions.dev. The interaction gate
+   prevents the off animation from playing during initial settings hydration. */
+.app-toggle {
+  --toggle-duration: 350ms;
+  --toggle-travel: 18px;
+  --toggle-overshoot: 1px;
+  --toggle-settle: 0px;
+  --toggle-track-duration: 0ms;
+  --toggle-ease: cubic-bezier(0.34, 1.35, 0.64, 1);
+  appearance: none;
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  width: 40px;
+  height: 22px;
+  padding: 3px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text-primary) 16%, transparent);
+  cursor: pointer;
+  transition: background var(--toggle-track-duration) var(--toggle-ease);
+}
+
+.app-toggle:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-primary) 24%, transparent);
+}
+
+.app-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.app-toggle-thumb {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: currentColor;
+  translate: 0 0;
+  will-change: translate;
+}
+
+.app-toggle[data-on="true"] {
+  color: #fff;
+  background: var(--accent);
+}
+
+.app-toggle[data-on="true"] .app-toggle-thumb {
+  translate: var(--toggle-travel) 0;
+}
+
+.app-toggle.is-init[data-on="true"] .app-toggle-thumb {
+  animation: app-toggle-on var(--toggle-duration) var(--toggle-ease) both;
+}
+
+.app-toggle.is-init[data-on="false"] .app-toggle-thumb {
+  animation: app-toggle-off var(--toggle-duration) var(--toggle-ease) both;
+}
+
+@keyframes app-toggle-on {
+  0% {
+    translate: 0 0;
+  }
+  55% {
+    translate: calc(var(--toggle-travel) + var(--toggle-overshoot)) 0;
+  }
+  80% {
+    translate: calc(var(--toggle-travel) - var(--toggle-settle)) 0;
+  }
+  100% {
+    translate: var(--toggle-travel) 0;
+  }
+}
+
+@keyframes app-toggle-off {
+  0% {
+    translate: var(--toggle-travel) 0;
+  }
+  55% {
+    translate: calc(0px - var(--toggle-overshoot)) 0;
+  }
+  80% {
+    translate: var(--toggle-settle) 0;
+  }
+  100% {
+    translate: 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-toggle-thumb {
+    animation: none !important;
+    will-change: auto;
+  }
+}
+
+/* Legacy switch markup used outside the Settings modal. */
 .tools-toggle {
   position: relative;
   display: inline-flex;
@@ -16194,6 +17313,21 @@ body:has(.shell-vibrant),
   flex-shrink: 0;
 }
 
+.web-preview-annotate-btn.web-preview-btn-active {
+  width: auto;
+  padding: 0 10px;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 999px;
+}
+
+.web-preview-annotate-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
 .web-preview-webview-container {
   flex: 1;
   position: relative;
@@ -16205,6 +17339,130 @@ body:has(.shell-vibrant),
   height: 100%;
   border: none;
   background: #ffffff;
+}
+
+.web-preview-annotation-outline {
+  position: absolute;
+  z-index: 10;
+  border: 2px solid rgba(59, 130, 246, 0.95);
+  border-radius: 4px;
+  background: rgba(59, 130, 246, 0.22);
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.web-preview-annotation-shield {
+  position: absolute;
+  inset: 0;
+  z-index: 11;
+  cursor: default;
+}
+
+.web-preview-annotation-composer {
+  position: absolute;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 7px 8px 7px 14px;
+  border: 1px solid color-mix(in srgb, var(--border) 75%, white 10%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+  box-shadow:
+    0 14px 36px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+}
+
+.web-preview-annotation-composer:focus-within {
+  border-color: color-mix(in srgb, var(--text-primary) 20%, var(--border));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 20%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 7%, transparent),
+    0 14px 36px rgba(0, 0, 0, 0.42);
+}
+
+.web-preview-annotation-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.web-preview-annotation-input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.web-preview-annotation-input::placeholder {
+  color: var(--text-muted);
+}
+
+.web-preview-annotation-input:focus-visible {
+  box-shadow: none;
+  filter: none;
+}
+
+.web-preview-annotation-cancel,
+.web-preview-annotation-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.web-preview-annotation-cancel {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.web-preview-annotation-cancel:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.web-preview-annotation-submit {
+  background: var(--accent);
+  color: white;
+}
+
+.web-preview-annotation-submit:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.web-preview-annotation-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
+.web-preview-annotation-marker {
+  position: absolute;
+  z-index: 13;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 2px solid white;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
 }
 
 .web-preview-btn-active {

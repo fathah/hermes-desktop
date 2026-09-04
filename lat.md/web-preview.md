@@ -2,7 +2,9 @@
 
 The chat screen can open a split-screen [[src/renderer/src/screens/Chat/WebPreviewPanel.tsx#WebPreviewPanel]] — an embedded Electron `<webview>` with a browser toolbar and an inspect-element mode — so the agent's links and locally served apps render in-app instead of an external browser.
 
-It auto-opens when an in-app link is clicked or a web tool reports a URL, via the `web-preview:navigate` `CustomEvent` that [[src/renderer/src/screens/Chat/Chat.tsx]] listens for. Inspect mode injects a hover/click overlay into the page and feeds the picked element's pretty-printed HTML back into the chat input.
+It auto-opens when an in-app link is clicked or a web tool reports a URL, via the `web-preview:navigate` `CustomEvent` that [[src/renderer/src/screens/Chat/Chat.tsx]] listens for. Annotation mode runs the fixed picker from [[src/main/web-preview-inspector.ts]] in Electron isolated world `1001`, returning a validated CSS selector and bounding rectangle through narrow preload IPC methods. Hermes renders the selected outline and floating comment composer above the webview, so the inspected page cannot spoof the result or read the comment. Submitting inserts only the unique CSS selector and comment into chat—never the element HTML. Annotation controls inherit the app-wide [[sidebar-navigation#Sidebar recent sessions#Row context menu|native inset keyboard-focus treatment]] instead of drawing an accent outline.
+
+Same-document navigation keeps the current DOM ready. The panel updates its address and cancels any active inspection without clearing DOM readiness, because Electron does not emit another `dom-ready` after SPA `pushState`, `replaceState`, or hash navigation.
 
 The panel's width is free-resizable: a drag handle on its left edge sets a `width` clamped between `MIN_PANEL_WIDTH` and `window.innerWidth - 360`, persisted to `localStorage` under `hermes:webPreviewWidth`. During a drag the webview's `pointer-events` are disabled so it doesn't swallow the move stream.
 

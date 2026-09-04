@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Crown,
   DoorOpen,
@@ -47,6 +54,11 @@ function isEditableTarget(t: EventTarget | null): boolean {
 interface OfficeProps {
   profile?: string;
   visible?: boolean;
+}
+
+interface AgentStatusRequest {
+  profile: string | undefined;
+  promise: Promise<OfficeAgent[]>;
 }
 
 // The CEO assignment is desktop-local UI state (one agent at a time), persisted
@@ -113,27 +125,88 @@ function Office({ visible, profile }: OfficeProps): React.JSX.Element {
     }
   }, []);
   // Avoid refetching every time the tab regains visibility within a session;
-  // only the first reveal and explicit refreshes hit IPC.
+  // the first reveal, profile changes, and explicit refreshes hit IPC.
   const loadedOnce = useRef(false);
+  const lastVisibleProfileRef = useRef(profile);
+
+  // Profile/Kanban IPC can take longer than the polling interval. Share one
+  // request across initial/manual loads and quiet polls so ticks never stack
+  // subprocesses, and track the committed profile so stale results cannot land.
+  const statusRequestRef = useRef<AgentStatusRequest | null>(null);
+  const activeProfileRef = useRef(profile);
+  useLayoutEffect(() => {
+    activeProfileRef.current = profile;
+  }, [profile]);
+
+  const requestAgentStatuses = useCallback((): AgentStatusRequest => {
+    const activeRequest = statusRequestRef.current;
+    if (activeRequest) return activeRequest;
+
+    const requestProfile = profile;
+    const promise = (async (): Promise<OfficeAgent[]> => {
+      const [profilesResult, runningTasksResult] = await Promise.allSettled([
+        window.hermesAPI.listProfiles(),
+        window.hermesAPI.kanbanListTasks({
+          status: "running",
+          profile: requestProfile,
+        }),
+      ]);
+      if (profilesResult.status === "rejected") throw profilesResult.reason;
+      const runningTasks =
+        runningTasksResult.status === "fulfilled"
+          ? runningTasksResult.value
+          : null;
+      return profilesToOfficeAgents(
+        profilesResult.value,
+        runningTasks?.success ? (runningTasks.data ?? []) : null,
+      );
+    })();
+    const request = { profile: requestProfile, promise };
+    statusRequestRef.current = request;
+    const clearRequest = (): void => {
+      if (statusRequestRef.current === request) statusRequestRef.current = null;
+    };
+    void promise.then(clearRequest, clearRequest);
+    return request;
+  }, [profile]);
 
   const loadAgents = useCallback(async () => {
+    const requestProfile = profile;
     setLoading(true);
     try {
-      const profiles = await window.hermesAPI.listProfiles();
-      setAgents(profilesToOfficeAgents(profiles));
-    } catch {
-      setAgents([]);
+      // A profile change during a slow request waits for that request to settle,
+      // then immediately starts the newest profile rather than overlapping it.
+      while (activeProfileRef.current === requestProfile) {
+        const request = requestAgentStatuses();
+        try {
+          const next = await request.promise;
+          if (activeProfileRef.current !== requestProfile) return;
+          if (request.profile !== requestProfile) continue;
+          setAgents(next);
+          break;
+        } catch {
+          if (activeProfileRef.current !== requestProfile) return;
+          if (request.profile !== requestProfile) continue;
+          setAgents([]);
+          break;
+        }
+      }
     } finally {
-      setLoading(false);
-      loadedOnce.current = true;
+      if (activeProfileRef.current === requestProfile) {
+        setLoading(false);
+        loadedOnce.current = true;
+      }
     }
-  }, []);
+  }, [profile, requestAgentStatuses]);
 
   useEffect(() => {
-    if (visible && !loadedOnce.current) {
+    if (!visible) return;
+    const profileChanged = lastVisibleProfileRef.current !== profile;
+    lastVisibleProfileRef.current = profile;
+    if (!loadedOnce.current || profileChanged) {
       void loadAgents();
     }
-  }, [visible, loadAgents]);
+  }, [visible, profile, loadAgents]);
 
   // GPU state is fixed for the lifetime of the process (changing it requires a
   // relaunch), so one fetch on first reveal is enough.
@@ -158,22 +231,32 @@ function Office({ visible, profile }: OfficeProps): React.JSX.Element {
     }
   }, []);
 
-  // Background poll: re-read profiles while the tab is visible so a gateway
-  // starting/stopping flips an agent's status (idle <-> working). The 3D
-  // controller reacts to that change by walking the agent to its desk or to
-  // the rest room. We update state only when something actually changed and
-  // never toggle `loading`, so this stays flicker-free.
+  // Background poll: re-read profiles and running Kanban cards while the tab is
+  // visible. A profile walks to its desk while it owns a running card and goes
+  // idle after that card leaves `running`. Gateway liveness remains separate
+  // metadata for chat availability and is the fallback when Kanban is
+  // unavailable. State updates only on a real change, so this stays flicker-free.
   const refreshAgentStatuses = useCallback(async () => {
+    // Initial/manual loads and earlier ticks own the single request slot. Skip
+    // this tick; the interval keeps its existing four-second cadence.
+    if (statusRequestRef.current) return;
+    const requestProfile = profile;
+    const request = requestAgentStatuses();
     try {
-      const profiles = await window.hermesAPI.listProfiles();
-      const next = profilesToOfficeAgents(profiles);
+      const next = await request.promise;
+      if (
+        activeProfileRef.current !== requestProfile ||
+        request.profile !== requestProfile
+      ) {
+        return;
+      }
       setAgents((prev) => {
         return officeAgentsChanged(prev, next) ? next : prev;
       });
     } catch {
       // Transient IPC failures are ignored; the next tick retries.
     }
-  }, []);
+  }, [profile, requestAgentStatuses]);
 
   useEffect(() => {
     if (!visible) return;
@@ -183,10 +266,10 @@ function Office({ visible, profile }: OfficeProps): React.JSX.Element {
     return () => window.clearInterval(interval);
   }, [visible, refreshAgentStatuses]);
 
-  // The initial fetch is driven solely by the visible-guard effect above
-  // (gated on `!loadedOnce.current`). A second unconditional mount effect used
-  // to live here too, but when the tab was visible on first render both fired
-  // in the same commit and raced two concurrent `listProfiles` calls.
+  // Initial and profile-change fetches are driven solely by the visible-guard
+  // effect above. A second unconditional mount effect used to live here too,
+  // but when the tab was visible on first render both fired in the same commit
+  // and raced two concurrent `listProfiles` calls.
 
   // Reset selection / CEO if the underlying profile disappears on refresh.
   useEffect(() => {

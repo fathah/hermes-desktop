@@ -144,7 +144,7 @@ function sanitizeSshError(stderr: string): string {
   return cleaned;
 }
 
-function shellQuote(value: string): string {
+export function shellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\"'\"'")}'`;
 }
 
@@ -974,6 +974,82 @@ export async function sshReadEnv(
   return result;
 }
 
+/**
+ * Boolean-only OAuth credential probe for SSH hosts that cannot serve the
+ * dashboard API. The Python process reads remote auth.json stores and emits no
+ * credential material. Named profiles inherit the default store just like the
+ * local hasOAuthCredentials helper.
+ */
+export async function sshGetOAuthProviderStatuses(
+  config: SshConfig,
+  providers: readonly string[],
+  profile?: string,
+): Promise<Record<string, boolean>> {
+  const requested = (profile || "default").trim() || "default";
+  if (
+    requested !== "default" &&
+    !/^[a-z0-9_][a-z0-9_-]{0,63}$/.test(requested)
+  ) {
+    throw new Error("Invalid SSH profile name.");
+  }
+
+  const script = String.raw`
+import json
+import pathlib
+import sys
+
+payload = json.loads(sys.stdin.read() or "{}")
+providers = [item for item in payload.get("providers", []) if isinstance(item, str)]
+profile = str(payload.get("profile") or "default")
+root = pathlib.Path.home() / ".hermes"
+paths = [root / "auth.json"]
+if profile != "default":
+    paths.insert(0, root / "profiles" / profile / "auth.json")
+
+stores = []
+for path in paths:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        stores.append(value if isinstance(value, dict) else {})
+    except Exception:
+        stores.append({})
+
+def usable(entry):
+    if not isinstance(entry, dict):
+        return False
+    return any(str(entry.get(key) or "").strip() for key in (
+        "access_token", "refresh_token", "api_key"
+    ))
+
+result = {}
+for provider in providers:
+    found = False
+    for store in stores:
+        direct = store.get("providers", {})
+        if isinstance(direct, dict) and usable(direct.get(provider)):
+            found = True
+            break
+        pool = store.get("credential_pool", {})
+        entries = pool.get(provider, []) if isinstance(pool, dict) else []
+        if isinstance(entries, list) and any(usable(entry) for entry in entries):
+            found = True
+            break
+    result[provider] = found
+
+print(json.dumps(result))
+`;
+
+  const out = await sshPython(
+    config,
+    script,
+    JSON.stringify({ providers, profile: requested }),
+  );
+  const parsed = JSON.parse(out.trim() || "{}") as Record<string, unknown>;
+  return Object.fromEntries(
+    providers.map((provider) => [provider, parsed[provider] === true]),
+  );
+}
+
 // Pure line-rewrite for sshSetEnvValue, exported for tests. Rewrites the
 // FIRST matching line (commented-out counts — it becomes live) and DROPS any
 // later duplicates. Both sshReadEnv and the remote gateway's dotenv are
@@ -1702,7 +1778,7 @@ export function parseHermesProfileListOutput(output: string): SshProfileInfo[] {
 // Per-user launcher hooks a managed deployment can drop in to wrap the real
 // Hermes CLI (custom HERMES_HOME, service user, unusual filesystem layout).
 // Kept in sync with the launcher probe order in buildRemoteHermesCmd.
-const REMOTE_HERMES_LAUNCHER_CANDIDATES = [
+export const REMOTE_HERMES_LAUNCHER_CANDIDATES = [
   "$HOME/.config/hermes-desktop/remote-hermes",
   "$HOME/.hermes/desktop-remote-hermes",
 ];
@@ -2062,8 +2138,21 @@ export function buildGatewayStopCommand(profile?: string): string {
  * gateway this is the unit's `is-active` state (`active` when up); otherwise
  * it is a liveness check on the recorded pid. Prints `active` or `running`
  * when up, anything else when not.
+ *
+ * `healthPort` (issue #432): Docker-backed installs record the pid in the
+ * CONTAINER's pid namespace, so a host-side `kill -0` reports a healthy
+ * gateway as stopped — and the desktop then nohups a second `gateway run`
+ * into the container. When the recorded pid is not visible on the host, fall
+ * back to probing the gateway's loopback health endpoint, which is
+ * namespace-agnostic.
  */
-export function buildGatewayStatusCommand(profile?: string): string {
+export function buildGatewayStatusCommand(
+  profile?: string,
+  healthPort?: number,
+): string {
+  const healthProbe = Number.isInteger(healthPort)
+    ? `python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:${healthPort}/health', timeout=3)" >/dev/null 2>&1 && echo "running" || echo "stopped"`
+    : `echo "stopped"`;
   if (profile && profile !== "default") {
     const pidPath = remoteGatewayPidPath(profile);
     return (
@@ -2079,8 +2168,8 @@ export function buildGatewayStatusCommand(profile?: string): string {
     `else ` +
     `if [ -f $HOME/.hermes/gateway.pid ]; then ` +
     `pid=$(python3 -c "import json,sys; d=json.load(open('$HOME/.hermes/gateway.pid')); print(d.get('pid',d) if isinstance(d,dict) else d)" 2>/dev/null || cat $HOME/.hermes/gateway.pid); ` +
-    `kill -0 $pid 2>/dev/null && echo "running" || echo "stopped"; ` +
-    `else echo "stopped"; fi; ` +
+    `kill -0 $pid 2>/dev/null && echo "running" || { ${healthProbe}; }; ` +
+    `else ${healthProbe}; fi; ` +
     `fi`
   );
 }
@@ -2090,7 +2179,15 @@ export async function sshGatewayStatus(
   profile?: string,
 ): Promise<boolean> {
   try {
-    const out = await sshExec(config, buildGatewayStatusCommand(profile));
+    // The health fallback targets the connection's configured gateway API
+    // port. Named profiles run their own gateways on ports this function
+    // cannot infer, so only the default-profile status uses it.
+    const healthPort =
+      !profile || profile === "default" ? config.remotePort : undefined;
+    const out = await sshExec(
+      config,
+      buildGatewayStatusCommand(profile, healthPort),
+    );
     const state = out.trim();
     return state === "running" || state === "active";
   } catch {
@@ -3223,9 +3320,9 @@ export async function sshListCachedSessions(
   config: SshConfig,
   limit = 50,
   offset = 0,
+  profile?: string,
 ): Promise<CachedSession[]> {
-  void offset;
-  const sessions = await sshListSessions(config, limit, 0);
+  const sessions = await sshListSessions(config, limit, offset, profile);
   return sessions.map((s) => ({
     id: s.id,
     title: s.title || s.id,
@@ -3266,17 +3363,21 @@ export async function sshListCachedSessions(
 // are not visible.
 //
 // Exported for unit testing the probe list without a live remote host.
+// Shared with the SSH target inspection in ssh-docker.ts so "is Hermes
+// installed on the host?" uses the exact same probe list as command execution.
+export const REMOTE_HERMES_CLI_CANDIDATES = [
+  "$HOME/hermes-agent/.venv/bin/hermes",
+  "$HOME/hermes-agent/venv/bin/hermes",
+  "$HOME/.hermes/hermes-agent/.venv/bin/hermes",
+  "$HOME/.hermes/hermes-agent/venv/bin/hermes",
+  "/opt/hermes/hermes-agent/.venv/bin/hermes",
+  "/opt/hermes/hermes-agent/venv/bin/hermes",
+  "$HOME/.local/bin/hermes",
+];
+
 export function buildRemoteHermesCmd(args: string[], extraShell = ""): string {
   const launcherCandidates = REMOTE_HERMES_LAUNCHER_CANDIDATES;
-  const candidates = [
-    "$HOME/hermes-agent/.venv/bin/hermes",
-    "$HOME/hermes-agent/venv/bin/hermes",
-    "$HOME/.hermes/hermes-agent/.venv/bin/hermes",
-    "$HOME/.hermes/hermes-agent/venv/bin/hermes",
-    "/opt/hermes/hermes-agent/.venv/bin/hermes",
-    "/opt/hermes/hermes-agent/venv/bin/hermes",
-    "$HOME/.local/bin/hermes",
-  ];
+  const candidates = REMOTE_HERMES_CLI_CANDIDATES;
   const quotedArgs = args.map((a) => shellQuote(a)).join(" ");
   const launcherProbe = launcherCandidates
     .map((p) => `[ -x ${p} ] && exec ${p} ${quotedArgs}${extraShell}`)

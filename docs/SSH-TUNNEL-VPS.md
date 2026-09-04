@@ -117,6 +117,36 @@ SSH in as the `hermes` user. Two things to set up:
 Don't. If it currently does, migrate it to a dedicated user before
 exposing SSH to it.
 
+### Case D — Hermes runs in a Docker container (Coolify, Compose, NAS)
+
+A containerized `nousresearch/hermes-agent` deployment is fully
+supported, but the host has no `hermes` binary and no real `~/.hermes` —
+the CLI lives inside the container and the data lives in the volume
+mounted at the container's `/opt/data`. Without setup, chat works (the
+API port is reachable through the tunnel) while Sessions, Models, Logs,
+and Doctor come up empty.
+
+The desktop can set this up for you. In **Settings → Connection → SSH**
+(or the first-run SSH screen), use **Detect remote install**. The
+desktop lists running Hermes containers; pick one (required when several
+run) and click **Set up Docker access**. This writes two files on the
+SSH host, as the SSH user:
+
+- `~/.config/hermes-desktop/remote-hermes` — a launcher that runs the
+  Hermes CLI inside the selected container via `docker exec`. This is
+  the standard per-user launcher hook the desktop already probes first
+  for every remote CLI call, so gateway controls, Doctor, skills, and
+  profile listing all route into the container automatically.
+- `~/.hermes` → symlink to the container's data volume (for example
+  `/data/hermes`), so session lists, config, logs, and memory read the
+  real Hermes home.
+
+Requirements: the SSH user must be able to run `docker` (root or a user
+in the `docker` group), and the container must mount a host directory at
+`/opt/data`. Nothing inside the container is modified, and an existing
+hand-written launcher or a real `~/.hermes` directory is never
+overwritten — the setup refuses and tells you what to move.
+
 ## Step-by-step setup
 
 ### 1. Verify SSH works exactly as the desktop will call it
@@ -234,6 +264,11 @@ The directory should contain `SOUL.md`, `config.yaml`, `auth.json`,
 `memories/`, `profiles/`, etc. If you see `No such file or directory`,
 you're in the wrong account — re-read the **"Which user account"**
 section above.
+
+If Hermes runs in a Docker container on the remote (Doctor reports
+`hermes CLI not found on remote PATH…`), no user has a real `~/.hermes`
+— use **Detect remote install** in the SSH settings and run the Docker
+setup (see **Case D** above).
 
 ### Settings → Hermes Agent shows blank Engine / Released / Python / OpenAI SDK
 

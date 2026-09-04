@@ -36,7 +36,19 @@ The **MODEL** section shows a read-only summary (logo + provider label + model).
 
 That modal (`model-select-modal`) is styled **light-based** (no strokes): the container border, header/footer dividers, and control outlines are dropped in favor of filled controls (`--bg-elevated`, `--bg-hover` on hover/open) — matching the branded config modal's treatment. Crucially it sets `overflow: visible` (the base `.models-modal` clips with `overflow: hidden`), so the `LogoSelect` dropdown — which is absolutely positioned and can extend past the modal — isn't clipped; the menu itself caps at `max-height` and scrolls internally when the provider list is long. Without the override the lower providers were hidden and unreachable.
 
-The provider list (`pickerProviders`) is sourced from the **configured providers** — the same set shown as LLM cards — NOT from which providers happen to have saved models: keyed FieldDef providers (`env[f.key]` set, in FieldDef order so Hermes One leads) plus named custom providers whose `customProviderEnvKey(label)` is set. So a freshly-keyed provider with no models yet still appears.
+The provider list (`pickerProviders`) is sourced from the **configured providers**, NOT from which providers happen to have saved models: keyed FieldDef providers, authenticated OAuth plans, plus named custom providers whose `customProviderEnvKey(label)` is set. So a newly configured provider with no models yet still appears.
+
+### Authenticated OAuth providers are selectable
+
+OAuth plans with usable `auth.json` credentials appear in the active-model picker even though they have no API-key environment variable.
+
+Each picker open asks the main process for a boolean status per supported OAuth provider. Local mode uses [[src/main/config.ts#hasOAuthCredentials]] so both `providers` and `credential_pool` auth shapes and profile fallback work. Access and refresh tokens never enter renderer state. [[src/renderer/src/screens/Providers/provider-picker.ts#buildAuthenticatedOAuthPickerProviders]] merges authenticated plans with saved and discovered models, while deduplicating providers such as Nous that may also have an API key. [[tests/provider-picker.test.ts]] covers the keyless Codex-plan regression.
+
+#### Connection-specific credential source
+
+OAuth usability is read from the machine that owns the active model library, preventing a local token from leaking into Remote or SSH picker decisions.
+
+Dashboard-backed Remote and SSH connections call the authenticated `/api/providers/oauth` endpoint through [[src/main/remote-provider-statuses.ts#remoteGetOAuthProviderStatuses]], scoped to the selected named profile when present, reduce its response to supported-provider booleans in the main process, and discard every token preview and metadata field. Legacy SSH reads the selected remote profile's `auth.json` through [[src/main/ssh-remote.ts#sshGetOAuthProviderStatuses]], with default-profile fallback and boolean-only output. Direct Remote legacy transport has no credential-status API and therefore fails closed instead of consulting desktop-local state. Status failures do not prevent the picker from opening; they only omit unverified OAuth entries. [[tests/remote-provider-statuses.test.ts]] covers dashboard authentication and profile scoping, boolean reduction, allowlisting, and malformed-response fail-closed behavior.
 
 ### Native keys without a setup card still route
 
@@ -74,7 +86,7 @@ The section is rendered **standalone, above the credential pool** rather than in
 
 The picker offers a **Custom provider** tile (last) for any OpenAI-compatible endpoint not covered by a built-in card. You can add **multiple**, each with a distinct name, base URL, and its own key.
 
-A custom provider's **identity** (name + base URL) is a first-class record in the desktop's per-profile store [[src/main/providers-store.ts]] (`providers.json`, plaintext — it holds no secrets, only name + base URL). Its **key** still lives in the profile `.env` and its **models** in `models.json`; the store is *additive* so a provider renders as a card the moment it is saved, independent of whether any model has been added. This fixed the prior gap where a keyed-but-modelless provider was invisible.
+A custom provider's **identity** (name + base URL) is a first-class record in the desktop's per-profile store [[src/main/providers-store.ts]] (`providers.json`, plaintext — it holds no secrets, only name + base URL). Its **key** still lives in the profile `.env` and its **models** in `models.json`; the store is _additive_ so a provider renders as a card the moment it is saved, independent of whether any model has been added. This fixed the prior gap where a keyed-but-modelless provider was invisible.
 
 The config modal collects **Name**, **Base URL**, and an API key. On save (modal close) the identity is upserted via `upsertCustomProvider` ([[src/main/providers-store.ts#upsertCustomProvider]]), deduped by the derived env-key anchor so a re-save updates in place. The key is stored under the provider's dedicated env var, [[src/shared/url-key-map.ts#customProviderEnvKey]]`(name)` → `CUSTOM_PROVIDER_<SANITISED_NAME>_KEY` — so two custom providers never share a key. Models are added through the same [[src/renderer/src/components/ProviderKeysSection.tsx#ProviderModelsManager]] with an explicit `{ provider: "custom", baseUrl }` route plus `providerLabel = name`; that label is persisted on each [[src/main/models.ts#SavedModel]] (`providerLabel`) via [[src/main/models.ts#addModel]] (whose dedup now includes base URL, so the same model id can exist under two endpoints).
 

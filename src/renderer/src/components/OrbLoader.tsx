@@ -1,4 +1,8 @@
-import { ThinkingOrb, type ThinkingOrbProps, type OrbSize } from "thinking-orbs";
+import {
+  ThinkingOrb,
+  type ThinkingOrbProps,
+  type OrbSize,
+} from "thinking-orbs";
 import type { CSSProperties } from "react";
 import { THEMES } from "../constants";
 import { useTheme } from "./ThemeProvider";

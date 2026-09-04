@@ -53,7 +53,16 @@ const sshConfig: SshConfig = {
   localPort: 18642,
 };
 
+// The shim-execution tests below run the generated command through a real
+// POSIX shell. A clean Windows dev environment has no `bash` on PATH (and the
+// shim/PATH model is POSIX-specific), so they skip there — the portable string
+// assertions in this file still run on every platform.
+const itPosix = process.platform === "win32" ? it.skip : it;
+
 function runWithHermesShim(command: string): Buffer {
+  if (process.platform === "win32") {
+    throw new Error("POSIX-only helper — guard the calling test with itPosix");
+  }
   const home = mkdtempSync(join(tmpdir(), "hermes-ssh-cmd-home-"));
   // Install the shim at a path buildRemoteHermesCmd PROBES BY ABSOLUTE PATH
   // ($HOME/.local/bin/hermes), not just on PATH. The command runs under
@@ -130,7 +139,7 @@ describe("ssh Hermes command quoting", () => {
     );
   });
 
-  it.each([
+  itPosix.each([
     [
       "multi-word title",
       ["kanban", "create", "My task title", "--triage", "--json"],
@@ -160,12 +169,16 @@ describe("ssh Hermes command quoting", () => {
     30000,
   );
 
-  it("preserves existing extraShell redirects", () => {
-    const output = runWithHermesShim(
-      buildRemoteHermesCmd(["doctor"], " 2>&1"),
-    ).toString("utf8");
-    expect(output).toBe("doctor stderr preserved\n");
-  }, 30000);
+  itPosix(
+    "preserves existing extraShell redirects",
+    () => {
+      const output = runWithHermesShim(
+        buildRemoteHermesCmd(["doctor"], " 2>&1"),
+      ).toString("utf8");
+      expect(output).toBe("doctor stderr preserved\n");
+    },
+    30000,
+  );
 });
 
 describe("ssh gateway commands (issue #285)", () => {
@@ -210,6 +223,26 @@ describe("ssh gateway commands (issue #285)", () => {
     expect(cmd).toContain("systemctl is-active hermes.service");
     expect(cmd).toContain("gateway.pid");
     expect(systemdBranch(cmd)).not.toContain("gateway.pid");
+  });
+
+  it("status falls back to a loopback health probe for container pids (issue #432)", () => {
+    // Docker-backed installs record the container-namespace pid, so a host
+    // `kill -0` reports a healthy gateway as stopped; the health probe is the
+    // namespace-agnostic tiebreaker.
+    const cmd = buildGatewayStatusCommand(undefined, 8642);
+    expect(cmd).toContain("http://127.0.0.1:8642/health");
+    expect(cmd).toContain('kill -0 $pid 2>/dev/null && echo "running"');
+  });
+
+  it("status without a health port keeps the plain pid check", () => {
+    const cmd = buildGatewayStatusCommand();
+    expect(cmd).not.toContain("/health");
+  });
+
+  it("status ignores non-integer health ports", () => {
+    expect(buildGatewayStatusCommand(undefined, 8642.5)).not.toContain(
+      "/health",
+    );
   });
 });
 

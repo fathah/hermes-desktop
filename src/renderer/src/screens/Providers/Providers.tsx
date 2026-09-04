@@ -6,6 +6,12 @@ import {
   OPENAI_COMPATIBLE_BASE_URLS,
   providerRouteForEnvKey,
 } from "../../constants";
+import {
+  buildAuthenticatedOAuthPickerProviders,
+  type LibModel,
+  type OAuthProviderStatuses,
+  type PickerProvider,
+} from "./provider-picker";
 import { useI18n } from "../../components/useI18n";
 import BrandLogo from "../../components/common/BrandLogo";
 import OAuthLoginModal from "../../components/OAuthLoginModal";
@@ -48,30 +54,6 @@ function displayProviderFromConfig(provider: string, baseUrl: string): string {
     ([, url]) => url === baseUrl,
   );
   return match ? match[0] : provider;
-}
-
-// A library model as returned by `listModels()`.
-interface LibModel {
-  id: string;
-  name: string;
-  provider: string;
-  model: string;
-  baseUrl: string;
-  providerLabel?: string;
-}
-
-// A configured provider offered in the active-model picker: the same set the
-// user sees as LLM-provider cards (keyed FieldDef providers + named custom
-// providers), each carrying its saved models (may be empty — discovery fills in).
-interface PickerProvider {
-  key: string; // stable dropdown id ("brand:<id>" or "label:<name>")
-  brand: string; // logo/brand id
-  label: string; // display name
-  provider: string; // route provider ("custom" or native slug)
-  baseUrl: string; // route base URL
-  keyEnv: string; // env var holding the API key
-  providerLabel?: string; // set for named custom providers
-  models: LibModel[]; // saved models under this provider
 }
 
 // A dropdown that shows a brand logo inside the control and in each option
@@ -183,6 +165,10 @@ function Providers({
   const [customProviders, setCustomProviders] = useState<
     { name: string; baseUrl: string }[]
   >([]);
+  // Boolean-only auth state from main. OAuth tokens remain in auth.json and
+  // never cross the context-isolated preload boundary.
+  const [oauthProviderStatuses, setOauthProviderStatuses] =
+    useState<OAuthProviderStatuses>({});
   const [pickGroupKey, setPickGroupKey] = useState("");
   const [pickModel, setPickModel] = useState("");
   const modelLoaded = useRef(false);
@@ -488,9 +474,8 @@ function Providers({
   const summaryMeta = [modelName, modelBaseUrl].filter(Boolean).join("  ·  ");
 
   // The providers offered in the picker = the ones the user has configured
-  // (the same set shown as LLM cards): keyed FieldDef providers + named custom
-  // providers. Sourced from `env` + the model library, NOT from which providers
-  // happen to already have saved models — so a freshly-keyed provider appears.
+  // across the keyed, OAuth, and custom-provider surfaces. Sourced from
+  // configuration state, NOT from which providers happen to have saved models.
   const pickerProviders = useMemo<PickerProvider[]>(() => {
     // Bucket saved models by brand / custom label.
     const byBrand = new Map<string, LibModel[]>();
@@ -534,7 +519,17 @@ function Providers({
         models: byBrand.get(brand) ?? [],
       });
     }
-    // 2) Named custom providers whose dedicated key is set. Source labels from
+    // 2) OAuth plans with usable credentials in auth.json. The main process
+    //    returns booleans only; no access or refresh token enters renderer state.
+    for (const oauthProvider of buildAuthenticatedOAuthPickerProviders(
+      oauthProviderStatuses,
+      byBrand,
+      seen,
+    )) {
+      seen.add(oauthProvider.brand);
+      out.push(oauthProvider);
+    }
+    // 3) Named custom providers whose dedicated key is set. Source labels from
     //    the desktop store (providers.json) unioned with any legacy providers
     //    that only exist as models.json rows, so a keyed provider lists even
     //    with zero saved models (discovery fills its list from the base URL).
@@ -563,7 +558,7 @@ function Providers({
       });
     }
     return out;
-  }, [libModels, customProviders, env, t]);
+  }, [libModels, customProviders, env, oauthProviderStatuses, t]);
 
   const activeProvider =
     pickerProviders.find((p) => p.key === pickGroupKey) ?? null;
@@ -618,12 +613,14 @@ function Providers({
   }, [modelPickerOpen, pickModelOptions, modelName]);
 
   async function openModelPicker(): Promise<void> {
-    const [all, customs] = await Promise.all([
+    const [all, customs, oauthStatuses] = await Promise.all([
       window.hermesAPI.listModels() as Promise<LibModel[]>,
       window.hermesAPI.listCustomProviders(profile).catch(() => []),
+      window.hermesAPI.getOAuthProviderStatuses(profile).catch(() => ({})),
     ]);
     setLibModels(all);
     setCustomProviders(customs);
+    setOauthProviderStatuses(oauthStatuses);
     setModelPickerOpen(true);
   }
 

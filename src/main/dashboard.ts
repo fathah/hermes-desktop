@@ -6,7 +6,11 @@ import https from "https";
 import net from "net";
 import { homedir } from "os";
 import { join } from "path";
-import { getConnectionConfig, type ConnectionConfig } from "./config";
+import {
+  getActiveConnection,
+  getConnectionConfig,
+  type ConnectionConfig,
+} from "./config";
 import {
   getEnhancedPath,
   hermesCliArgs,
@@ -68,6 +72,25 @@ function resolveProfile(profile?: string): string | undefined {
 
 function profileKey(profile?: string): string {
   return resolveProfile(profile) ?? "default";
+}
+
+function inactiveSshDashboardStatus(
+  config: ConnectionConfig,
+  connectionId?: unknown,
+): DashboardStatus | null {
+  if (
+    config.mode !== "ssh" ||
+    !connectionId ||
+    connectionId === getActiveConnection().connectionId
+  ) {
+    return null;
+  }
+  return {
+    supported: true,
+    running: false,
+    error:
+      "Select this SSH connection before starting its dashboard; Hermes Desktop uses one SSH tunnel at a time.",
+  };
 }
 
 function dashboardWsUrl(baseUrl: string, token: string): string {
@@ -523,13 +546,18 @@ async function getSshDashboardStatusForConfig(
 
 export async function getDashboardStatus(
   profile?: string,
+  connectionId?: unknown,
 ): Promise<DashboardStatus> {
-  const config = getConnectionConfig();
+  const config = getConnectionConfig(connectionId);
   const mode =
     config.mode === "remote" || config.mode === "ssh" ? config.mode : "local";
   if (mode === "remote")
     return getRemoteDashboardStatusForConfig(config, profile);
-  if (mode === "ssh") return getSshDashboardStatusForConfig(config, profile);
+  if (mode === "ssh") {
+    const inactive = inactiveSshDashboardStatus(config, connectionId);
+    if (inactive) return inactive;
+    return getSshDashboardStatusForConfig(config, profile);
+  }
 
   const managed = getManagedDashboard(profile);
   if (managed) {
@@ -555,8 +583,9 @@ export async function getDashboardStatus(
 
 export async function freshDashboardWebSocketUrl(
   profile?: string,
+  connectionId?: unknown,
 ): Promise<string> {
-  const config = getConnectionConfig();
+  const config = getConnectionConfig(connectionId);
   if (config.mode === "remote") {
     const baseUrl = normalizeRemoteDashboardBaseUrl(config.remoteUrl);
     if (!baseUrl) throw new Error("Remote dashboard URL is invalid.");
@@ -577,22 +606,28 @@ export async function freshDashboardWebSocketUrl(
     return dashboardWebSocketUrlForRenderer(connection.wsUrl);
   }
 
-  const status = await getDashboardStatus(profile);
+  const status = await getDashboardStatus(profile, connectionId);
   if (!status.running || !status.connection?.wsUrl) {
     throw new Error(status.error || "Dashboard WebSocket is unavailable.");
   }
   return dashboardWebSocketUrlForRenderer(status.connection.wsUrl);
 }
 
+// @lat: [[connections#Session locations#Connection-explicit dashboard transport]]
 export async function startDashboard(
   profile?: string,
+  connectionId?: unknown,
 ): Promise<DashboardStatus> {
-  const config = getConnectionConfig();
+  const config = getConnectionConfig(connectionId);
   const mode =
     config.mode === "remote" || config.mode === "ssh" ? config.mode : "local";
   if (mode === "remote")
     return getRemoteDashboardStatusForConfig(config, profile);
-  if (mode === "ssh") return getSshDashboardStatusForConfig(config, profile);
+  if (mode === "ssh") {
+    const inactive = inactiveSshDashboardStatus(config, connectionId);
+    if (inactive) return inactive;
+    return getSshDashboardStatusForConfig(config, profile);
+  }
 
   const existing = getManagedDashboard(profile);
   if (existing) {

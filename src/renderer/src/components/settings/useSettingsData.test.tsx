@@ -10,6 +10,8 @@ type PublicConnectionConfig = Awaited<
 
 function connectionConfig(): PublicConnectionConfig {
   return {
+    connectionId: "connection-test",
+    name: "Remote",
     mode: "remote" as const,
     remoteUrl: "https://hermes.example",
     remoteAuthMode: "auto" as const,
@@ -45,10 +47,60 @@ describe("useSettingsData remote OAuth", () => {
       value: {
         getAppVersion: vi.fn(async () => "1.0.0"),
         getConnectionConfig: vi.fn(async () => connectionConfig()),
+        getConnectionRegistry: vi.fn(async () => ({
+          version: 1 as const,
+          activeConnectionId: "connection-test",
+          connections: [connectionConfig()],
+        })),
+        getConnectionStatuses: vi.fn(async () => []),
         getApiServerKeyStatus: vi.fn(async () => ({ hasKey: true })),
         getAutoUpgradeEnabled: vi.fn(async () => true),
         getHermesHome: vi.fn(async () => "/tmp/hermes"),
         getHermesVersion: vi.fn(async () => "Hermes Agent v1.0.0"),
+        getAgentCapabilities: vi.fn(async () => ({
+          canUpdate: false,
+          checkedAt: 1,
+          compatibility: "compatible" as const,
+          desktopContract: 6,
+          features: {
+            approvalsMode: {
+              source: "desktop-contract" as const,
+              state: "supported" as const,
+            },
+            dashboardChat: {
+              source: "desktop-contract" as const,
+              state: "supported" as const,
+            },
+            explicitNormalTier: {
+              source: "desktop-contract" as const,
+              state: "supported" as const,
+            },
+            fileAttach: {
+              source: "desktop-contract" as const,
+              state: "supported" as const,
+            },
+            keyedPluginManagement: {
+              source: "desktop-contract" as const,
+              state: "supported" as const,
+            },
+            largeFileAttach: {
+              source: "desktop-contract" as const,
+              state: "supported" as const,
+            },
+            runsTransport: {
+              source: "api" as const,
+              state: "supported" as const,
+            },
+          },
+          minimumDesktopContract: 1,
+          recommendedDesktopContract: 6,
+          recommendedVersion: null,
+          releaseDate: null,
+          updateAvailable: false,
+          updateCommand: null,
+          updateInfo: null,
+          version: "1.0.0",
+        })),
         getConfig: vi.fn(async () => ""),
         onConnectionConfigChanged: vi.fn(() => vi.fn()),
         onUpdateAvailable: vi.fn(() => vi.fn()),
@@ -67,6 +119,10 @@ describe("useSettingsData remote OAuth", () => {
           error: "Sign in required",
         })),
         setConnectionConfig: vi.fn(async () => true),
+        createConnection: vi.fn(async () => true),
+        renameConnection: vi.fn(async () => true),
+        selectConnection: vi.fn(async () => true),
+        removeConnection: vi.fn(async () => true),
         setConnectionChatTransports: vi.fn(async () => true),
         remoteOAuthLogin: vi.fn(async () => ({ signedIn: true as const })),
         remoteOAuthLogout: vi.fn(async () => ({ signedIn: false as const })),
@@ -84,6 +140,7 @@ describe("useSettingsData remote OAuth", () => {
     );
     expect(window.hermesAPI.remoteOAuthSessionState).toHaveBeenCalledTimes(1);
     expect(result.current.remoteOAuthSignedIn).toBe(false);
+    expect(result.current.agentCapabilities?.desktopContract).toBe(6);
   });
 
   it("opens browser login and updates signed-in state", async () => {
