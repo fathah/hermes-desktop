@@ -2538,6 +2538,7 @@ function sendMessageViaCli(
     "OPENAI_API_KEY",
     "OLLAMA_API_KEY",
     "AIMLAPI_API_KEY",
+    "EVOLINK_API_KEY",
     "ANTHROPIC_API_KEY",
     "GROQ_API_KEY",
     "DEEPSEEK_API_KEY",

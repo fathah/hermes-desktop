@@ -29,6 +29,7 @@ export const URL_KEY_MAP: ReadonlyArray<UrlKeyMapping> = [
   { pattern: /openai\.com/i, envKey: "OPENAI_API_KEY" },
   { pattern: /ollama\.com/i, envKey: "OLLAMA_API_KEY" },
   { pattern: /api\.aimlapi\.com/i, envKey: "AIMLAPI_API_KEY" },
+  { pattern: /direct\.evolink\.ai/i, envKey: "EVOLINK_API_KEY" },
   { pattern: /huggingface\.co/i, envKey: "HF_TOKEN" },
   { pattern: /api\.groq\.com/i, envKey: "GROQ_API_KEY" },
   { pattern: /api\.deepseek\.com/i, envKey: "DEEPSEEK_API_KEY" },
