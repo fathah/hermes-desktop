@@ -1,4 +1,5 @@
 import type { AppLocale } from "../shared/i18n/types";
+import type { BotGroupAPI } from "../shared/bot-groups";
 import type { Attachment } from "../shared/attachments";
 import type { SessionModelOverride } from "../shared/model-override";
 import type { DesktopSessionContinuationItem } from "../shared/session-continuation";
@@ -259,6 +260,7 @@ interface KanbanCreateTaskInput {
 }
 
 interface HermesAPI {
+  botGroups: BotGroupAPI;
   // Installation
   checkInstall: () => Promise<InstallStatus>;
   verifyInstall: () => Promise<boolean>;

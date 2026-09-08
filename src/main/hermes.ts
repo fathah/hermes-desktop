@@ -913,6 +913,18 @@ function getTuiGatewayClient(profile?: string): TuiGatewayClient {
   return client;
 }
 
+/** Bot groups reuse the existing default Dashboard process, never chat auto-approval. */
+export async function requestLocalBotGroup(
+  operation: import("../shared/bot-groups").BotGroupOperation,
+  params: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  return getTuiGatewayClient("default").request(
+    operation === "profiles" ? "profiles.list" : `groups.${operation}`,
+    params,
+    15000,
+  );
+}
+
 function shouldUseTuiGatewayClient(): boolean {
   return (
     process.env.VITEST !== "true" &&
