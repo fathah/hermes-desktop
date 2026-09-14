@@ -1,20 +1,17 @@
 import http from "http";
 import https from "https";
-import type { RemoteSessionConfig } from "./remote-sessions";
+import { dashboardApiUrl, type RemoteSessionConfig } from "./remote-sessions";
 
 type RemoteRecord = Record<string, unknown>;
 
-function normalizeRemoteDashboardBaseUrl(value: string): string {
-  const raw = value.trim();
-  if (!raw) throw new Error("Remote Hermes dashboard URL is not configured.");
-  const url = new URL(raw);
-  url.hash = "";
-  url.search = "";
-  url.pathname = url.pathname.replace(/\/+$/, "");
-  if (url.pathname === "/v1" || url.pathname === "/api") {
-    url.pathname = "";
+class RemoteMetadataHttpError extends Error {
+  constructor(
+    readonly statusCode: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "RemoteMetadataHttpError";
   }
-  return url.toString().replace(/\/+$/, "");
 }
 
 function asRecord(value: unknown): RemoteRecord {
@@ -25,10 +22,16 @@ function stringValue(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function remoteStatus(config: RemoteSessionConfig): Promise<RemoteRecord> {
+function remoteRecord(
+  config: RemoteSessionConfig,
+  path: "/api/status" | "/health",
+): Promise<RemoteRecord> {
   return new Promise((resolve, reject) => {
-    const base = normalizeRemoteDashboardBaseUrl(config.remoteUrl);
-    const parsed = new URL("/api/status", `${base}/`);
+    // Shared builder from remote-sessions so /api/status carries the same
+    // `?profile=` scoping as every other dashboard request — on the unified
+    // SSH machine dashboard an unscoped status reads the DEFAULT profile's
+    // hermes home/version instead of the requested one.
+    const parsed = new URL(dashboardApiUrl(config, path));
     const client = parsed.protocol === "https:" ? https : http;
     const token = config.apiKey.trim();
     const req = client.request(
@@ -37,7 +40,12 @@ function remoteStatus(config: RemoteSessionConfig): Promise<RemoteRecord> {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { "X-Hermes-Session-Token": token } : {}),
+          ...(token && path === "/api/status"
+            ? { "X-Hermes-Session-Token": token }
+            : {}),
+          ...(token && path === "/health"
+            ? { Authorization: `Bearer ${token}` }
+            : {}),
         },
       },
       (res) => {
@@ -47,13 +55,19 @@ function remoteStatus(config: RemoteSessionConfig): Promise<RemoteRecord> {
         res.on("end", () => {
           const text = Buffer.concat(chunks).toString("utf8");
           if ((res.statusCode ?? 500) >= 400) {
-            reject(new Error(`${res.statusCode}: ${text || res.statusMessage}`));
+            reject(
+              new RemoteMetadataHttpError(
+                res.statusCode ?? 500,
+                `${res.statusCode}: ${text || res.statusMessage}`,
+              ),
+            );
             return;
           }
           try {
             resolve(asRecord(JSON.parse(text || "{}")));
           } catch {
-            reject(new Error(`Invalid JSON from ${parsed.toString()}`));
+            if (path === "/health") resolve({});
+            else reject(new Error(`Invalid JSON from ${parsed.toString()}`));
           }
         });
       },
@@ -64,6 +78,22 @@ function remoteStatus(config: RemoteSessionConfig): Promise<RemoteRecord> {
     });
     req.end();
   });
+}
+
+async function remoteStatus(
+  config: RemoteSessionConfig,
+): Promise<RemoteRecord> {
+  try {
+    return await remoteRecord(config, "/api/status");
+  } catch (error) {
+    if (
+      error instanceof RemoteMetadataHttpError &&
+      (error.statusCode === 404 || error.statusCode === 405)
+    ) {
+      return remoteRecord(config, "/health");
+    }
+    throw error;
+  }
 }
 
 export async function remoteGetHermesHome(
@@ -85,7 +115,8 @@ export async function remoteGetHermesVersion(
     stringValue(status.project) ||
     stringValue(status.repo_path) ||
     stringValue(status.config_path);
-  const python = stringValue(status.python) || stringValue(status.python_version);
+  const python =
+    stringValue(status.python) || stringValue(status.python_version);
   const sdk =
     stringValue(status.openai_sdk) || stringValue(status.openai_sdk_version);
   const update =

@@ -115,10 +115,7 @@ export function findSiblingHermesHomes(): SiblingHermesHome[] {
       for (const user of users) {
         const hermesHome = `\\\\wsl$\\${distro}\\home\\${user}\\.hermes`;
         try {
-          if (
-            existsSync(hermesHome) &&
-            statSync(hermesHome).isDirectory()
-          ) {
+          if (existsSync(hermesHome) && statSync(hermesHome).isDirectory()) {
             result.push({ distro, user, hermesHome });
           }
         } catch {

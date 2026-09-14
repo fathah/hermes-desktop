@@ -341,7 +341,10 @@ export function buildOfficeSettings(
   };
 }
 
-export function writeOfficeFileIfChanged(filePath: string, content: string): boolean {
+export function writeOfficeFileIfChanged(
+  filePath: string,
+  content: string,
+): boolean {
   try {
     if (existsSync(filePath) && readFileSync(filePath, "utf-8") === content) {
       return false;
@@ -531,7 +534,8 @@ export async function waitForClaw3dReady(
 ): Promise<boolean> {
   const port = getSavedPort();
   const conn = getConnectionConfig();
-  const host = conn.mode === "ssh" && conn.ssh?.host ? conn.ssh.host : "127.0.0.1";
+  const host =
+    conn.mode === "ssh" && conn.ssh?.host ? conn.ssh.host : "127.0.0.1";
   const url = `http://${host}:${port}/office`;
   const adapterPort = adapterPortFromWsUrl(getSavedWsUrl());
   const deadline = Date.now() + timeoutMs;
@@ -539,9 +543,7 @@ export async function waitForClaw3dReady(
   while (Date.now() < deadline) {
     const officeReady = await probeHttp(url, Math.min(intervalMs, 2000));
     const adapterReady =
-      conn.mode === "local" ||
-      conn.mode === "remote" ||
-      !conn.ssh?.host
+      conn.mode === "local" || conn.mode === "remote" || !conn.ssh?.host
         ? await probeTcp(adapterPort, "127.0.0.1", Math.min(intervalMs, 2000))
         : true;
 

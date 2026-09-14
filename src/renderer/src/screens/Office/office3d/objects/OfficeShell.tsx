@@ -4,13 +4,19 @@ import * as THREE from "three";
 import woodenTableGlbUrl from "../assets/wooden_table.glb?url";
 import hermesHqLogoUrl from "../assets/images/hermes-one-hq.webp";
 import { WORLD_W, WORLD_H, SCALE } from "../core/constants";
+import { OFFICE_DOOR_X, OFFICE_DOOR_W } from "../core/cityPlan";
 import { toWorld } from "../core/geometry";
 import { glbClone, normalizeFootprint } from "../core/glb";
 import type { WorldPalette } from "../core/palette";
 import { INTERIOR_WALLS, GLASS_WALLS, CEO_OFFICE } from "../layout";
 
-const ROOM_WALL_H = 2.4;
+// Perimeter walls match the 3.6 north wall so every wall meets the glass
+// roof — the old 2.4 left a floating gap band visible from street level in
+// walk mode. Interiors read as one tall storey (~2.2 person heights).
+const ROOM_WALL_H = 3.6;
 const ROOM_WALL_T = 0.2;
+// Doorway opening height; the wall above it is solid up to the roof.
+const DOOR_TOP = 2.2;
 
 /** North wall — 3.6 m tall with three window openings and glass panels. */
 function NorthWall({ palette }: { palette: WorldPalette }): React.JSX.Element {
@@ -134,11 +140,32 @@ export const Room = memo(function Room({
       </mesh>
       {/* North wall — taller with windows */}
       <NorthWall palette={palette} />
-      {/* South / east / west walls */}
-      <mesh position={[0, wallH / 2, halfH]}>
-        <boxGeometry args={[WORLD_W, wallH, wallT]} />
-        <meshStandardMaterial color={palette.wallNS} />
-      </mesh>
+      {/* South wall — split around the entrance doorway (agents walk in and
+          out through this gap; the collision walls mirror it). */}
+      {(() => {
+        const doorMin = OFFICE_DOOR_X - OFFICE_DOOR_W / 2;
+        const doorMax = OFFICE_DOOR_X + OFFICE_DOOR_W / 2;
+        const westW = doorMin + halfW;
+        const eastW = halfW - doorMax;
+        return (
+          <>
+            <mesh position={[-halfW + westW / 2, wallH / 2, halfH]}>
+              <boxGeometry args={[westW, wallH, wallT]} />
+              <meshStandardMaterial color={palette.wallNS} />
+            </mesh>
+            <mesh position={[doorMax + eastW / 2, wallH / 2, halfH]}>
+              <boxGeometry args={[eastW, wallH, wallT]} />
+              <meshStandardMaterial color={palette.wallNS} />
+            </mesh>
+            {/* Header above the doorway so the gap reads as an entrance —
+                solid from the door top (human scale) up to the roof line. */}
+            <mesh position={[OFFICE_DOOR_X, (DOOR_TOP + wallH) / 2, halfH]}>
+              <boxGeometry args={[OFFICE_DOOR_W, wallH - DOOR_TOP, wallT]} />
+              <meshStandardMaterial color={palette.wallNS} />
+            </mesh>
+          </>
+        );
+      })()}
       <Suspense fallback={null}>
         <OfficeLogo />
       </Suspense>

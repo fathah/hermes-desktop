@@ -35,17 +35,13 @@ describe("app locale persistence", () => {
     rmSync(testHome, { recursive: true, force: true });
   });
 
-  it(
-    "reloads the saved locale after the main process restarts",
-    async () => {
-      const firstRun = await loadLocaleModule();
+  it("reloads the saved locale after the main process restarts", async () => {
+    const firstRun = await loadLocaleModule();
 
-      expect(firstRun.setAppLocale("es")).toBe("es");
+    expect(firstRun.setAppLocale("es")).toBe("es");
 
-      const secondRun = await loadLocaleModule();
+    const secondRun = await loadLocaleModule();
 
-      expect(secondRun.getAppLocale()).toBe("es");
-    },
-    30000,
-  );
+    expect(secondRun.getAppLocale()).toBe("es");
+  }, 30000);
 });

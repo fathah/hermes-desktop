@@ -66,7 +66,9 @@ describe("I18nProvider", () => {
       );
     });
 
-    expect(await screen.findByText("Welcome to Hermes")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Welcome to Hermes One"),
+    ).toBeInTheDocument();
   });
 
   it("renders Spanish translations after switching locale", async () => {

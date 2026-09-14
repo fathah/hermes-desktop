@@ -46,14 +46,14 @@ describe("completionFailed", () => {
         rendered: "To troubleshoot an invalid API key, check your provider.",
       }),
     ).toBe(false);
-    expect(completionFailed({ status: "failed", text: "Invalid API Key" })).toBe(
-      true,
-    );
+    expect(
+      completionFailed({ status: "failed", text: "Invalid API Key" }),
+    ).toBe(true);
     expect(completionFailed({ error: "Invalid API Key" })).toBe(true);
     expect(completionFailed({ ok: false, text: "Invalid API Key" })).toBe(true);
-    expect(completionFailed({ text: "Error: Error code: 401 - invalid key" })).toBe(
-      true,
-    );
+    expect(
+      completionFailed({ text: "Error: Error code: 401 - invalid key" }),
+    ).toBe(true);
     expect(
       completionFailed({
         text: "API call failed after 3 retries: Connection error.",
@@ -119,12 +119,12 @@ describe("dashboardShouldPersistLocalOverlays", () => {
 
 describe("isDashboardSlashWorkerExitError", () => {
   it("detects the transient upstream slash worker failure", () => {
-    expect(isDashboardSlashWorkerExitError(new Error("slash worker exited"))).toBe(
-      true,
-    );
-    expect(isDashboardSlashWorkerExitError("Slash worker exited unexpectedly")).toBe(
-      true,
-    );
+    expect(
+      isDashboardSlashWorkerExitError(new Error("slash worker exited")),
+    ).toBe(true);
+    expect(
+      isDashboardSlashWorkerExitError("Slash worker exited unexpectedly"),
+    ).toBe(true);
     expect(isDashboardSlashWorkerExitError(new Error("invalid api key"))).toBe(
       false,
     );
@@ -458,7 +458,11 @@ describe("ensureDashboardRuntimeSession", () => {
     const client = {
       async request(method: string, params?: unknown): Promise<unknown> {
         calls.push({ method, params });
-        return { session_id: "live-resumed", resumed: "stored-1" };
+        return {
+          session_id: "live-resumed",
+          resumed: "stored-1",
+          info: { desktop_contract: 6 },
+        };
       },
     };
 
@@ -471,6 +475,7 @@ describe("ensureDashboardRuntimeSession", () => {
       }),
     ).resolves.toEqual({
       created: false,
+      info: { desktop_contract: 6 },
       runtimeSessionId: "live-resumed",
       storedSessionId: "stored-1",
     });
@@ -646,6 +651,38 @@ describe("resolveDashboardProviderForModel", () => {
     ).toBe("custom");
   });
 
+  // Regression: `/model hermesone-swift --provider custom` let the agent bind
+  // "custom" to the session's *current* base URL — a session sitting on Nous
+  // sent the Hermes One model to the Nous proxy (404 "not in our configuration
+  // or OpenRouter catalog"). A named user-provider row on the same endpoint
+  // (the mirrored config.yaml `providers: hermesone:` entry) must win.
+  it("resolves custom rows to a named user provider on the same endpoint", () => {
+    expect(
+      resolveDashboardProviderForModel(
+        "custom",
+        "hermesone-swift",
+        "https://inference.hermesone.org/v1",
+        {
+          provider: "nous",
+          model: "moonshotai/kimi-k3",
+          providers: [
+            {
+              slug: "nous",
+              name: "Nous Portal",
+              models: ["moonshotai/kimi-k3"],
+            },
+            {
+              slug: "hermesone",
+              name: "Hermes One",
+              api_url: "https://inference.hermesone.org/v1/",
+              models: [],
+            },
+          ],
+        },
+      ),
+    ).toBe("hermesone");
+  });
+
   it("resolves Hermes One custom rows to dashboard custom provider slugs by base URL", () => {
     expect(
       resolveDashboardProviderForModel(
@@ -753,7 +790,8 @@ describe("dashboardSeedMessagesFromTranscript", () => {
           {
             id: "u-recovery",
             role: "user",
-            content: "recovery prompt that should be persisted by prompt.submit",
+            content:
+              "recovery prompt that should be persisted by prompt.submit",
           },
         ],
         { excludeUserId: "u-recovery" },

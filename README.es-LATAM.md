@@ -2,34 +2,55 @@
 
 <br/>
 <p align="center">
-  <a href="https://hermes-agent.nousresearch.com/docs/"><img src="https://img.shields.io/badge/Documentación-hermes--agent.nousresearch.com-FFD700?style=for-the-badge" alt="Documentación"></a>
-  <a href="https://t.me/hermes_agent_desktop"><img src="https://img.shields.io/badge/Telegram-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram"></a>
+  <a href="https://x.com/HermesOneApp"><img src="https://img.shields.io/badge/Síguenos-000000?style=for-the-badge&logo=x" alt="Twitter/X"></a>
+  <a href="https://discord.gg/Fqu72h8z"><img src="https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
   <a href="https://github.com/fathah/hermes-desktop/blob/main/LICENSE"><img src="https://img.shields.io/badge/Licencia-MIT-green?style=for-the-badge" alt="Licencia: MIT"></a>
-  <a href="https://hermesagents.cc/"><img src="https://img.shields.io/badge/Descargar-Releases-FF6600?style=for-the-badge" alt="Releases"></a>
+  <a href="https://hermesone.org/"><img src="https://img.shields.io/badge/Descargar-Releases-FF6600?style=for-the-badge" alt="Releases"></a>
   <a href="https://github.com/fathah/hermes-desktop/stargazers">
   <img src="https://img.shields.io/github/stars/fathah/hermes-desktop?style=for-the-badge&color=FFD700&label=Estrellas" alt="Estrellas">
 </a>
   <a href="https://github.com/fathah/hermes-desktop/releases/">
   <img src="https://img.shields.io/github/downloads/fathah/hermes-desktop/total?style=for-the-badge&color=00B496&label=Descargas%20Totales" alt="Descargas">
 </a>
+  <a href="https://bankr.bot/launches/0xfda75f77a22b4f4b783bbbb21915ef64d149bba3">
+  <img src="https://img.shields.io/badge/Token-$HD-purple?style=for-the-badge&logo=ethereum" alt="Token $HD">
+</a>
+</p>
+
+<p align="center">
+  <a href="README.md">English</a> ·
+  <a href="README.zh-CN.md">简体中文</a> ·
+  <a href="README.ja-JP.md">日本語</a> ·
+  <a href="README.es-LATAM.md">Español (LATAM)</a>
+</p>
+
+<p align="center">
+ <a href="https://www.star-history.com/fathah/hermes-desktop">
+  <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/badge?repo=fathah/hermes-desktop&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/badge?repo=fathah/hermes-desktop" />
+   <img alt="Star History Rank" src="https://api.star-history.com/badge?repo=fathah/hermes-desktop" />
+  </picture>
+ </a>
 </p>
 
 > **Este proyecto está en desarrollo activo.** Las funciones pueden cambiar y algunas cosas podrían no funcionar perfectamente. Si encuentras un problema o tienes una idea, [abre un issue](https://github.com/fathah/hermes-desktop/issues). ¡Las contribuciones son bienvenidas!
-
-## Idiomas
-
-- English: `README.md`
-- 简体中文: `README.zh-CN.md`
-- 日本語: `README.ja-JP.md`
-- 🌎 Español (LATAM): `README.es-LATAM.md`
 
 Hermes Desktop es una aplicación nativa de escritorio para instalar, configurar y chatear con [Hermes Agent](https://github.com/NousResearch/hermes-agent) — un asistente de IA con autoaprendizaje, uso de herramientas, mensajería multiplataforma y un ciclo de aprendizaje cerrado.
 
 En lugar de manejar el CLI a mano, la app guía todo el proceso de instalación, configuración de proveedores y uso diario en un solo lugar. Usa el script oficial de instalación de Hermes, guarda los archivos en `~/.hermes` y te da una GUI para chat, sesiones, perfiles, memoria, habilidades, herramientas, tareas programadas, gateways de mensajería y más.
 
+## Patrocinadores
+
+<a href="https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=hermes-desktop" target="_blank" rel="noopener noreferrer">
+    <img src="src/renderer/src/assets/logos/atlascloud.svg" alt="Atlas Cloud" height="100" style="display: block;">
+  </a>
+
+> **[Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=hermes-desktop)** es una plataforma de inferencia de IA full-modal compatible con OpenAI (DeepSeek, Qwen, GLM, Kimi, MiniMax y más). Úsala en Hermes Desktop seleccionando **Atlas Cloud** como tu proveedor — la URL base se configura automáticamente.
+
 ## Instalación
 
-<a href="https://hermesagents.cc/"><img width="380" alt="Descargar ahora" src="previews/download.webp" /></a>
+<a href="https://hermesone.org/"><img width="380" alt="Descargar ahora" src="previews/download.webp" /></a>
 
 ### Windows
 
@@ -120,38 +141,44 @@ En modo local, las solicitudes de chat van por `http://127.0.0.1:8642` con strea
 
 ## Pantallas
 
-| Pantalla          | Descripción                                                                                    |
-| ----------------- | ---------------------------------------------------------------------------------------------- |
+| Pantalla          | Descripción                                                                                        |
+| ----------------- | -------------------------------------------------------------------------------------------------- |
 | **Chat**          | UI de conversación con streaming, comandos slash, progreso de herramientas y seguimiento de tokens |
-| **Sesiones**      | Navega, busca y reanuda conversaciones pasadas                                                  |
-| **Perfiles**      | Crea, elimina y cambia entre perfiles de Hermes                                                 |
-| **Habilidades**   | Navega, instala y gestiona habilidades incluidas e instaladas                                   |
-| **Modelos**       | Gestiona configuraciones de modelos guardadas por proveedor                                     |
-| **Memoria**       | Ver/editar entradas de memoria, perfil de usuario y configurar proveedores de memoria           |
-| **Soul**          | Edita la persona del perfil activo (SOUL.md)                                                    |
-| **Herramientas**  | Activa o desactiva conjuntos de herramientas individuales                                       |
-| **Programadas**   | Crea y gestiona cron jobs con destinos de entrega                                               |
-| **Gateway**       | Configura y controla integraciones de plataformas de mensajería                                 |
-| **Oficina**       | Configuración y gestión de la interfaz visual Claw3d                                            |
-| **Configuración** | Config de proveedor, pools de credenciales, backup/importar, visor de logs, red, tema           |
+| **Sesiones**      | Navega, busca y reanuda conversaciones pasadas                                                     |
+| **Agentes**       | Crea, elimina y cambia entre perfiles de Hermes                                                    |
+| **Habilidades**   | Navega, instala y gestiona habilidades incluidas e instaladas                                      |
+| **Modelos**       | Gestiona configuraciones de modelos guardadas por proveedor                                        |
+| **Memoria**       | Ver/editar entradas de memoria, perfil de usuario y configurar proveedores de memoria              |
+| **Soul**          | Edita la persona del perfil activo (SOUL.md)                                                       |
+| **Herramientas**  | Activa o desactiva conjuntos de herramientas individuales                                          |
+| **Programadas**   | Crea y gestiona cron jobs con destinos de entrega                                                  |
+| **Gateway**       | Configura y controla integraciones de plataformas de mensajería                                    |
+| **Oficina**       | Configuración y gestión de la interfaz visual Claw3d                                               |
+| **Configuración** | Config de proveedor, pools de credenciales, backup/importar, visor de logs, red, tema              |
 
 ## Proveedores soportados
 
+### Patrocinadores
+
+| Proveedor       | Notas                                                                                                                                                                                |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Atlas Cloud** | Gateway compatible con OpenAI — DeepSeek, Qwen, GLM, Kimi, MiniMax y más ([atlascloud.ai](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=hermes-desktop)) |
+
 ### Proveedores de LLM
 
-| Proveedor           | Notas                                          |
-| ------------------- | ---------------------------------------------- |
-| **OpenRouter**      | 200+ modelos vía API única (recomendado)        |
-| **Anthropic**       | Acceso directo a Claude                         |
-| **OpenAI**          | Acceso directo a GPT                            |
-| **Google (Gemini)** | Google AI Studio                                |
-| **xAI (Grok)**      | Modelos Grok                                    |
-| **Nous Portal**     | Capa gratuita disponible                        |
-| **Qwen**            | Modelos QwenAI                                  |
-| **MiniMax**         | Endpoints globales y de China                   |
-| **Hugging Face**    | 20+ modelos abiertos vía HF Inference           |
-| **Groq**            | Inferencia rápida (voz/STT)                     |
-| **Local/Custom**    | Cualquier endpoint compatible con OpenAI        |
+| Proveedor           | Notas                                    |
+| ------------------- | ---------------------------------------- |
+| **OpenRouter**      | 200+ modelos vía API única (recomendado) |
+| **Anthropic**       | Acceso directo a Claude                  |
+| **OpenAI**          | Acceso directo a GPT                     |
+| **Google (Gemini)** | Google AI Studio                         |
+| **xAI (Grok)**      | Modelos Grok                             |
+| **Nous Portal**     | Capa gratuita disponible                 |
+| **Qwen**            | Modelos QwenAI                           |
+| **MiniMax**         | Endpoints globales y de China            |
+| **Hugging Face**    | 20+ modelos abiertos vía HF Inference    |
+| **Groq**            | Inferencia rápida (voz/STT)              |
+| **Local/Custom**    | Cualquier endpoint compatible con OpenAI |
 
 Los presets locales incluyen LM Studio, Atomic Chat, Ollama, vLLM y llama.cpp.
 
@@ -241,6 +268,55 @@ Los archivos de Hermes se gestionan en:
 - `~/.hermes/state.db` — base de datos del historial de sesiones
 - `~/.hermes/cron/jobs.json` — tareas programadas
 
+## Proveedor de secretos
+
+Por defecto, las claves API viven en `~/.hermes/.env` (el proveedor **env**). No se necesita configuración — este es el comportamiento histórico y nada cambia para ti.
+
+Si prefieres no guardar claves en un `.env` en texto plano, el proveedor **command** (de activación opcional) las resuelve ejecutando un comando auxiliar que tú configuras. El orden de resolución en todos lados es: `process.env` → `.env` → proveedor → no definida.
+
+Helper por clave (el nombre de la clave solicitada llega como `$HERMES_SECRET_KEY`):
+
+```yaml
+# ~/.hermes/config.yaml
+secrets:
+  provider: command
+  command: secret-tool lookup hermes "$HERMES_SECRET_KEY"
+```
+
+O un helper que vuelca un bloque dotenv (por ejemplo, un vault que se descifra en tmpfs):
+
+```yaml
+secrets:
+  provider: command
+  command: "cat /run/user/1000/hermes-secrets.env"
+```
+
+La salida del helper puede ser un valor único (helpers por clave) o líneas `KEY=VALUE` (volcados dotenv); ambos formatos se detectan automáticamente.
+
+### Integración con vault / gestor de secretos (sin TPM requerido)
+
+El proveedor `command` es **agnóstico al vault** — ejecuta el helper que configures y lee su stdout. El helper es lo único que necesita comunicarse con tu almacén de secretos. Si no tienes un keyfile sellado con TPM, cualquiera de estas opciones funciona sin cambios en el código de Hermes:
+
+- **KeePassXC (BD solo con contraseña, sin keyfile):** apunta `secrets.command` a un pequeño script `kpxc-export.sh` que hace `keepassxc-cli ls ~/secrets/hermes.kdbx <<<"$KPXC_PASSWORD"` y vuelca el grupo relevante como dotenv. Pide la contraseña maestra una vez por sesión.
+- **GnuPG con clave solo de contraseña:** `gpg --batch --passphrase-fd 0 --decrypt ~/.keys/api-keys.gpg` funciona directamente como valor de `command`. Pasa la contraseña vía descriptor de archivo o variable de entorno, nunca como argumento.
+- **`pass` (el gestor de contraseñas unix estándar):** `command: "pass show hermes/$HERMES_SECRET_KEY"` para helper por clave, o un script wrapper para volcado dotenv.
+- **`secret-tool` (libsecret/Gnome Keyring):** `command: "secret-tool lookup hermes $HERMES_SECRET_KEY"` (ya mostrado arriba como ejemplo canónico por clave).
+- **Bitwarden CLI:** `bw get item "$HERMES_SECRET_KEY" | jq -r .notes` (después de `bw unlock` en la sesión).
+- **1Password CLI:** `op read "op://vault/$HERMES_SECRET_KEY/credential"`.
+- **Archivo env plano con permisos gestionados:** `command: "cat ~/.config/hermes/secrets.env"` con `chmod 600` y el archivo propiedad de tu usuario. No tan seguro como un vault, pero mejor que un `.env` legible por todos.
+
+El punto: **cualquier helper que imprima un valor (por clave) o un bloque dotenv (modo lista) en stdout funcionará**, y Hermes impone un timeout de 3 segundos y un límite de 1 MiB de salida al helper. El proveedor no hace suposiciones sobre TPM, FIDO2, tarjetas inteligentes ni keychains de plataforma.
+
+Modelo de seguridad:
+
+- El string de comando es tu propia configuración — mismo nivel de confianza que `.env`. Se ejecuta vía `/bin/sh -c`, por lo que el proveedor command es solo POSIX (Linux/macOS); Windows se mantiene en el proveedor env.
+- El helper hereda el entorno del proceso más `HERMES_SECRET_KEY`; el nombre de la clave se pasa como dato, nunca interpolado en el string del shell.
+- Timeout fijo de 3 segundos, límite de 1 MiB de salida, y stderr se descarta.
+- Los valores resueltos nunca se registran ni se escriben en disco; los fallos degradan a "clave no definida", registrando solo el código de salida/señal.
+- El broadcast de inicio de gateway usa una única llamada `list()`, nunca un loop de helper por clave.
+
+Fuente de verdad: [`src/main/secrets/`](src/main/secrets/).
+
 ## Stack tecnológico
 
 - **Electron** 39 — shell de escritorio multiplataforma
@@ -271,4 +347,4 @@ Para el agente central, documentación y flujos de trabajo CLI, consulta el repo
 
 ---
 
-*Traducción al español LATAM por [Nanoboy](https://github.com/365diascollaboration-prog).*
+_Traducción al español LATAM por [Nanoboy](https://github.com/365diascollaboration-prog)._

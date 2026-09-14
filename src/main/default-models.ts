@@ -93,7 +93,6 @@ const DEFAULT_MODELS: DefaultModel[] = [
     model: "Qwen/Qwen3-235B-A22B-Instruct-2507",
     baseUrl: "",
   },
-
 ];
 
 export default DEFAULT_MODELS;

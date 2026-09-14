@@ -1,7 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Toaster } from "react-hot-toast";
 import { ThemeProvider } from "./components/ThemeProvider";
 import { FontProvider } from "./components/FontProvider";
+import { ProfileModalProvider } from "./components/profile/ProfileModalProvider";
+import { SettingsModalProvider } from "./components/settings/SettingsModalProvider";
+import { ChatPreferencesProvider } from "./components/ChatPreferencesProvider";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Welcome from "./screens/Welcome/Welcome";
 import Install from "./screens/Install/Install";
@@ -22,6 +25,7 @@ function App(): React.JSX.Element {
   const [connectionMode, setConnectionMode] = useState<
     "local" | "remote" | "ssh"
   >("local");
+  const [connectionId, setConnectionId] = useState("");
   // Soft warning: install files exist but the deep `verifyInstall` probe
   // failed (e.g. slow Python startup, restricted network). We surface this
   // as a dismissible banner instead of bouncing the user back to Welcome,
@@ -32,11 +36,16 @@ function App(): React.JSX.Element {
     undefined,
   );
   const isMac = window.electron?.process?.platform === "darwin";
+  // Bumped on every runInstallCheck so a superseded run (e.g. the user hit
+  // "Switch to local mode" while an SSH tunnel attempt was still in flight)
+  // can't clobber the newer run's screen transition.
+  const runIdRef = useRef(0);
 
   const runInstallCheck = useCallback(async () => {
+    const myRun = ++runIdRef.current;
     const startedAt = Date.now();
     let next: Screen = "welcome";
-    let error: string | null = null;
+    const error: string | null = null;
     let isRemote = false;
 
     try {
@@ -44,6 +53,7 @@ function App(): React.JSX.Element {
       const conn = await window.hermesAPI.getConnectionConfig();
       isRemote = conn.mode === "remote" || conn.mode === "ssh";
       setConnectionMode(conn.mode);
+      setConnectionId(conn.connectionId);
 
       if (conn.mode === "ssh" && conn.ssh) {
         setSplashStatus("Starting SSH tunnel…");
@@ -97,6 +107,10 @@ function App(): React.JSX.Element {
       next = "welcome";
     }
 
+    // Abandoned by a newer run (the user switched modes mid-connect) — leave
+    // all screen/status state to that run.
+    if (myRun !== runIdRef.current) return;
+
     setSplashStatus(undefined);
     if (error) setInstallError(error);
 
@@ -105,6 +119,7 @@ function App(): React.JSX.Element {
     if (wait > 0) {
       await new Promise((r) => setTimeout(r, wait));
     }
+    if (myRun !== runIdRef.current) return;
     setScreen(next);
 
     // Lazy deep-verify in the background after the UI is up. If the
@@ -127,6 +142,15 @@ function App(): React.JSX.Element {
   useEffect(() => {
     runInstallCheck();
   }, [runInstallCheck]);
+
+  useEffect(
+    () =>
+      window.hermesAPI.onConnectionConfigChanged((connection) => {
+        setConnectionMode(connection.mode);
+        setConnectionId(connection.connectionId);
+      }),
+    [],
+  );
 
   // Track screen views for analytics
   useEffect(() => {
@@ -159,6 +183,9 @@ function App(): React.JSX.Element {
   }
 
   async function handleSwitchToLocal(): Promise<void> {
+    // Tear down any in-flight SSH tunnel so a hung connect attempt doesn't keep
+    // running (or race the local recheck) after we switch.
+    await window.hermesAPI.stopSshTunnel().catch(() => undefined);
     await window.hermesAPI.setConnectionConfig("local", "", "");
     setConnectionMode("local");
     handleRecheck();
@@ -181,6 +208,9 @@ function App(): React.JSX.Element {
           <SplashScreen
             onFinished={handleSplashFinished}
             status={splashStatus}
+            onSwitchToLocal={
+              connectionMode !== "local" ? handleSwitchToLocal : undefined
+            }
           />
         );
       case "welcome":
@@ -213,6 +243,7 @@ function App(): React.JSX.Element {
       case "main":
         return (
           <Layout
+            connectionId={connectionId}
             verifyWarning={verifyWarning}
             onReinstall={handleVerifyReinstall}
             onDismissVerifyWarning={handleDismissVerifyWarning}
@@ -224,24 +255,34 @@ function App(): React.JSX.Element {
   return (
     <ThemeProvider>
       <FontProvider>
-        <ErrorBoundary>
-          <div className={`app${isMac ? " is-mac" : ""}`}>
-            {isMac && <div className="drag-region" />}
-            <div className="app-content">{renderScreen()}</div>
-          </div>
-          <Toaster
-            position="bottom-right"
-            reverseOrder={false}
-            toastOptions={{
-              style: {
-                background: "var(--bg-elevated)",
-                color: "var(--text-primary)",
-                border: "1px solid var(--border-bright)",
-                fontSize: 13,
-              },
-            }}
-          />
-        </ErrorBoundary>
+        <ChatPreferencesProvider>
+          <ProfileModalProvider>
+            <SettingsModalProvider>
+              <ErrorBoundary>
+                <div
+                  className={`app${isMac ? " is-mac" : ""}${
+                    isMac && screen === "main" ? " shell-vibrant" : ""
+                  }`}
+                >
+                  {isMac && <div className="drag-region" />}
+                  <div className="app-content">{renderScreen()}</div>
+                </div>
+                <Toaster
+                  position="bottom-right"
+                  reverseOrder={false}
+                  toastOptions={{
+                    style: {
+                      background: "var(--bg-elevated)",
+                      color: "var(--text-primary)",
+                      border: "1px solid var(--border-bright)",
+                      fontSize: 13,
+                    },
+                  }}
+                />
+              </ErrorBoundary>
+            </SettingsModalProvider>
+          </ProfileModalProvider>
+        </ChatPreferencesProvider>
       </FontProvider>
     </ThemeProvider>
   );

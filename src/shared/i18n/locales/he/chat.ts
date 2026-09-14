@@ -5,8 +5,7 @@ export default {
   auto: "אוטומטי",
   commandsTitle: "פקודות",
   typeMessage: "הקלידו הודעה... (Shift+Enter לשורה חדשה)",
-  quickAskTitle:
-    "שאלה מהירה (/btw) - שאלה צדדית שלא תשפיע על הקשר השיחה",
+  quickAskTitle: "שאלה מהירה (/btw) - שאלה צדדית שלא תשפיע על הקשר השיחה",
   send: "שליחה",
   custom: "מותאם אישית",
   typeModelName: "הקלידו שם מודל...",
@@ -60,10 +59,10 @@ export default {
   removeAttachment: "הסרת הצירוף",
   dropToAttach: "גררו קבצים לכאן לצירוף",
   attachUnsupported: "{{name}}: סוג הקובץ אינו נתמך",
-  attachImageTooLarge: "{{name}}: התמונה גדולה מדי (מקסימום 50 מ\"ב)",
+  attachImageTooLarge: '{{name}}: התמונה גדולה מדי (מקסימום 50 מ"ב)',
   attachImageUncompressible:
     "{{name}}: לא ניתן לדחוס את התמונה כך שתתאים (GIF מונפש או פורמט לא נתמך). נסו צילום מסך סטטי.",
-  attachTextTooLarge: "{{name}}: הקובץ גדול מדי (מקסימום 256 ק\"ב)",
+  attachTextTooLarge: '{{name}}: הקובץ גדול מדי (מקסימום 256 ק"ב)',
   attachTooMany: "יותר מדי צירופים (מקסימום 10 להודעה)",
   attachReadFailed: "{{name}}: לא ניתן היה לקרוא את הקובץ",
   attachRemoteModeBinary:
@@ -131,7 +130,7 @@ export default {
     openTerminal: "פתיחת מסוף כאן",
     openTerminalFailed: "לא ניתן היה לפתוח מסוף עבור תיקייה זו.",
     fileTruncated: "קוצר",
-    fileTruncatedWarning: "הקובץ גדול מדי - מוצגים רק 100 ק\"ב הראשונים",
+    fileTruncatedWarning: 'הקובץ גדול מדי - מוצגים רק 100 ק"ב הראשונים',
   },
   showWorktree: "הצגת סייר הקבצים",
   hideWorktree: "הסתרת סייר הקבצים",

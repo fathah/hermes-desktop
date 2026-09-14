@@ -5,6 +5,12 @@ export interface DashboardRpcEvent<T = unknown> {
 }
 
 export interface DashboardGatewayClientOptions {
+  /** How long `connect()` waits for the WebSocket handshake before giving up.
+   *  Without this, a socket stuck in CONNECTING (TCP accepted but the upgrade
+   *  never completes — e.g. when the renderer is starved) leaves the connect
+   *  promise pending forever, wedging the whole transport with no error and no
+   *  fallback (issue #718). */
+  connectTimeoutMs?: number;
   onClose?: (event: CloseEvent) => void;
   onError?: (event: Event) => void;
   onEvent?: (event: DashboardRpcEvent) => void;
@@ -33,6 +39,7 @@ interface PendingRequest<T = unknown> {
 }
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const DEFAULT_CONNECT_TIMEOUT_MS = 10_000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -88,10 +95,13 @@ export class DashboardGatewayClient {
   private pending = new Map<number | string, PendingRequest>();
   private socket: WebSocket | null = null;
   private readonly requestTimeoutMs: number;
+  private readonly connectTimeoutMs: number;
 
   constructor(private readonly options: DashboardGatewayClientOptions = {}) {
     this.requestTimeoutMs =
       options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    this.connectTimeoutMs =
+      options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS;
   }
 
   get connected(): boolean {
@@ -104,8 +114,28 @@ export class DashboardGatewayClient {
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(wsUrl);
       this.socket = socket;
+      let settled = false;
+
+      // Bound the handshake: a socket stuck in CONNECTING fires neither `open`
+      // nor `error`, so without this timer the promise would never settle and
+      // the transport would wedge forever (issue #718). On timeout we reject and
+      // close the half-open socket so `ensureClient` can fall back to legacy.
+      const timeout = window.setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        if (this.socket === socket) this.socket = null;
+        try {
+          socket.close();
+        } catch {
+          // Best-effort teardown of the stalled socket.
+        }
+        reject(new Error("Hermes dashboard WebSocket connection timed out"));
+      }, this.connectTimeoutMs);
 
       const failOpen = (event: Event): void => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
         if (this.socket === socket) this.socket = null;
         reject(new Error(`Could not connect to Hermes dashboard WebSocket`));
         this.options.onError?.(event);
@@ -114,6 +144,9 @@ export class DashboardGatewayClient {
       socket.addEventListener(
         "open",
         () => {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timeout);
           socket.removeEventListener("error", failOpen);
           resolve();
         },
@@ -123,6 +156,14 @@ export class DashboardGatewayClient {
       socket.addEventListener("message", (event) => this.handleMessage(event));
       socket.addEventListener("close", (event) => {
         if (this.socket === socket) this.socket = null;
+        // A close before the handshake settles must still reject the connect
+        // promise — otherwise a CONNECTING→CLOSED transition with no `error`
+        // event would hang it until the timeout fires.
+        if (!settled) {
+          settled = true;
+          window.clearTimeout(timeout);
+          reject(new Error("Hermes dashboard WebSocket closed"));
+        }
         this.rejectPending("Hermes dashboard WebSocket closed");
         this.options.onClose?.(event);
       });

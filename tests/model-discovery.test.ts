@@ -543,6 +543,66 @@ describe("model-discovery", () => {
     expect(calls).toBe(1);
   });
 
+  // A manual `model.context_length` override in config.yaml must win over
+  // /models detection (and the heuristic) for the active model — the primary
+  // fix for providers like qwen that don't advertise context_length.
+  it("getModelContextWindow returns the config override for the active model", async () => {
+    writeFileSync(
+      join(testHome, "config.yaml"),
+      ["model:", '  default: "qwen-max"', '  context_length: "65536"', ""].join(
+        "\n",
+      ),
+    );
+    // qwen is non-discoverable, so without the override this would be null.
+    const { getModelContextWindow } = await loadDiscovery();
+    const ctx = await getModelContextWindow(
+      "qwen",
+      "qwen-max",
+      undefined,
+      undefined,
+      undefined,
+    );
+    expect(ctx).toBe(65536);
+  });
+
+  it("getModelContextWindow ignores the override for a non-active model id", async () => {
+    writeFileSync(
+      join(testHome, "config.yaml"),
+      ["model:", '  default: "qwen-max"', '  context_length: "65536"', ""].join(
+        "\n",
+      ),
+    );
+    const { getModelContextWindow } = await loadDiscovery();
+    // Different model id → override must not leak; qwen has no /models, → null.
+    const ctx = await getModelContextWindow(
+      "qwen",
+      "some-other-model",
+      undefined,
+      undefined,
+      undefined,
+    );
+    expect(ctx).toBeNull();
+  });
+
+  it("getModelContextWindow does not apply the override when model.default is absent", async () => {
+    // A hand-edited / partial config can carry context_length without a
+    // model.default. The override must NOT leak onto an arbitrary model id
+    // (regression: the old `override.model === ""` branch matched everything).
+    writeFileSync(
+      join(testHome, "config.yaml"),
+      ["model:", '  context_length: "65536"', ""].join("\n"),
+    );
+    const { getModelContextWindow } = await loadDiscovery();
+    const ctx = await getModelContextWindow(
+      "qwen",
+      "qwen-max",
+      undefined,
+      undefined,
+      undefined,
+    );
+    expect(ctx).toBeNull();
+  });
+
   it("getModelContextWindow returns null for providers without a /models endpoint", async () => {
     const { getModelContextWindow } = await loadDiscovery();
     const ctx = await getModelContextWindow(

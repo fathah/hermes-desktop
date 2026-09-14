@@ -6,6 +6,21 @@ export default {
     privacy: "Prywatność",
     credentialPool: "Pula poświadczeń",
   },
+  nav: {
+    groups: {
+      general: "Ogólne",
+      hermes: "Hermes One",
+    },
+    appearance: "Wygląd",
+    language: "Język",
+    privacy: "Prywatność",
+    connection: "Połączenie",
+    network: "Sieć",
+    data: "Dane",
+    about: "Informacje i aktualizacje",
+    community: "Społeczność",
+    logs: "Dzienniki i diagnostyka",
+  },
   theme: {
     label: "Motyw",
     system: "Systemowy",
@@ -24,14 +39,14 @@ export default {
   },
   analytics: {
     label: "Wysyłaj anonimową analitykę użycia",
-    hint: "Pomaga ulepszać Hermes One przez wysyłanie anonimowych, zagregowanych danych użycia do instancji PostHog projektu. Możesz to wyłączyć w dowolnym momencie.",
+    hint: "Pomaga ulepszać Hermes One przez wysyłanie anonimowych, zagregowanych danych użycia do usługi analitycznej projektu. Możesz to wyłączyć w dowolnym momencie.",
     disclosure: {
       uuid: "Losowy identyfikator instalacji przechowywany tylko na tym urządzeniu (bez imienia, e-maila ani danych konta).",
       platform: "Twój system operacyjny, wersja Electron i wersja Node.js.",
       navigation:
         "Ekrany odwiedzane w aplikacji (np. Czat, Sesje, Ustawienia). Nie zbieramy treści czatu, promptów, odpowiedzi modeli ani zawartości plików.",
       endpoint:
-        "Dane są wysyłane do us.i.posthog.com (chmura PostHog US). Nagrywanie sesji i automatyczne przechwytywanie odsłon są wyłączone.",
+        "Dane są wysyłane do usługi analitycznej Hermes (analytics.hermesone.org). Nagrywanie sesji i automatyczne przechwytywanie odsłon są wyłączone.",
       notCollected:
         "Nigdy nie zbieramy: wiadomości czatu, ścieżek plików, kluczy API, konfiguracji modeli, poświadczeń kont.",
     },

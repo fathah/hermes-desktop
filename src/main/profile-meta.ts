@@ -11,6 +11,8 @@ export { PROFILE_COLORS, defaultColorForName } from "../shared/profileColors";
  * the CLI's settings.
  */
 export interface ProfileMeta {
+  /** User-facing agent name. The underlying profile id/directory is stable. */
+  name?: string;
   /** Hex colour (e.g. "#3498DB"). When unset, a stable default is derived. */
   color?: string;
   /** Avatar image as a data URL. When unset, a letter avatar is shown. */
@@ -42,6 +44,10 @@ export async function readProfileMeta(name: string): Promise<ProfileMeta> {
     ) {
       meta.avatar = parsed.avatar;
     }
+    const rawName = typeof parsed.name === "string" ? parsed.name.trim() : "";
+    if (rawName) {
+      meta.name = rawName.slice(0, 80);
+    }
     return meta;
   } catch {
     return {};
@@ -59,6 +65,7 @@ async function writeProfileMeta(
   for (const k of Object.keys(next) as (keyof ProfileMeta)[]) {
     if (next[k] === undefined) delete next[k];
   }
+  await fs.mkdir(profileHome(name), { recursive: true });
   await fs.writeFile(metaPath(name), JSON.stringify(next, null, 2), "utf-8");
 }
 
@@ -100,6 +107,21 @@ export async function removeProfileAvatar(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     await writeProfileMeta(name, { avatar: undefined });
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
+  }
+}
+
+export async function setProfileName(
+  name: string,
+  agentName: string,
+): Promise<{ success: boolean; error?: string }> {
+  const trimmed = agentName.trim();
+  try {
+    await writeProfileMeta(name, {
+      name: trimmed ? trimmed.slice(0, 80) : undefined,
+    });
     return { success: true };
   } catch (err) {
     return { success: false, error: (err as Error).message };

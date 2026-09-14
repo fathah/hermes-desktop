@@ -11,14 +11,15 @@ export default {
     "Geçit yeniden başlatılamadı. Ayrıntılar için gateway-stderr.log dosyasını kontrol edin.",
   startFailed: "Geçit başlatılamadı.",
   stopFailed: "Geçit durdurulamadı.",
-  startExited:
-    "Geçit başlatıldı, ancak hazır hale gelmeden önce tekrar durdu.",
+  startExited: "Geçit başlatıldı, ancak hazır hale gelmeden önce tekrar durdu.",
   checkLog: "Geçit günlüğünü kontrol edin:",
   gatewayHint: "Hermes'i Telegram, Discord, Slack ve diğer platformlara bağlar",
-  subtitle: "Hermes Ajanının bağlanabileceği mesajlaşma platformlarını yönetin.",
+  subtitle:
+    "Hermes Ajanının bağlanabileceği mesajlaşma platformlarını yönetin.",
   refreshTooltip: "Platform durumunu yenile",
   refresh: "Yenile",
-  configHint: "Platformları buradan yapılandırın. Değişiklikleri kaydetmek, adaptörlerin en son kimlik bilgilerini alması için gerektiğinde geçidi yeniden başlatır.",
+  configHint:
+    "Platformları buradan yapılandırın. Değişiklikleri kaydetmek, adaptörlerin en son kimlik bilgilerini alması için gerektiğinde geçidi yeniden başlatır.",
   searchPlaceholder: "Platformları veya ortam değişkenlerini ara",
   emptyState: "Bu aramayla eşleşen hiçbir mesajlaşma platformu bulunamadı.",
   details: "Detaylar",
@@ -42,7 +43,8 @@ export default {
   enable: "Etkinleştir",
   enablePlatform: "Platformu etkinleştir",
   strongWarning: "Güçlü uyarı",
-  riskDesc: "{{name}}, bu mesajlaşma platformunun hassas yerel araçları çalıştırmasına izin verir. Bunu yalnızca güvenilir, özel kanallar ve bilinen kullanıcılar için etkinleştirin.",
+  riskDesc:
+    "{{name}}, bu mesajlaşma platformunun hassas yerel araçları çalıştırmasına izin verir. Bunu yalnızca güvenilir, özel kanallar ve bilinen kullanıcılar için etkinleştirin.",
   enableAnyway: "Yine de etkinleştir",
   states: {
     disabled: "Devre Dışı",

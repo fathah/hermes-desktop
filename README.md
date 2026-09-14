@@ -1,11 +1,11 @@
-<img width="100%" alt="HERMES DESKTOP" src="previews/header.webp" />
+<img width="100%" alt="HERMES DESKTOP" src="assets/header.webp" />
 
 <br/>
 <p align="center">
-  <a href="https://hermes-agent.nousresearch.com/docs/"><img src="https://img.shields.io/badge/Docs-hermes--agent.nousresearch.com-FFD700?style=for-the-badge" alt="Documentation"></a>
+  <a href="https://x.com/HermesOneApp"><img src="https://img.shields.io/badge/Follow Us-000000?style=for-the-badge&logo=x" alt="Twitter"></a>
   <a href="https://discord.gg/Fqu72h8z"><img src="https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
   <a href="https://github.com/fathah/hermes-desktop/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License: MIT"></a>
-  <a href="https://hermesagents.cc/"><img src="https://img.shields.io/badge/Download-Releases-FF6600?style=for-the-badge" alt="Releases"></a>
+  <a href="https://hermesone.org"><img src="https://img.shields.io/badge/Download-Releases-FF6600?style=for-the-badge" alt="Releases"></a>
 <a href="https://github.com/fathah/hermes-desktop/stargazers">
   <img src="https://img.shields.io/github/stars/fathah/hermes-desktop?style=for-the-badge&color=FFD700&label=Stars" alt="Stars">
 </a>
@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/github/downloads/fathah/hermes-desktop/total?style=for-the-badge&color=00B496&label=Total%20Downloads" alt="Downloads">
 </a>
    <a href="https://bankr.bot/launches/0xfda75f77a22b4f4b783bbbb21915ef64d149bba3">
-  <img src="https://img.shields.io/badge/Token-$HD-purple?style=for-the-badge" alt="Downloads">
+  <img src="https://img.shields.io/badge/Token-$HD-purple?style=for-the-badge&logo=ethereum" alt="Downloads">
 </a>
   
 </p>
@@ -25,25 +25,58 @@
   <a href="README.es-LATAM.md">Español (LATAM)</a>
 </p>
 
+<p align="center">
+  
+  
+  
+ <a href="https://www.star-history.com/fathah/hermes-desktop">
+  <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/badge?repo=fathah/hermes-desktop&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/badge?repo=fathah/hermes-desktop" />
+   <img alt="Star History Rank" src="https://api.star-history.com/badge?repo=fathah/hermes-desktop" />
+  </picture>
+ </a>
+</p>
+
+
 > **This project is in active development.** Features may change, and some things might break. If you run into a problem or have an idea, [open an issue](https://github.com/fathah/hermes-desktop/issues). Contributions are welcome!
 
-Hermes Desktop is a native desktop app for installing, configuring, and chatting with [Hermes Agent](https://github.com/NousResearch/hermes-agent) — a self-improving AI assistant with tool use, multi-platform messaging, and a closed learning loop.
+Hermes One is a community maintained native desktop app for installing, configuring, and chatting with [Hermes Agent](https://github.com/NousResearch/hermes-agent) — a self-improving AI assistant with tool use, multi-platform messaging, and a closed learning loop.
 
 Instead of managing the CLI by hand, the app walks through install, provider setup, and day-to-day usage in one place. It uses the official Hermes install script, stores Hermes in `~/.hermes`, and gives you a GUI for chat, sessions, profiles, memory, skills, tools, scheduling, messaging gateways, and more.
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/D1D41ZEKFO)
+
 ## Sponsors
 
-<a href="https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=hermes-desktop" target="_blank" rel="noopener noreferrer">
-    <img src="src/renderer/src/assets/logos/atlascloud.svg" alt="Atlas Cloud" height="100" style="display: block;">
-  </a>
-  
-  > **[Atlas Cloud](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=hermes-desktop)** is a full-modal, OpenAI-compatible AI inference platform (DeepSeek, Qwen, GLM, Kimi, MiniMax, and more). Use it in Hermes Desktop by selecting **Atlas Cloud** as your provider — the base URL is pre-configured automatically.
+> [Want to appear here?](mailto:fathah@hermesone.org)
+
+<details open>
+<summary>Click to collapse</summary>
+<br/>
+<table>
+
+<tr>
+<td width="180"><a href="ttps://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=hermes-desktop"><img src="assets/partners/atlascloud.webp" alt="Atlas Cloud" width=""></a></td>
+<td> <a href="https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=hermes-desktop">Atlas Cloud</a> is a full-modal, OpenAI-compatible AI inference platform. Use it in Hermes One by selecting <b>Atlas Cloud</b> as your provider. The base URL is pre-configured automatically. </td>
+</tr>
+
+<tr>
+<td width="180"><a href="https://www.greptile.com/?utm_source=hermes-desktop"><img src="assets/partners/greptile.webp" alt="Greptile" width=""></a></td>
+<td> <a href="https://www.greptile.com/?utm_source=hermes-desktop">Greptile</a> is an AI code reviewer. It reviews and tests pull requests with full context of the codebase. It catches bugs, flags regressions, and leaves inline review comments on every PR automatically. </td>
+</tr>
+
+</table>
+
+</details>
 
 ## Install
 
-<a href="https://hermesagents.cc/"><img width="380" alt="Download Now" src="previews/download.webp" /></a>
+<a href="https://hermesone.org"><img width="380" alt="Download Now" src="previews/download.webp" /></a>
 
-### Windows
+<details>
+<summary>Windows</summary>
+<br/>
 
 > **Windows users:** The installer is not code-signed. Windows SmartScreen will warn on first launch — click "More info" → "Run anyway".
 
@@ -57,13 +90,19 @@ Instead of managing the CLI by hand, the app walks through install, provider set
 >
 > Tracked in [#109](https://github.com/fathah/hermes-desktop/issues/109).
 
-### Fedora (RPM)
+</details>
+
+<details>
+<summary>Fedora (RPM)</summary>
+<br/>
 
 ```bash
 sudo dnf install ./hermes-desktop-<version>.rpm
 ```
 
 > **Fedora users:** The `.rpm` is not GPG-signed. If your system enforces signature checking, append `--nogpgcheck` to the install command. Auto-update is not supported for `.rpm` builds (limitation of `electron-updater`); reinstall the new `.rpm` to update.
+
+</details>
 
 ## Preview
 
@@ -78,7 +117,7 @@ sudo dnf install ./hermes-desktop-<version>.rpm
 </tr>
 <tr>
 <td width="50%" align="center"><b>Tools</b><br/><img width="100%" alt="Tools" src="previews/tools.png" /></td>
-<td width="50%" align="center"><b>Skills</b><br/><img width="100%" alt="Skills" src="previews/skills.png" /></td>
+<td width="50%" align="center"><b>Discover</b><br/><img width="100%" alt="Skills" src="previews/discover.png" /></td>
 </tr>
 <tr>
 <td width="50%" align="center"><b>Schedules</b><br/><img width="100%" alt="Schedules" src="previews/schedules.png" /></td>
@@ -181,55 +220,6 @@ Telegram, Discord, Slack, WhatsApp, Signal, Matrix/Element, Mattermost, Email (I
 
 Exa Search, Parallel API, Tavily, Firecrawl, FAL.ai (image generation), Honcho, Browserbase, Weights & Biases, and Tinker.
 
-## Development
-
-### Prerequisites
-
-- Node.js and npm
-- A Unix-like shell environment for the Hermes installer
-- Network access for downloading Hermes during first-run install
-
-### Install dependencies
-
-```bash
-npm install
-```
-
-### Start the app in development
-
-```bash
-npm run dev
-```
-
-### Run checks
-
-```bash
-npm run lint
-npm run typecheck
-```
-
-### Run tests
-
-```bash
-npm run test
-npm run test:watch
-```
-
-### Build the desktop app
-
-```bash
-npm run build
-```
-
-Platform packaging:
-
-```bash
-npm run build:mac
-npm run build:win
-npm run build:linux
-npm run build:rpm    # Fedora/RHEL .rpm only
-```
-
 ## First-Time Setup
 
 When the app opens for the first time, it will either detect an existing Hermes installation or offer to install it for you.
@@ -302,7 +292,7 @@ these work without code changes to Hermes:
   the relevant group as dotenv. Prompt the user for the master password
   once per session.
 - **GnuPG with a passphrase-only key:** `gpg --batch --passphrase-fd 0
-  --decrypt ~/.keys/api-keys.gpg` works directly as the `command` value.
+--decrypt ~/.keys/api-keys.gpg` works directly as the `command` value.
   Pass the passphrase via a file descriptor or env var, never argv.
 - **`pass` (the standard unix password manager):**
   `command: "pass show hermes/$HERMES_SECRET_KEY"` for a per-key helper,
@@ -340,17 +330,6 @@ Security model:
 
 Source of truth: [`src/main/secrets/`](src/main/secrets/).
 
-## Tech Stack
-
-- **Electron** 39 — cross-platform desktop shell
-- **React** 19 — UI framework
-- **TypeScript** 5.9 — type safety across main and renderer processes
-- **Tailwind CSS** 4 — utility-first styling
-- **Vite** 7 + electron-vite — fast dev server and build tooling
-- **better-sqlite3** — local session storage with FTS5 full-text search
-- **i18next** — internationalization framework
-- **Vitest** — test runner
-
 ## Notes
 
 - The desktop app depends on the upstream Hermes Agent project for agent behavior and tool execution.
@@ -363,6 +342,8 @@ Source of truth: [`src/main/secrets/`](src/main/secrets/).
 Contributions are welcome! Check out the [Contributing Guide](CONTRIBUTING.md) to get started. If you're not sure where to begin, take a look at the [open issues](https://github.com/fathah/hermes-desktop/issues). Found a bug or have a feature request? [File an issue](https://github.com/fathah/hermes-desktop/issues/new).
 
 ## Related Project
+
+This repo is not affiliated to **Nous Research**. This is a community maintained project.
 
 For the core agent, docs, and CLI workflows, see the main Hermes Agent repository:
 

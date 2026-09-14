@@ -1,22 +1,19 @@
 export default {
   title: "קנבן",
-  subtitle:
-    "לוח רב-סוכני עמיד למשימות שהסוכן יכול לקחת ולסיים בכוחות עצמו.",
+  subtitle: "לוח רב-סוכני עמיד למשימות שהסוכן יכול לקחת ולסיים בכוחות עצמו.",
 
   // Header actions
   refresh: "רענון",
   refreshTooltip: "טעינה מחדש של הלוחות והמשימות מהסוכן",
   dispatch: "שיגור",
-  dispatchTooltip:
-    "הרצת מעבר שיגור אחד - קידום משימות מוכנות ויצירת עובדים",
+  dispatchTooltip: "הרצת מעבר שיגור אחד - קידום משימות מוכנות ויצירת עובדים",
   newTask: "משימה חדשה",
   newTaskTooltip: "יצירת משימה חדשה בלוח הנוכחי",
   newBoard: "לוח חדש",
   newBoardTooltip: "יצירת לוח קנבן חדש",
 
   // Remote-mode unsupported notice
-  remoteUnsupportedTitle:
-    "קנבן דורש התקנת Hermes מקומית או מצב מנהרת SSH.",
+  remoteUnsupportedTitle: "קנבן דורש התקנת Hermes מקומית או מצב מנהרת SSH.",
   remoteUnsupportedHint:
     "מצב מרוחק רגיל ‏(HTTP + מפתח API) עדיין אינו חושף את ה-API של הקנבן. עברו למצב מקומי או למצב מנהרת SSH בהגדרות כדי לנהל את הלוח.",
 
@@ -57,8 +54,7 @@ export default {
   workspaceChoose: "בחירת תיקייה…",
   workspaceNoFolder: "לא נבחרה תיקייה",
   browse: "עיון…",
-  triageCheckbox:
-    "החנייה במיון (מפרֵט מרחיב את המפרט לפני קידום לביצוע)",
+  triageCheckbox: "החנייה במיון (מפרֵט מרחיב את המפרט לפני קידום לביצוע)",
   create: "יצירת משימה",
   creating: "יוצר…",
 

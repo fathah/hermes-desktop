@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Zap } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import toast from "react-hot-toast";
+import { Zap, Globe } from "lucide-react";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ChatEmptyState } from "./ChatEmptyState";
 import { MessageList } from "./MessageList";
@@ -7,10 +8,15 @@ import { ModelPicker } from "./ModelPicker";
 import { ReasoningEffortPicker } from "./ReasoningEffortPicker";
 import { ContextFolderChip } from "./ContextFolderChip";
 import { WorktreePanel } from "./WorktreePanel";
+import { RemoteFolderPicker } from "./RemoteFolderPicker";
+import { WebPreviewPanel } from "./WebPreviewPanel";
 import { useChatScroll } from "./hooks/useChatScroll";
 import { useChatIPC } from "./hooks/useChatIPC";
-import { useChatActions } from "./hooks/useChatActions";
-import { useModelConfig } from "./hooks/useModelConfig";
+import { useChatActions, parseBackgroundCommand } from "./hooks/useChatActions";
+import {
+  useModelConfig,
+  effectiveOverrideBaseUrl,
+} from "./hooks/useModelConfig";
 import { useFastMode } from "./hooks/useFastMode";
 import { useReasoningEffort } from "./hooks/useReasoningEffort";
 import { useLocalCommands } from "./hooks/useLocalCommands";
@@ -19,13 +25,33 @@ import {
   useDashboardChatTransport,
 } from "./hooks/useDashboardChatTransport";
 import { useI18n } from "../../components/useI18n";
+import { useChatPreferences } from "../../components/ChatPreferencesProvider";
 import { buildChatTranscript } from "./transcriptUtils";
 import { ConfigHealthBanner } from "../../components/ConfigHealthBanner";
+import FollowUsModal from "../../components/FollowUsModal";
 import type { Attachment } from "../../../../shared/attachments";
-import type { ActiveTurn, ChatMessage, UsageState } from "./types";
+import type { ApprovalChoice } from "../../../../shared/chat-approval";
+import type { SessionModelOverride } from "../../../../shared/model-override";
+import type {
+  ActiveTurn,
+  ApprovalMessage,
+  ChatMessage,
+  UsageState,
+} from "./types";
 import type { ContextUsage } from "./ContextGauge";
 import { contextWindowForModel } from "./contextWindows";
 import { QueuedMessages } from "./QueuedMessages";
+import { SLASH_COMMANDS, type SlashCommand } from "./slashCommands";
+import { reconcileSlashCatalog } from "./slash/commandCatalog";
+import {
+  DESKTOP_SLASH_COMMANDS,
+  LOCAL_DESKTOP_SLASH_COMMANDS,
+} from "./slash/desktopCommands";
+import type {
+  AgentCommandsCatalogResponse,
+  AgentSlashCommand,
+} from "./slash/types";
+import { shouldPlayCompletionSound } from "./chatNotifications";
 
 interface QueuedMessage {
   text: string;
@@ -34,10 +60,41 @@ interface QueuedMessage {
 
 export type { ChatMessage } from "./types";
 
+// A single shared AudioContext for the "agent finished" chime. Creating a new
+// context per turn leaks them — Chromium caps concurrent contexts (~6) and
+// never reclaims unclosed ones, after which construction throws and the chime
+// silently dies. One lazily-created, reused context avoids the leak entirely.
+let finishChimeCtx: AudioContext | null = null;
+function playFinishChime(): void {
+  try {
+    finishChimeCtx ??= new AudioContext();
+    const ctx = finishChimeCtx;
+    // Autoplay policy may park the context as "suspended"; the user has been
+    // interacting with the composer, so resuming is permitted.
+    if (ctx.state === "suspended") void ctx.resume();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "sine";
+    // Two quick ascending tones.
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.setValueAtTime(1100, ctx.currentTime + 0.08);
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.2);
+  } catch {
+    // AudioContext may be unavailable in some environments — ignore.
+  }
+}
+
 interface ChatProps {
   /** Stable id for this conversation/run. One <Chat> is mounted per run; all
    *  remain mounted (background sessions) and only the active one is shown. */
   runId: string;
+  /** Stable Hermes machine identity for this run. */
+  connectionId: string;
   /** Seed transcript when re-opening a session from history; empty for new chats. */
   initialMessages?: ChatMessage[];
   /** Gateway session id when resuming a known session; null for a new chat. */
@@ -47,9 +104,10 @@ interface ChatProps {
   profile?: string;
   onSessionStarted?: () => void;
   onNewChat?: () => void;
-  /** Optional callback to navigate to Settings → Diagnose section
-   *  when the user clicks "Show details" in the config-health banner. */
-  onOpenDiagnose?: () => void;
+  /** Optional callback to open Settings — from the config-health banner's
+   *  "Show details" (no section) or a `/settings <section>` command, which
+   *  passes the section name to scroll to. */
+  onOpenDiagnose?: (section?: string) => void;
   /** Reports the agent generating state so the sidebar / active-sessions bar
    *  can show a spinner on each running session. */
   onLoadingChange?: (runId: string, loading: boolean) => void;
@@ -58,10 +116,14 @@ interface ChatProps {
   onSessionIdChange?: (runId: string, sessionId: string | null) => void;
   /** Reports the first user message as a best-effort conversation title. */
   onTitleChange?: (runId: string, title: string) => void;
+  /** Resolved avatar/colour of `profile`, so idle agent avatars in the
+   *  transcript show the agent's profile picture instead of the loading gif. */
+  agentAppearance?: { color?: string | null; avatar?: string | null };
 }
 
 function Chat({
   runId,
+  connectionId,
   initialMessages,
   initialSessionId,
   active = true,
@@ -72,8 +134,21 @@ function Chat({
   onLoadingChange,
   onSessionIdChange,
   onTitleChange,
+  agentAppearance,
 }: ChatProps): React.JSX.Element {
   const { t } = useI18n();
+  const { completionSoundEnabled } = useChatPreferences();
+  // Identity + appearance of the agent this conversation is with. Passed to the
+  // transcript so idle avatars render the agent's profile picture (the loading
+  // gif is only shown while a turn is generating).
+  const agentAvatar = useMemo(
+    () => ({
+      name: profile ?? "default",
+      color: agentAppearance?.color,
+      avatar: agentAppearance?.avatar,
+    }),
+    [profile, agentAppearance?.color, agentAppearance?.avatar],
+  );
   const [messages, setMessages] = useState<ChatMessage[]>(
     initialMessages ?? [],
   );
@@ -81,6 +156,20 @@ function Chat({
   useEffect(() => {
     onLoadingChange?.(runId, isLoading);
   }, [runId, isLoading, onLoadingChange]);
+
+  // Play a notification sound when the agent finishes responding
+  const prevLoadingRef = useRef(isLoading);
+  useEffect(() => {
+    const wasLoading = prevLoadingRef.current;
+    prevLoadingRef.current = isLoading;
+    if (
+      !shouldPlayCompletionSound(wasLoading, isLoading, completionSoundEnabled)
+    ) {
+      return;
+    }
+    // Agent just finished — play a short notification chime (shared context).
+    playFinishChime();
+  }, [completionSoundEnabled, isLoading]);
   const [hermesSessionId, setHermesSessionId] = useState<string | null>(
     initialSessionId ?? null,
   );
@@ -88,6 +177,16 @@ function Chat({
   useEffect(() => {
     onSessionIdChange?.(runId, hermesSessionId);
   }, [runId, hermesSessionId, onSessionIdChange]);
+  useEffect(() => {
+    if (!hermesSessionId) return;
+    void window.hermesAPI
+      .recordSessionLocation({
+        connectionId,
+        profile: profile ?? "default",
+        sessionId: hermesSessionId,
+      })
+      .catch(() => undefined);
+  }, [connectionId, profile, hermesSessionId]);
   // Best-effort title from the first user bubble (for the active-sessions bar).
   const reportedTitleRef = useRef(false);
   useEffect(() => {
@@ -111,12 +210,70 @@ function Chat({
     "auto" | "dashboard" | "legacy"
   >("auto");
   const [connectionModeLoaded, setConnectionModeLoaded] = useState(false);
-  // Working folder bound to this conversation (issue #27). Per-conversation,
-  // held in memory; reset on session switch / new chat below.
+  const [connectionRevision, setConnectionRevision] = useState(0);
+  // Working folder bound to this conversation (issue #27). Per-conversation;
+  // persisted per session so a re-opened conversation restores its folder, and
+  // reset on new chat below.
   const [contextFolder, setContextFolder] = useState<string | null>(null);
+  // Gate folder persistence until the stored value for a resumed session has
+  // been loaded — otherwise the initial null would overwrite the saved folder
+  // before the load resolves. A brand-new chat (no initialSessionId) has
+  // nothing to load, so it starts unblocked.
+  const contextFolderLoadedRef = useRef<boolean>(!initialSessionId);
+
+  // Restore the folder linked to a resumed session (once, on mount).
+  useEffect(() => {
+    if (!initialSessionId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const folder =
+          await window.hermesAPI.getSessionContextFolder(initialSessionId);
+        if (!cancelled && folder) setContextFolder(folder);
+      } catch {
+        /* best-effort — a missing folder just leaves the session unlinked */
+      } finally {
+        if (!cancelled) contextFolderLoadedRef.current = true;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [initialSessionId]);
+
+  // Persist the linked folder for this session whenever it changes, once a
+  // gateway session id exists. Gated on the load above so a resumed session's
+  // stored folder is never clobbered by the initial null.
+  useEffect(() => {
+    if (!hermesSessionId || !contextFolderLoadedRef.current) return;
+    void window.hermesAPI
+      .setSessionContextFolder(hermesSessionId, contextFolder)
+      .then(() => {
+        window.dispatchEvent(
+          new CustomEvent("hermes-session-context-folder-changed", {
+            detail: { sessionId: hermesSessionId },
+          }),
+        );
+      })
+      .catch(() => {
+        /* best-effort sidebar refresh signal */
+      });
+  }, [hermesSessionId, contextFolder]);
   // Whether the worktree panel is visible (only applies when contextFolder is set)
   // Default false so the panel doesn't open automatically and interfere with scrolling
   const [worktreeVisible, setWorktreeVisible] = useState<boolean>(false);
+  const [folderPickerOpen, setFolderPickerOpen] = useState<boolean>(false);
+  const [webPreviewVisible, setWebPreviewVisible] = useState<boolean>(false);
+  const [webPreviewUrl, setWebPreviewUrl] =
+    useState<string>("https://google.com");
+  // Explicit session-scoped model override — set only when the user picks
+  // from the chat-screen picker (persist:false). Undefined until then so the
+  // TUI gateway bypass in sendMessageViaBestApi is not triggered for normal
+  // chats where the user never changed the model (issue #688).
+  const [sessionModelOverride, setSessionModelOverride] = useState<
+    SessionModelOverride | undefined
+  >(undefined);
+  const sessionModelOverrideLoadedRef = useRef<boolean>(!initialSessionId);
   const dragCounter = useRef(0);
   const chatInputRef = useRef<ChatInputHandle>(null);
   const queueRef = useRef<QueuedMessage[]>([]);
@@ -133,7 +290,20 @@ function Chat({
     let cancelled = false;
     const loadConnectionConfig = async (): Promise<void> => {
       try {
-        const conn = await window.hermesAPI.getConnectionConfig();
+        const conn = await window.hermesAPI.getConnectionConfig(connectionId);
+        let remoteAuthMode = conn.remoteAuthMode ?? "auto";
+        if (conn.mode === "remote" && conn.remoteUrl.trim()) {
+          try {
+            remoteAuthMode = (
+              await window.hermesAPI.probeRemoteAuthMode(
+                conn.remoteUrl,
+                connectionId,
+              )
+            ).authMode;
+          } catch {
+            // Keep stored transport choice when public status is unreachable.
+          }
+        }
         if (!cancelled) {
           setConnectionMode(conn.mode);
           setRemoteMode(conn.mode !== "local");
@@ -141,8 +311,10 @@ function Chat({
             conn.mode === "local"
               ? "auto"
               : conn.mode === "ssh"
-              ? conn.sshChatTransport ?? "auto"
-              : conn.remoteChatTransport ?? "auto",
+                ? (conn.sshChatTransport ?? "auto")
+                : remoteAuthMode === "oauth"
+                  ? "dashboard"
+                  : (conn.remoteChatTransport ?? "auto"),
           );
         }
       } catch {
@@ -157,6 +329,8 @@ function Chat({
     };
     void loadConnectionConfig();
     const unsubscribe = window.hermesAPI.onConnectionConfigChanged((conn) => {
+      if (conn.connectionId !== connectionId) return;
+      setConnectionRevision((revision) => revision + 1);
       setConnectionModeLoaded(true);
       setConnectionMode(conn.mode);
       setRemoteMode(conn.mode !== "local");
@@ -164,18 +338,72 @@ function Chat({
         conn.mode === "local"
           ? "auto"
           : conn.mode === "ssh"
-          ? conn.sshChatTransport ?? "auto"
-          : conn.remoteChatTransport ?? "auto",
+            ? (conn.sshChatTransport ?? "auto")
+            : conn.remoteAuthMode === "oauth"
+              ? "dashboard"
+              : (conn.remoteChatTransport ?? "auto"),
       );
     });
     return (): void => {
       cancelled = true;
       unsubscribe();
     };
-  }, []);
+  }, [connectionId]);
 
   const { containerRef, bottomRef } = useChatScroll(messages);
   const modelConfig = useModelConfig(profile);
+  const { reload: reloadModelConfig, selectModel } = modelConfig;
+  const chatCurrentModel =
+    sessionModelOverride?.model ?? modelConfig.currentModel;
+  const chatCurrentProvider =
+    sessionModelOverride?.provider ?? modelConfig.currentProvider;
+  const chatCurrentBaseUrl =
+    sessionModelOverride?.baseUrl ?? modelConfig.currentBaseUrl;
+  const chatDisplayModel = sessionModelOverride?.model
+    ? sessionModelOverride.model.split("/").pop() || sessionModelOverride.model
+    : modelConfig.displayModel;
+
+  // Restore the model/provider linked to a resumed session. The saved value is
+  // applied only to this chat's local picker state (`persist:false`) so it never
+  // rewrites the global config.yaml default.
+  useEffect(() => {
+    if (!initialSessionId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const override =
+          await window.hermesAPI.getSessionModelOverride(initialSessionId);
+        if (!cancelled && override) {
+          setSessionModelOverride(override);
+          await selectModel(
+            override.provider,
+            override.model,
+            override.baseUrl,
+            { persist: false },
+          );
+        }
+      } catch {
+        /* best-effort — sessions without a saved pick use the global default */
+      } finally {
+        if (!cancelled) sessionModelOverrideLoadedRef.current = true;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [initialSessionId, selectModel]);
+
+  // Persist the chat-local model/provider once a session exists. This stores
+  // only routing identity, never API keys, and is gated so a resumed session's
+  // initial undefined state cannot erase its saved model before restore.
+  useEffect(() => {
+    if (!hermesSessionId || !sessionModelOverrideLoadedRef.current) return;
+    void window.hermesAPI.setSessionModelOverride(
+      hermesSessionId,
+      sessionModelOverride ?? null,
+    );
+  }, [hermesSessionId, sessionModelOverride]);
+
   const {
     fastMode,
     toggle: toggleFastMode,
@@ -209,12 +437,7 @@ function Chat({
     return (): void => {
       cancelled = true;
     };
-  }, [
-    profile,
-    modelConfig.currentModel,
-    modelConfig.currentProvider,
-    modelConfig.currentBaseUrl,
-  ]);
+  }, [profile, chatCurrentModel, chatCurrentProvider, chatCurrentBaseUrl]);
 
   // Authoritative context-window size for the active model, resolved from the
   // provider's /models catalogue (issue #597). Null until/unless the provider
@@ -225,12 +448,12 @@ function Chat({
   useEffect(() => {
     let cancelled = false;
     setRealContextWindow(null);
-    if (!modelConfig.currentModel) return;
+    if (!chatCurrentModel) return;
     window.hermesAPI
       .getModelContextWindow(
-        modelConfig.currentProvider,
-        modelConfig.currentModel,
-        modelConfig.currentBaseUrl,
+        chatCurrentProvider,
+        chatCurrentModel,
+        chatCurrentBaseUrl,
         profile,
       )
       .then((w) => {
@@ -244,18 +467,14 @@ function Chat({
     return (): void => {
       cancelled = true;
     };
-  }, [
-    profile,
-    modelConfig.currentModel,
-    modelConfig.currentProvider,
-    modelConfig.currentBaseUrl,
-  ]);
+  }, [profile, chatCurrentModel, chatCurrentProvider, chatCurrentBaseUrl]);
 
-  const visibleSessionScopeId =
-    messages.length === 0 ? null : hermesSessionId;
+  const visibleSessionScopeId = messages.length === 0 ? null : hermesSessionId;
 
   useChatIPC({
     runId,
+    connectionId,
+    profile,
     sessionScopeId: visibleSessionScopeId,
     setMessages,
     setHermesSessionId,
@@ -283,6 +502,23 @@ function Chat({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [active, onNewChat]);
+
+  // Listen for in-app link clicks to load in the split-screen Web Preview panel
+  useEffect(() => {
+    if (!active) return;
+    const handleNavigate = (e: Event): void => {
+      const customEvent = e as CustomEvent<string>;
+      const url = customEvent.detail;
+      if (url) {
+        setWebPreviewUrl(url);
+        setWebPreviewVisible(true);
+      }
+    };
+    document.addEventListener("web-preview:navigate", handleNavigate);
+    return () => {
+      document.removeEventListener("web-preview:navigate", handleNavigate);
+    };
+  }, [active]);
 
   // "Copy entire chat" context-menu items (issue #298) — serialise the whole
   // conversation in the requested format and copy it. A ref keeps the latest
@@ -359,23 +595,35 @@ function Chat({
 
   const handleClear = useCallback(() => {
     if (isLoading) {
-      window.hermesAPI.abortChat(runId);
+      window.hermesAPI.abortChat(runId, connectionId);
       setIsLoading(false);
     }
     const idToDelete = hermesSessionId;
     if (idToDelete) {
-      void window.hermesAPI.deleteSession(idToDelete);
+      void window.hermesAPI.deleteSession(idToDelete, connectionId, profile);
       void window.hermesAPI.clearStagedAttachments(idToDelete);
     }
     setMessages([]);
     setHermesSessionId(null);
     setContextFolder(null);
+    // Clearing the conversation reverts to the global default model — the
+    // session-scoped pick belongs to the conversation being cleared (#688).
+    setSessionModelOverride(undefined);
+    void reloadModelConfig();
     activeTurnRef.current = null;
     setUsage(null);
     setToolProgress(null);
     queueRef.current = [];
     setQueuedMessages([]);
-  }, [isLoading, runId, hermesSessionId, setMessages]);
+  }, [
+    isLoading,
+    runId,
+    connectionId,
+    profile,
+    hermesSessionId,
+    setMessages,
+    reloadModelConfig,
+  ]);
 
   const localCommands = useLocalCommands({
     profile,
@@ -386,27 +634,163 @@ function Chat({
     addAgentMessage,
   });
 
+  // Fired once per connection when the dashboard WebSocket transport can't
+  // connect (e.g. SSH tunnel → `hermes gateway`, which has no `/api/ws`, issue
+  // #667) and we fall back to legacy chat. A fixed toast id dedupes.
+  const handleDashboardUnavailable = useCallback(() => {
+    toast(t("chat.dashboardUnavailableFallback"), {
+      id: "dashboard-unavailable-fallback",
+      icon: "ℹ️",
+      duration: 8000,
+    });
+  }, [t]);
+
   const dashboardTransport = useDashboardChatTransport({
     activeTurnRef,
+    connectionId,
+    connectionRevision,
     contextFolder,
     connectionMode,
     enabled: dashboardChatEnabled,
     fallbackOnUnavailable: chatTransportPreference === "auto",
     hermesSessionId,
     messages,
-    model: modelConfig.currentModel,
-    modelBaseUrl: modelConfig.currentBaseUrl,
+    model: chatCurrentModel,
+    modelBaseUrl: chatCurrentBaseUrl,
     profile,
-    provider: modelConfig.currentProvider,
+    provider: chatCurrentProvider,
     setHermesSessionId,
     setIsLoading,
     setMessages,
     setToolProgress,
     setUsage,
+    onDashboardUnavailable: handleDashboardUnavailable,
   });
+
+  const respondDashboardApproval = dashboardTransport.respondApproval;
+  const handleApprovalRespond = useCallback(
+    (msg: ApprovalMessage, choice: ApprovalChoice): Promise<boolean> =>
+      msg.responsePath === "dashboard"
+        ? respondDashboardApproval(msg.requestId, choice)
+        : window.hermesAPI.respondApproval(
+            msg.requestId,
+            choice,
+            msg.runId || "",
+          ),
+    [respondDashboardApproval],
+  );
+
+  const handleApprovalResolved = useCallback(
+    (msg: ApprovalMessage, choice: ApprovalChoice) => {
+      setMessages((prev) =>
+        prev.map((candidate) =>
+          candidate.kind === "approval" && candidate.id === msg.id
+            ? { ...candidate, choice, resolved: true }
+            : candidate,
+        ),
+      );
+    },
+    [setMessages],
+  );
+
+  const [agentCommandCatalog, setAgentCommandCatalog] =
+    useState<AgentCommandsCatalogResponse | null>(null);
+  const getCommandCatalog = dashboardTransport.getCommandCatalog;
+  const commandCatalogEnabled = dashboardTransport.enabled;
+
+  useEffect(() => {
+    if (!commandCatalogEnabled) {
+      setAgentCommandCatalog(null);
+      return;
+    }
+    if (!active) return;
+    let cancelled = false;
+    void getCommandCatalog()
+      .then((catalog) => {
+        if (cancelled) return;
+        setAgentCommandCatalog(catalog);
+        const recordInventory = window.hermesAPI.recordAgentCommandInventory;
+        if (typeof recordInventory === "function") {
+          void recordInventory(catalog, profile, connectionId).catch(
+            () => undefined,
+          );
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAgentCommandCatalog(null);
+        const recordInventory = window.hermesAPI.recordAgentCommandInventory;
+        if (typeof recordInventory === "function") {
+          void recordInventory(null, profile, connectionId).catch(
+            () => undefined,
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [active, commandCatalogEnabled, connectionId, getCommandCatalog, profile]);
+
+  const slashCatalog = useMemo(() => {
+    const desktopCommands = [
+      ...DESKTOP_SLASH_COMMANDS,
+      ...LOCAL_DESKTOP_SLASH_COMMANDS,
+    ];
+    const desktopNames = new Set(
+      desktopCommands.map((command) => command.name),
+    );
+    const fallbackAgentCommands: AgentSlashCommand[] = SLASH_COMMANDS.filter(
+      (command) => !desktopNames.has(command.name.replace(/^\//, "")),
+    ).map((command) => ({
+      name: command.name,
+      description: command.description,
+      category: command.category,
+      source: "agent",
+      target: "agent",
+      allowWhileBusy: true,
+      supportsAttachments: false,
+    }));
+
+    return reconcileSlashCatalog({
+      catalog: agentCommandCatalog,
+      desktopCommands,
+      fallbackAgentCommands,
+    });
+  }, [agentCommandCatalog]);
+
+  const slashMenuCommands = useMemo<SlashCommand[]>(
+    () =>
+      slashCatalog.commands.map((command) => ({
+        name: `/${command.name}`,
+        description: command.description,
+        category:
+          command.target === "desktop"
+            ? "info"
+            : command.target === "model"
+              ? "tools"
+              : "agent",
+        local: command.target === "desktop",
+        takesArgs:
+          command.target === "agent" ||
+          command.target === "model" ||
+          Boolean(command.argsHint),
+      })),
+    [slashCatalog],
+  );
+
+  // Defer a message onto the busy queue (used when a slash command resolves to
+  // an agent prompt while a turn is already in flight).
+  const enqueueMessage = useCallback(
+    (text: string, attachments: Attachment[] = []) => {
+      queueRef.current.push({ text, attachments });
+      setQueuedMessages([...queueRef.current]);
+    },
+    [],
+  );
 
   const actions = useChatActions({
     runId,
+    connectionId,
     profile,
     hermesSessionId,
     messages,
@@ -416,11 +800,22 @@ function Chat({
     onSessionStarted,
     chatInputRef,
     localCommands,
+    slashCatalog,
+    onOpenSettings: onOpenDiagnose,
     activeTurnRef,
     contextFolder,
+    sessionModel: sessionModelOverride,
     sendViaDashboard: dashboardTransport.enabled
       ? dashboardTransport.sendMessage
       : undefined,
+    execSlashViaDashboard: dashboardTransport.enabled
+      ? dashboardTransport.execSlash
+      : undefined,
+    runBackgroundViaDashboard: dashboardTransport.enabled
+      ? dashboardTransport.runBackground
+      : undefined,
+    addAgentMessage,
+    enqueueMessage,
     abortDashboard: dashboardTransport.enabled
       ? dashboardTransport.abort
       : undefined,
@@ -429,8 +824,10 @@ function Chat({
   // Stable ref to handleSend so the drain effect doesn't re-trigger on
   // identity changes (regression #5 from PR #315).
   const handleSendRef = useRef(actions.handleSend);
+  const handleBackgroundRef = useRef(actions.handleBackground);
   useEffect(() => {
     handleSendRef.current = actions.handleSend;
+    handleBackgroundRef.current = actions.handleBackground;
   });
 
   // Drain queued messages one at a time when the agent finishes.
@@ -454,6 +851,23 @@ function Chat({
 
   const handleSubmitOrQueue = useCallback(
     (text: string, attachments: Attachment[]) => {
+      // Side questions (`/btw`) run on a concurrent background agent, so they
+      // must never queue — fire them immediately even while the main turn is in
+      // flight. This is the whole point of "ask without affecting context".
+      const bgQuestion = parseBackgroundCommand(text);
+      if (bgQuestion !== null) {
+        if (bgQuestion)
+          void handleBackgroundRef.current(bgQuestion, attachments);
+        return;
+      }
+      // The central slash router owns queueing policy. Dispatch every slash
+      // command immediately so Desktop commands can run, Agent commands can use
+      // the concurrent worker, and model-bound commands can format once before
+      // they are queued.
+      if (text.startsWith("/")) {
+        void handleSendRef.current(text, attachments, true);
+        return;
+      }
       if (isLoading) {
         queueRef.current.push({ text, attachments });
         setQueuedMessages([...queueRef.current]);
@@ -469,12 +883,47 @@ function Chat({
   }, []);
 
   const handlePickFolder = useCallback(async () => {
+    if (remoteMode) {
+      setFolderPickerOpen(true);
+      return;
+    }
     const path = await window.hermesAPI.selectFolder();
     if (path) setContextFolder(path);
-  }, []);
+  }, [remoteMode]);
 
   const handleClearFolder = useCallback(() => {
     setContextFolder(null);
+  }, []);
+
+  // Stable toolbar callbacks so the memoized ModelPicker / ContextFolderChip
+  // don't re-render on every streaming chunk (each chunk re-renders <Chat>).
+  const handleSelectModel = useCallback(
+    (provider: string, model: string, baseUrl: string) => {
+      void selectModel(provider, model, baseUrl, {
+        persist: false,
+      });
+      // Carry the full identity (not just the model name) so a cross-provider
+      // switch reaches the right backend. Mirror the baseUrl rule selectModel
+      // applies so they can't drift.
+      setSessionModelOverride(
+        model
+          ? {
+              provider,
+              model,
+              baseUrl: effectiveOverrideBaseUrl(provider, baseUrl),
+            }
+          : undefined,
+      );
+    },
+    [selectModel],
+  );
+
+  const handleSelectRecentFolder = useCallback((path: string) => {
+    setContextFolder(path);
+  }, []);
+
+  const handleToggleWorktree = useCallback(() => {
+    setWorktreeVisible((v) => !v);
   }, []);
 
   // Drag-and-drop: filter for dragenter events carrying files (suppresses
@@ -527,15 +976,28 @@ function Chat({
   );
 
   // Context-gauge data: the latest turn's prompt tokens vs the model's window.
+  // Denominator priority: gateway-reported context_max (authoritative — knows
+  // the actual model config) > provider /models catalogue > static heuristic.
   const contextUsage: ContextUsage | null = usage?.contextTokens
     ? {
         used: usage.contextTokens,
         window:
-          realContextWindow ?? contextWindowForModel(modelConfig.currentModel),
+          usage.contextWindowTokens ??
+          realContextWindow ??
+          contextWindowForModel(chatCurrentModel),
         cacheReadTokens: usage.cacheReadTokens,
         cacheWriteTokens: usage.cacheWriteTokens,
       }
     : null;
+
+  const handleInspectElement = useCallback(
+    (payload: { selector: string; comment: string }) => {
+      chatInputRef.current?.appendText(
+        `Element: \`${payload.selector}\`\nComment: ${payload.comment}`,
+      );
+    },
+    [],
+  );
 
   return (
     <div
@@ -559,6 +1021,9 @@ function Chat({
               onApprove={actions.handleApprove}
               onDeny={actions.handleDeny}
               onClarifyResolved={handleClarifyResolved}
+              onApprovalRespond={handleApprovalRespond}
+              onApprovalResolved={handleApprovalResolved}
+              agentAvatar={agentAvatar}
             />
           )}
           <div ref={bottomRef} />
@@ -566,6 +1031,14 @@ function Chat({
 
         {contextFolder && worktreeVisible && (
           <WorktreePanel folderPath={contextFolder} />
+        )}
+
+        {webPreviewVisible && (
+          <WebPreviewPanel
+            initialUrl={webPreviewUrl}
+            onClose={() => setWebPreviewVisible(false)}
+            onInspectElement={handleInspectElement}
+          />
         )}
       </div>
 
@@ -583,19 +1056,21 @@ function Chat({
           profile={profile}
           contextUsage={contextUsage}
           readiness={readiness}
+          slashCommands={slashMenuCommands}
           onSubmit={handleSubmitOrQueue}
           onQuickAsk={actions.handleQuickAsk}
           onAbort={actions.handleAbort}
           toolbarExtras={
             <>
               <ModelPicker
-                currentModel={modelConfig.currentModel}
-                currentProvider={modelConfig.currentProvider}
-                currentBaseUrl={modelConfig.currentBaseUrl}
+                active={active}
+                currentModel={chatCurrentModel}
+                currentProvider={chatCurrentProvider}
+                currentBaseUrl={chatCurrentBaseUrl}
                 modelGroups={modelConfig.modelGroups}
-                displayModel={modelConfig.displayModel}
-                onOpen={modelConfig.reload}
-                onSelectModel={modelConfig.selectModel}
+                displayModel={chatDisplayModel}
+                onOpen={reloadModelConfig}
+                onSelectModel={handleSelectModel}
               />
               <ReasoningEffortPicker
                 value={reasoningEffort}
@@ -609,10 +1084,17 @@ function Chat({
                 >
                   <Zap size={14} />
                 </button>
-                <div className="chat-fast-popover">
-                  <strong>
-                    {fastMode ? t("chat.fastModeOn") : t("chat.fastMode")}
-                  </strong>
+                <div
+                  className={`chat-fast-popover ${fastMode ? "chat-fast-active-popover" : ""}`}
+                >
+                  <div className="chat-fast-popover-head">
+                    <span className="chat-fast-popover-icon" aria-hidden="true">
+                      <Zap size={13} />
+                    </span>
+                    <strong>
+                      {fastMode ? t("chat.fastModeOn") : t("chat.fastMode")}
+                    </strong>
+                  </div>
                   <span>
                     {fastMode
                       ? t("chat.fastModeActive")
@@ -622,12 +1104,38 @@ function Chat({
               </div>
               <ContextFolderChip
                 contextFolder={contextFolder}
-                show={!remoteMode}
+                show
                 worktreeVisible={worktreeVisible}
                 onPickFolder={handlePickFolder}
                 onClearFolder={handleClearFolder}
-                onToggleWorktree={() => setWorktreeVisible((v) => !v)}
+                onToggleWorktree={handleToggleWorktree}
+                onSelectRecentFolder={handleSelectRecentFolder}
               />
+              <button
+                type="button"
+                className={`btn-ghost chat-tool-btn ${webPreviewVisible ? "chat-tool-btn-active" : ""}`}
+                onClick={() => setWebPreviewVisible((v) => !v)}
+                title={
+                  webPreviewVisible ? "Hide web preview" : "Show web preview"
+                }
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 28,
+                  height: 28,
+                  padding: 0,
+                  borderRadius: 6,
+                  color: webPreviewVisible
+                    ? "var(--accent-text)"
+                    : "var(--text-secondary)",
+                  background: webPreviewVisible
+                    ? "color-mix(in srgb, var(--accent-text) 10%, transparent)"
+                    : "transparent",
+                }}
+              >
+                <Globe size={14} />
+              </button>
             </>
           }
         />
@@ -639,6 +1147,17 @@ function Chat({
           </div>
         </div>
       )}
+      <RemoteFolderPicker
+        initialPath={contextFolder}
+        open={folderPickerOpen}
+        onCancel={() => setFolderPickerOpen(false)}
+        onSelect={(path) => {
+          setContextFolder(path);
+          setFolderPickerOpen(false);
+        }}
+      />
+      {/* Show follow-us modal only after setup is complete */}
+      {active && connectionModeLoaded && readiness.ok && <FollowUsModal />}
     </div>
   );
 }

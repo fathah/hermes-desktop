@@ -111,7 +111,7 @@ export function runConfigHealthCheck(profile?: string): ConfigHealthReport {
     } catch (err) {
       // Swallow — a broken check never breaks the audit. Log to console
       // so a developer can find it; users see only the empty result.
-      // eslint-disable-next-line no-console
+
       console.warn("[config-health] check threw:", err);
     }
   }
@@ -389,11 +389,16 @@ function checkNonAsciiCredentials(profile?: string): ConfigHealthIssue[] {
   const env = readEnv(profile);
   const offenders: string[] = [];
   for (const [key, value] of Object.entries(env)) {
-    if (!/^[A-Z][A-Z0-9_]*(_API_KEY|_TOKEN|API_SERVER_KEY)$/.test(key)) {
+    // The `API_SERVER_KEY` alternative could never match: the leading
+    // `[A-Z][A-Z0-9_]*` requires at least one character before it, but the key
+    // *is* that literal with nothing preceding it. Anchor it as a whole-key
+    // alternative so the audit also covers the remote-mode bearer token —
+    // exactly the value a user pastes and where a stray smart-quote lands.
+    if (!/^([A-Z][A-Z0-9_]*(_API_KEY|_TOKEN)|API_SERVER_KEY)$/.test(key)) {
       continue;
     }
     if (!value) continue;
-    // eslint-disable-next-line no-control-regex
+
     if (/[^\x20-\x7e]/.test(value)) {
       offenders.push(key);
     }
@@ -495,7 +500,7 @@ function fixNonAsciiCredential(
   const cleaned: string[] = [];
   for (const key of keys) {
     const value = env[key] ?? "";
-    // eslint-disable-next-line no-control-regex
+
     const stripped = value.replace(/[^\x20-\x7e]/g, "");
     if (stripped !== value && stripped) {
       setEnvValue(key, stripped, profile);

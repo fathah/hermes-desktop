@@ -5,7 +5,9 @@ import {
 } from "../src/renderer/src/screens/Chat/dashboardEventAdapter";
 import type { ChatMessage } from "../src/renderer/src/screens/Chat/types";
 
-function reduceEvents(events: Parameters<typeof applyDashboardStreamEvent>[1][]) {
+function reduceEvents(
+  events: Parameters<typeof applyDashboardStreamEvent>[1][],
+): ChatMessage[] {
   let state: DashboardEventState = {
     messages: [{ id: "u-1", role: "user", content: "make image" }],
     reasoningSegmentClosed: false,
@@ -255,8 +257,14 @@ describe("applyDashboardStreamEvent", () => {
       "tool-result-call-a-3",
       "tool-result-call-b-4",
     ]);
-    expect(messages[1]).toMatchObject({ callId: "call-a", status: "completed" });
-    expect(messages[2]).toMatchObject({ callId: "call-b", status: "completed" });
+    expect(messages[1]).toMatchObject({
+      callId: "call-a",
+      status: "completed",
+    });
+    expect(messages[2]).toMatchObject({
+      callId: "call-b",
+      status: "completed",
+    });
     expect(messages[3]).toMatchObject({ callId: "call-a" });
     expect(messages[4]).toMatchObject({ callId: "call-b" });
   });
@@ -307,6 +315,56 @@ describe("applyDashboardStreamEvent", () => {
     const agent = state.messages[1] as ChatMessage & { content: string };
     expect(state.messages).toHaveLength(2);
     expect(agent.content).toBe("It is 6:51 PM.");
+    expect(agent).toMatchObject({ pending: false });
+  });
+
+  it("replaces mismatched streamed deltas with the final completion text", () => {
+    let state: DashboardEventState = {
+      messages: [{ id: "u-1", role: "user", content: "korean" }],
+      reasoningSegmentClosed: false,
+    };
+    state = applyDashboardStreamEvent(
+      state,
+      { type: "message.delta", payload: { text: "맞,측으로 말했습니다. " } },
+      { now: 310 },
+    );
+    state = applyDashboardStreamEvent(
+      state,
+      {
+        type: "message.complete",
+        payload: { text: "맞아요. 추측으로 말했습니다." },
+      },
+      { now: 311 },
+    );
+
+    const agent = state.messages[1] as ChatMessage & { content: string };
+    expect(state.messages).toHaveLength(2);
+    expect(agent.content).toBe("맞아요. 추측으로 말했습니다.");
+    expect(agent).toMatchObject({ pending: false });
+  });
+
+  it("can suppress assistant deltas and render only final completion text", () => {
+    let state: DashboardEventState = {
+      messages: [{ id: "u-1", role: "user", content: "korean" }],
+      reasoningSegmentClosed: false,
+    };
+    state = applyDashboardStreamEvent(
+      state,
+      { type: "message.delta", payload: { text: "맞,측으로 말했습니다. " } },
+      { now: 320, renderAssistantDeltas: false },
+    );
+    state = applyDashboardStreamEvent(
+      state,
+      {
+        type: "message.complete",
+        payload: { text: "맞아요. 추측으로 말했습니다." },
+      },
+      { now: 321, renderAssistantDeltas: false },
+    );
+
+    const agent = state.messages[1] as ChatMessage & { content: string };
+    expect(state.messages).toHaveLength(2);
+    expect(agent.content).toBe("맞아요. 추측으로 말했습니다.");
     expect(agent).toMatchObject({ pending: false });
   });
 

@@ -21,6 +21,10 @@ export default {
   no: "No",
   nameRequired: "Name and Model ID are required",
   customProviderHint: "Only required for custom or local providers",
+  contextWindowLabel: "Context Window (tokens)",
+  contextWindowPlaceholder: "e.g. 65536",
+  contextWindowHint:
+    "Override the context size when your provider doesn't report it. Fixes the context gauge and lets auto-compaction trigger. Leave empty to auto-detect.",
   apiKeyLabel: "API Key",
   apiKeyHint:
     "Stored as an environment variable. Picks the matching env key based on the URL, or CUSTOM_API_KEY otherwise.",

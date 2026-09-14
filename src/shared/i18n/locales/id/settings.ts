@@ -6,16 +6,31 @@ export default {
     privacy: "Privasi",
     credentialPool: "Kumpulan Kredensial",
   },
+  nav: {
+    groups: {
+      general: "Umum",
+      hermes: "Hermes One",
+    },
+    appearance: "Tampilan",
+    language: "Bahasa",
+    privacy: "Privasi",
+    connection: "Koneksi",
+    network: "Jaringan",
+    data: "Data",
+    about: "Tentang & Pembaruan",
+    community: "Komunitas",
+    logs: "Log & Diagnostik",
+  },
   analytics: {
     label: "Kirim analitik penggunaan anonim",
-    hint: "Membantu meningkatkan Hermes dengan mengirim data penggunaan anonim dan teragregasi ke instans PostHog proyek (di-host di UE). Anda dapat menonaktifkannya kapan saja.",
+    hint: "Membantu meningkatkan Hermes dengan mengirim data penggunaan anonim dan teragregasi ke layanan analitik proyek. Anda dapat menonaktifkannya kapan saja.",
     disclosure: {
       uuid: "Pengenal acak per-instalasi yang disimpan hanya di perangkat ini (tanpa nama, email, atau info akun).",
       platform: "Sistem operasi, versi Electron, dan versi Node.js Anda.",
       navigation:
         "Layar mana yang Anda kunjungi di dalam aplikasi (mis. Chat, Sesi, Pengaturan). Tidak ada konten chat, prompt, respons model, atau isi file yang dikumpulkan.",
       endpoint:
-        "Data dikirim ke eu.i.posthog.com (cloud PostHog UE). Rekaman sesi dan tangkapan pageview otomatis dinonaktifkan.",
+        "Data dikirim ke layanan analitik Hermes (analytics.hermesone.org). Rekaman sesi dan tangkapan pageview otomatis dinonaktifkan.",
       notCollected:
         "Tidak pernah dikumpulkan: pesan chat, jalur file, kunci API, konfigurasi model, kredensial akun.",
     },

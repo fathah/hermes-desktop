@@ -1,8 +1,6 @@
 import type { SavedModel } from "./models";
-import {
-  remoteRequestJson,
-  type RemoteSessionConfig,
-} from "./remote-sessions";
+import { remoteRequestJson, type RemoteSessionConfig } from "./remote-sessions";
+import { normalizeModelEndpointUrl } from "../shared/model-endpoint";
 
 type RemoteRecord = Record<string, unknown>;
 const REMOTE_MODEL_OPTIONS_TIMEOUT_MS = 60_000;
@@ -22,6 +20,16 @@ function asStringArray(value: unknown): string[] {
     : [];
 }
 
+function asPositiveInt(value: unknown): number | undefined {
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim()
+        ? Number(value.trim())
+        : Number.NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined;
+}
+
 function shortModelLabel(model: string): string {
   return model.split("/").pop() || model;
 }
@@ -32,6 +40,7 @@ function savedModelFromRemoteOption(
   model: string,
   index: number,
   baseUrl = "",
+  contextLength?: number,
 ): SavedModel {
   return {
     id: `remote:${provider}:${index}:${model}`,
@@ -40,6 +49,7 @@ function savedModelFromRemoteOption(
     model,
     baseUrl,
     createdAt: 0,
+    ...(contextLength !== undefined ? { contextLength } : {}),
   };
 }
 
@@ -52,10 +62,10 @@ function normalizeRemoteSavedModel(
   const model = asString(row.model).trim();
   if (!provider || !model) return null;
   const baseUrl = asString(row.baseUrl, asString(row.base_url)).trim();
+  const contextLength = asPositiveInt(row.contextLength ?? row.context_length);
   return {
     id:
-      asString(row.id).trim() ||
-      `remote:library:${provider}:${index}:${model}`,
+      asString(row.id).trim() || `remote:library:${provider}:${index}:${model}`,
     name: asString(row.name).trim() || shortModelLabel(model) || provider,
     provider,
     model,
@@ -64,6 +74,7 @@ function normalizeRemoteSavedModel(
       typeof row.createdAt === "number" && Number.isFinite(row.createdAt)
         ? row.createdAt
         : 0,
+    ...(contextLength !== undefined ? { contextLength } : {}),
   };
 }
 
@@ -74,7 +85,7 @@ function dedupeModels(models: SavedModel[]): SavedModel[] {
     const key = [
       model.provider.trim().toLowerCase(),
       model.model.trim().toLowerCase(),
-      (model.baseUrl || "").trim().replace(/\/+$/, "").toLowerCase(),
+      normalizeModelEndpointUrl(model.baseUrl),
     ].join("\n");
     if (seen.has(key)) continue;
     seen.add(key);
@@ -123,6 +134,9 @@ function modelsFromRemoteOptions(response: unknown): SavedModel[] {
   const currentModel = asString(record.model).trim();
   if (currentProvider && currentModel) {
     const current = currentProviderRow(response);
+    const contextLength =
+      asPositiveInt(record.contextLength ?? record.context_length) ??
+      current.contextLength;
     models.push(
       savedModelFromRemoteOption(
         current.provider || currentProvider,
@@ -130,6 +144,7 @@ function modelsFromRemoteOptions(response: unknown): SavedModel[] {
         currentModel,
         -1,
         current.baseUrl,
+        contextLength,
       ),
     );
   }
@@ -163,9 +178,11 @@ function modelsFromRemoteOptions(response: unknown): SavedModel[] {
   return dedupeModels(models);
 }
 
-function currentProviderRow(
-  response: unknown,
-): { baseUrl: string; provider: string } {
+function currentProviderRow(response: unknown): {
+  baseUrl: string;
+  provider: string;
+  contextLength?: number;
+} {
   const record = asRecord(response);
   const currentProvider = asString(record.provider).trim();
   const providers = Array.isArray(record.providers)
@@ -175,12 +192,16 @@ function currentProviderRow(
     const row = asRecord(rawProvider);
     const slug = asString(row.slug, asString(row.provider)).trim();
     if (!slug || slug !== currentProvider) continue;
+    const contextLength = asPositiveInt(
+      row.contextLength ?? row.context_length,
+    );
     return {
       provider: slug,
       baseUrl: asString(
         row.api_url,
         asString(row.base_url, asString(row.baseUrl)),
       ),
+      ...(contextLength !== undefined ? { contextLength } : {}),
     };
   }
   return { provider: currentProvider, baseUrl: "" };
@@ -203,7 +224,12 @@ export async function remoteListModels(
 
 export async function remoteGetModelConfig(
   config: RemoteSessionConfig,
-): Promise<{ provider: string; model: string; baseUrl: string }> {
+): Promise<{
+  provider: string;
+  model: string;
+  baseUrl: string;
+  contextLength?: number;
+}> {
   const libraryRows = await remoteModelLibraryRows(config);
   const active = libraryRows?.find((row) =>
     row.id.startsWith("remote:active:"),
@@ -213,6 +239,9 @@ export async function remoteGetModelConfig(
       provider: active.provider,
       model: active.model,
       baseUrl: active.baseUrl || "",
+      ...(active.contextLength !== undefined
+        ? { contextLength: active.contextLength }
+        : {}),
     };
   }
 
@@ -221,10 +250,14 @@ export async function remoteGetModelConfig(
   });
   const record = asRecord(response);
   const current = currentProviderRow(response);
+  const contextLength =
+    asPositiveInt(record.contextLength ?? record.context_length) ??
+    current.contextLength;
   return {
     provider: current.provider || "auto",
     model: asString(record.model),
     baseUrl: current.baseUrl,
+    ...(contextLength !== undefined ? { contextLength } : {}),
   };
 }
 
@@ -252,8 +285,8 @@ export async function remoteSetModelConfig(
       last.provider === provider &&
       last.model === model &&
       (provider !== "custom" ||
-        (last.baseUrl || "").replace(/\/+$/, "") ===
-          (baseUrl || "").replace(/\/+$/, ""))
+        normalizeModelEndpointUrl(last.baseUrl) ===
+          normalizeModelEndpointUrl(baseUrl))
     ) {
       return true;
     }

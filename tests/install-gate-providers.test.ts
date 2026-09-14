@@ -29,7 +29,14 @@ describe("expectedEnvKeyForModel — provider-name lookup", () => {
     ["cerebras", "CEREBRAS_API_KEY"],
     ["perplexity", "PERPLEXITY_API_KEY"],
     ["huggingface", "HF_TOKEN"], // exception to the *_API_KEY convention
-    ["qwen", "QWEN_API_KEY"],
+    ["alibaba", "DASHSCOPE_API_KEY"],
+    // The agent's DashScope aliases — `qwen` is what pre-#825 desktop
+    // configs stored, so it must keep resolving to a real key check.
+    ["dashscope", "DASHSCOPE_API_KEY"],
+    ["qwen", "DASHSCOPE_API_KEY"],
+    ["aliyun", "DASHSCOPE_API_KEY"],
+    ["alibaba-cloud", "DASHSCOPE_API_KEY"],
+    ["qwen-oauth", "QWEN_API_KEY"],
     ["minimax", "MINIMAX_API_KEY"],
     ["glm", "GLM_API_KEY"],
     ["kimi", "KIMI_API_KEY"],
@@ -59,9 +66,9 @@ describe("expectedEnvKeyForModel — URL fallback for custom/auto providers", ()
     expect(
       expectedEnvKeyForModel("custom", "https://openrouter.ai/api/v1"),
     ).toBe("OPENROUTER_API_KEY");
-    expect(
-      expectedEnvKeyForModel("custom", "https://ollama.com/v1"),
-    ).toBe("OLLAMA_API_KEY");
+    expect(expectedEnvKeyForModel("custom", "https://ollama.com/v1")).toBe(
+      "OLLAMA_API_KEY",
+    );
     expect(expectedEnvKeyForModel("custom", "https://api.aimlapi.com/v1")).toBe(
       "AIMLAPI_API_KEY",
     );

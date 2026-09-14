@@ -80,7 +80,9 @@ describe("custom-provider env persistence — dual-engine compat", () => {
     listModels(); // triggers seedDefaults → persists env
 
     const envContent = readFileSync(join(testHome, ".env"), "utf-8");
-    expect(envContent).toMatch(/^CUSTOM_PROVIDER_MYDEEPSEEK_KEY=sk-deepseek-test-123$/m);
+    expect(envContent).toMatch(
+      /^CUSTOM_PROVIDER_MYDEEPSEEK_KEY=sk-deepseek-test-123$/m,
+    );
     expect(envContent).toMatch(/^DEEPSEEK_API_KEY=sk-deepseek-test-123$/m);
   });
 
@@ -125,7 +127,9 @@ describe("custom-provider env persistence — dual-engine compat", () => {
     listModels();
 
     const envContent = readFileSync(join(testHome, ".env"), "utf-8");
-    expect(envContent).toMatch(/^CUSTOM_PROVIDER_MYUNSLOTH_KEY=sk-unsloth-test$/m);
+    expect(envContent).toMatch(
+      /^CUSTOM_PROVIDER_MYUNSLOTH_KEY=sk-unsloth-test$/m,
+    );
     // No UNSLOTH_API_KEY — the lookup correctly returns null for unknown hosts
     expect(envContent).not.toMatch(/^UNSLOTH_API_KEY/m);
   });
@@ -170,7 +174,9 @@ describe("custom-provider env persistence — dual-engine compat", () => {
     listModels();
 
     const envContent = readFileSync(join(testHome, ".env"), "utf-8");
-    expect(envContent).toMatch(/^CUSTOM_PROVIDER_MYANTHROPIC_KEY=sk-ant-custom$/m);
+    expect(envContent).toMatch(
+      /^CUSTOM_PROVIDER_MYANTHROPIC_KEY=sk-ant-custom$/m,
+    );
     expect(envContent).not.toMatch(/^ANTHROPIC_API_KEY=sk-ant-custom$/m);
   });
 
@@ -194,7 +200,8 @@ describe("custom-provider env persistence — dual-engine compat", () => {
     listModels();
 
     const envContent = readFileSync(join(testHome, ".env"), "utf-8");
-    const customMatches = envContent.match(/^CUSTOM_PROVIDER_MYDEEPSEEK_KEY=/gm) || [];
+    const customMatches =
+      envContent.match(/^CUSTOM_PROVIDER_MYDEEPSEEK_KEY=/gm) || [];
     const deepseekMatches = envContent.match(/^DEEPSEEK_API_KEY=/gm) || [];
     expect(customMatches).toHaveLength(1);
     expect(deepseekMatches).toHaveLength(1);
@@ -215,8 +222,12 @@ describe("custom-provider env persistence — dual-engine compat", () => {
     listModels();
 
     const envFile = join(testHome, ".env");
-    const envContent = existsSync(envFile) ? readFileSync(envFile, "utf-8") : "";
-    expect(envContent).not.toMatch(/^CUSTOM_PROVIDER_LOCALDEEPSEEKCOMPAT_KEY=/m);
+    const envContent = existsSync(envFile)
+      ? readFileSync(envFile, "utf-8")
+      : "";
+    expect(envContent).not.toMatch(
+      /^CUSTOM_PROVIDER_LOCALDEEPSEEKCOMPAT_KEY=/m,
+    );
     expect(envContent).not.toMatch(/^DEEPSEEK_API_KEY=/m);
   });
 });

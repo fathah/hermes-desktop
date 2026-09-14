@@ -1,5 +1,5 @@
 export default {
-  title: "Welcome to Hermes",
+  title: "Welcome to Hermes One",
   subtitle:
     "Your self-improving AI assistant that runs locally on your machine. Private, powerful, and always learning.",
   installIssueTitle: "Installation Issue",
@@ -20,5 +20,5 @@ export default {
   testingConnection: "Testing",
   connect: "Connect",
   remoteHint:
-    "Leave the key empty if the server accepts unauthenticated requests (e.g. via SSH tunnel to localhost).",
+    "Authentication is detected automatically. Raw API servers use API_SERVER_KEY from ~/.hermes/.env on the remote host; dashboard servers open secure browser sign-in.",
 } as const;

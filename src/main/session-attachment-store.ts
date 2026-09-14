@@ -145,7 +145,9 @@ function hasTrailingImagePlaceholder(text: string): boolean {
   return /\[(?:screenshot|image)\]\s*$/i.test(text || "");
 }
 
-function parseImageDataUrl(dataUrl: string): { mime: string; data: Buffer } | null {
+function parseImageDataUrl(
+  dataUrl: string,
+): { mime: string; data: Buffer } | null {
   const match = /^data:([^;,]+);base64,(.*)$/s.exec(dataUrl || "");
   if (!match) return null;
   const mime = match[1].toLowerCase();

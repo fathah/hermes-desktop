@@ -1,6 +1,12 @@
 export default {
   chat: "聊天",
+  newChat: "新增聊天",
   sessions: "工作階段",
+  projects: "專案",
+  chats: "聊天",
+  noChats: "沒有聊天",
+  discover: "探索",
+  pinned: "已釘選",
   agents: "檔案",
   office: "工作區",
   models: "模型",

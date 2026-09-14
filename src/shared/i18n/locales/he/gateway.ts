@@ -7,12 +7,10 @@ export default {
   stopped: "נעצר",
   working: "עובד…",
   restart: "הפעלה מחדש",
-  restartFailed:
-    "הפעלת השער מחדש נכשלה. בדקו את gateway-stderr.log לפרטים.",
+  restartFailed: "הפעלת השער מחדש נכשלה. בדקו את gateway-stderr.log לפרטים.",
   startFailed: "לא ניתן היה להפעיל את השער.",
   stopFailed: "לא ניתן היה לעצור את השער.",
-  startExited:
-    "השער הופעל, אך נעצר שוב לפני שהספיק להיות מוכן.",
+  startExited: "השער הופעל, אך נעצר שוב לפני שהספיק להיות מוכן.",
   checkLog: "בדקו את יומן השער:",
   gatewayHint:
     "מחבר את Hermes ל-Telegram, ל-Discord, ל-Slack ולפלטפורמות נוספות",

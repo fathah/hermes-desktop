@@ -8,6 +8,7 @@ import { spawn } from "child_process";
 import { homedir } from "os";
 import { join } from "path";
 import { existsSync } from "fs";
+import { randomBytes } from "crypto";
 import type { SshConfig } from "./ssh-tunnel";
 import type { KanbanTask } from "./kanban";
 import { buildSshControlOptions } from "./ssh-options";
@@ -21,6 +22,7 @@ import type { HistoryItem, SessionSummary, SearchResult } from "./sessions";
 import type { CachedSession } from "./session-cache";
 import type { Attachment } from "../shared/attachments";
 import { isImageMime, MAX_IMAGE_BYTES } from "../shared/attachments";
+import { normalizeModelEndpointUrl } from "../shared/model-endpoint";
 import type { ToolsetInfo } from "./tools";
 import {
   extractLeadingVisionImageFallback,
@@ -143,7 +145,7 @@ function sanitizeSshError(stderr: string): string {
   return cleaned;
 }
 
-function shellQuote(value: string): string {
+export function shellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\"'\"'")}'`;
 }
 
@@ -153,6 +155,62 @@ function normalizeRemotePath(remotePath: string): string {
 
 function pythonJsonInput(payload: unknown): string {
   return JSON.stringify(payload);
+}
+
+export interface SshDirectoryEntry {
+  name: string;
+  isDirectory: boolean;
+}
+
+export async function sshReadDirectory(
+  config: SshConfig,
+  remotePath: string,
+): Promise<SshDirectoryEntry[] | null> {
+  const script = `
+import json
+import os
+import sys
+
+payload = json.loads(sys.stdin.read() or "{}")
+raw = str(payload.get("path") or "")
+if raw.startswith("~/"):
+    raw = os.path.join(os.path.expanduser("~"), raw[2:])
+elif raw.startswith("$HOME/"):
+    raw = os.path.join(os.path.expanduser("~"), raw[6:])
+path = os.path.abspath(os.path.expanduser(raw or "."))
+rows = []
+for entry in os.scandir(path):
+    rows.append({
+        "name": entry.name,
+        "isDirectory": entry.is_dir(follow_symlinks=False),
+    })
+rows.sort(key=lambda item: (not item["isDirectory"], item["name"].lower(), item["name"]))
+print(json.dumps(rows))
+`;
+
+  try {
+    const out = await sshPython(
+      config,
+      script,
+      pythonJsonInput({ path: remotePath }),
+    );
+    const parsed = JSON.parse(out);
+    if (!Array.isArray(parsed)) return null;
+    return parsed
+      .filter(
+        (entry): entry is SshDirectoryEntry =>
+          entry !== null &&
+          typeof entry === "object" &&
+          typeof entry.name === "string" &&
+          typeof entry.isDirectory === "boolean",
+      )
+      .map((entry) => ({
+        name: entry.name,
+        isDirectory: entry.isDirectory,
+      }));
+  } catch {
+    return null;
+  }
 }
 
 async function sshReadFile(
@@ -265,7 +323,7 @@ export async function sshInstallSkill(
   try {
     const stdout = await sshExec(
       config,
-      `hermes skills install ${shellQuote(identifier)} --yes 2>&1`,
+      buildRemoteHermesCmd(["skills", "install", identifier, "--yes"], " 2>&1"),
       undefined,
       120000,
     );
@@ -282,7 +340,7 @@ export async function sshUninstallSkill(
   try {
     const stdout = await sshExec(
       config,
-      `hermes skills uninstall ${shellQuote(name)} --yes 2>&1`,
+      buildRemoteHermesCmd(["skills", "uninstall", name, "--yes"], " 2>&1"),
     );
     const result = classifySkillCliOutput(stdout ?? "");
     if (result.success) return result;
@@ -346,7 +404,10 @@ export async function sshSearchSkills(
   try {
     const out = await sshExec(
       config,
-      `hermes skills browse --query ${shellQuote(query)} --json 2>/dev/null || echo "[]"`,
+      `${buildRemoteHermesCmd(
+        ["skills", "browse", "--query", query, "--json"],
+        " 2>/dev/null",
+      )} || echo "[]"`,
     );
     const parsed = JSON.parse(out.trim() || "[]");
     if (Array.isArray(parsed)) {
@@ -914,6 +975,112 @@ export async function sshReadEnv(
   return result;
 }
 
+/**
+ * Boolean-only OAuth credential probe for SSH hosts that cannot serve the
+ * dashboard API. The Python process reads remote auth.json stores and emits no
+ * credential material. Named profiles inherit the default store just like the
+ * local hasOAuthCredentials helper.
+ */
+export async function sshGetOAuthProviderStatuses(
+  config: SshConfig,
+  providers: readonly string[],
+  profile?: string,
+): Promise<Record<string, boolean>> {
+  const requested = (profile || "default").trim() || "default";
+  if (
+    requested !== "default" &&
+    !/^[a-z0-9_][a-z0-9_-]{0,63}$/.test(requested)
+  ) {
+    throw new Error("Invalid SSH profile name.");
+  }
+
+  const script = String.raw`
+import json
+import pathlib
+import sys
+
+payload = json.loads(sys.stdin.read() or "{}")
+providers = [item for item in payload.get("providers", []) if isinstance(item, str)]
+profile = str(payload.get("profile") or "default")
+root = pathlib.Path.home() / ".hermes"
+paths = [root / "auth.json"]
+if profile != "default":
+    paths.insert(0, root / "profiles" / profile / "auth.json")
+
+stores = []
+for path in paths:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        stores.append(value if isinstance(value, dict) else {})
+    except Exception:
+        stores.append({})
+
+def usable(entry):
+    if not isinstance(entry, dict):
+        return False
+    return any(str(entry.get(key) or "").strip() for key in (
+        "access_token", "refresh_token", "api_key"
+    ))
+
+result = {}
+for provider in providers:
+    found = False
+    for store in stores:
+        direct = store.get("providers", {})
+        if isinstance(direct, dict) and usable(direct.get(provider)):
+            found = True
+            break
+        pool = store.get("credential_pool", {})
+        entries = pool.get(provider, []) if isinstance(pool, dict) else []
+        if isinstance(entries, list) and any(usable(entry) for entry in entries):
+            found = True
+            break
+    result[provider] = found
+
+print(json.dumps(result))
+`;
+
+  const out = await sshPython(
+    config,
+    script,
+    JSON.stringify({ providers, profile: requested }),
+  );
+  const parsed = JSON.parse(out.trim() || "{}") as Record<string, unknown>;
+  return Object.fromEntries(
+    providers.map((provider) => [provider, parsed[provider] === true]),
+  );
+}
+
+// Pure line-rewrite for sshSetEnvValue, exported for tests. Rewrites the
+// FIRST matching line (commented-out counts — it becomes live) and DROPS any
+// later duplicates. Both sshReadEnv and the remote gateway's dotenv are
+// last-wins, and pre-dedup desktops left .env files with several
+// API_SERVER_KEY / HERMES_DASHBOARD_SESSION_TOKEN lines — replacing only the
+// first while a stale later line survives means the gateway keeps using the
+// OLD value while this desktop caches the new one (a permanent 401). One
+// canonical line, matching the grep-v writers for the dashboard token/port.
+export function upsertEnvLine(
+  content: string,
+  key: string,
+  value: string,
+): string {
+  if (!content.trim()) return `${key}=${value}\n`;
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const matcher = new RegExp(`^#?\\s*${escaped}\\s*=`);
+  let found = false;
+  const lines: string[] = [];
+  for (const line of content.split("\n")) {
+    if (!line.trim().match(matcher)) {
+      lines.push(line);
+      continue;
+    }
+    if (!found) lines.push(`${key}=${value}`);
+    found = true;
+  }
+  if (!found) lines.push(`${key}=${value}`);
+  return lines.join("\n");
+}
+
 export async function sshSetEnvValue(
   config: SshConfig,
   key: string,
@@ -922,24 +1089,7 @@ export async function sshSetEnvValue(
 ): Promise<void> {
   const envPath = remoteEnvPath(profile);
   const content = await sshReadFile(config, envPath);
-
-  if (!content.trim()) {
-    await sshWriteFile(config, envPath, `${key}=${value}\n`);
-    return;
-  }
-
-  const lines = content.split("\n");
-  let found = false;
-  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].trim().match(new RegExp(`^#?\\s*${escaped}\\s*=`))) {
-      lines[i] = `${key}=${value}`;
-      found = true;
-      break;
-    }
-  }
-  if (!found) lines.push(`${key}=${value}`);
-  await sshWriteFile(config, envPath, lines.join("\n"));
+  await sshWriteFile(config, envPath, upsertEnvLine(content, key, value));
 }
 
 // ─── Dotted-path YAML helpers (mirror of the local-mode fix) ───────────────
@@ -1176,17 +1326,36 @@ export function sshGetHermesHome(_config: SshConfig, profile?: string): string {
 export async function sshGetModelConfig(
   config: SshConfig,
   profile?: string,
-): Promise<{ provider: string; model: string; baseUrl: string }> {
+): Promise<{
+  provider: string;
+  model: string;
+  baseUrl: string;
+  contextLength?: number;
+}> {
   // Use dotted paths so the lookup is scoped to the `model:` block. The
   // previous flat keys `provider` / `default` / `base_url` would each
   // match the first occurrence at any indent — typically picking up
   // `personalities.default` or `auxiliary.vision.provider` and reporting
   // them as the model fields (#240).
+  // Read once: each sshReadFile is a real SSH process, so fetching four
+  // sibling fields independently adds avoidable latency to every model read.
+  const content = await sshReadFile(config, remoteConfigPath(profile));
+  const read = (key: string): string =>
+    (content && locateInYaml(content, key)?.value) || "";
+  const rawContextLength = read("model.context_length").trim();
+  const parsedContextLength = rawContextLength
+    ? Number(rawContextLength)
+    : Number.NaN;
+  const contextLength =
+    Number.isFinite(parsedContextLength) && parsedContextLength > 0
+      ? Math.floor(parsedContextLength)
+      : undefined;
+
   return {
-    provider:
-      (await sshGetConfigValue(config, "model.provider", profile)) || "auto",
-    model: (await sshGetConfigValue(config, "model.default", profile)) || "",
-    baseUrl: (await sshGetConfigValue(config, "model.base_url", profile)) || "",
+    provider: read("model.provider") || "auto",
+    model: read("model.default"),
+    baseUrl: read("model.base_url"),
+    ...(contextLength !== undefined ? { contextLength } : {}),
   };
 }
 
@@ -1585,6 +1754,118 @@ export interface SshProfileInfo {
   gatewayRunning: boolean;
 }
 
+export function parseHermesProfileListOutput(output: string): SshProfileInfo[] {
+  const profiles: SshProfileInfo[] = [];
+
+  for (const rawLine of output.split(/\r?\n/)) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) continue;
+    if (/^profile\s+model\s+gateway\b/i.test(trimmed)) continue;
+    if (/^[─\-\s]+$/.test(trimmed)) continue;
+
+    const active = /^[◆*]/.test(trimmed);
+    const line = trimmed.replace(/^[◆*]\s*/, "");
+    const parts = line.split(/\s+/);
+    if (parts.length < 3) continue;
+
+    const [name, model, gateway] = parts;
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name)) continue;
+    const gatewayState = gateway.toLowerCase();
+    if (gatewayState !== "running" && gatewayState !== "stopped") continue;
+
+    profiles.push({
+      name,
+      path: name === "default" ? "~/.hermes" : `~/.hermes/profiles/${name}`,
+      isDefault: name === "default",
+      isActive: active,
+      model: model === "—" ? "" : model,
+      provider: "auto",
+      hasEnv: false,
+      hasSoul: false,
+      skillCount: 0,
+      gatewayRunning: gatewayState === "running",
+    });
+  }
+
+  if (profiles.length > 0 && !profiles.some((p) => p.isActive)) {
+    const defaultProfile = profiles.find((p) => p.isDefault) ?? profiles[0];
+    defaultProfile.isActive = true;
+  }
+
+  return profiles;
+}
+
+// Per-user launcher hooks a managed deployment can drop in to wrap the real
+// Hermes CLI (custom HERMES_HOME, service user, unusual filesystem layout).
+// Kept in sync with the launcher probe order in buildRemoteHermesCmd.
+export const REMOTE_HERMES_LAUNCHER_CANDIDATES = [
+  "$HOME/.config/hermes-desktop/remote-hermes",
+  "$HOME/.hermes/desktop-remote-hermes",
+];
+
+const LAUNCHER_PRESENT_SENTINEL = "__HERMES_REMOTE_LAUNCHER__";
+
+export interface LauncherProfileResult {
+  // Whether an executable launcher hook actually exists on the remote. This is
+  // distinct from "the CLI returned profiles": the regular hermes binary on
+  // PATH can answer `profile list` even with no launcher configured, so count
+  // heuristics cannot tell the two apart — only this flag can.
+  present: boolean;
+  profiles: SshProfileInfo[];
+}
+
+// Detect whether a remote launcher hook exists and, if so, list its profiles in
+// a single round trip. When no launcher is configured the loop exits without
+// invoking the Hermes CLI, so ordinary installs stay cheap and fall through to
+// the richer filesystem scan in sshListProfiles.
+async function sshDetectLauncherProfiles(
+  config: SshConfig,
+): Promise<LauncherProfileResult> {
+  const list = REMOTE_HERMES_LAUNCHER_CANDIDATES.map((p) => `"${p}"`).join(" ");
+  // Echo the sentinel BEFORE exec so it is flushed even though exec replaces
+  // the shell; `exec` then streams the launcher's `profile list` to the same
+  // stdout. No launcher → no sentinel, empty output.
+  const script =
+    `for p in ${list}; do ` +
+    `[ -x "$p" ] && { echo ${LAUNCHER_PRESENT_SENTINEL}; exec "$p" profile list 2>/dev/null; }; ` +
+    `done`;
+  try {
+    const out = await sshExec(
+      config,
+      `sh -c ${shellQuote(script)}`,
+      undefined,
+      20000,
+    );
+    if (!out.includes(LAUNCHER_PRESENT_SENTINEL)) {
+      return { present: false, profiles: [] };
+    }
+    const cleaned = out
+      .split(/\r?\n/)
+      .filter((line) => line.trim() !== LAUNCHER_PRESENT_SENTINEL)
+      .join("\n");
+    return { present: true, profiles: parseHermesProfileListOutput(cleaned) };
+  } catch {
+    return { present: false, profiles: [] };
+  }
+}
+
+// Decide which profile list represents the actual remote runtime. A configured
+// launcher runs against the deployment's real HERMES_HOME and is authoritative;
+// the filesystem scan always assumes ~/.hermes. Prefer the launcher whenever it
+// is present and returned profiles — even when it reports the SAME number of
+// profiles as the scan — so Office/Agents reflect the live runtime instead of
+// stale home-directory state. Exported for unit testing the decision in
+// isolation from any live SSH host.
+export function selectSshProfiles(
+  launcher: LauncherProfileResult,
+  scannedProfiles: SshProfileInfo[],
+): SshProfileInfo[] {
+  if (launcher.present && launcher.profiles.length > 0)
+    return launcher.profiles;
+  if (scannedProfiles.length > 0) return scannedProfiles;
+  return launcher.profiles;
+}
+
 export async function sshListProfiles(
   config: SshConfig,
 ): Promise<SshProfileInfo[]> {
@@ -1622,7 +1903,14 @@ def gw_running(path):
     pid_file = os.path.join(path, "gateway.pid")
     if not os.path.exists(pid_file): return False
     try:
-        pid = int(open(pid_file).read().strip())
+        raw = open(pid_file).read().strip()
+        # \`hermes gateway run\` writes a JSON pidfile ({"pid": N, ...}); older
+        # builds wrote a bare integer. Handle both.
+        try:
+            d = json.loads(raw)
+            pid = int(d.get("pid") if isinstance(d, dict) else d)
+        except Exception:
+            pid = int(raw)
         os.kill(pid, 0)
         return True
     except:
@@ -1655,10 +1943,18 @@ if os.path.isdir(profiles_dir):
 
 print(json.dumps(profiles))
 `;
+  const launcher = await sshDetectLauncherProfiles(config);
+
   try {
     const out = await sshPython(config, script);
-    return JSON.parse(out.trim() || "[]");
+    const scannedProfiles = JSON.parse(out.trim() || "[]") as SshProfileInfo[];
+    return selectSshProfiles(launcher, scannedProfiles);
   } catch {
+    // The filesystem scan failed (e.g. no python on the remote). A configured
+    // launcher is still authoritative; otherwise fall back to a minimal default.
+    if (launcher.present && launcher.profiles.length > 0) {
+      return launcher.profiles;
+    }
     return [
       {
         name: "default",
@@ -1679,26 +1975,48 @@ print(json.dumps(profiles))
 export async function sshCreateProfile(
   config: SshConfig,
   name: string,
-  clone: boolean,
-): Promise<boolean> {
+  cloneFrom: string | null,
+): Promise<{ success: boolean; error?: string }> {
+  const safe = name.replace(/[^a-zA-Z0-9_-]/g, "");
+  if (!safe) return { success: false, error: "Invalid profile name" };
+  const quoted = shellQuote(safe);
   try {
-    const safe = name.replace(/[^a-zA-Z0-9_-]/g, "");
-    if (!safe) return false;
-    const quoted = shellQuote(safe);
-    if (clone) {
+    if (cloneFrom) {
+      const safeSource = cloneFrom.replace(/[^a-zA-Z0-9_-]/g, "") || "default";
+      // No `|| mkdir` fallback here: a failed clone must surface as an error
+      // rather than silently leaving an empty profile that copied no config,
+      // keys, or skills. sshExec rejects on a non-zero exit, caught below.
+      // buildRemoteHermesCmd locates the CLI in the remote venv/launcher when
+      // `hermes` is not on the non-interactive SSH PATH; the subcommand is
+      // `profile` (singular) to match the rest of the SSH profile calls.
       await sshExec(
         config,
-        `hermes profiles create ${quoted} --clone-from default 2>&1 || mkdir -p ~/.hermes/profiles/${quoted}`,
+        buildRemoteHermesCmd([
+          "profile",
+          "create",
+          safe,
+          "--clone-from",
+          safeSource,
+        ]),
       );
     } else {
+      // A fresh profile is just a directory, so falling back to mkdir when the
+      // remote CLI lacks the subcommand is an acceptable, lossless result.
       await sshExec(
         config,
-        `hermes profiles create ${quoted} 2>&1 || mkdir -p ~/.hermes/profiles/${quoted}`,
+        `${buildRemoteHermesCmd([
+          "profile",
+          "create",
+          safe,
+        ])} 2>&1 || mkdir -p ~/.hermes/profiles/${quoted}`,
       );
     }
-    return true;
-  } catch {
-    return false;
+    return { success: true };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Failed to create profile",
+    };
   }
 }
 
@@ -1710,9 +2028,15 @@ export async function sshDeleteProfile(
     const safe = name.replace(/[^a-zA-Z0-9_-]/g, "");
     if (!safe || safe === "default") return false;
     const quoted = shellQuote(safe);
+    // `profile` (singular) subcommand, resolved via buildRemoteHermesCmd so it
+    // works when `hermes` is not on the non-interactive SSH PATH; fall back to
+    // a filesystem remove when the CLI is unavailable/lacks the subcommand.
     await sshExec(
       config,
-      `hermes profiles delete ${quoted} --yes 2>&1 || rm -rf ~/.hermes/profiles/${quoted}`,
+      `${buildRemoteHermesCmd(
+        ["profile", "delete", safe, "--yes"],
+        " 2>&1",
+      )} || rm -rf ~/.hermes/profiles/${quoted}`,
     );
     return true;
   } catch {
@@ -1751,13 +2075,47 @@ const SYSTEMD_HERMES_UNIT_TEST =
  * start (the status check will then report it as down). The detached
  * `nohup` start is used only when there is no unit to collide with.
  */
-export function buildGatewayStartCommand(): string {
+function remoteGatewayPidPath(profile?: string): string {
+  return profile && profile !== "default"
+    ? `$HOME/.hermes/profiles/${profile}/gateway.pid`
+    : "$HOME/.hermes/gateway.pid";
+}
+
+function remoteGatewayLogPath(profile?: string): string {
+  return profile && profile !== "default"
+    ? `$HOME/.hermes/profiles/${profile}/gateway.log`
+    : "$HOME/.hermes/gateway.log";
+}
+
+export function buildGatewayStartCommand(profile?: string): string {
+  // NB: `gateway run` (foreground, backgrounded here via nohup), NOT `gateway
+  // start`. `gateway start` drives the systemd/launchd *service* and fails with
+  // "Gateway service is not installed" on a bare VPS that never ran `hermes
+  // gateway install` — which is the common SSH remote. `gateway run` launches
+  // the gateway (and its api_server, when API_SERVER_ENABLED) directly and
+  // writes ~/.hermes/gateway.pid, matching the pid-based status/stop commands
+  // below. Hosts that DO have a systemd unit still go through systemctl.
+  if (profile && profile !== "default") {
+    return (
+      `mkdir -p $HOME/.hermes/profiles/${profile}; ` +
+      `(nohup ${buildRemoteHermesCmd(
+        ["--profile", profile, "gateway", "run"],
+        ` > ${remoteGatewayLogPath(profile)} 2>&1`,
+      )} &); sleep 0.3`
+    );
+  }
   return (
     `if ${SYSTEMD_HERMES_UNIT_TEST}; then ` +
     `sudo -n systemctl start hermes.service 2>/dev/null || ` +
     `systemctl start hermes.service 2>/dev/null || true; ` +
     `else ` +
-    `(nohup hermes gateway start > $HOME/.hermes/gateway.log 2>&1 &); ` +
+    // buildRemoteHermesCmd (not bare `hermes`) so the run works on remotes
+    // where `hermes` is not on the non-interactive SSH PATH (only the venv /
+    // launcher locations) — matching the named-profile branch above.
+    `(nohup ${buildRemoteHermesCmd(
+      ["gateway", "run"],
+      " > $HOME/.hermes/gateway.log 2>&1",
+    )} &); sleep 0.3; ` +
     `fi`
   );
 }
@@ -1769,13 +2127,25 @@ export function buildGatewayStartCommand(): string {
  * otherwise it falls back to `hermes gateway stop` and, last resort, the
  * recorded pid.
  */
-export function buildGatewayStopCommand(): string {
+export function buildGatewayStopCommand(profile?: string): string {
+  if (profile && profile !== "default") {
+    const pidPath = remoteGatewayPidPath(profile);
+    return (
+      `${buildRemoteHermesCmd(["--profile", profile, "gateway", "stop"], " 2>/dev/null")} || ` +
+      `(if [ -f ${pidPath} ]; then ` +
+      `pid=$(python3 -c "import json; d=json.load(open('${pidPath}')); print(d['pid'] if isinstance(d,dict) else d)" 2>/dev/null); ` +
+      `[ -n "$pid" ] && kill $pid 2>/dev/null; fi); true`
+    );
+  }
   return (
     `if ${SYSTEMD_HERMES_UNIT_TEST}; then ` +
     `sudo -n systemctl stop hermes.service 2>/dev/null || ` +
     `systemctl stop hermes.service 2>/dev/null || true; ` +
     `else ` +
-    `hermes gateway stop 2>/dev/null || ` +
+    // buildRemoteHermesCmd (not bare `hermes`) so stop works on remotes where
+    // `hermes` is not on the non-interactive SSH PATH — matching the named-
+    // profile branch above; the recorded-pid kill remains the last resort.
+    `${buildRemoteHermesCmd(["gateway", "stop"], " 2>/dev/null")} || ` +
     `(if [ -f $HOME/.hermes/gateway.pid ]; then ` +
     `pid=$(python3 -c "import json; d=json.load(open('$HOME/.hermes/gateway.pid')); print(d['pid'] if isinstance(d,dict) else d)" 2>/dev/null); ` +
     `[ -n "$pid" ] && kill $pid 2>/dev/null; fi); true; ` +
@@ -1788,23 +2158,56 @@ export function buildGatewayStopCommand(): string {
  * gateway this is the unit's `is-active` state (`active` when up); otherwise
  * it is a liveness check on the recorded pid. Prints `active` or `running`
  * when up, anything else when not.
+ *
+ * `healthPort` (issue #432): Docker-backed installs record the pid in the
+ * CONTAINER's pid namespace, so a host-side `kill -0` reports a healthy
+ * gateway as stopped — and the desktop then nohups a second `gateway run`
+ * into the container. When the recorded pid is not visible on the host, fall
+ * back to probing the gateway's loopback health endpoint, which is
+ * namespace-agnostic.
  */
-export function buildGatewayStatusCommand(): string {
+export function buildGatewayStatusCommand(
+  profile?: string,
+  healthPort?: number,
+): string {
+  const healthProbe = Number.isInteger(healthPort)
+    ? `python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:${healthPort}/health', timeout=3)" >/dev/null 2>&1 && echo "running" || echo "stopped"`
+    : `echo "stopped"`;
+  if (profile && profile !== "default") {
+    const pidPath = remoteGatewayPidPath(profile);
+    return (
+      `if [ -f ${pidPath} ]; then ` +
+      `pid=$(python3 -c "import json,sys; d=json.load(open('${pidPath}')); print(d.get('pid',d) if isinstance(d,dict) else d)" 2>/dev/null || cat ${pidPath}); ` +
+      `kill -0 $pid 2>/dev/null && echo "running" || echo "stopped"; ` +
+      `else echo "stopped"; fi`
+    );
+  }
   return (
     `if ${SYSTEMD_HERMES_UNIT_TEST}; then ` +
     `systemctl is-active hermes.service 2>/dev/null || true; ` +
     `else ` +
     `if [ -f $HOME/.hermes/gateway.pid ]; then ` +
     `pid=$(python3 -c "import json,sys; d=json.load(open('$HOME/.hermes/gateway.pid')); print(d.get('pid',d) if isinstance(d,dict) else d)" 2>/dev/null || cat $HOME/.hermes/gateway.pid); ` +
-    `kill -0 $pid 2>/dev/null && echo "running" || echo "stopped"; ` +
-    `else echo "stopped"; fi; ` +
+    `kill -0 $pid 2>/dev/null && echo "running" || { ${healthProbe}; }; ` +
+    `else ${healthProbe}; fi; ` +
     `fi`
   );
 }
 
-export async function sshGatewayStatus(config: SshConfig): Promise<boolean> {
+export async function sshGatewayStatus(
+  config: SshConfig,
+  profile?: string,
+): Promise<boolean> {
   try {
-    const out = await sshExec(config, buildGatewayStatusCommand());
+    // The health fallback targets the connection's configured gateway API
+    // port. Named profiles run their own gateways on ports this function
+    // cannot infer, so only the default-profile status uses it.
+    const healthPort =
+      !profile || profile === "default" ? config.remotePort : undefined;
+    const out = await sshExec(
+      config,
+      buildGatewayStatusCommand(profile, healthPort),
+    );
     const state = out.trim();
     return state === "running" || state === "active";
   } catch {
@@ -1812,20 +2215,190 @@ export async function sshGatewayStatus(config: SshConfig): Promise<boolean> {
   }
 }
 
-export async function sshStartGateway(config: SshConfig): Promise<void> {
+// In-flight dedup so a connect storm (model-library + chat + sessions firing at
+// once, each finding "no gateway" before any start writes the pidfile) can't
+// launch several `gateway run` processes — observed as 4+ concurrent gateways
+// piling up and OOM-killing a small remote. Re-checks status inside the guard so
+// a gateway that came up between the caller's check and here isn't duplicated.
+const gatewayStartPromises = new Map<string, Promise<void>>();
+
+export async function sshStartGateway(
+  config: SshConfig,
+  profile?: string,
+): Promise<void> {
+  const key = `${config.host}:${config.port || 22}:${config.username}:${profile || "default"}`;
+  const inflight = gatewayStartPromises.get(key);
+  if (inflight) return inflight;
+
+  const run = (async (): Promise<void> => {
+    if (await sshGatewayStatus(config, profile)) return; // already up — don't duplicate
+    try {
+      await sshExec(config, buildGatewayStartCommand(profile));
+    } catch {
+      // best effort
+    }
+  })();
+  gatewayStartPromises.set(key, run);
   try {
-    await sshExec(config, buildGatewayStartCommand());
+    await run;
+  } finally {
+    gatewayStartPromises.delete(key);
+  }
+}
+
+export async function sshStopGateway(
+  config: SshConfig,
+  profile?: string,
+): Promise<void> {
+  try {
+    await sshExec(config, buildGatewayStopCommand(profile));
   } catch {
     // best effort
   }
 }
 
-export async function sshStopGateway(config: SshConfig): Promise<void> {
+export async function sshResolveApiServerPort(
+  config: SshConfig,
+  profile?: string,
+): Promise<number> {
+  if (!profile || profile === "default") return config.remotePort || 8642;
+  const fallbackPort = config.remotePort || 8642;
+  const script = `
+import json, os, re, sys
+
+payload = json.loads(sys.stdin.read() or "{}")
+profile = payload.get("profile")
+fallback_port = int(payload.get("fallbackPort") or 8642)
+home = os.path.expanduser("~/.hermes")
+profiles_dir = os.path.join(home, "profiles")
+
+def config_path(name):
+    if name and name != "default":
+        return os.path.join(profiles_dir, name, "config.yaml")
+    return os.path.join(home, "config.yaml")
+
+def read(path):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        return ""
+
+def line_indent(line):
+    return len(line) - len(line.lstrip(" "))
+
+def api_server_bounds(lines):
+    for i, line in enumerate(lines):
+        if re.match(r"^\\s*api_server\\s*:\\s*(?:#.*)?$", line):
+            indent = line_indent(line)
+            end = len(lines)
+            for j in range(i + 1, len(lines)):
+                if lines[j].strip() and line_indent(lines[j]) <= indent:
+                    end = j
+                    break
+            return i, end, indent
+    return None
+
+def configured_port(text):
+    lines = text.splitlines()
+    bounds = api_server_bounds(lines)
+    if not bounds:
+        return None
+    start, end, _ = bounds
+    for line in lines[start + 1:end]:
+        m = re.match(r"^\\s*port\\s*:\\s*[\\"']?(\\d+)[\\"']?\\s*(?:#.*)?$", line)
+        if m:
+            port = int(m.group(1))
+            if 0 < port < 65536:
+                return port
+    return None
+
+def existing_ports():
+    ports = {fallback_port}
+    paths = [config_path(None)]
+    if os.path.isdir(profiles_dir):
+        for name in os.listdir(profiles_dir):
+            p = os.path.join(profiles_dir, name)
+            if os.path.isdir(p):
+                paths.append(os.path.join(p, "config.yaml"))
+    for path in paths:
+        port = configured_port(read(path))
+        if port:
+            ports.add(port)
+    return ports
+
+def allocate_port():
+    used = existing_ports()
+    for port in range(fallback_port + 1, min(65535, fallback_port + 100) + 1):
+        if port not in used:
+            return port
+    return fallback_port
+
+def ensure_profile_port(path, port):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    text = read(path)
+    lines = text.splitlines()
+    bounds = api_server_bounds(lines)
+    if bounds:
+        start, end, indent = bounds
+        for i in range(start + 1, end):
+            if re.match(r"^\\s*port\\s*:", lines[i]):
+                lines[i] = " " * line_indent(lines[i]) + f"port: {port}"
+                break
+        else:
+            extra_index = None
+            extra_indent = indent + 2
+            for i in range(start + 1, end):
+                if re.match(r"^\\s*extra\\s*:\\s*(?:#.*)?$", lines[i]):
+                    extra_index = i
+                    extra_indent = line_indent(lines[i])
+                    break
+            if extra_index is not None:
+                lines.insert(extra_index + 1, " " * (extra_indent + 2) + f"port: {port}")
+            else:
+                lines.insert(start + 1, " " * (indent + 2) + "enabled: true")
+                lines.insert(start + 2, " " * (indent + 2) + "extra:")
+                lines.insert(start + 3, " " * (indent + 4) + f"port: {port}")
+    else:
+        platforms_index = None
+        for i, line in enumerate(lines):
+            if re.match(r"^\\s*platforms\\s*:\\s*(?:#.*)?$", line):
+                platforms_index = i
+                break
+        block = ["  api_server:", "    enabled: true", "    extra:", f"      port: {port}"]
+        if platforms_index is not None:
+            lines[platforms_index + 1:platforms_index + 1] = block
+        else:
+            if lines and lines[-1].strip():
+                lines.append("")
+            lines.extend(["platforms:", *block])
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\\n".join(lines) + "\\n")
+
+path = config_path(profile)
+current = configured_port(read(path))
+if current:
+    print(current)
+else:
+    port = allocate_port()
+    ensure_profile_port(path, port)
+    print(port)
+`;
   try {
-    await sshExec(config, buildGatewayStopCommand());
-  } catch {
-    // best effort
+    const out = await sshPython(
+      config,
+      script,
+      pythonJsonInput({ profile, fallbackPort }),
+    );
+    const port = parseInt(out.trim(), 10);
+    if (port > 0 && port < 65536) return port;
+  } catch (err) {
+    console.warn(
+      "[ssh] Failed to allocate remote profile API port:",
+      err instanceof Error ? err.message : String(err),
+    );
   }
+  return fallbackPort;
 }
 
 // ── Remote API key (for chat auth through SSH tunnel) ─────────────────────────
@@ -1837,6 +2410,585 @@ export async function sshReadRemoteApiKey(config: SshConfig): Promise<string> {
   } catch {
     return "";
   }
+}
+
+// The gateway api_server refuses to bind with a key shorter than 16 chars or an
+// obvious placeholder, so chat over /v1 can never connect with one. Mirrors the
+// remote-side guard.
+const MIN_API_SERVER_KEY_LENGTH = 16;
+const PLACEHOLDER_API_SERVER_KEY =
+  /^(?:changeme|placeholder|your[-_]?(?:api[-_]?)?key|api[-_]?server[-_]?key|secret|password|token)$/i;
+
+export function isUsableApiServerKey(key: string): boolean {
+  const k = (key || "").trim();
+  return (
+    k.length >= MIN_API_SERVER_KEY_LENGTH && !PLACEHOLDER_API_SERVER_KEY.test(k)
+  );
+}
+
+export interface SshApiServerKeyResult {
+  key: string;
+  /** True when the key and/or enable flag were just written — the caller must
+   *  (re)start the gateway so the api_server platform picks them up. */
+  created: boolean;
+}
+
+// Provision the remote gateway api_server for SSH chat over /v1 — the no-build
+// transport (no dashboard web dist, no Node) used by remote mode and
+// hermes-webui's gateway backend. SSH mode, unlike local mode (startGateway),
+// never WROTE these to the remote, so a fresh server had no /v1 endpoint at all:
+// the api_server refuses to start without API_SERVER_KEY, and the gateway only
+// loads the api_server platform when API_SERVER_ENABLED is truthy
+// (gateway/config.py). Ensures both, generating a key when missing/invalid.
+// In-flight dedup — same race class as the dashboard token: this is ensured on
+// every chat, so concurrent first-connect callers could each see "no key" and
+// append a different generated API_SERVER_KEY, leaving the gateway (dotenv
+// last-wins) on one value while a caller cached another → 401 over /v1.
+const apiServerKeyPromises = new Map<string, Promise<SshApiServerKeyResult>>();
+
+export async function sshEnsureApiServerKey(
+  config: SshConfig,
+  profile?: string,
+): Promise<SshApiServerKeyResult> {
+  const cacheKey = `${config.host}:${config.port || 22}:${config.username}:${profile || "default"}`;
+  const inflight = apiServerKeyPromises.get(cacheKey);
+  if (inflight) return inflight;
+
+  const run = (async (): Promise<SshApiServerKeyResult> => {
+    let existing = "";
+    let enabled = false;
+    try {
+      const env = await sshReadEnv(config, profile);
+      existing = (env["API_SERVER_KEY"] || "").trim();
+      enabled = ["true", "1", "yes"].includes(
+        (env["API_SERVER_ENABLED"] || "").trim().toLowerCase(),
+      );
+    } catch {
+      // remote .env missing/unreadable — provision from scratch below.
+    }
+
+    let key = existing;
+    let created = false;
+    if (!isUsableApiServerKey(existing)) {
+      key = randomBytes(24).toString("hex"); // 48 hex chars, well over the minimum
+      await sshSetEnvValue(config, "API_SERVER_KEY", key, profile);
+      created = true;
+    }
+    if (!enabled) {
+      await sshSetEnvValue(config, "API_SERVER_ENABLED", "true", profile);
+      created = true; // gateway must (re)start to load the api_server platform
+    }
+    return { key, created };
+  })();
+
+  apiServerKeyPromises.set(cacheKey, run);
+  try {
+    return await run;
+  } finally {
+    apiServerKeyPromises.delete(cacheKey);
+  }
+}
+
+// Poll the remote api_server's /health on the given loopback port until it
+// answers or the deadline passes. Runs on the remote via python3 (no curl
+// dependency). Lets a freshly (re)started gateway finish binding before we open
+// the tunnel, so the first chat doesn't race "tunnel health check failed".
+export async function sshWaitGatewayApiReady(
+  config: SshConfig,
+  port: number,
+  timeoutMs = 20000,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  const script =
+    `import urllib.request as u\n` +
+    `try:\n` +
+    ` print(u.urlopen("http://127.0.0.1:${port}/health", timeout=3).status)\n` +
+    `except Exception:\n` +
+    ` print(0)`;
+  while (Date.now() <= deadline) {
+    try {
+      const out = await sshExec(
+        config,
+        `python3 -c ${shellQuote(script)}`,
+        undefined,
+        8000,
+      );
+      if (out.trim() === "200") return true;
+    } catch {
+      // transient — keep polling until the deadline
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  return false;
+}
+
+// ── Dashboard lifecycle ─────────────────────────────────────────────────────
+//
+// Dashboard transport over SSH. The desktop starts `hermes dashboard` on the
+// remote and tunnels to it for the model library, session list, and the chat
+// WebSocket (/api/ws) — the surfaces the gateway api_server does NOT serve.
+//
+// IMPORTANT: the dashboard is NOT a /v1 superset. hermes_cli/web_server.py has
+// no /v1/chat|responses|runs routes and does not proxy /v1 to the gateway, so
+// chat over the dashboard tunnel uses /api/ws (token auth), never /v1. The /v1
+// chat transport lives ONLY on the gateway api_server (port 8642, API_SERVER_KEY
+// auth); see sshEnsureApiServerKey + prepareSshTunnel's gateway branch. The
+// dashboard also requires a built web dist (Node), which gateway-only installs
+// lack — those fall back to the gateway /v1 path. Its /api/* routes are gated by
+// HERMES_DASHBOARD_SESSION_TOKEN (the api_server key is rejected there).
+
+const REMOTE_DASHBOARD_DEFAULT_PORT = 9119;
+const REMOTE_DASHBOARD_PORT_ENV = "HERMES_DESKTOP_DASHBOARD_PORT";
+
+function remoteDashboardLogPath(profile?: string): string {
+  return profile && profile !== "default"
+    ? `$HOME/.hermes/profiles/${profile}/dashboard.log`
+    : "$HOME/.hermes/dashboard.log";
+}
+
+// Read the dashboard session token from the remote .env (per profile),
+// generating + persisting one when absent so it stays stable across reconnects
+// and is shared by the remote dashboard process and the desktop client.
+// In-flight dedup so a connect storm (the dashboard is ensured on every chat /
+// model-library / session op) can't run several token provisions at once. The
+// previous raw `printf >> .env` had no guard, so concurrent callers each read
+// "no token" and appended a different one — observed as 9 divergent
+// HERMES_DASHBOARD_SESSION_TOKEN lines in one remote .env, where dotenv's
+// last-wins value drifted from whatever a caller cached.
+const dashboardTokenPromises = new Map<string, Promise<string>>();
+
+export async function sshEnsureDashboardToken(
+  config: SshConfig,
+  profile?: string,
+): Promise<string> {
+  const envPath = remoteEnvPath(profile);
+  const cacheKey = `${config.host}:${config.port || 22}:${config.username}:${envPath}`;
+  const inflight = dashboardTokenPromises.get(cacheKey);
+  if (inflight) return inflight;
+
+  const run = (async (): Promise<string> => {
+    let token = "";
+    try {
+      const env = await sshReadEnv(config, profile);
+      token = (env["HERMES_DASHBOARD_SESSION_TOKEN"] || "").trim();
+    } catch {
+      // .env missing/unreadable — generate below.
+    }
+    if (!token) token = randomBytes(24).toString("hex");
+    // Write exactly ONE canonical line: strip any existing (possibly duplicated)
+    // entries, append one, then truncate-in-place via `cat > file` so the file's
+    // permissions/owner are preserved. Idempotent and self-heals prior dupes.
+    await sshExec(
+      config,
+      `mkdir -p "$(dirname ${envPath})" 2>/dev/null; ` +
+        `touch ${envPath}; ` +
+        `tmp=${envPath}.tmp.$$; ` +
+        `grep -v '^HERMES_DASHBOARD_SESSION_TOKEN=' ${envPath} > $tmp 2>/dev/null || true; ` +
+        `printf 'HERMES_DASHBOARD_SESSION_TOKEN=%s\\n' ${shellQuote(token)} >> $tmp; ` +
+        `cat $tmp > ${envPath}; rm -f $tmp`,
+    );
+    return token;
+  })();
+
+  dashboardTokenPromises.set(cacheKey, run);
+  try {
+    return await run;
+  } finally {
+    dashboardTokenPromises.delete(cacheKey);
+  }
+}
+
+// Resolve the remote dashboard port. Default profile uses 9119; named profiles
+// get a distinct stable port derived from their api_server port so they never
+// collide with the default or each other.
+export async function sshResolveDashboardPort(
+  config: SshConfig,
+  profile?: string,
+): Promise<number> {
+  try {
+    const env = await sshReadEnv(config, profile);
+    const persisted = Number.parseInt(env[REMOTE_DASHBOARD_PORT_ENV] || "", 10);
+    if (persisted > 0 && persisted < 65536) return persisted;
+  } catch {
+    // Fall through to the stable preferred port.
+  }
+  if (!profile || profile === "default") return REMOTE_DASHBOARD_DEFAULT_PORT;
+  const apiPort = await sshResolveApiServerPort(config, profile);
+  return REMOTE_DASHBOARD_DEFAULT_PORT + (apiPort - 8642);
+}
+
+async function sshAllocateDashboardPort(config: SshConfig): Promise<number> {
+  const script = `
+import socket
+
+sock = socket.socket()
+sock.bind(("127.0.0.1", 0))
+print(sock.getsockname()[1])
+sock.close()
+`;
+  const out = await sshPython(config, script);
+  const port = Number.parseInt(out.trim(), 10);
+  if (!(port > 0 && port < 65536)) {
+    throw new Error("Remote host did not return a valid dashboard port.");
+  }
+  return port;
+}
+
+async function sshPersistDashboardPort(
+  config: SshConfig,
+  profile: string | undefined,
+  port: number,
+): Promise<void> {
+  const envPath = remoteEnvPath(profile);
+  // Write exactly ONE canonical line (strip any prior entries, then append) so
+  // repeated port reallocations don't accumulate duplicate
+  // HERMES_DESKTOP_DASHBOARD_PORT lines — sshReadEnv is last-wins, so dupes
+  // "worked" by luck but drifted and grew. cat-in-place preserves perms.
+  await sshExec(
+    config,
+    `mkdir -p "$(dirname ${envPath})" 2>/dev/null; ` +
+      `touch ${envPath}; ` +
+      `tmp=${envPath}.tmp.$$; ` +
+      `grep -v '^${REMOTE_DASHBOARD_PORT_ENV}=' ${envPath} > $tmp 2>/dev/null || true; ` +
+      `printf '${REMOTE_DASHBOARD_PORT_ENV}=%s\\n' ${shellQuote(String(port))} >> $tmp; ` +
+      `cat $tmp > ${envPath}; rm -f $tmp`,
+  );
+}
+
+// Remote-side readiness probe: is the dashboard answering /api/status on the
+// given loopback port? (/api/status is unauthenticated.) Runs on the remote via
+// python3 so it needs no curl on the host.
+export async function sshDashboardRunning(
+  config: SshConfig,
+  port: number,
+): Promise<boolean> {
+  try {
+    const script =
+      `import urllib.request as u\n` +
+      `try:\n` +
+      ` print(u.urlopen("http://127.0.0.1:${port}/api/status", timeout=3).status)\n` +
+      `except Exception:\n` +
+      ` print(0)`;
+    const out = await sshExec(
+      config,
+      `python3 -c ${shellQuote(script)}`,
+      undefined,
+      8000,
+    );
+    return out.trim() === "200";
+  } catch {
+    return false;
+  }
+}
+
+// A public /api/status response only proves that *something* HTTP-speaking is
+// bound to the dashboard port. Verify an authenticated dashboard route before
+// handing the target to callers; otherwise a stale dashboard (different token)
+// or another service on 9119 is mistaken for a usable dashboard, leading to
+// /api/* 401s and legacy /v1 chat being POSTed to the wrong server (405).
+export async function sshDashboardAuthenticated(
+  config: SshConfig,
+  port: number,
+  token: string,
+): Promise<boolean> {
+  const script = `
+import json
+import sys
+import urllib.request
+
+payload = json.loads(sys.stdin.read() or "{}")
+port = int(payload.get("port") or 0)
+token = str(payload.get("token") or "")
+request = urllib.request.Request(
+    f"http://127.0.0.1:{port}/api/sessions?limit=1",
+    headers={"X-Hermes-Session-Token": token},
+)
+try:
+    with urllib.request.urlopen(request, timeout=3) as response:
+        print(response.status)
+except Exception:
+    print(0)
+`;
+  try {
+    const out = await sshPython(
+      config,
+      script,
+      pythonJsonInput({ port, token }),
+      8000,
+    );
+    return out.trim() === "200";
+  } catch {
+    return false;
+  }
+}
+
+// Start `hermes dashboard` on the remote, bound to loopback (the SSH tunnel
+// terminates there) with --skip-build (the web dist is prebuilt) and the
+// session token in its env. Backgrounded so the exec returns.
+export async function sshStartDashboard(
+  config: SshConfig,
+  profile: string | undefined,
+  port: number,
+  token: string,
+): Promise<void> {
+  // Always the unified machine dashboard (no --profile / --isolated): one server
+  // serves every profile's data via `?profile=`, so the single global SSH tunnel
+  // has exactly one target. Per-profile isolated dashboards on distinct ports
+  // thrash that tunnel when the app queries multiple profiles at once. `profile`
+  // is accepted for signature compatibility but intentionally unused.
+  void profile;
+  const cmd = buildRemoteHermesCmd([
+    "dashboard",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    String(port),
+    "--no-open",
+    "--skip-build",
+  ]);
+  const log = remoteDashboardLogPath(profile);
+  await sshExec(
+    config,
+    `(nohup env HERMES_DASHBOARD_SESSION_TOKEN=${shellQuote(
+      token,
+    )} ${cmd} > ${log} 2>&1 &); sleep 0.2`,
+  );
+}
+
+// Poll the remote readiness probe until the dashboard answers or the deadline
+// passes.
+export async function sshWaitDashboardReady(
+  config: SshConfig,
+  port: number,
+  timeoutMs = 30000,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() <= deadline) {
+    if (await sshDashboardRunning(config, port)) return true;
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  return false;
+}
+
+export interface SshDashboardTarget {
+  port: number;
+  token: string;
+}
+
+const dashboardDistBuildPromises = new Map<string, Promise<boolean>>();
+
+// Candidate hermes-agent install roots, most specific first. A system-wide
+// install (the Linux package / install.sh default) lives at
+// /usr/local/lib/hermes-agent — NOT under $HOME — so a hardcoded
+// ~/.hermes/hermes-agent path wrongly concludes the dashboard web dist is
+// absent and forces every SSH connection into basic chat. Mirrors the resolver
+// philosophy of buildRemoteHermesCmd.
+const REMOTE_HERMES_ROOT_CANDIDATES = [
+  "/usr/local/lib/hermes-agent",
+  "$HOME/.hermes/hermes-agent",
+  "/opt/hermes/hermes-agent",
+  "$HOME/hermes-agent",
+];
+
+// Resolve the remote hermes-agent install root that has (or can build) the
+// dashboard web dist. Returns the first candidate whose built dist exists, else
+// the first that has the `web/` workspace (buildable), else null. One round
+// trip.
+export async function sshResolveDashboardRoot(
+  config: SshConfig,
+): Promise<string | null> {
+  const roots = REMOTE_HERMES_ROOT_CANDIDATES.join(" ");
+  // Prefer a root with the prebuilt dist; fall back to one with web sources.
+  const script =
+    `built=""; buildable=""; ` +
+    `for r in ${roots}; do ` +
+    `  if [ -z "$built" ] && [ -f "$r/hermes_cli/web_dist/index.html" ]; then built="$r"; fi; ` +
+    `  if [ -z "$buildable" ] && [ -f "$r/web/package.json" ]; then buildable="$r"; fi; ` +
+    `done; ` +
+    `if [ -n "$built" ]; then echo "$built"; elif [ -n "$buildable" ]; then echo "$buildable"; fi`;
+  try {
+    const out = (await sshExec(config, script, undefined, 10000)).trim();
+    return out || null;
+  } catch {
+    return null;
+  }
+}
+
+// Ensure the dashboard web dist is built on the remote so `hermes dashboard
+// --skip-build` can serve it. Resolves the real install root first (system-wide
+// or under $HOME), so an already-built dist is detected wherever hermes lives.
+// The install vendors Node (~/.hermes/node) and the web workspace deps, so a
+// missing dist just needs the vite build (→ hermes_cli/web_dist). Returns true
+// when the dist exists (already or after building), false when it can't (no
+// install with web sources / no Node / build failed) — sshEnsureDashboard then
+// reports the dashboard unavailable and the desktop falls back to legacy.
+// Concurrent callers share one in-flight build so a connect storm can't kick
+// off several `npm run build` at once.
+export async function sshEnsureDashboardDist(
+  config: SshConfig,
+): Promise<boolean> {
+  const root = await sshResolveDashboardRoot(config);
+  if (!root) return false;
+  const marker = `${root}/hermes_cli/web_dist/index.html`;
+  const exists = async (): Promise<boolean> => {
+    try {
+      const out = await sshExec(
+        config,
+        `[ -f "${marker}" ] && echo yes || echo no`,
+        undefined,
+        10000,
+      );
+      return out.trim() === "yes";
+    } catch {
+      return false;
+    }
+  };
+  if (await exists()) return true;
+  // Keyed by host (like the other in-flight maps): a stale in-flight build for
+  // a PREVIOUS remote must not be handed to a caller targeting a new one.
+  const buildKey = `${config.host}:${config.port || 22}:${config.username}`;
+  const inflight = dashboardDistBuildPromises.get(buildKey);
+  if (inflight) return inflight;
+  const run = (async () => {
+    try {
+      // tsc -b && vite build. Prefer the vendored Node, fall back to system
+      // Node/npm on PATH. Generous timeout: a first build on a small VPS can
+      // take a few minutes.
+      await sshExec(
+        config,
+        `cd "${root}" && ` +
+          `PATH="$HOME/.hermes/node/bin:$PATH" npm run build -w web 2>&1`,
+        undefined,
+        300000,
+      );
+    } catch {
+      // build failed (no Node, missing deps, …) — fall through to re-check
+    }
+    return exists();
+  })();
+  dashboardDistBuildPromises.set(buildKey, run);
+  try {
+    return await run;
+  } finally {
+    dashboardDistBuildPromises.delete(buildKey);
+  }
+}
+
+// Negative cache: the dashboard is "ensured" on every chat / model-library /
+// session op. Only cache a *permanent* failure — the remote has no web dist and
+// can't build one (a gateway-only install) — so we don't re-run the heavy build
+// probe every call. A TRANSIENT failure (the dashboard is still starting, a
+// readiness/auth blip) must NOT be cached: caching it would force chat's
+// `prepareSshTunnel` onto the gateway /v1 tunnel (8642) while model-library still
+// targets the dashboard port, and the single global SSH tunnel would thrash
+// between them ("SSH tunnel is not active" / 405). In-flight dedup collapses a
+// connect storm into one probe regardless.
+const DASHBOARD_UNAVAILABLE_TTL_MS = 60_000;
+const dashboardUnavailableUntil = new Map<string, number>();
+const dashboardEnsurePromises = new Map<
+  string,
+  Promise<SshDashboardTarget | null>
+>();
+
+function dashboardCacheKey(config: SshConfig, _profile?: string): string {
+  // Machine-scoped (NOT per-profile): the unified dashboard is one server for
+  // all profiles, so all profiles share one cache/in-flight entry and one tunnel
+  // target. Keying per-profile would let concurrent profiles each ensure/tunnel
+  // separately and thrash the single global tunnel.
+  return `${config.host}:${config.port || 22}:${config.username}`;
+}
+
+// Clear the dashboard negative cache — call when the connection config changes
+// so a freshly (re)configured remote is probed immediately, not after the TTL.
+export function resetSshDashboardAvailability(): void {
+  dashboardUnavailableUntil.clear();
+}
+
+// Ensure the remote has a running dashboard for SSH transport. Starts the
+// gateway too (messaging/cron stays up, and chat keeps a working /v1 endpoint),
+// builds the web dist if missing, then starts the dashboard and waits for
+// readiness. Returns the port + token to tunnel to, or null when the remote
+// can't run the dashboard (no web dist, or it won't become ready) — callers then
+// fall back to the gateway-only /v1 path (see prepareSshTunnel).
+export async function sshEnsureDashboard(
+  config: SshConfig,
+  profile?: string,
+): Promise<SshDashboardTarget | null> {
+  const cacheKey = dashboardCacheKey(config, profile);
+  const until = dashboardUnavailableUntil.get(cacheKey);
+  if (until && until > Date.now()) return null; // remote can't run a dashboard — skip the probe
+  const inflight = dashboardEnsurePromises.get(cacheKey);
+  if (inflight) return inflight;
+
+  const run = (async (): Promise<SshDashboardTarget | null> => {
+    const target = await ensureDashboardInner(config, profile);
+    if (target) {
+      dashboardUnavailableUntil.delete(cacheKey);
+      return target;
+    }
+    // Only latch the negative cache for the PERMANENT case (no buildable web
+    // dist). Transient failures stay uncached so the next op retries and the
+    // tunnel target stays consistent (dashboard, not gateway) — avoiding thrash.
+    const distOk = await sshEnsureDashboardDist(config).catch(() => false);
+    if (!distOk) {
+      dashboardUnavailableUntil.set(
+        cacheKey,
+        Date.now() + DASHBOARD_UNAVAILABLE_TTL_MS,
+      );
+    }
+    return null;
+  })();
+  dashboardEnsurePromises.set(cacheKey, run);
+  try {
+    return await run;
+  } finally {
+    dashboardEnsurePromises.delete(cacheKey);
+  }
+}
+
+async function ensureDashboardInner(
+  config: SshConfig,
+  profile?: string,
+): Promise<SshDashboardTarget | null> {
+  // The dashboard is the UNIFIED machine dashboard (default profile, one port +
+  // one token) for EVERY profile — NOT a per-profile isolated server. `hermes
+  // dashboard` serves any profile's data via `?profile=`, and the desktop has a
+  // single global SSH tunnel that can only point at one remote port. Per-profile
+  // dashboard ports (the old `--isolated` approach) made concurrent profile
+  // queries (e.g. `default` + `accessibility-auditor`) resolve different ports
+  // and thrash that one tunnel ("SSH tunnel is not active"). So all dashboard
+  // resolution here uses the machine scope (profile=undefined); callers pass the
+  // requested profile to the dashboard OPS as `?profile=` for per-profile data.
+  void profile; // intentionally machine-scoped
+  if (!(await sshGatewayStatus(config))) {
+    await sshStartGateway(config);
+  }
+  const token = await sshEnsureDashboardToken(config);
+  let port = await sshResolveDashboardPort(config);
+  if (await sshDashboardRunning(config, port)) {
+    if (await sshDashboardAuthenticated(config, port, token)) {
+      return { port, token };
+    }
+    // The preferred/persisted port belongs to a stale dashboard with another
+    // token (or a different HTTP service). Do not kill an externally managed
+    // process. Move this desktop-managed dashboard to a free remote port and
+    // persist it so every later IPC call and app restart reuses the same target.
+    port = await sshAllocateDashboardPort(config);
+    await sshPersistDashboardPort(config, undefined, port);
+  }
+  // Build the web dist if it isn't there yet (first connect to a fresh install
+  // that ran the installer but never built the dashboard UI). Without a dist,
+  // `dashboard --skip-build` can't serve, so treat an unbuildable remote as
+  // dashboard-unavailable → legacy fallback.
+  if (!(await sshEnsureDashboardDist(config))) return null;
+  await sshStartDashboard(config, undefined, port, token);
+  if (
+    (await sshWaitDashboardReady(config, port)) &&
+    (await sshDashboardAuthenticated(config, port, token))
+  ) {
+    return { port, token };
+  }
+  return null;
 }
 
 // ── Versions ──────────────────────────────────────────────────────────────────
@@ -1901,6 +3053,38 @@ export async function sshRunKanban<T = unknown>(
     return {
       success: false,
       error: (err as Error).message || "Remote kanban command failed",
+    };
+  }
+}
+
+export interface SshCronResult {
+  success: boolean;
+  error?: string;
+  stdout?: string;
+}
+
+export async function sshRunCron(
+  config: SshConfig,
+  args: string[],
+  opts: { profile?: string; timeoutMs?: number } = {},
+): Promise<SshCronResult> {
+  const cliArgs: string[] = [];
+  if (opts.profile && opts.profile !== "default") {
+    cliArgs.push("-p", opts.profile);
+  }
+  cliArgs.push("cron", ...args);
+  try {
+    const stdout = await sshExec(
+      config,
+      buildRemoteHermesCmd(cliArgs),
+      undefined,
+      opts.timeoutMs ?? 15000,
+    );
+    return { success: true, stdout };
+  } catch (err) {
+    return {
+      success: false,
+      error: (err as Error).message || "Remote cron command failed",
     };
   }
 }
@@ -2156,9 +3340,9 @@ export async function sshListCachedSessions(
   config: SshConfig,
   limit = 50,
   offset = 0,
+  profile?: string,
 ): Promise<CachedSession[]> {
-  void offset;
-  const sessions = await sshListSessions(config, limit, 0);
+  const sessions = await sshListSessions(config, limit, offset, profile);
   return sessions.map((s) => ({
     id: s.id,
     title: s.title || s.id,
@@ -2166,6 +3350,7 @@ export async function sshListCachedSessions(
     source: s.source,
     messageCount: s.messageCount,
     model: s.model,
+    contextFolder: null,
   }));
 }
 
@@ -2188,26 +3373,39 @@ export async function sshListCachedSessions(
 // directory name is not fixed, and an install that uses the un-dotted
 // `venv` was otherwise invisible even when fully working (issue #284).
 // `~/.local/bin/hermes` is also probed, where `pip install --user` flows
-// place a wrapper. `command -v hermes` alone is not enough: the desktop's
-// non-interactive SSH does not source `~/.profile`/`~/.bashrc`, so any
-// PATH additions made there are not visible.
+// place a wrapper. Before those default install paths, probe explicit
+// per-user launcher hooks. They let managed deployments provide their own
+// executable wrapper for unusual filesystem layouts, service users, or
+// HERMES_HOME requirements without baking deployment-specific paths into the
+// desktop.
+// `command -v hermes` alone is not enough: the desktop's non-interactive SSH
+// does not source `~/.profile`/`~/.bashrc`, so any PATH additions made there
+// are not visible.
 //
 // Exported for unit testing the probe list without a live remote host.
+// Shared with the SSH target inspection in ssh-docker.ts so "is Hermes
+// installed on the host?" uses the exact same probe list as command execution.
+export const REMOTE_HERMES_CLI_CANDIDATES = [
+  "$HOME/hermes-agent/.venv/bin/hermes",
+  "$HOME/hermes-agent/venv/bin/hermes",
+  "$HOME/.hermes/hermes-agent/.venv/bin/hermes",
+  "$HOME/.hermes/hermes-agent/venv/bin/hermes",
+  "/opt/hermes/hermes-agent/.venv/bin/hermes",
+  "/opt/hermes/hermes-agent/venv/bin/hermes",
+  "$HOME/.local/bin/hermes",
+];
+
 export function buildRemoteHermesCmd(args: string[], extraShell = ""): string {
-  const candidates = [
-    "$HOME/hermes-agent/.venv/bin/hermes",
-    "$HOME/hermes-agent/venv/bin/hermes",
-    "$HOME/.hermes/hermes-agent/.venv/bin/hermes",
-    "$HOME/.hermes/hermes-agent/venv/bin/hermes",
-    "/opt/hermes/hermes-agent/.venv/bin/hermes",
-    "/opt/hermes/hermes-agent/venv/bin/hermes",
-    "$HOME/.local/bin/hermes",
-  ];
+  const launcherCandidates = REMOTE_HERMES_LAUNCHER_CANDIDATES;
+  const candidates = REMOTE_HERMES_CLI_CANDIDATES;
   const quotedArgs = args.map((a) => shellQuote(a)).join(" ");
+  const launcherProbe = launcherCandidates
+    .map((p) => `[ -x ${p} ] && exec ${p} ${quotedArgs}${extraShell}`)
+    .join("; ");
   const probe = candidates
     .map((p) => `[ -x ${p} ] && exec ${p} ${quotedArgs}${extraShell}`)
     .join("; ");
-  const script = `${probe}; command -v hermes >/dev/null && exec hermes ${quotedArgs}${extraShell}; echo "ERR: hermes CLI not found on remote PATH or in any known venv location" >&2; exit 1`;
+  const script = `${launcherProbe}; ${probe}; command -v hermes >/dev/null && exec hermes ${quotedArgs}${extraShell}; echo "ERR: hermes CLI not found on remote PATH, configured launcher, or in any known venv location" >&2; exit 1`;
   return `sh -c ${shellQuote(script)}`;
 }
 
@@ -2345,7 +3543,11 @@ export async function sshAddModel(
 ): Promise<SavedModel> {
   const models = await sshListModels(config);
   const existing = models.find(
-    (m) => m.model === model && m.provider === provider,
+    (m) =>
+      m.model === model &&
+      m.provider === provider &&
+      normalizeModelEndpointUrl(m.baseUrl) ===
+        normalizeModelEndpointUrl(baseUrl),
   );
   if (existing) return existing;
   const entry: SavedModel = {

@@ -1,4 +1,5 @@
 import type { ChatMessage } from "../Chat/Chat";
+import type { SessionLocation } from "../../../../shared/session-location";
 
 /**
  * One concurrently-running (or open) conversation. Several runs coexist so the
@@ -8,6 +9,8 @@ import type { ChatMessage } from "../Chat/Chat";
  */
 export interface ChatRun {
   runId: string;
+  /** Immutable: the Hermes machine this run was started against. */
+  connectionId: string;
   /** Immutable: the profile/agent this run was started under. */
   profile: string;
   /** Gateway session id, known once the first turn reports it. */
@@ -20,13 +23,23 @@ export interface ChatRun {
   seed?: ChatMessage[];
 }
 
+/** A blank chat that can be reassigned to another profile without losing work. */
+export function isScratchRun(r: ChatRun): boolean {
+  return !r.sessionId && !r.loading && !r.title;
+}
+
 /** Mint a fresh, empty run under the given profile. */
-export function mintRun(profile: string, seed?: ChatMessage[]): ChatRun {
+export function mintRun(
+  connectionId: string,
+  profile: string,
+  seed?: ChatMessage[],
+): ChatRun {
   return {
     runId:
       typeof crypto !== "undefined" && "randomUUID" in crypto
         ? `run-${crypto.randomUUID()}`
         : `run-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    connectionId,
     profile,
     sessionId: null,
     loading: false,
@@ -43,12 +56,116 @@ export function patchRun(
   return runs.map((r) => (r.runId === runId ? { ...r, ...patch } : r));
 }
 
-/** The first live run already bound to a given gateway session id, if any. */
-export function findRunBySession(
+/**
+ * Keep the selected shell profile and the visible chat run in sync.
+ *
+ * Existing conversations remain under the profile they started with; switching
+ * profiles activates a scratch run for the new profile instead of showing a
+ * stale conversation from the previous one.
+ */
+export function selectProfileRunTransition(
   runs: ChatRun[],
-  sessionId: string,
+  activeRunId: string,
+  connectionId: string,
+  profile: string,
+): { activeRunId: string; runs: ChatRun[] } {
+  const active = runs.find((r) => r.runId === activeRunId);
+  if (
+    !active ||
+    (active.connectionId === connectionId && active.profile === profile)
+  ) {
+    return { activeRunId, runs };
+  }
+
+  if (active.connectionId === connectionId && isScratchRun(active)) {
+    return {
+      activeRunId,
+      runs: runs.map((r) => (r.runId === activeRunId ? { ...r, profile } : r)),
+    };
+  }
+
+  const scratch = runs.find(
+    (r) =>
+      r.connectionId === connectionId &&
+      r.profile === profile &&
+      isScratchRun(r),
+  );
+  if (scratch) {
+    return { activeRunId: scratch.runId, runs };
+  }
+
+  const next = mintRun(connectionId, profile);
+  return { activeRunId: next.runId, runs: [...runs, next] };
+}
+
+/**
+ * Open a persisted session without leaving behind the active blank placeholder.
+ *
+ * Profile switching may create a scratch run so the visible chat matches the
+ * selected profile. If the next action is opening a saved session for that same
+ * profile, the saved session should occupy that placeholder tab.
+ */
+export function openSessionRunTransition(
+  runs: ChatRun[],
+  activeRunId: string,
+  run: ChatRun,
+): { activeRunId: string; runs: ChatRun[] } {
+  const active = runs.find((r) => r.runId === activeRunId);
+  if (
+    active &&
+    active.connectionId === run.connectionId &&
+    active.profile === run.profile &&
+    isScratchRun(active)
+  ) {
+    return {
+      activeRunId: run.runId,
+      runs: runs.map((r) => (r.runId === activeRunId ? run : r)),
+    };
+  }
+
+  return { activeRunId: run.runId, runs: [...runs, run] };
+}
+
+/**
+ * Chrome-style tab cycling: the run `delta` steps away from the active one,
+ * wrapping at both ends. Returns null when there is nothing to switch to.
+ */
+export function cycleRunId(
+  runs: ChatRun[],
+  activeRunId: string,
+  delta: 1 | -1,
+): string | null {
+  if (runs.length < 2) return null;
+  const idx = runs.findIndex((r) => r.runId === activeRunId);
+  if (idx === -1) return runs[0].runId;
+  return runs[(idx + delta + runs.length) % runs.length].runId;
+}
+
+/**
+ * Chrome-style ordinal jump: Cmd/Ctrl+1..8 select the Nth tab, 9 selects the
+ * last tab regardless of count. Returns null when the ordinal has no tab.
+ */
+export function runIdAtOrdinal(
+  runs: ChatRun[],
+  ordinal: number,
+): string | null {
+  if (runs.length === 0) return null;
+  if (ordinal === 9) return runs[runs.length - 1].runId;
+  const idx = ordinal - 1;
+  return idx >= 0 && idx < runs.length ? runs[idx].runId : null;
+}
+
+/** The first live run bound to the exact machine/profile/session tuple. */
+export function findRunByLocation(
+  runs: ChatRun[],
+  location: SessionLocation,
 ): ChatRun | undefined {
-  return runs.find((r) => r.sessionId === sessionId);
+  return runs.find(
+    (run) =>
+      run.connectionId === location.connectionId &&
+      run.profile === location.profile &&
+      run.sessionId === location.sessionId,
+  );
 }
 
 /** Session ids of every currently-loading run (for sidebar spinners). */

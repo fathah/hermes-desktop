@@ -4,8 +4,7 @@ export default {
   installationComplete: "ההתקנה הושלמה",
   installationFailed: "ההתקנה נכשלה",
   installingHermes: "מתקין את Hermes Agent",
-  installationFailedHint:
-    "ההתקנה נכשלה. אנא נסו שוב או התקינו דרך הטרמינל.",
+  installationFailedHint: "ההתקנה נכשלה. אנא נסו שוב או התקינו דרך הטרמינל.",
   retryInstallation: "נסה התקנה שוב",
   copied: "הועתק!",
   copyLogs: "העתקת היומנים",
@@ -14,10 +13,8 @@ export default {
   continueToSetup: "המשך להגדרה",
   confirmTitle: "לפני ההתקנה",
   confirmLocationLabel: "‏Hermes יותקן בנתיב:",
-  confirmFresh:
-    "לא נמצאה התקנה קיימת כאן - תוגדר עותק חדש.",
-  confirmUpdate:
-    "קיימת כאן התקנת Hermes - היא תעודכן לגרסה האחרונה.",
+  confirmFresh: "לא נמצאה התקנה קיימת כאן - תוגדר עותק חדש.",
+  confirmUpdate: "קיימת כאן התקנת Hermes - היא תעודכן לגרסה האחרונה.",
   confirmReplace:
     "קיימת כאן תיקייה אך היא אינה התקנת Hermes תקפה - ההתקנה תמחק ותחליף אותה.",
   confirmNotInherited:

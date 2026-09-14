@@ -25,7 +25,11 @@ export default {
   actions: {
     install: { setup: "Yükle", working: "Yükleniyor...", done: "Yüklendi" },
     connect: { setup: "Bağlan", working: "Bağlanıyor...", done: "Bağlandı" },
-    create: { setup: "Oluştur", working: "Oluşturuluyor...", done: "Oluşturuldu" },
+    create: {
+      setup: "Oluştur",
+      working: "Oluşturuluyor...",
+      done: "Oluşturuldu",
+    },
   },
   installedSegment: "Kurulu",
   communitySegment: "Topluluk",

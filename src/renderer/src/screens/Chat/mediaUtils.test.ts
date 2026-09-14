@@ -299,7 +299,9 @@ describe("parseMediaTokens (issue #299)", () => {
   it("does not render the same image twice when markdown and file path repeat it", () => {
     const src =
       "C:\\Users\\pmos6\\Documents\\AI-Playground\\media\\toy_duck_bathtub.png";
-    const segs = parseMediaTokens(`Here it is:\n![duck](${src})\nFile: \`${src}\``);
+    const segs = parseMediaTokens(
+      `Here it is:\n![duck](${src})\nFile: \`${src}\``,
+    );
     const mediaSegs = segs.filter((segment) => segment.type === "media");
 
     expect(mediaSegs).toHaveLength(1);

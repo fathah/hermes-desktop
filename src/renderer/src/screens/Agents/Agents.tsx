@@ -1,11 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Plus, Trash, ChatBubble, Pencil, X } from "../../assets/icons";
+import { Plus, ChatBubble, Pencil, X } from "../../assets/icons";
 import ProfileAvatar from "../../components/common/ProfileAvatar";
-import { PROFILE_COLORS } from "../../../../shared/profileColors";
-import { fileToAvatarDataUrl } from "../../utils/imageResize";
+import { AppModal, AppModalTitle } from "../../components/modal/AppModal";
 import { useI18n } from "../../components/useI18n";
+import { OrbLoader } from "../../components/OrbLoader";
+import { useProfileModal } from "../../components/profile/ProfileModalContext";
+import type {
+  AgentSyncResult,
+  AgentSyncStatus,
+} from "../../../../shared/agent-sync";
 
 interface ProfileInfo {
+  id: string;
   name: string;
   path: string;
   isDefault: boolean;
@@ -32,22 +38,19 @@ function Agents({
   onChatWith,
 }: AgentsProps): React.JSX.Element {
   const { t } = useI18n();
+  const { openProfile } = useProfileModal();
   const [profiles, setProfiles] = useState<ProfileInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [cloneConfig, setCloneConfig] = useState(true);
+  // Source profile to clone config/keys/skills from when `cloneConfig` is on.
+  const [cloneSource, setCloneSource] = useState("default");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  // Name of the profile whose appearance modal is open (null = closed).
-  const [editingName, setEditingName] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Live view of the profile being edited, so the modal reflects updates.
-  const editingProfile = editingName
-    ? (profiles.find((p) => p.name === editingName) ?? null)
-    : null;
+  // Profile whose gateway we're waiting on after a switch — drives the
+  // "Starting…" status while it spins up.
+  const [startingProfile, setStartingProfile] = useState<string | null>(null);
 
   const loadProfiles = useCallback(async (): Promise<void> => {
     const list = await window.hermesAPI.listProfiles();
@@ -55,53 +58,156 @@ function Agents({
     setLoading(false);
   }, []);
 
-  async function handlePickColor(name: string, color: string): Promise<void> {
-    setProfiles((cur) =>
-      cur.map((p) => (p.name === name ? { ...p, color } : p)),
-    );
-    const result = await window.hermesAPI.setProfileColor(name, color);
-    if (!result.success) setError(result.error || t("agents.appearanceFailed"));
-    loadProfiles();
-  }
+  // A switched profile starts its gateway asynchronously, so the pid file the
+  // status reads from isn't written yet when the switch returns. Poll the list
+  // until that profile reports running (or we give up) so the row flips to
+  // "Running" on its own instead of only after a manual refresh/revisit.
+  const gatewayPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  function triggerUpload(): void {
-    fileInputRef.current?.click();
-  }
-
-  async function handleAvatarFile(
-    e: React.ChangeEvent<HTMLInputElement>,
-  ): Promise<void> {
-    const file = e.target.files?.[0];
-    const name = editingName;
-    e.target.value = ""; // allow re-selecting the same file
-    if (!file || !name) return;
-    try {
-      const dataUrl = await fileToAvatarDataUrl(file);
-      const result = await window.hermesAPI.setProfileAvatar(name, dataUrl);
-      if (!result.success)
-        setError(result.error || t("agents.uploadImageFailed"));
-    } catch {
-      setError(t("agents.uploadImageFailed"));
+  const stopGatewayPoll = useCallback((): void => {
+    if (gatewayPollRef.current) {
+      clearTimeout(gatewayPollRef.current);
+      gatewayPollRef.current = null;
     }
-    loadProfiles();
-  }
+  }, []);
 
-  async function handleRemoveAvatar(name: string): Promise<void> {
-    const result = await window.hermesAPI.removeProfileAvatar(name);
-    if (!result.success) setError(result.error || t("agents.appearanceFailed"));
-    loadProfiles();
-  }
+  const pollGatewayReady = useCallback(
+    (name: string): void => {
+      stopGatewayPoll();
+      // ~15 attempts × 700ms ≈ 10s, enough for a cold gateway to come up.
+      let attemptsLeft = 15;
+      const settle = (): void =>
+        setStartingProfile((current) => (current === name ? null : current));
+      const tick = async (): Promise<void> => {
+        attemptsLeft -= 1;
+        try {
+          const list = await window.hermesAPI.listProfiles();
+          setProfiles(list);
+          if (list.find((p) => p.id === name)?.gatewayRunning) {
+            settle();
+            return;
+          }
+        } catch {
+          // A transient listing failure (e.g. SSH) shouldn't strand the
+          // spinner — fall through to retry or give up like any other miss.
+        }
+        if (attemptsLeft <= 0) {
+          settle();
+          return;
+        }
+        gatewayPollRef.current = setTimeout(tick, 700);
+      };
+      gatewayPollRef.current = setTimeout(tick, 700);
+    },
+    [stopGatewayPoll],
+  );
 
   useEffect(() => {
     loadProfiles();
   }, [loadProfiles]);
 
+  // Cancel any in-flight gateway poll when the page unmounts.
+  useEffect(() => stopGatewayPoll, [stopGatewayPoll]);
+
+  // Cloud sync: null while the signed-in state is still loading.
+  const [syncStatus, setSyncStatus] = useState<AgentSyncStatus | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const autoSyncedRef = useRef(false);
+
+  const refreshSyncStatus = useCallback(async (): Promise<void> => {
+    try {
+      setSyncStatus(await window.hermesAPI.getAgentSyncStatus());
+    } catch {
+      // Bridge unavailable (tests/old preload): leave the affordance hidden.
+    }
+  }, []);
+
+  const runSync = useCallback(async (): Promise<void> => {
+    setSyncing(true);
+    try {
+      const result = await window.hermesAPI.syncAgents();
+      setSyncStatus((s) => (s ? { ...s, lastResult: result } : s));
+      if (result.outcomes.some((o) => o.action === "created-local")) {
+        await loadProfiles();
+      }
+    } catch {
+      // Surfaced through lastResult on the next status refresh.
+    } finally {
+      setSyncing(false);
+      void refreshSyncStatus();
+    }
+  }, [loadProfiles, refreshSyncStatus]);
+
+  // Load the signed-in state once, then run one automatic pass per visit so
+  // console-side edits appear without a manual click.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const status = await window.hermesAPI.getAgentSyncStatus();
+        setSyncStatus(status);
+        if (status.signedIn && !status.running && !autoSyncedRef.current) {
+          autoSyncedRef.current = true;
+          void runSync();
+        }
+      } catch {
+        // Bridge unavailable: leave the affordance hidden.
+      }
+    })();
+  }, [runSync]);
+
+  // Syncs triggered elsewhere (e.g. right after sign-in) refresh the list too.
+  useEffect(() => {
+    if (!window.hermesAPI.onAgentSyncUpdated) return undefined;
+    return window.hermesAPI.onAgentSyncUpdated((result: AgentSyncResult) => {
+      setSyncStatus((s) => (s ? { ...s, lastResult: result } : s));
+      if (result.outcomes.some((o) => o.action === "created-local")) {
+        void loadProfiles();
+      }
+    });
+  }, [loadProfiles]);
+
+  function syncSummary(result: AgentSyncResult): string {
+    if (result.status === "unauthorized") return t("agents.syncUnauthorized");
+    if (result.status === "error")
+      return result.error || t("agents.syncFailed");
+    const counts = { pushed: 0, pulled: 0, created: 0, errors: 0 };
+    for (const o of result.outcomes) {
+      if (o.action === "pushed" || o.action === "created-remote")
+        counts.pushed++;
+      else if (o.action === "pulled") counts.pulled++;
+      if (o.action === "created-local") counts.created++;
+      if (o.action === "error") counts.errors++;
+    }
+    if (counts.errors > 0)
+      return t("agents.syncErrors", { count: counts.errors });
+    if (counts.pushed + counts.pulled + counts.created === 0)
+      return t("agents.syncUpToDate");
+    return t("agents.syncSummary", counts);
+  }
+
+  // Open the create modal, defaulting the clone source to the active profile.
+  function openCreate(): void {
+    setNewName("");
+    setError("");
+    setCloneConfig(true);
+    setCloneSource(activeProfile || "default");
+    setShowCreate(true);
+  }
+
+  function closeCreate(): void {
+    setShowCreate(false);
+    setError("");
+  }
+
   async function handleCreate(): Promise<void> {
-    const name = newName.trim().toLowerCase();
+    const name = newName.trim();
     if (!name) return;
     setCreating(true);
     setError("");
-    const result = await window.hermesAPI.createProfile(name, cloneConfig);
+    const result = await window.hermesAPI.createProfile(
+      name,
+      cloneConfig ? cloneSource : null,
+    );
     setCreating(false);
     if (result.success) {
       setShowCreate(false);
@@ -112,26 +218,15 @@ function Agents({
     loadProfiles();
   }
 
-  async function handleDelete(name: string): Promise<void> {
-    const previousProfiles = profiles;
-    setConfirmDelete(null);
-    setError("");
-    setProfiles((current) => current.filter((p) => p.name !== name));
-
-    const result = await window.hermesAPI.deleteProfile(name);
-    if (result.success) {
-      if (activeProfile === name) onSelectProfile("default");
-      loadProfiles();
-    } else {
-      setProfiles(previousProfiles);
-      setError(result.error || t("agents.deleteFailed"));
-    }
-  }
-
   async function handleSelect(name: string): Promise<void> {
+    // Show "Starting…" only when this profile's gateway isn't already up, so
+    // switching to an already-running profile doesn't flash a fake spinner.
+    const alreadyRunning = profiles.find((p) => p.id === name)?.gatewayRunning;
+    setStartingProfile(alreadyRunning ? null : name);
     await window.hermesAPI.setActiveProfile(name);
     onSelectProfile(name);
     loadProfiles();
+    pollGatewayReady(name);
   }
 
   // "Chat" button — make the agent active (starts its gateway) then open a
@@ -152,7 +247,7 @@ function Agents({
     return (
       <div className="agents-container">
         <div className="agents-loading">
-          <div className="loading-spinner" />
+          <OrbLoader state="searching" size={64} />
         </div>
       </div>
     );
@@ -165,31 +260,88 @@ function Agents({
           <h2 className="agents-title">{t("agents.title")}</h2>
           <p className="agents-subtitle">{t("agents.subtitle")}</p>
         </div>
-        <button
-          className="btn btn-primary btn-sm"
-          onClick={() => setShowCreate(true)}
-        >
-          <Plus size={14} />
-          {t("agents.newAgent")}
-        </button>
+        <div className="agents-header-actions">
+          {syncStatus && !syncStatus.signedIn && (
+            <span
+              className="agents-sync-hint"
+              title={t("agents.syncSignedOutHint")}
+            >
+              {t("agents.syncSignedOut")}
+            </span>
+          )}
+          {syncStatus?.signedIn && (
+            <span
+              className="agents-sync-hint"
+              title={
+                syncStatus.lastResult?.outcomes
+                  .flatMap((o) => o.warnings.map((w) => `${o.profile}: ${w}`))
+                  .join("\n") ||
+                (syncStatus.accountLabel ?? "")
+              }
+            >
+              {syncStatus.lastResult
+                ? syncSummary(syncStatus.lastResult)
+                : (syncStatus.accountLabel ?? "")}
+            </span>
+          )}
+          {syncStatus?.signedIn && (
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => void runSync()}
+              disabled={syncing}
+            >
+              {syncing ? t("agents.syncing") : t("agents.sync")}
+            </button>
+          )}
+          <button className="btn btn-primary btn-sm" onClick={openCreate}>
+            <Plus size={14} />
+            {t("agents.newAgent")}
+          </button>
+        </div>
       </div>
 
-      {showCreate && (
-        <div className="agents-create">
-          <input
-            className="input"
-            placeholder={t("agents.namePlaceholder")}
-            value={newName}
-            onChange={(e) => {
-              const v = e.target.value
-                .toLowerCase()
-                .replace(/[^a-z0-9_-]/g, "");
-              setNewName(v);
-              setError("");
-            }}
-            onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-            autoFocus
-          />
+      {!showCreate && error && (
+        <div className="agents-create-error">{error}</div>
+      )}
+
+      <AppModal
+        open={showCreate}
+        onOpenChange={(open) => {
+          if (!open) closeCreate();
+        }}
+        className="agents-create-modal"
+        labelledBy="agents-create-title"
+      >
+        <div className="agents-create-modal-header">
+          <AppModalTitle
+            id="agents-create-title"
+            className="agents-create-modal-title"
+          >
+            {t("agents.createTitle")}
+          </AppModalTitle>
+          <button
+            className="profile-modal-close"
+            onClick={closeCreate}
+            aria-label={t("common.close")}
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="agents-create-modal-body">
+          <label className="agents-create-field">
+            <span>{t("agents.nameLabel")}</span>
+            <input
+              className="input"
+              placeholder={t("agents.namePlaceholder")}
+              value={newName}
+              onChange={(e) => {
+                setNewName(e.target.value);
+                setError("");
+              }}
+              onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+              autoFocus
+            />
+          </label>
           <label className="agents-create-clone">
             <input
               type="checkbox"
@@ -198,91 +350,137 @@ function Agents({
             />
             <span>{t("agents.cloneConfig")}</span>
           </label>
+          {cloneConfig && (
+            <label className="agents-create-field">
+              <span>{t("agents.cloneFromLabel")}</span>
+              <select
+                className="input"
+                value={cloneSource}
+                onChange={(e) => setCloneSource(e.target.value)}
+              >
+                {profiles.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {error && <div className="agents-create-error">{error}</div>}
-          <div className="agents-create-actions">
+          <div className="agents-create-modal-actions">
+            <button className="btn btn-secondary" onClick={closeCreate}>
+              {t("common.cancel")}
+            </button>
             <button
-              className="btn btn-primary btn-sm"
+              className="btn btn-primary"
               onClick={handleCreate}
               disabled={creating || !newName.trim()}
             >
               {creating ? t("agents.creating") : t("agents.create")}
             </button>
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => {
-                setShowCreate(false);
-                setError("");
-              }}
-            >
-              {t("common.cancel")}
-            </button>
           </div>
         </div>
-      )}
+      </AppModal>
 
-      {!showCreate && error && (
-        <div className="agents-create-error">{error}</div>
-      )}
-
-      <div className="agents-grid">
+      <div className="agents-table">
+        <div className="agents-table-head">
+          <span className="agents-cell-profile">{t("agents.colProfile")}</span>
+          <span className="agents-cell-model">{t("agents.colModel")}</span>
+          <span className="agents-cell-status">{t("agents.colStatus")}</span>
+          <span className="agents-cell-actions">{t("agents.colActions")}</span>
+        </div>
         {profiles.map((p) => (
           <div
-            key={p.name}
-            className={`agents-card ${activeProfile === p.name ? "active" : ""}`}
-            onClick={() => handleSelect(p.name)}
+            key={p.id}
+            className={`agents-row ${activeProfile === p.id ? "active" : ""}`}
+            onClick={() => handleSelect(p.id)}
             role="button"
             tabIndex={0}
             onKeyDown={(e) => {
-              if (e.key === "Enter") handleSelect(p.name);
+              // Only the row itself — not Enter bubbling up from the edit/chat
+              // buttons — should switch the profile.
+              if (e.key === "Enter" && e.target === e.currentTarget) {
+                handleSelect(p.id);
+              }
             }}
           >
-            <button
-              type="button"
-              className="agents-card-edit"
-              title={t("agents.editAppearance")}
-              aria-label={t("agents.editAppearance")}
-              onClick={(e) => {
-                e.stopPropagation();
-                setError("");
-                setEditingName(p.name);
-              }}
-            >
-              <Pencil size={14} />
-            </button>
-            <div className="agents-card-header">
+            <div className="agents-cell-profile">
               <ProfileAvatar
-                name={p.name}
+                name={p.id}
                 color={p.color}
                 avatar={p.avatar}
                 size={36}
               />
-              <div className="agents-card-info">
-                <div className="agents-card-name">{p.name}</div>
-                <div className="agents-card-provider">
-                  {providerLabel(p.provider)}
+              <div className="agents-row-info">
+                <div className="agents-row-name">{p.name}</div>
+                <div className="agents-row-sub">
+                  {p.id !== p.name ? `${p.id} · ` : ""}
+                  {providerLabel(p.provider)} ·{" "}
+                  {t("agents.skillsCount", { count: p.skillCount })}
                 </div>
               </div>
             </div>
-            <div className="agents-card-model">
-              {p.model ? p.model.split("/").pop() : t("agents.noModel")}
-            </div>
-            <div className="agents-card-stats">
-              <span>{t("agents.skillsCount", { count: p.skillCount })}</span>
-              <span className="agents-card-dot" />
-              {p.gatewayRunning ? (
-                <span className="agents-card-gateway-on">
-                  {t("agents.gatewayRunning")}
-                </span>
+            <div className="agents-cell-model">
+              {p.model ? (
+                <code className="agents-model-chip">
+                  {p.model.split("/").pop()}
+                </code>
               ) : (
-                <span>{t("agents.gatewayOff")}</span>
+                <span className="agents-model-empty">
+                  {t("agents.noModel")}
+                </span>
               )}
             </div>
-            <div className="agents-card-footer">
+            <div className="agents-cell-status">
+              {startingProfile === p.id && !p.gatewayRunning ? (
+                <span className="agents-status-pill starting">
+                  <span className="agents-status-spinner" />
+                  {t("agents.starting")}
+                </span>
+              ) : (
+                <span
+                  className={`agents-status-pill ${
+                    p.gatewayRunning ? "on" : "off"
+                  }`}
+                  title={
+                    p.gatewayRunning
+                      ? t("agents.gatewayRunning")
+                      : t("agents.gatewayOff")
+                  }
+                >
+                  <span className="agents-status-dot" />
+                  {p.gatewayRunning ? t("agents.running") : t("agents.off")}
+                </span>
+              )}
+            </div>
+            <div className="agents-cell-actions">
+              <button
+                type="button"
+                className="agents-row-edit"
+                title={t("agents.editAppearanceFor", {
+                  name: p.name,
+                })}
+                aria-label={t("agents.editAppearanceFor", {
+                  name: p.name,
+                })}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setError("");
+                  openProfile(p.id, {
+                    onChanged: loadProfiles,
+                    onDeleted: (n) => {
+                      if (activeProfile === n) onSelectProfile("default");
+                    },
+                  });
+                }}
+              >
+                <Pencil size={14} />
+              </button>
               <button
                 className="btn btn-primary btn-sm"
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleChatWith(p.name);
+                  handleChatWith(p.id);
                 }}
               >
                 <ChatBubble size={13} />
@@ -292,141 +490,6 @@ function Agents({
           </div>
         ))}
       </div>
-
-      {editingProfile && (
-        <div
-          className="agents-appearance-overlay"
-          onClick={() => setEditingName(null)}
-        >
-          <div
-            className="agents-appearance-modal"
-            role="dialog"
-            aria-modal="true"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="agents-appearance-modal-header">
-              <span className="agents-appearance-modal-title">
-                {t("agents.editAppearanceFor", { name: editingProfile.name })}
-              </span>
-              <button
-                className="agents-appearance-modal-close"
-                onClick={() => setEditingName(null)}
-                aria-label={t("common.cancel")}
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="agents-appearance-modal-body">
-              <div className="agents-appearance-preview">
-                <ProfileAvatar
-                  name={editingProfile.name}
-                  color={editingProfile.color}
-                  avatar={editingProfile.avatar}
-                  size={64}
-                />
-                <div className="agents-appearance-image-actions">
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={triggerUpload}
-                  >
-                    {t("agents.uploadImage")}
-                  </button>
-                  {editingProfile.avatar && (
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      onClick={() => handleRemoveAvatar(editingProfile.name)}
-                    >
-                      {t("agents.removeImage")}
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="agents-appearance-section">
-                <span className="agents-appearance-label">
-                  {t("agents.color")}
-                </span>
-                <div className="agents-appearance-swatches">
-                  {PROFILE_COLORS.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      className={`agents-appearance-swatch ${
-                        (editingProfile.color || "").toLowerCase() ===
-                        c.toLowerCase()
-                          ? "active"
-                          : ""
-                      }`}
-                      style={{ background: c }}
-                      title={c}
-                      aria-label={c}
-                      onClick={() => handlePickColor(editingProfile.name, c)}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {!editingProfile.isDefault && (
-                <div className="agents-appearance-danger">
-                  <span className="agents-appearance-label agents-appearance-danger-label">
-                    {t("agents.dangerZone")}
-                  </span>
-                  <p className="agents-appearance-danger-info">
-                    {t("agents.deleteProfileInfo")}
-                  </p>
-                  {confirmDelete === editingProfile.name ? (
-                    <div className="agents-appearance-danger-confirm">
-                      <span>{t("agents.deleteProfileConfirm")}</span>
-                      <div className="agents-appearance-image-actions">
-                        <button
-                          className="btn btn-danger btn-sm"
-                          onClick={() => handleDelete(editingProfile.name)}
-                        >
-                          {t("agents.deleteProfile")}
-                        </button>
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => setConfirmDelete(null)}
-                        >
-                          {t("common.cancel")}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      className="btn btn-danger-ghost btn-sm"
-                      onClick={() => setConfirmDelete(editingProfile.name)}
-                    >
-                      <Trash size={13} />
-                      {t("agents.deleteProfile")}
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {error && <div className="agents-create-error">{error}</div>}
-            </div>
-
-            <div className="agents-appearance-modal-footer">
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={() => setEditingName(null)}
-              >
-                {t("common.done")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        style={{ display: "none" }}
-        onChange={handleAvatarFile}
-      />
     </div>
   );
 }

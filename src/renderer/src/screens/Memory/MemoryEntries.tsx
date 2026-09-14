@@ -25,7 +25,10 @@ export function MemoryEntries({
   async function handleAddEntry(): Promise<void> {
     if (!newEntry.trim()) return;
     setError("");
-    const result = await window.hermesAPI.addMemoryEntry(newEntry.trim(), profile);
+    const result = await window.hermesAPI.addMemoryEntry(
+      newEntry.trim(),
+      profile,
+    );
     if (result.success) {
       setNewEntry("");
       setShowAdd(false);
@@ -73,7 +76,11 @@ export function MemoryEntries({
         </button>
       </div>
 
-      {error && <div className="memory-error" style={{ marginBottom: 12 }}>{error}</div>}
+      {error && (
+        <div className="memory-error" style={{ marginBottom: 12 }}>
+          {error}
+        </div>
+      )}
 
       {showAdd && (
         <div className="memory-entry-form">

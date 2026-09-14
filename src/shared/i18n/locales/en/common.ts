@@ -9,6 +9,9 @@ export default {
   save: "Save",
   done: "Done",
   edit: "Edit",
+  addKey: "Add key",
+  activeModel: "Active Model",
+  change: "Change",
   search: "Search",
   searchPlaceholder: "Search...",
   show: "Show",
@@ -49,4 +52,6 @@ export default {
   errorMessage: "An unexpected error occurred.",
   tryAgain: "Try Again",
   copied: "Copied!",
+  showMore: "Show more",
+  showLess: "Show less",
 } as const;

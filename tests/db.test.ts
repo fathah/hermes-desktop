@@ -6,14 +6,12 @@ import { activeStateDbPath } from "../src/main/utils";
 const { mockClose, mockDatabaseConstructor, mockExistsSync } = vi.hoisted(
   () => {
     const mockClose = vi.fn();
-    const mockDatabaseConstructor = vi
-      .fn()
-      .mockImplementation((_dbPath, _options) => {
-        return {
-          close: mockClose,
-          open: true,
-        };
-      });
+    const mockDatabaseConstructor = vi.fn().mockImplementation(() => {
+      return {
+        close: mockClose,
+        open: true,
+      };
+    });
     const mockExistsSync = vi.fn();
     return { mockClose, mockDatabaseConstructor, mockExistsSync };
   },
@@ -21,7 +19,10 @@ const { mockClose, mockDatabaseConstructor, mockExistsSync } = vi.hoisted(
 
 vi.mock("better-sqlite3", () => {
   return {
-    default: vi.fn().mockImplementation(function (dbPath: string, options: any) {
+    default: vi.fn().mockImplementation(function (
+      dbPath: string,
+      options: unknown,
+    ) {
       return mockDatabaseConstructor(dbPath, options);
     }),
   };
@@ -41,10 +42,10 @@ vi.mock("fs", async (importOriginal) => {
   const original = await importOriginal<typeof import("fs")>();
   return {
     ...original,
-    existsSync: (path: any) => mockExistsSync(path),
+    existsSync: (path: string) => mockExistsSync(path),
     default: {
       ...original,
-      existsSync: (path: any) => mockExistsSync(path),
+      existsSync: (path: string) => mockExistsSync(path),
     },
   };
 });
@@ -85,6 +86,13 @@ describe("Database connection caching", () => {
     expect(db2).not.toBeNull();
     expect(db1).toBe(db2); // Cached same connection
     expect(mockDatabaseConstructor).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolves an explicitly requested profile instead of active profile state", () => {
+    vi.mocked(activeStateDbPath).mockReturnValue(dbPath1);
+
+    expect(getDbConnection(true, "work")).not.toBeNull();
+    expect(activeStateDbPath).toHaveBeenCalledWith("work");
   });
 
   it("re-creates connection if database path changes (e.g. profile switch)", () => {

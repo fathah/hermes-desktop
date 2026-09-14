@@ -28,7 +28,8 @@ export default {
   },
   computer_use: {
     label: "Bilgisayar Kullanımı",
-    description: "Masaüstünü kontrol edin — fareyi hareket ettirin, tıklayın ve yazın",
+    description:
+      "Masaüstünü kontrol edin — fareyi hareket ettirin, tıklayın ve yazın",
   },
   vision: {
     label: "Görüntü",

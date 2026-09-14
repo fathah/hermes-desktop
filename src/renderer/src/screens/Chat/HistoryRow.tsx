@@ -1,10 +1,11 @@
 import { memo, useState } from "react";
-import { Grid } from "react-loader-spinner";
-import { Brain, ChevronRight, Spinner, Wrench } from "../../assets/icons";
+import { Brain, ChevronRight, Wrench } from "../../assets/icons";
+import { OrbLoader } from "../../components/OrbLoader";
 import { useI18n } from "../../components/useI18n";
 import { AttachmentChip } from "../../components/AttachmentChip";
 import { ToolGlyph, humanizeToolName } from "../../components/toolMeta";
 import { HermesAvatar, AvatarSpacer } from "./MessageRow";
+import type { AgentAvatarInfo } from "./MessageRow";
 import type {
   Attachment,
   ReasoningMessage,
@@ -18,6 +19,7 @@ export const ReasoningRow = memo(function ReasoningRow({
   msg,
   active = false,
   showAvatar = true,
+  agent,
 }: {
   msg: ReasoningMessage;
   /** True only while this turn's reasoning is still streaming. Controls the
@@ -26,17 +28,22 @@ export const ReasoningRow = memo(function ReasoningRow({
   /** False on continuation rows of a turn — render a spacer instead of an
    *  avatar so one turn shows a single avatar. */
   showAvatar?: boolean;
+  /** Appearance of the chatting agent, shown once the avatar goes idle. */
+  agent?: AgentAvatarInfo;
 }): React.JSX.Element {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
-  const lineCount = msg.text.split("\n").length;
   return (
     <div
       className={`chat-message chat-message-agent chat-message-history${
         showAvatar ? "" : " chat-message--grouped"
       }`}
     >
-      {showAvatar ? <HermesAvatar /> : <AvatarSpacer />}
+      {showAvatar ? (
+        <HermesAvatar active={active} agent={agent} />
+      ) : (
+        <AvatarSpacer />
+      )}
       <div
         className={`chat-reasoning-group${
           active ? " chat-reasoning-group--active" : ""
@@ -48,23 +55,25 @@ export const ReasoningRow = memo(function ReasoningRow({
           aria-expanded={open}
           onClick={() => setOpen((o) => !o)}
         >
-          <ChevronRight
-            size={14}
-            className={`chat-reasoning-group-chevron${
-              open ? " chat-reasoning-group-chevron--open" : ""
-            }`}
-          />
           {active ? (
-            <Spinner size={13} className="chat-reasoning-group-spinner" />
+            <OrbLoader
+              state="solving"
+              size={20}
+              aria-label="thinking-loading"
+              className="chat-reasoning-group-spinner"
+            />
           ) : (
             <Brain size={13} className="chat-reasoning-group-icon" />
           )}
           <span className="chat-reasoning-group-title">
             {active ? t("chat.thinking") : t("chat.thought")}
           </span>
-          <span className="chat-reasoning-group-meta">
-            {lineCount} {lineCount === 1 ? "line" : "lines"}
-          </span>
+          <ChevronRight
+            size={14}
+            className={`chat-reasoning-group-chevron${
+              open ? " chat-reasoning-group-chevron--open" : ""
+            }`}
+          />
         </button>
         <div
           className={`chat-tool-collapse${
@@ -124,7 +133,10 @@ function singleToolName(items: ToolItem[]): string | null {
 
 export function orderToolActivityItems(items: ToolItem[]): ToolItem[] {
   const callIds = new Set(
-    items.filter(isToolCall).map((item) => item.callId).filter(Boolean),
+    items
+      .filter(isToolCall)
+      .map((item) => item.callId)
+      .filter(Boolean),
   );
   const resultsByCallId = new Map<string, ToolResultMessage[]>();
   for (const item of items) {
@@ -233,16 +245,18 @@ export const ToolActivityGroup = memo(function ToolActivityGroup({
   items,
   active = false,
   showAvatar = true,
+  agent,
 }: {
   items: ToolItem[];
   /** True while the turn is still streaming and this is the trailing run —
    *  drives the spinner on the collapsed summary. */
   active?: boolean;
   showAvatar?: boolean;
+  /** Appearance of the chatting agent, shown once the avatar goes idle. */
+  agent?: AgentAvatarInfo;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const last = items[items.length - 1];
-  const count = items.length;
   const detail = itemDetail(last);
   const title = toolActivityGroupTitle(items);
   const soloTool = singleToolName(items);
@@ -254,7 +268,11 @@ export const ToolActivityGroup = memo(function ToolActivityGroup({
         showAvatar ? "" : " chat-message--grouped"
       }`}
     >
-      {showAvatar ? <HermesAvatar /> : <AvatarSpacer />}
+      {showAvatar ? (
+        <HermesAvatar active={active} agent={agent} />
+      ) : (
+        <AvatarSpacer />
+      )}
       <div
         className={`chat-tool-group${active ? " chat-tool-group--active" : ""}`}
       >
@@ -264,21 +282,12 @@ export const ToolActivityGroup = memo(function ToolActivityGroup({
           aria-expanded={open}
           onClick={() => setOpen((o) => !o)}
         >
-          <ChevronRight
-            size={14}
-            className={`chat-tool-group-chevron${
-              open ? " chat-tool-group-chevron--open" : ""
-            }`}
-          />
           {active ? (
-            <Grid
-              visible={true}
-              height={13}
-              width={13}
-              radius={15}
-              color="#4aa8ff"
-              ariaLabel="tool-loading"
-              wrapperClass="chat-tool-group-spinner"
+            <OrbLoader
+              state="working"
+              size={20}
+              aria-label="tool-loading"
+              className="chat-tool-group-spinner"
             />
           ) : soloTool ? (
             <ToolGlyph
@@ -291,9 +300,12 @@ export const ToolActivityGroup = memo(function ToolActivityGroup({
           )}
           <span className="chat-tool-group-name">{title}</span>
           {detail && <span className="chat-tool-group-detail">{detail}</span>}
-          <span className="chat-tool-group-count">
-            {count} {count === 1 ? "step" : "steps"}
-          </span>
+          <ChevronRight
+            size={14}
+            className={`chat-tool-group-chevron${
+              open ? " chat-tool-group-chevron--open" : ""
+            }`}
+          />
         </button>
         <div
           className={`chat-tool-collapse${open ? " chat-tool-collapse--open" : ""}`}

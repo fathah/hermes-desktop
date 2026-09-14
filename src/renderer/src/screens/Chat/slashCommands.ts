@@ -4,6 +4,7 @@ export interface SlashCommand {
   category: "chat" | "agent" | "tools" | "info";
   /** If true, the command is handled locally instead of sent to the backend */
   local?: boolean;
+  takesArgs?: boolean;
 }
 
 export const SLASH_COMMANDS: SlashCommand[] = [
@@ -82,6 +83,12 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     category: "agent",
   },
   {
+    name: "/learn",
+    description: "Learn a reusable skill from files, URLs, notes, or this chat",
+    category: "agent",
+    takesArgs: true,
+  },
+  {
     name: "/steer",
     description: "Steer the in-flight agent without interrupting it",
     category: "agent",
@@ -128,7 +135,37 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   },
   {
     name: "/model",
-    description: "Show or switch the current model",
+    description: "Open model picker",
+    category: "info",
+  },
+  {
+    name: "/agents",
+    description: "Open Agents page",
+    category: "info",
+  },
+  {
+    name: "/office",
+    description: "Open Office 3D page",
+    category: "info",
+  },
+  {
+    name: "/discover",
+    description: "Open Discover page",
+    category: "info",
+  },
+  {
+    name: "/providers",
+    description: "Open Providers page",
+    category: "info",
+  },
+  {
+    name: "/schedules",
+    description: "Open Schedules page",
+    category: "info",
+  },
+  {
+    name: "/gateway",
+    description: "Open Gateway status page",
     category: "info",
   },
   { name: "/memory", description: "Show agent memory", category: "info" },

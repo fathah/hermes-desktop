@@ -16,6 +16,8 @@ interface UseChatIPCArgs {
   /** This conversation's run id. Events tagged with a different runId belong
    *  to another mounted/background chat and are ignored. */
   runId: string;
+  connectionId: string;
+  profile?: string;
   /** The session currently visible in this Chat, if already known. */
   sessionScopeId: string | null;
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
@@ -44,6 +46,8 @@ export function eventMatchesRun(eventRunId: string, ownRunId: string): boolean {
  */
 export function useChatIPC({
   runId,
+  connectionId,
+  profile,
   sessionScopeId,
   setMessages,
   setHermesSessionId,
@@ -89,6 +93,8 @@ export function useChatIPC({
       try {
         const items = (await window.hermesAPI.getSessionMessages(
           sessionId,
+          connectionId,
+          profile,
         )) as DbHistoryItem[];
         if (
           disposed ||
@@ -183,16 +189,21 @@ export function useChatIPC({
         stopDbPolling();
         const activeTurn = activeTurnRef.current;
         const acceptedSessionId = acceptedSessionIdRef.current;
-        if (
-          sessionId &&
-          acceptedSessionId &&
-          acceptedSessionId !== sessionId
-        ) {
+        if (sessionId && acceptedSessionId && acceptedSessionId !== sessionId) {
           return;
         }
         if (sessionId && !acceptedSessionId && !activeTurn) {
           return;
         }
+        setMessages((current) =>
+          current.map((message) =>
+            message.kind === "approval" &&
+            message.responsePath === "ipc" &&
+            !message.resolved
+              ? { ...message, unavailable: true }
+              : message,
+          ),
+        );
         if (sessionId) {
           acceptedSessionIdRef.current = sessionId;
           setHermesSessionId(sessionId);
@@ -206,6 +217,8 @@ export function useChatIPC({
         try {
           const items = (await window.hermesAPI.getSessionMessages(
             sessionId,
+            connectionId,
+            profile,
           )) as DbHistoryItem[];
           const dbMessages = dbItemsToChatMessages(items);
           if (dbMessages.length > 0) {
@@ -231,9 +244,16 @@ export function useChatIPC({
       reasoningSegmentClosedRef.current = false;
       stopDbPolling();
       const activeTurn = activeTurnRef.current;
-      if (!activeTurn) return;
-      activeTurn.status = "failed";
-      setMessages((prev) => markActiveTurnFailed(prev, error, activeTurn));
+      if (activeTurn) activeTurn.status = "failed";
+      setMessages((prev) =>
+        markActiveTurnFailed(prev, error, activeTurn).map((message) =>
+          message.kind === "approval" &&
+          message.responsePath === "ipc" &&
+          !message.resolved
+            ? { ...message, unavailable: true }
+            : message,
+        ),
+      );
       setToolProgress(null);
       setIsLoading(false);
     });
@@ -267,6 +287,38 @@ export function useChatIPC({
       },
     );
 
+    const cleanupApproval = window.hermesAPI.onApprovalRequest(
+      (eventRunId, req) => {
+        if (!eventMatchesRun(eventRunId, runId)) return;
+        reasoningSegmentClosedRef.current = true;
+        setToolProgress(null);
+        setIsLoading(true);
+        setMessages((prev) => {
+          if (
+            prev.some(
+              (message) =>
+                message.kind === "approval" &&
+                message.responsePath === "ipc" &&
+                message.requestId === req.requestId,
+            )
+          ) {
+            return prev;
+          }
+          return [
+            ...prev,
+            {
+              id: `approval-ipc-${req.requestId}`,
+              kind: "approval",
+              role: "agent",
+              responsePath: "ipc",
+              runId,
+              ...req,
+            },
+          ];
+        });
+      },
+    );
+
     const cleanupToolProgress = window.hermesAPI.onChatToolProgress(
       (eventRunId, tool) => {
         if (!eventMatchesRun(eventRunId, runId)) return;
@@ -277,6 +329,29 @@ export function useChatIPC({
         setMessages((prev) =>
           upsertLiveToolEvent(prev, liveToolEventFromProgress(tool)),
         );
+
+        // Also check progress text for URLs, but only if it's a web tool
+        const toolEventName =
+          liveToolEventFromProgress(tool).name.toLowerCase();
+        const isWebTool = [
+          "browser",
+          "web",
+          "browse",
+          "web_search",
+          "search_web",
+          "computer_use",
+          "computer",
+        ].includes(toolEventName);
+
+        if (isWebTool) {
+          const urlMatch = tool.match(/https?:\/\/[^\s)]+/i);
+          if (urlMatch) {
+            const event = new CustomEvent("web-preview:navigate", {
+              detail: urlMatch[0],
+            });
+            document.dispatchEvent(event);
+          }
+        }
       },
     );
 
@@ -287,6 +362,28 @@ export function useChatIPC({
         setToolProgress(null);
         reasoningSegmentClosedRef.current = true;
         setMessages((prev) => upsertLiveToolEvent(prev, toolEvent));
+
+        // Auto-open webview if the agent is using a browser/web tool to navigate
+        const isWebTool = [
+          "browser",
+          "web",
+          "browse",
+          "web_search",
+          "search_web",
+          "computer_use",
+          "computer",
+        ].includes(toolEvent.name.toLowerCase());
+        if (isWebTool) {
+          const textToSearch = `${toolEvent.preview || ""} ${toolEvent.result || ""}`;
+          const urlMatch = textToSearch.match(/https?:\/\/[^\s)]+/i);
+          if (urlMatch) {
+            const url = urlMatch[0];
+            const event = new CustomEvent("web-preview:navigate", {
+              detail: url,
+            });
+            document.dispatchEvent(event);
+          }
+        }
       },
     );
 
@@ -312,12 +409,15 @@ export function useChatIPC({
       cleanupDone();
       cleanupError();
       cleanupClarify();
+      cleanupApproval();
       cleanupToolProgress();
       cleanupToolEvent();
       cleanupUsage();
     };
   }, [
     runId,
+    connectionId,
+    profile,
     setMessages,
     setHermesSessionId,
     setToolProgress,

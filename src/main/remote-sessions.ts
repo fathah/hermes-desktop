@@ -1,5 +1,7 @@
 import http from "http";
 import https from "https";
+import type { ConnectionConfig } from "./config";
+import { requestRemoteOAuthJson } from "./remote-oauth";
 import type { CachedSession } from "./session-cache";
 import {
   extractLeadingVisionImageFallback,
@@ -18,9 +20,14 @@ import { isImageMime, MAX_IMAGE_BYTES } from "../shared/attachments";
 export interface RemoteSessionConfig {
   remoteUrl: string;
   apiKey: string;
+  /** When set (and not "default"), every dashboard request is scoped to this
+   *  profile via `?profile=`. The SSH transport uses ONE unified machine
+   *  dashboard for all profiles (see ensureDashboardInner), so per-profile data
+   *  correctness comes from this query param rather than a per-profile server. */
+  profile?: string;
 }
 
-type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
+type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 interface RemoteRequestOptions {
   method?: HttpMethod;
@@ -43,18 +50,46 @@ function normalizeRemoteDashboardBaseUrl(value: string): string {
   return url.toString().replace(/\/+$/, "");
 }
 
-function dashboardApiUrl(config: RemoteSessionConfig, path: string): string {
+// Exported so every dashboard request — including remote-metadata's /api/status
+// probe — shares ONE URL builder and gets the same `?profile=` scoping.
+export function dashboardApiUrl(
+  config: RemoteSessionConfig,
+  path: string,
+): string {
   const base = normalizeRemoteDashboardBaseUrl(config.remoteUrl);
-  return new URL(path, `${base}/`).toString();
+  const url = new URL(path, `${base}/`);
+  // Scope to the requested profile on the unified machine dashboard, unless the
+  // path already carries an explicit profile (e.g. the sessions list uses
+  // `profile=all`). "default"/empty needs no param.
+  const profile = config.profile?.trim();
+  if (profile && profile !== "default" && !url.searchParams.has("profile")) {
+    url.searchParams.set("profile", profile);
+  }
+  return url.toString();
 }
 
 export function remoteRequestJson<T>(
-  config: RemoteSessionConfig,
+  config: RemoteSessionConfig | ConnectionConfig,
   path: string,
   options: RemoteRequestOptions = {},
 ): Promise<T> {
+  if ("mode" in config) {
+    if (config.mode !== "remote") {
+      throw new Error(
+        "Remote dashboard API is available only in direct Remote mode.",
+      );
+    }
+    if (config.remoteAuthMode === "oauth") {
+      return requestRemoteOAuthJson(
+        dashboardApiUrl(config, path),
+        options,
+      ) as Promise<T>;
+    }
+  }
+
   const token = config.apiKey.trim();
-  if (!token) throw new Error("Remote Hermes dashboard token is not configured.");
+  if (!token)
+    throw new Error("Remote Hermes dashboard token is not configured.");
 
   return new Promise((resolve, reject) => {
     const parsed = new URL(dashboardApiUrl(config, path));
@@ -67,6 +102,12 @@ export function remoteRequestJson<T>(
         method: options.method ?? "GET",
         headers: {
           "Content-Type": "application/json",
+          // URL credentials let Node authenticate a reverse proxy with Basic
+          // auth; preserve that header and use the dedicated dashboard token.
+          // Otherwise support gateways that accept only Bearer authentication.
+          ...(!parsed.username && !parsed.password
+            ? { Authorization: `Bearer ${token}` }
+            : {}),
           "X-Hermes-Session-Token": token,
           ...(body ? { "Content-Length": Buffer.byteLength(body) } : {}),
         },
@@ -78,7 +119,9 @@ export function remoteRequestJson<T>(
         res.on("end", () => {
           const text = Buffer.concat(chunks).toString("utf8");
           if ((res.statusCode ?? 500) >= 400) {
-            reject(new Error(`${res.statusCode}: ${text || res.statusMessage}`));
+            reject(
+              new Error(`${res.statusCode}: ${text || res.statusMessage}`),
+            );
             return;
           }
           if (!text) {
@@ -234,6 +277,7 @@ function normalizeCachedSession(row: RemoteRecord): CachedSession {
     source: summary.source,
     messageCount: summary.messageCount,
     model: summary.model,
+    contextFolder: null,
   };
 }
 
@@ -247,9 +291,10 @@ async function remoteSessionListPage(
   limit: number,
   offset: number,
 ): Promise<unknown> {
+  const profile = config.profile?.trim() || "all";
   const profileEndpoint =
     `/api/profiles/sessions?limit=${limit}&offset=${offset}` +
-    "&min_messages=0&archived=exclude&order=recent&profile=all";
+    `&min_messages=0&archived=exclude&order=recent&profile=${encodeURIComponent(profile)}`;
 
   try {
     return await remoteRequestJson(config, profileEndpoint);
@@ -381,7 +426,9 @@ async function remoteGetSessionSummary(
       { timeoutMs: 8_000 },
     );
     const record = asRecord(response);
-    return record.id || record.session_id ? normalizeSessionSummary(record) : null;
+    return record.id || record.session_id
+      ? normalizeSessionSummary(record)
+      : null;
   } catch {
     return null;
   }
@@ -530,19 +577,27 @@ export async function remoteUpdateSessionTitle(
   sessionId: string,
   title: string,
 ): Promise<void> {
-  await remoteRequestJson(config, `/api/sessions/${encodeURIComponent(sessionId)}`, {
-    method: "PATCH",
-    body: { title },
-  });
+  await remoteRequestJson(
+    config,
+    `/api/sessions/${encodeURIComponent(sessionId)}`,
+    {
+      method: "PATCH",
+      body: { title },
+    },
+  );
 }
 
 export async function remoteDeleteSession(
   config: RemoteSessionConfig,
   sessionId: string,
 ): Promise<void> {
-  await remoteRequestJson(config, `/api/sessions/${encodeURIComponent(sessionId)}`, {
-    method: "DELETE",
-  });
+  await remoteRequestJson(
+    config,
+    `/api/sessions/${encodeURIComponent(sessionId)}`,
+    {
+      method: "DELETE",
+    },
+  );
 }
 
 export interface RemoteDeleteSessionsResult {

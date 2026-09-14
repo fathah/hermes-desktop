@@ -141,6 +141,28 @@ export function readMemory(profile?: string): MemoryInfo {
   };
 }
 
+/** Raw MEMORY.md content (empty string when missing) — for whole-file sync. */
+export function readMemoryRaw(profile?: string): string {
+  return readFileSafe(memoryPath(profile)).content;
+}
+
+/**
+ * Replace MEMORY.md wholesale. Used by cloud agent sync when the remote copy
+ * wins — the content is the user's own cloud copy, so no entry parsing or
+ * char-limit gate applies (safeWriteFile creates `memories/` when missing).
+ */
+export function writeMemoryRaw(
+  content: string,
+  profile?: string,
+): { success: boolean; error?: string } {
+  try {
+    safeWriteFile(memoryPath(profile), content);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
+  }
+}
+
 // ── Write operations ────────────────────────────────
 
 export function addMemoryEntry(

@@ -1,12 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { join } from "path";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 
 /**
@@ -70,9 +64,7 @@ describe("runConfigHealthCheck", () => {
   });
 
   it("flags API_SERVER_KEY_NON_CANONICAL when key lives in api_server.token only", async () => {
-    writeConfig(
-      ["api_server:", "  token: sk-nested-only", ""].join("\n"),
-    );
+    writeConfig(["api_server:", "  token: sk-nested-only", ""].join("\n"));
     // No .env file
     const { runConfigHealthCheck } = await freshHealth(TEST_DIR);
     const report = runConfigHealthCheck();
@@ -85,9 +77,7 @@ describe("runConfigHealthCheck", () => {
   });
 
   it("flags API_SERVER_KEY_MULTIPLE_VALUES when env and config disagree", async () => {
-    writeConfig(
-      ["api_server:", "  token: sk-yaml-value", ""].join("\n"),
-    );
+    writeConfig(["api_server:", "  token: sk-yaml-value", ""].join("\n"));
     writeEnv("API_SERVER_KEY=sk-different-env-value\n");
     const { runConfigHealthCheck } = await freshHealth(TEST_DIR);
     const report = runConfigHealthCheck();
@@ -145,7 +135,10 @@ describe("runConfigHealthCheck", () => {
         {
           version: 1,
           providers: {
-            nous: { access_token: "oauth-token", auth_type: "oauth_device_code" },
+            nous: {
+              access_token: "oauth-token",
+              auth_type: "oauth_device_code",
+            },
           },
         },
         null,
@@ -222,9 +215,7 @@ describe("runConfigHealthCheck", () => {
     writeEnv("OPENROUTER_API_KEY=sk-or-test“trailing\n");
     const { runConfigHealthCheck } = await freshHealth(TEST_DIR);
     const report = runConfigHealthCheck();
-    const issue = report.issues.find(
-      (i) => i.code === "NON_ASCII_CREDENTIAL",
-    );
+    const issue = report.issues.find((i) => i.code === "NON_ASCII_CREDENTIAL");
     expect(issue).toBeDefined();
     expect(issue?.autoFixable).toBe(true);
   });
@@ -235,6 +226,81 @@ describe("runConfigHealthCheck", () => {
     const report = runConfigHealthCheck();
     expect(report).toBeDefined();
     expect(Array.isArray(report.issues)).toBe(true);
+  });
+});
+
+describe("named custom provider readiness", () => {
+  // @lat: [[provider-setup#Provider setup#LLM-provider keys are configured-only, via modals#Named custom providers#Credential readiness]]
+  it.each([
+    ["https://API.GROQ.COM:443/Api/", "https://api.groq.com/Api", true],
+    ["https://api.groq.com/Api", "https://api.groq.com/api", false],
+    ["https://other.example/Api", "https://api.groq.com/Api", false],
+  ])(
+    "matches saved endpoint %s against %s without crossing path or host identities",
+    async (saved, active, ready) => {
+      writeConfig(
+        `model:\n  provider: custom\n  default: test-model\n  base_url: ${active}\n`,
+      );
+      writeEnv("CUSTOM_PROVIDER_TEST_LABEL_KEY=test-secret\n");
+      writeFileSync(
+        join(TEST_DIR, "models.json"),
+        JSON.stringify([
+          {
+            id: "test",
+            name: "Model",
+            providerLabel: "Test Label",
+            provider: "custom",
+            model: "test-model",
+            baseUrl: saved,
+          },
+        ]),
+      );
+      const { runConfigHealthCheck } = await freshHealth(TEST_DIR);
+      const report = runConfigHealthCheck();
+      expect(
+        report.issues.some((issue) => issue.code === "MODEL_KEY_MISSING"),
+      ).toBe(!ready);
+    },
+  );
+
+  it("uses only the requested profile's credentials", async () => {
+    writeConfig(
+      "model:\n  provider: custom\n  default: test-model\n  base_url: https://api.groq.com/v1\n",
+    );
+    writeEnv("CUSTOM_PROVIDER_TEST_LABEL_KEY=default-secret\n");
+    writeFileSync(
+      join(TEST_DIR, "models.json"),
+      JSON.stringify([
+        {
+          id: "test",
+          name: "Model",
+          providerLabel: "Test Label",
+          provider: "custom",
+          model: "test-model",
+          baseUrl: "https://api.groq.com/v1",
+        },
+      ]),
+    );
+    const named = join(TEST_DIR, "profiles", "work");
+    mkdirSync(named, { recursive: true });
+    writeFileSync(
+      join(named, "config.yaml"),
+      readFileSync(join(TEST_DIR, "config.yaml")),
+    );
+    writeFileSync(join(named, ".env"), "");
+    const { runConfigHealthCheck } = await freshHealth(TEST_DIR);
+    expect(
+      runConfigHealthCheck("work").issues.some(
+        (issue) => issue.code === "MODEL_KEY_MISSING",
+      ),
+    ).toBe(true);
+    const { setEnvValue } = await import("../src/main/config");
+    setEnvValue("CUSTOM_PROVIDER_TEST_LABEL_KEY", "work-secret", "work");
+    expect(
+      runConfigHealthCheck("work").issues.some(
+        (issue) => issue.code === "MODEL_KEY_MISSING",
+      ),
+    ).toBe(false);
   });
 });
 
@@ -355,13 +421,7 @@ describe("checkLegacyToolsetName", () => {
   });
 
   it("tolerates quoted entries and trailing comments", async () => {
-    writeConfig(
-      [
-        "toolsets:",
-        '  - "hermes"   # legacy alias',
-        "",
-      ].join("\n"),
-    );
+    writeConfig(["toolsets:", '  - "hermes"   # legacy alias', ""].join("\n"));
     const { checkLegacyToolsetName } = await freshHealth(TEST_DIR);
     const issues = checkLegacyToolsetName();
     expect(issues).toHaveLength(1);
@@ -418,13 +478,7 @@ describe("fixLegacyToolsetName", () => {
   });
 
   it("preserves quoting style and trailing comment when rewriting", async () => {
-    writeConfig(
-      [
-        "toolsets:",
-        '  - "hermes"   # legacy alias',
-        "",
-      ].join("\n"),
-    );
+    writeConfig(["toolsets:", '  - "hermes"   # legacy alias', ""].join("\n"));
     const { fixLegacyToolsetName } = await freshHealth(TEST_DIR);
     expect(fixLegacyToolsetName().ok).toBe(true);
     const after = readFileSync(join(TEST_DIR, "config.yaml"), "utf-8");

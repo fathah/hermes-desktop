@@ -30,9 +30,8 @@ export function getYamlPath(content: string, dottedKey: string): string | null {
 
   // Walk the path one segment at a time. `searchStart` is the first line to
   // scan for the current segment; `parentIndent` bounds the parent's block —
-  // children live at indent strictly greater than it. The first segment uses
-  // parentIndent = -1, so only column-0 keys match (a flat/single-segment key
-  // is pinned to the top level and never resolves a nested occurrence).
+  // children live at indent strictly greater than it. The first segment is
+  // explicitly pinned to column 0; nested occurrences never satisfy it.
   let searchStart = 0;
   let parentIndent = -1;
 
@@ -41,7 +40,7 @@ export function getYamlPath(content: string, dottedKey: string): string | null {
     // The shallowest non-blank line inside the block is the direct-child
     // depth. Lines deeper than that are grandchildren and are skipped, so a
     // segment only matches a *direct* child of its parent.
-    let directChildIndent: number | null = null;
+    let directChildIndent: number | null = p === 0 ? 0 : null;
     let descendInto = -1;
 
     let i = searchStart;
@@ -65,7 +64,11 @@ export function getYamlPath(content: string, dottedKey: string): string | null {
       // in case so `"memory": ...` would still match.
       if (stripQuotes(rawKey) !== parts[p]) continue;
 
-      if (isLeaf) return parseScalar(trimmed.slice(colon + 1));
+      const remainder = trimmed.slice(colon + 1);
+      if (isLeaf) return parseScalar(remainder);
+      // A scalar (including block text) cannot contain map children.
+      const inlineValue = remainder.trim();
+      if (inlineValue && !inlineValue.startsWith("#")) return null;
       descendInto = i;
       break;
     }

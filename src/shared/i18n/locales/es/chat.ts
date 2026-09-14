@@ -108,6 +108,7 @@ export default {
   },
   queued: "{{count}} mensaje(s) en cola — se enviará cuando el agente termine",
   queuedCancel: "Quitar de la cola",
+  copyMessage: "Copiar mensaje",
   worktree: {
     loading: "Cargando",
     empty: "La carpeta está vacía",

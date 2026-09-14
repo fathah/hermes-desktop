@@ -1,12 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { join } from "path";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 
 /**
@@ -74,9 +68,7 @@ describe("addCredentialPoolEntry", () => {
     const { addCredentialPoolEntry } = await freshConfig(TEST_DIR);
     addCredentialPoolEntry("openrouter", "sk-or-test", "Test");
 
-    const auth = JSON.parse(
-      readFileSync(join(TEST_DIR, "auth.json"), "utf-8"),
-    );
+    const auth = JSON.parse(readFileSync(join(TEST_DIR, "auth.json"), "utf-8"));
     const pool = auth.credential_pool.openrouter;
     expect(Array.isArray(pool)).toBe(true);
     expect(pool[0].access_token).toBe("sk-or-test");
@@ -93,11 +85,7 @@ describe("addCredentialPoolEntry", () => {
 
   it("leaves base_url empty for unknown providers", async () => {
     const { addCredentialPoolEntry } = await freshConfig(TEST_DIR);
-    const entries = addCredentialPoolEntry(
-      "some-custom-provider",
-      "k",
-      "Test",
-    );
+    const entries = addCredentialPoolEntry("some-custom-provider", "k", "Test");
     expect(entries[0].base_url).toBe("");
   });
 

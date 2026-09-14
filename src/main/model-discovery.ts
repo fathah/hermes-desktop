@@ -17,7 +17,7 @@ import { URL } from "url";
 import { execFile } from "child_process";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
-import { readEnv } from "./config";
+import { readEnv, getModelContextLengthOverride } from "./config";
 import { profileHome } from "./utils";
 import {
   expectedEnvKeyForModel,
@@ -30,6 +30,7 @@ import {
 // same lookup without pulling in this whole file (and triggering a
 // circular import via `model-discovery → config → ...`).
 import { PROVIDER_BASE_URLS } from "./provider-registry";
+import { normalizeModelEndpointUrl } from "../shared/model-endpoint";
 
 /** Providers whose `/models` we never call — either they don't expose it,
  *  use a different protocol, or rely on OAuth credentials we can't
@@ -40,7 +41,7 @@ const NON_DISCOVERABLE_PROVIDERS = new Set<string>([
   "custom",
   "google",
   "xai",
-  "qwen",
+  "alibaba",
   "minimax",
   "kimi-coding",
 ]);
@@ -263,7 +264,7 @@ const LOCAL_NO_KEY_PROVIDERS = new Set([
 ]);
 
 function cacheKey(provider: string, baseUrl: string): string {
-  return `${provider.toLowerCase()}|${baseUrl.replace(/\/+$/, "").toLowerCase()}`;
+  return `${provider.toLowerCase()}|${normalizeModelEndpointUrl(baseUrl)}`;
 }
 
 function fromCache(provider: string, baseUrl: string): string[] | null {
@@ -620,6 +621,7 @@ async function fetchAndCacheModels(
  * model id isn't found, in which case the renderer falls back to the static
  * heuristic in `contextWindows.ts`. Issue #597.
  */
+// @lat: [[model-context#Model context window#Gauge resolution order]]
 export async function getModelContextWindow(
   provider: string,
   model: string,
@@ -630,6 +632,19 @@ export async function getModelContextWindow(
   const modelId = (model || "").trim();
   if (!modelId) return null;
   const lowerProvider = (provider || "").trim().toLowerCase();
+
+  // A manual `model.context_length` override in config.yaml wins over /models
+  // detection — it's what the user set explicitly and what the agent's
+  // auto-compaction threshold uses. Apply it ONLY when it targets the model
+  // being asked about (an exact match against the active `model.default`), so a
+  // stale value can't leak onto a different model id — including the case where
+  // `model.default` is absent (override.model === ""), which must NOT match.
+  // This is the primary fix for providers (qwen, etc.) that don't advertise
+  // `context_length`, leaving the gauge on its heuristic.
+  const override = getModelContextLengthOverride(profile);
+  if (override && override.model && override.model === modelId) {
+    return override.contextLength;
+  }
 
   // OAuth/subscription and non-discoverable providers have no static-key
   // `/models` endpoint to read `context_length` from — the renderer falls

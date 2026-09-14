@@ -1,6 +1,8 @@
 import { Download, FileText, X } from "lucide-react";
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import type { Attachment } from "../../../shared/attachments";
+import { useLightboxClose } from "../hooks/useLightboxClose";
 import { useI18n } from "./useI18n";
 
 interface AttachmentChipProps {
@@ -18,6 +20,7 @@ export function AttachmentChip({
 }: AttachmentChipProps): React.JSX.Element {
   const { t } = useI18n();
   const [zoomed, setZoomed] = useState(false);
+  useLightboxClose(zoomed, () => setZoomed(false));
   const isImage = attachment.kind === "image";
   const showImageMenu = (event: React.MouseEvent): void => {
     if (!isImage || !attachment.dataUrl) return;
@@ -75,46 +78,52 @@ export function AttachmentChip({
           </button>
         )}
       </div>
-      {zoomed && isImage && attachment.dataUrl && (
-        <div
-          className="chat-image-preview-backdrop"
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setZoomed(false)}
-        >
-          <img
-            className="chat-image-preview-image"
-            src={attachment.dataUrl}
-            alt={attachment.name}
-            onClick={(e) => e.stopPropagation()}
-            onContextMenu={showImageMenu}
-          />
+      {/* Portal to <body> — same containment escape as MediaImage: chat
+          rows' `content-visibility: auto` traps an inline fixed backdrop. */}
+      {zoomed &&
+        isImage &&
+        attachment.dataUrl &&
+        createPortal(
           <div
-            className="chat-image-preview-actions"
-            onClick={(e) => e.stopPropagation()}
+            className="chat-image-preview-backdrop"
+            role="dialog"
+            aria-modal="true"
+            onClick={() => setZoomed(false)}
           >
-            <button
-              className="chat-image-preview-btn"
-              onClick={() =>
-                window.hermesAPI.saveMediaFile(
-                  attachment.dataUrl!,
-                  attachment.name,
-                )
-              }
+            <img
+              className="chat-image-preview-image"
+              src={attachment.dataUrl}
+              alt={attachment.name}
+              onClick={(e) => e.stopPropagation()}
+              onContextMenu={showImageMenu}
+            />
+            <div
+              className="chat-image-preview-actions"
+              onClick={(e) => e.stopPropagation()}
             >
-              <Download size={14} />
-              {t("chat.media.saveImage")}
-            </button>
-            <button
-              className="chat-image-preview-btn"
-              onClick={() => setZoomed(false)}
-              aria-label="Close"
-            >
-              <X size={14} />
-            </button>
-          </div>
-        </div>
-      )}
+              <button
+                className="chat-image-preview-btn"
+                onClick={() =>
+                  window.hermesAPI.saveMediaFile(
+                    attachment.dataUrl!,
+                    attachment.name,
+                  )
+                }
+              >
+                <Download size={14} />
+                {t("chat.media.saveImage")}
+              </button>
+              <button
+                className="chat-image-preview-btn"
+                onClick={() => setZoomed(false)}
+                aria-label="Close"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>,
+          document.body,
+        )}
     </>
   );
 }

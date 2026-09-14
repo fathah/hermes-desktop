@@ -62,6 +62,14 @@ function flagFile(): string {
   return join(testHome, "disable-gpu.flag");
 }
 
+function prefFile(): string {
+  return join(testHome, "gpu-preference.json");
+}
+
+function writePref(mode: string): void {
+  writeFileSync(prefFile(), JSON.stringify({ mode }));
+}
+
 function fireGpuCrash(reason = "crashed", exitCode = 9): void {
   h.state.handlers["child-process-gone"]?.(
     {},
@@ -74,6 +82,7 @@ describe("gpu-fallback", () => {
     testHome = mkdtempSync(join(tmpdir(), "hermes-gpu-"));
     originalArgv = process.argv;
     process.argv = ["/path/to/app"];
+    vi.spyOn(process, "platform", "get").mockReturnValue("win32");
     h.state.userData = testHome;
     h.state.relaunchArgs = undefined;
     h.state.relaunchCount = 0;
@@ -86,6 +95,7 @@ describe("gpu-fallback", () => {
   afterEach(() => {
     process.argv = originalArgv;
     vi.unstubAllEnvs();
+    vi.restoreAllMocks();
     rmSync(testHome, { recursive: true, force: true });
   });
 
@@ -93,6 +103,63 @@ describe("gpu-fallback", () => {
     writeFileSync(flagFile(), new Date().toISOString());
     const { isGpuDisabled } = await load();
     expect(isGpuDisabled()).toBe(true);
+  });
+
+  it("a flag older than the TTL no longer disables the GPU", async () => {
+    // 25h old — one hour past the 24h TTL.
+    const stale = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    writeFileSync(flagFile(), stale);
+    const { isGpuDisabled } = await load();
+    expect(isGpuDisabled()).toBe(false);
+  });
+
+  it("a flag with unparseable content is treated as stale", async () => {
+    writeFileSync(flagFile(), "not-a-date");
+    const { isGpuDisabled } = await load();
+    expect(isGpuDisabled()).toBe(false);
+  });
+
+  it("applyGpuPreferences clears a stale flag and keeps hardware acceleration", async () => {
+    const stale = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    writeFileSync(flagFile(), stale);
+    const { applyGpuPreferences, installGpuCrashGuard } = await load();
+
+    applyGpuPreferences();
+    expect(existsSync(flagFile())).toBe(false);
+    expect(h.state.hwAccelDisabled).toBe(false);
+
+    // With the stale flag gone the crash guard must re-arm, so a repeat
+    // crash re-persists a fresh flag instead of leaving the machine looping.
+    installGpuCrashGuard();
+    expect(h.state.handlers["child-process-gone"]).toBeDefined();
+    fireGpuCrash();
+    expect(existsSync(flagFile())).toBe(true);
+  });
+
+  it("ignores and clears a persisted flag on macOS unless fallback is forced", async () => {
+    writeFileSync(flagFile(), new Date().toISOString());
+    vi.spyOn(process, "platform", "get").mockReturnValue("darwin");
+    const { applyGpuPreferences, installGpuCrashGuard, isGpuDisabled } =
+      await load();
+
+    expect(isGpuDisabled()).toBe(false);
+    applyGpuPreferences();
+    expect(existsSync(flagFile())).toBe(false);
+    expect(h.state.hwAccelDisabled).toBe(false);
+
+    installGpuCrashGuard();
+    expect(h.state.handlers["child-process-gone"]).toBeUndefined();
+  });
+
+  it("allows forcing the persistent GPU fallback on macOS", async () => {
+    writeFileSync(flagFile(), new Date().toISOString());
+    vi.spyOn(process, "platform", "get").mockReturnValue("darwin");
+    vi.stubEnv("HERMES_GPU_FALLBACK", "1");
+    const { applyGpuPreferences } = await load();
+
+    applyGpuPreferences();
+    expect(h.state.hwAccelDisabled).toBe(true);
+    expect(h.state.switches).toContain("disable-gpu");
   });
 
   it("HERMES_DISABLE_GPU=0 force-enables even when the flag file exists", async () => {
@@ -169,5 +236,112 @@ describe("gpu-fallback", () => {
     const { installGpuCrashGuard } = await load();
     installGpuCrashGuard();
     expect(h.state.handlers["child-process-gone"]).toBeUndefined();
+  });
+
+  it("getGpuStatus reports the flag reason and its timestamp", async () => {
+    const writtenAt = new Date().toISOString();
+    writeFileSync(flagFile(), writtenAt);
+    const { getGpuStatus } = await load();
+    expect(getGpuStatus()).toEqual({
+      disabled: true,
+      reason: "flag",
+      flagWrittenAt: writtenAt,
+      canReenable: true,
+      preference: "auto",
+      bootPreference: "auto",
+    });
+  });
+
+  it("getGpuStatus reports env-forced disable as non-reenableable", async () => {
+    vi.stubEnv("HERMES_DISABLE_GPU", "1");
+    const { getGpuStatus } = await load();
+    const status = getGpuStatus();
+    expect(status.disabled).toBe(true);
+    expect(status.reason).toBe("env");
+    expect(status.canReenable).toBe(false);
+  });
+
+  it("getGpuStatus reports enabled when nothing disables the GPU", async () => {
+    const { getGpuStatus } = await load();
+    expect(getGpuStatus().disabled).toBe(false);
+  });
+
+  it("reenableGpuAndRelaunch clears the flag and relaunches without the sentinel", async () => {
+    writeFileSync(flagFile(), new Date().toISOString());
+    process.argv = ["/path/to/app", SENTINEL];
+    const { reenableGpuAndRelaunch } = await load();
+    expect(reenableGpuAndRelaunch()).toBe(true);
+    expect(existsSync(flagFile())).toBe(false);
+    expect(h.state.relaunchArgs).not.toContain(SENTINEL);
+    expect(h.state.exited).toBe(true);
+  });
+
+  it("reenableGpuAndRelaunch refuses when HERMES_DISABLE_GPU=1 forces GPU off", async () => {
+    writeFileSync(flagFile(), new Date().toISOString());
+    vi.stubEnv("HERMES_DISABLE_GPU", "1");
+    const { reenableGpuAndRelaunch } = await load();
+    expect(reenableGpuAndRelaunch()).toBe(false);
+    expect(existsSync(flagFile())).toBe(true);
+    expect(h.state.relaunchCount).toBe(0);
+    expect(h.state.exited).toBe(false);
+  });
+
+  it('a Settings preference of "off" disables the GPU with no crash flag', async () => {
+    writePref("off");
+    const { isGpuDisabled, getGpuStatus } = await load();
+    expect(isGpuDisabled()).toBe(true);
+    const status = getGpuStatus();
+    expect(status.reason).toBe("preference");
+    expect(status.canReenable).toBe(false);
+  });
+
+  it('a Settings preference of "on" ignores a fresh crash flag', async () => {
+    writeFileSync(flagFile(), new Date().toISOString());
+    writePref("on");
+    const { isGpuDisabled } = await load();
+    expect(isGpuDisabled()).toBe(false);
+  });
+
+  it("the relaunch sentinel outranks a force-on preference (crash-loop protection)", async () => {
+    writePref("on");
+    process.argv = ["/path/to/app", SENTINEL];
+    const { isGpuDisabled } = await load();
+    expect(isGpuDisabled()).toBe(true);
+  });
+
+  it('HERMES_DISABLE_GPU=0 outranks a Settings preference of "off"', async () => {
+    writePref("off");
+    vi.stubEnv("HERMES_DISABLE_GPU", "0");
+    const { isGpuDisabled } = await load();
+    expect(isGpuDisabled()).toBe(false);
+  });
+
+  it("a crash under a force-on preference relaunches with the sentinel but persists no flag", async () => {
+    writePref("on");
+    const { installGpuCrashGuard } = await load();
+    installGpuCrashGuard();
+    fireGpuCrash();
+    expect(existsSync(flagFile())).toBe(false);
+    expect(h.state.relaunchArgs).toContain(SENTINEL);
+    expect(h.state.exited).toBe(true);
+  });
+
+  it("setGpuPreference round-trips and a malformed file falls back to auto", async () => {
+    const { setGpuPreference, getGpuPreference } = await load();
+    expect(getGpuPreference()).toBe("auto");
+    expect(setGpuPreference("off")).toBe(true);
+    expect(getGpuPreference()).toBe("off");
+    writeFileSync(prefFile(), "{corrupt");
+    expect(getGpuPreference()).toBe("auto");
+  });
+
+  it("getGpuStatus reports a pending preference change against the boot value", async () => {
+    const { applyGpuPreferences, setGpuPreference, getGpuStatus } =
+      await load();
+    applyGpuPreferences(); // captures bootPreference = "auto"
+    setGpuPreference("off");
+    const status = getGpuStatus();
+    expect(status.preference).toBe("off");
+    expect(status.bootPreference).toBe("auto");
   });
 });

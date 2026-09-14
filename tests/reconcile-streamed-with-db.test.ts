@@ -485,7 +485,10 @@ describe("reconcileStreamedWithDb", () => {
     const streamed: ChatMessage[] = [
       STREAMED_USER("hi", "u-failed"),
       LOCAL_ERROR("OpenRouter 401: invalid API key", "error-failed"),
-      { ...STREAMED_USER("generate a toy duck", "u-duck"), turnId: "turn-duck" },
+      {
+        ...STREAMED_USER("generate a toy duck", "u-duck"),
+        turnId: "turn-duck",
+      },
       LIVE_TOOL_CALL("call-skill", "skill_view", "ai-playground-image-gen"),
       LIVE_TOOL_CALL("call-run", "terminal", "python generate_duck.py"),
       STREAMED_AGENT("Generated it with AI Playground.", "a-duck"),
@@ -518,10 +521,12 @@ describe("reconcileStreamedWithDb", () => {
       "db-tr-5",
       "a-duck",
     ]);
-    expect(merged.filter((m) => "kind" in m && m.kind === "tool_call"))
-      .toHaveLength(2);
-    expect(merged.filter((m) => "kind" in m && m.kind === "tool_result"))
-      .toHaveLength(2);
+    expect(
+      merged.filter((m) => "kind" in m && m.kind === "tool_call"),
+    ).toHaveLength(2);
+    expect(
+      merged.filter((m) => "kind" in m && m.kind === "tool_result"),
+    ).toHaveLength(2);
   });
 
   it("handles an empty streamed array (cold session load)", () => {
@@ -793,7 +798,12 @@ describe("reconcileStreamedWithDb", () => {
       DB_USER("make an image", 60),
       DB_TOOL_CALL("call-skill", "skill_view", "ai-playground-image-gen", 61),
       DB_TOOL_RESULT("call-skill", "skill_view", "ok", 62),
-      DB_TOOL_CALL("call-code", "execute_code", "from hermes_tools import terminal", 63),
+      DB_TOOL_CALL(
+        "call-code",
+        "execute_code",
+        "from hermes_tools import terminal",
+        63,
+      ),
       DB_TOOL_RESULT("call-code", "execute_code", "ok", 64),
       DB_AGENT("Done.", 65),
     ];
@@ -826,11 +836,7 @@ describe("reconcileStreamedWithDb", () => {
 
     const merged = reconcileStreamedWithDb(streamed, db);
 
-    expect(merged.map((m) => m.id)).toEqual([
-      "u-file",
-      "db-r-571",
-      "a-file",
-    ]);
+    expect(merged.map((m) => m.id)).toEqual(["u-file", "db-r-571", "a-file"]);
     expect(
       "attachments" in merged[0] ? merged[0].attachments?.[0].kind : "",
     ).toBe("text-file");
@@ -973,6 +979,34 @@ describe("reconcileStreamedWithDb", () => {
     expect(merged.map((m) => m.id)).toEqual(["clarify-r1", "a-1"]);
   });
 
+  it("keeps a resolved approval card before the resulting agent output", () => {
+    const approval: ChatMessage = {
+      id: "approval-r1",
+      kind: "approval",
+      role: "agent",
+      requestId: "r1",
+      responsePath: "dashboard",
+      command: "npm publish",
+      description: "Publish the package",
+      choices: ["once", "deny"],
+      resolved: true,
+      choice: "once",
+    };
+    const streamed: ChatMessage[] = [
+      STREAMED_USER("publish it", "u-1"),
+      approval,
+      STREAMED_AGENT("Published.", "a-1"),
+    ];
+    const db: ChatMessage[] = [
+      DB_USER("publish it", 1),
+      DB_AGENT("Published.", 2),
+    ];
+
+    const merged = reconcileStreamedWithDb(streamed, db);
+
+    expect(merged.map((m) => m.id)).toEqual(["u-1", "approval-r1", "a-1"]);
+  });
+
   it("keeps a continued restored image prompt before its answer when the DB snapshot briefly misses that user row", () => {
     const answer =
       "It's a cute yellow toy duck in a bathtub filled with blue bathwater.";
@@ -990,12 +1024,7 @@ describe("reconcileStreamedWithDb", () => {
 
     const merged = reconcileAfterDbRefresh(streamed, db);
 
-    expect(merged.map((m) => m.id)).toEqual([
-      "db-1",
-      "db-2",
-      "u-img",
-      "a-img",
-    ]);
+    expect(merged.map((m) => m.id)).toEqual(["db-1", "db-2", "u-img", "a-img"]);
     expect(
       ("attachments" in merged[2] && merged[2].attachments) || [],
     ).toHaveLength(1);
@@ -1045,11 +1074,7 @@ describe("reconcileStreamedWithDb", () => {
 
     const merged = reconcileAfterDbRefresh(streamed, db);
 
-    expect(merged.map((m) => m.id)).toEqual([
-      "db-444",
-      "db-r-445",
-      "db-446",
-    ]);
+    expect(merged.map((m) => m.id)).toEqual(["db-444", "db-r-445", "db-446"]);
   });
 
   it("does not anchor a pasted-image active user when the DB already has the canonical attachment row", () => {
@@ -1110,5 +1135,91 @@ describe("reconcileStreamedWithDb", () => {
       "agent-image",
     ]);
     expect(merged.filter((m) => m.id === "user-active-image")).toHaveLength(1);
+  });
+});
+
+/**
+ * The live reasoning stream is best-effort: dropped delta chunks leave the
+ * streamed row with garbled text whose reconciliation key can't match the
+ * canonical DB reasoning row, so both used to survive the merge — the user
+ * saw the corrupt partial AND the full thought stacked in one Thought block
+ * ("moon-k3 via provider ous" above "moonshotai/kimi-k3 via provider nous").
+ * A dropped-chunks preview is by construction a subsequence of the canonical
+ * text, which separates "same thought, chunks missing" (drop) from a distinct
+ * second reasoning segment (keep).
+ */
+describe("lossy streamed reasoning previews", () => {
+  const CANONICAL = "I'm running moonshotai/kimi-k3 via provider nous.";
+  const LOSSY = "I'm running moon-k3 via provider ous.";
+
+  // @lat: [[chat-commands#Slash command execution#Reasoning & tool activity rows#Reasoning reconciliation#Lossy live preview collapses into the DB row]]
+  it("drops a garbled streamed preview when the DB has the canonical row", () => {
+    const merged = reconcileStreamedWithDb(
+      [
+        STREAMED_USER("what model are you"),
+        STREAMED_REASONING(LOSSY, "r-lossy"),
+      ],
+      [DB_USER("what model are you", 1), DB_REASONING(CANONICAL, 2)],
+    );
+
+    const reasoning = merged.filter(
+      (m) => "kind" in m && m.kind === "reasoning",
+    );
+    expect(reasoning).toHaveLength(1);
+    expect((reasoning[0] as { text: string }).text).toBe(CANONICAL);
+  });
+
+  // @lat: [[chat-commands#Slash command execution#Reasoning & tool activity rows#Reasoning reconciliation#Distinct live segments survive]]
+  it("keeps a live second reasoning segment that is not a lossy duplicate", () => {
+    const SECOND = "Now checking the weather tool output.";
+    const merged = reconcileStreamedWithDb(
+      [
+        STREAMED_USER("hi"),
+        STREAMED_REASONING(CANONICAL, "r-seg-1"),
+        STREAMED_REASONING(SECOND, "r-seg-2"),
+      ],
+      [DB_USER("hi", 1), DB_REASONING(CANONICAL, 2)],
+    );
+
+    const texts = merged
+      .filter((m) => "kind" in m && m.kind === "reasoning")
+      .map((m) => (m as { text: string }).text);
+    expect(texts).toEqual([CANONICAL, SECOND]);
+  });
+
+  it("keeps a short thought that embeds only as scattered characters", () => {
+    // Review regression: a distinct short thought whose characters happen to
+    // appear in order inside the canonical text (as scattered 1-char
+    // fragments) is NOT a lossy preview and must survive the merge.
+    const merged = reconcileStreamedWithDb(
+      [STREAMED_USER("hi"), STREAMED_REASONING("abcdefghijkl", "r-scattered")],
+      [DB_USER("hi", 1), DB_REASONING("a1b2c3d4e5f6g7h8i9j0k1l2", 2)],
+    );
+
+    const texts = merged
+      .filter((m) => "kind" in m && m.kind === "reasoning")
+      .map((m) => (m as { text: string }).text);
+    expect(texts).toContain("abcdefghijkl");
+    expect(texts).toContain("a1b2c3d4e5f6g7h8i9j0k1l2");
+  });
+
+  // @lat: [[chat-commands#Slash command execution#Reasoning & tool activity rows#Reasoning reconciliation#Turn-scoped matching]]
+  it("does not cross-drop against a DB reasoning row from another turn", () => {
+    // Turn 1 is fully reconciled (DB); turn 2's live preview happens to be a
+    // subsequence of turn 1's canonical text but belongs to a different turn,
+    // so it must be kept.
+    const merged = reconcileStreamedWithDb(
+      [
+        STREAMED_USER("first", "u-1"),
+        STREAMED_USER("second", "u-2"),
+        STREAMED_REASONING(LOSSY, "r-turn-2"),
+      ],
+      [DB_USER("first", 1), DB_REASONING(CANONICAL, 2), DB_USER("second", 3)],
+    );
+
+    const texts = merged
+      .filter((m) => "kind" in m && m.kind === "reasoning")
+      .map((m) => (m as { text: string }).text);
+    expect(texts).toEqual([CANONICAL, LOSSY]);
   });
 });

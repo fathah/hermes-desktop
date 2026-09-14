@@ -16,6 +16,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
 import { useI18n } from "../../components/useI18n";
+import { OrbLoader } from "../../components/OrbLoader";
 import type {
   RegistryKind,
   RegistryItem,
@@ -107,7 +108,7 @@ export default function Discover({
         skills: skills.map((s) => s.name),
         mcps: reg.mcps,
         workflows: reg.workflows,
-        agents: profiles.map((p) => p.name),
+        agents: profiles.map((p) => p.id),
       });
     } catch {
       /* leave as-is */
@@ -450,7 +451,7 @@ export default function Discover({
                 )}
                 <div className="discover-modal-content">
                   {detailLoading ? (
-                    <div className="loading-spinner" />
+                    <OrbLoader state="searching" size={64} />
                   ) : (
                     <>
                       {detailData?.rows && detailData.rows.length > 0 ? (
@@ -512,7 +513,7 @@ export default function Discover({
           <p className="discover-subtitle">{t("discover.subtitle")}</p>
         </div>
         <a
-          href="https://github.com/fathah/hermes-registry"
+          href="https://github.com/hermesonehq/hermes-registry"
           target="_blank"
           rel="noreferrer"
           className="btn btn-secondary btn-sm"
@@ -561,7 +562,7 @@ export default function Discover({
 
       {loading ? (
         <div className="discover-state">
-          <div className="loading-spinner" />
+          <OrbLoader state="searching" size={64} />
         </div>
       ) : error && !hasResults ? (
         <div className="discover-state">

@@ -22,7 +22,10 @@ export function MemoryProfile({
 
   async function handleSave(): Promise<void> {
     setError("");
-    const result = await window.hermesAPI.writeUserProfile(userContent, profile);
+    const result = await window.hermesAPI.writeUserProfile(
+      userContent,
+      profile,
+    );
     if (result.success) {
       setUserEditing(false);
       setUserSaved(true);
@@ -36,7 +39,9 @@ export function MemoryProfile({
   return (
     <div className="memory-profile">
       <div className="memory-profile-header">
-        <span className="memory-profile-hint">{t("memory.userProfileHint")}</span>
+        <span className="memory-profile-hint">
+          {t("memory.userProfileHint")}
+        </span>
         {userSaved && (
           <span
             style={{
@@ -50,7 +55,11 @@ export function MemoryProfile({
         )}
       </div>
 
-      {error && <div className="memory-error" style={{ marginBottom: 12 }}>{error}</div>}
+      {error && (
+        <div className="memory-error" style={{ marginBottom: 12 }}>
+          {error}
+        </div>
+      )}
 
       <textarea
         className="memory-profile-textarea"

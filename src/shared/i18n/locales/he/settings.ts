@@ -6,6 +6,21 @@ export default {
     privacy: "פרטיות",
     credentialPool: "מאגר אישורים",
   },
+  nav: {
+    groups: {
+      general: "כללי",
+      hermes: "Hermes One",
+    },
+    appearance: "מראה",
+    language: "שפה",
+    privacy: "פרטיות",
+    connection: "חיבור",
+    network: "רשת",
+    data: "נתונים",
+    about: "אודות ועדכונים",
+    community: "קהילה",
+    logs: "יומנים ואבחון",
+  },
   theme: {
     label: "ערכת נושא",
     system: "מערכת",
@@ -35,14 +50,14 @@ export default {
   },
   analytics: {
     label: "שליחת נתוני שימוש אנונימיים",
-    hint: "עוזר לשפר את Hermes Desktop באמצעות שליחת נתוני שימוש אנונימיים ומצרפיים למופע ה-PostHog של הפרויקט. ניתן לכבות זאת בכל עת.",
+    hint: "עוזר לשפר את Hermes Desktop באמצעות שליחת נתוני שימוש אנונימיים ומצרפיים לשירות הניתוח של הפרויקט. ניתן לכבות זאת בכל עת.",
     disclosure: {
       uuid: "מזהה אקראי לכל התקנה, השמור רק במכשיר זה (ללא שם, אימייל או פרטי חשבון).",
       platform: "מערכת ההפעלה שלכם, גרסת Electron וגרסת Node.js.",
       navigation:
         "אילו מסכים אתם מבקרים בתוך האפליקציה (לדוגמה, צ'אט, סשנים, הגדרות). לא נאסף תוכן צ'אט, הנחיות, תגובות מודל או תוכן קבצים.",
       endpoint:
-        "הנתונים נשלחים אל us.i.posthog.com (ענן PostHog בארה\"ב). הקלטות סשן ולכידה אוטומטית של צפיות בדפים מושבתות.",
+        "הנתונים נשלחים אל שירות הניתוח של Hermes (analytics.hermesone.org). הקלטות סשן ולכידה אוטומטית של צפיות בדפים מושבתות.",
       notCollected:
         "לעולם לא נאסף: הודעות צ'אט, נתיבי קבצים, מפתחות API, הגדרות מודל, אישורי חשבון.",
     },
@@ -57,8 +72,7 @@ export default {
   modelBaseUrlPlaceholder: "http://localhost:1234/v1",
   networkSection: "רשת",
   forceIpv4: "אכוף IPv4",
-  forceIpv4Hint:
-    "השביתו IPv6 כדי לפתור בעיות תפוגת זמן בחיבור בחלק מהרשתות",
+  forceIpv4Hint: "השביתו IPv6 כדי לפתור בעיות תפוגת זמן בחיבור בחלק מהרשתות",
   httpProxy: "פרוקסי HTTP",
   httpProxyHint:
     "פרוקסי SOCKS או HTTP לכל החיבורים היוצאים (השאירו ריק לזיהוי אוטומטי)",
@@ -82,8 +96,7 @@ export default {
   keyLabel: "מפתח",
   empty: "(ריק)",
   dataSection: "נתונים",
-  dataHint:
-    "ייצוא או ייבוא של ההגדרות, הסשנים, המיומנויות והזיכרון של Hermes.",
+  dataHint: "ייצוא או ייבוא של ההגדרות, הסשנים, המיומנויות והזיכרון של Hermes.",
   backingUp: "מגבה...",
   exportBackup: "ייצוא גיבוי",
   importing: "מייבא...",

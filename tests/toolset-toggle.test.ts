@@ -286,7 +286,11 @@ describe("setMessagingPlatformToolsetEnabled", () => {
       ].join("\n"),
     );
 
-    const result = setMessagingPlatformToolsetEnabled("telegram", "browser", true);
+    const result = setMessagingPlatformToolsetEnabled(
+      "telegram",
+      "browser",
+      true,
+    );
     expect(result).toBe(true);
 
     const after = readConfig();
@@ -300,7 +304,11 @@ describe("setMessagingPlatformToolsetEnabled", () => {
   it("starts from safe messaging defaults when the platform has no explicit list", () => {
     writeConfig(["platform_toolsets:", "  cli:", "      - web", ""].join("\n"));
 
-    const result = setMessagingPlatformToolsetEnabled("telegram", "browser", true);
+    const result = setMessagingPlatformToolsetEnabled(
+      "telegram",
+      "browser",
+      true,
+    );
     expect(result).toBe(true);
 
     const toolsets = getPlatformToolsets();

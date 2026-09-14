@@ -3,7 +3,7 @@ import type { Attachment } from "../shared/attachments";
 import { isImageMime } from "../shared/attachments";
 import { clearStagedAttachments } from "./attachment-staging";
 import { removeSessionFromCache } from "./session-cache";
-import { getDbConnection } from "./db";
+import { getDbConnection, sessionVisibilityPredicate } from "./db";
 import {
   attachmentFromLocalVisionImagePath,
   deletePromptImageAttachmentsForSession,
@@ -17,6 +17,8 @@ import {
   loadSessionLocalErrors,
   mergeSessionLocalErrors,
 } from "./session-continuation-store";
+import { deleteSessionContextFolderForSession } from "./session-context-folder-store";
+import { deleteSessionModelOverrideForSession } from "./session-model-override-store";
 
 // Sentinel prefix used by hermes-agent's hermes_state.py to mark
 // JSON-encoded multimodal content in the messages.content column.
@@ -254,12 +256,16 @@ function decodeSearchSnippet(
   );
 }
 
-function getDb(readonly = true): Database.Database | null {
-  return getDbConnection(readonly);
+function getDb(readonly = true, profile?: unknown): Database.Database | null {
+  return getDbConnection(readonly, profile);
 }
 
-export function listSessions(limit = 30, offset = 0): SessionSummary[] {
-  const db = getDb();
+export function listSessions(
+  limit = 30,
+  offset = 0,
+  profile?: unknown,
+): SessionSummary[] {
+  const db = getDb(true, profile);
   if (!db) return [];
 
   // Simple query without correlated subquery — titles come from session cache
@@ -274,6 +280,7 @@ export function listSessions(limit = 30, offset = 0): SessionSummary[] {
         s.model,
         s.title
       FROM sessions s
+      WHERE ${sessionVisibilityPredicate(db)}
       ORDER BY s.started_at DESC
       LIMIT ? OFFSET ?`,
     )
@@ -299,8 +306,12 @@ export function listSessions(limit = 30, offset = 0): SessionSummary[] {
   }));
 }
 
-export function searchSessions(query: string, limit = 20): SearchResult[] {
-  const db = getDb();
+export function searchSessions(
+  query: string,
+  limit = 20,
+  profile?: unknown,
+): SearchResult[] {
+  const db = getDb(true, profile);
   if (!db) return [];
 
   try {
@@ -665,8 +676,11 @@ export function mergeStoredPromptImageAttachments(
   });
 }
 
-export function getSessionMessages(sessionId: string): HistoryItem[] {
-  const db = getDb();
+export function getSessionMessages(
+  sessionId: string,
+  profile?: unknown,
+): HistoryItem[] {
+  const db = getDb(true, profile);
   if (!db) return [];
 
   const rows = db
@@ -692,8 +706,9 @@ export function applySessionLocalOverlays(
   sessionId: string,
   items: HistoryItem[],
   existingDb?: Database.Database | null,
+  profile?: unknown,
 ): HistoryItem[] {
-  const db = existingDb ?? getDb();
+  const db = existingDb ?? getDb(true, profile);
   if (!db) return items;
   const canonical = mergeStoredPromptImageAttachments(
     items,
@@ -724,24 +739,56 @@ function normalizeSessionIds(sessionIds: string[]): string[] {
   return normalized;
 }
 
+// sessions has a self-referential FK parent_session_id -> sessions.id (set by
+// the agent for subagent runs / branches). Cached after first lookup.
+let sessionsHasParentColumn: boolean | null = null;
+function hasParentSessionColumn(db: Database.Database): boolean {
+  if (sessionsHasParentColumn !== null) return sessionsHasParentColumn;
+  try {
+    sessionsHasParentColumn =
+      db
+        .prepare(
+          "SELECT 1 FROM pragma_table_info('sessions') WHERE name = 'parent_session_id'",
+        )
+        .get() != null;
+  } catch {
+    sessionsHasParentColumn = false;
+  }
+  return sessionsHasParentColumn;
+}
+
 function deleteSessionRows(db: Database.Database, sessionId: string): number {
   deletePromptImageAttachmentsForSession(db, sessionId);
   deleteSessionContinuationForSession(db, sessionId);
+  // Unlink any child sessions first. better-sqlite3 enables
+  // PRAGMA foreign_keys=ON by default, so deleting a parent while a child
+  // still references it via parent_session_id throws "FOREIGN KEY constraint
+  // failed", which rolls back the whole delete transaction -> 0 rows deleted
+  // with no surfaced error (and a select-all batch deletes nothing, since one
+  // violation aborts the entire transaction). Detach children rather than
+  // cascade-delete so a session the user didn't select is never removed.
+  if (hasParentSessionColumn(db)) {
+    db.prepare(
+      "UPDATE sessions SET parent_session_id = NULL WHERE parent_session_id = ?",
+    ).run(sessionId);
+  }
+  deleteSessionContextFolderForSession(db, sessionId);
+  deleteSessionModelOverrideForSession(db, sessionId);
   db.prepare("DELETE FROM messages WHERE session_id = ?").run(sessionId);
   const result = db.prepare("DELETE FROM sessions WHERE id = ?").run(sessionId);
   return result.changes;
 }
 
-function cleanupDeletedSession(sessionId: string): void {
+function cleanupDeletedSession(sessionId: string, profile?: unknown): void {
   clearStagedAttachments(sessionId);
-  removeSessionFromCache(sessionId);
+  removeSessionFromCache(sessionId, profile);
 }
 
-export function deleteSession(sessionId: string): void {
+export function deleteSession(sessionId: string, profile?: unknown): void {
   const id = normalizeSessionIds([sessionId])[0];
   if (!id) return;
 
-  const db = getDb(false);
+  const db = getDb(false, profile);
 
   if (db) {
     const tx = db.transaction((sessionIdToDelete: string) => {
@@ -750,14 +797,17 @@ export function deleteSession(sessionId: string): void {
     tx(id);
   }
 
-  cleanupDeletedSession(id);
+  cleanupDeletedSession(id, profile);
 }
 
-export function deleteSessions(sessionIds: string[]): DeleteSessionsResult {
+export function deleteSessions(
+  sessionIds: string[],
+  profile?: unknown,
+): DeleteSessionsResult {
   const ids = normalizeSessionIds(sessionIds);
   let deleted = 0;
 
-  const db = getDb(false);
+  const db = getDb(false, profile);
 
   if (db) {
     const tx = db.transaction((idsToDelete: string[]) => {
@@ -769,7 +819,7 @@ export function deleteSessions(sessionIds: string[]): DeleteSessionsResult {
   }
 
   for (const id of ids) {
-    cleanupDeletedSession(id);
+    cleanupDeletedSession(id, profile);
   }
 
   return { requested: ids.length, deleted };

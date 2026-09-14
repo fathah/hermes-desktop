@@ -34,7 +34,9 @@ function extractLocalRecoveryFunction(): string {
   expect(startMatch).toBeGreaterThan(-1);
 
   const remainingCode = hermesSrc.substring(startMatch);
-  const endMatch = remainingCode.indexOf("\nexport async function sendMessage(");
+  const endMatch = remainingCode.indexOf(
+    "\nexport async function sendMessage(",
+  );
   expect(endMatch).toBeGreaterThan(-1);
 
   return remainingCode.substring(0, endMatch);
@@ -62,7 +64,7 @@ describe("Remote/SSH Mode History Preservation", () => {
   it("sendMessage passes history to the best API transport in remote mode", () => {
     // Extract the sendMessage function's remote mode branch
     const remoteModeBranch = hermesSrc.match(
-      /\/\/ Remote mode: always use API, no CLI fallback[\s\S]*?if \(isRemoteMode\(\)\) \{[\s\S]*?return sendMessageViaBestApi\([\s\S]*?\);[\s\S]*?\}/,
+      /\/\/ Remote mode: always use API, no CLI fallback[\s\S]*?if \(isRemoteMode\(conn\)\) \{[\s\S]*?return sendMessageViaBestApi\([\s\S]*?\);[\s\S]*?\}/,
     );
 
     expect(remoteModeBranch).toBeDefined();

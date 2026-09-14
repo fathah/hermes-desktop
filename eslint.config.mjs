@@ -48,6 +48,17 @@ export default defineConfig(
       "react-hooks/set-state-in-effect": "off",
       "react-hooks/refs": "off",
       "react-refresh/only-export-components": "off",
+      // Honour the `_`-prefix convention used across the codebase for
+      // deliberately-unused parameters/variables (e.g. unused args kept for
+      // signature symmetry, or ignored caught errors).
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+        },
+      ],
     },
   },
   {

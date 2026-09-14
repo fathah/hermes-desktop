@@ -42,24 +42,27 @@ afterEach(() => {
 });
 
 describe("getApiServerKeyStatus", () => {
-  itPosix("reports hasKey=true, providerId='command' for a vault-resolved key", async () => {
-    writeFileSync(
-      join(TEST_DIR, "config.yaml"),
-      [
-        "secrets:",
-        "  provider: command",
-        "  command: echo API_SERVER_KEY=synthetic-vault-marker",
-        "",
-      ].join("\n"),
-    );
-    // No .env at all — the key comes only from the provider overlay.
-    const { getApiServerKeyStatus } = await freshConfig(TEST_DIR);
+  itPosix(
+    "reports hasKey=true, providerId='command' for a vault-resolved key",
+    async () => {
+      writeFileSync(
+        join(TEST_DIR, "config.yaml"),
+        [
+          "secrets:",
+          "  provider: command",
+          "  command: echo API_SERVER_KEY=synthetic-vault-marker",
+          "",
+        ].join("\n"),
+      );
+      // No .env at all — the key comes only from the provider overlay.
+      const { getApiServerKeyStatus } = await freshConfig(TEST_DIR);
 
-    const status = getApiServerKeyStatus();
-    expect(status.hasKey).toBe(true);
-    expect(status.providerId).toBe("command");
-    expect(typeof status.checkedAt).toBe("number");
-  });
+      const status = getApiServerKeyStatus();
+      expect(status.hasKey).toBe(true);
+      expect(status.providerId).toBe("command");
+      expect(typeof status.checkedAt).toBe("number");
+    },
+  );
 
   it("reports hasKey=true, providerId='env' for a .env key (no regression)", async () => {
     writeFileSync(join(TEST_DIR, "config.yaml"), "agent:\n  enabled: true\n");
@@ -74,19 +77,24 @@ describe("getApiServerKeyStatus", () => {
     expect(status.providerId).toBe("env");
   });
 
-  itPosix("reports hasKey=false with the configured providerId when nothing resolves", async () => {
-    writeFileSync(
-      join(TEST_DIR, "config.yaml"),
-      ["secrets:", "  provider: command", '  command: "exit 0"', ""].join("\n"),
-    );
-    const { getApiServerKeyStatus } = await freshConfig(TEST_DIR);
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  itPosix(
+    "reports hasKey=false with the configured providerId when nothing resolves",
+    async () => {
+      writeFileSync(
+        join(TEST_DIR, "config.yaml"),
+        ["secrets:", "  provider: command", '  command: "exit 0"', ""].join(
+          "\n",
+        ),
+      );
+      const { getApiServerKeyStatus } = await freshConfig(TEST_DIR);
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    const status = getApiServerKeyStatus();
-    expect(status.hasKey).toBe(false);
-    expect(status.providerId).toBe("command");
-    warnSpy.mockRestore();
-  });
+      const status = getApiServerKeyStatus();
+      expect(status.hasKey).toBe(false);
+      expect(status.providerId).toBe("command");
+      warnSpy.mockRestore();
+    },
+  );
 
   it("keeps hasKey as the required primary field (additive contract)", async () => {
     writeFileSync(join(TEST_DIR, "config.yaml"), "agent:\n  enabled: true\n");
@@ -102,32 +110,37 @@ describe("getApiServerKeyStatus", () => {
 });
 
 describe("getApiServerKey missing-key diagnostic", () => {
-  itPosix("warns exactly once per (provider, profile) pair, naming the provider", async () => {
-    writeFileSync(
-      join(TEST_DIR, "config.yaml"),
-      ["secrets:", "  provider: command", '  command: "exit 0"', ""].join("\n"),
-    );
-    const { getApiServerKey, invalidateSecretsCache } =
-      await freshConfig(TEST_DIR);
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-    expect(getApiServerKey()).toBe("");
-    // Force a real re-resolution (the 5s cache would otherwise short-circuit
-    // before the diagnostic) — the rate-limit Set must still suppress it.
-    invalidateSecretsCache();
-    expect(getApiServerKey()).toBe("");
-
-    const diagnostics = warnSpy.mock.calls
-      .flat()
-      .filter(
-        (m) =>
-          typeof m === "string" && m.includes("API_SERVER_KEY not resolved"),
+  itPosix(
+    "warns exactly once per (provider, profile) pair, naming the provider",
+    async () => {
+      writeFileSync(
+        join(TEST_DIR, "config.yaml"),
+        ["secrets:", "  provider: command", '  command: "exit 0"', ""].join(
+          "\n",
+        ),
       );
-    expect(diagnostics).toHaveLength(1);
-    expect(diagnostics[0]).toContain("provider=command");
-    expect(diagnostics[0]).toContain("env=default");
-    warnSpy.mockRestore();
-  });
+      const { getApiServerKey, invalidateSecretsCache } =
+        await freshConfig(TEST_DIR);
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      expect(getApiServerKey()).toBe("");
+      // Force a real re-resolution (the 5s cache would otherwise short-circuit
+      // before the diagnostic) — the rate-limit Set must still suppress it.
+      invalidateSecretsCache();
+      expect(getApiServerKey()).toBe("");
+
+      const diagnostics = warnSpy.mock.calls
+        .flat()
+        .filter(
+          (m) =>
+            typeof m === "string" && m.includes("API_SERVER_KEY not resolved"),
+        );
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics[0]).toContain("provider=command");
+      expect(diagnostics[0]).toContain("env=default");
+      warnSpy.mockRestore();
+    },
+  );
 
   it("does not warn when the key resolves", async () => {
     writeFileSync(join(TEST_DIR, "config.yaml"), "agent:\n  enabled: true\n");

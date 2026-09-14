@@ -4,6 +4,7 @@ export type {
 } from "../../../../shared/attachments";
 
 import type { Attachment } from "../../../../shared/attachments";
+import type { ApprovalChoice } from "../../../../shared/chat-approval";
 
 /**
  * Visible chat bubble (user or assistant). Used for live streaming and as
@@ -23,6 +24,10 @@ export interface ChatBubbleMessage {
   localOnly?: boolean;
   /** Renderer-local turn identity used to anchor local failures. */
   turnId?: string;
+  /** Epoch-ms the message was recorded; surfaced as a hover timestamp. */
+  timestamp?: number;
+  /** Renderer-only progress row while a slash command is executing. */
+  isSlashLoader?: boolean;
 }
 
 /**
@@ -76,12 +81,28 @@ export interface ClarifyMessage {
   resolved?: boolean;
 }
 
+export interface ApprovalMessage {
+  id: string;
+  kind: "approval";
+  role: "agent";
+  requestId: string;
+  responsePath: "dashboard" | "ipc";
+  runId?: string;
+  command: string;
+  description: string;
+  choices: ApprovalChoice[];
+  choice?: ApprovalChoice;
+  resolved?: boolean;
+  unavailable?: boolean;
+}
+
 export type ChatMessage =
   | ChatBubbleMessage
   | ReasoningMessage
   | ToolCallMessage
   | ToolResultMessage
-  | ClarifyMessage;
+  | ClarifyMessage
+  | ApprovalMessage;
 
 export interface ActiveTurn {
   turnId: string;
@@ -109,6 +130,10 @@ export interface UsageState {
   /** Latest turn's prompt tokens = current context-window occupancy (NOT
    *  summed across turns, unlike promptTokens). Drives the context gauge. */
   contextTokens?: number;
+  /** Model's total context window as reported by the backend gateway
+   *  (`context_max` from the compressor) — the authoritative denominator for
+   *  the gauge. Falls back to the static heuristic table when absent. */
+  contextWindowTokens?: number;
   /** Latest turn's prompt-cache read/write tokens, if the provider reports them. */
   cacheReadTokens?: number;
   cacheWriteTokens?: number;

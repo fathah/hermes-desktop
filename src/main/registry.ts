@@ -23,7 +23,7 @@ export type {
 
 /**
  * The "Discover" marketplace reads its catalog from a public GitHub repo:
- *   https://github.com/fathah/hermes-registry
+ *   https://github.com/hermesonehq/hermes-registry
  *
  * `index.json` is a flat list of entries, each with a `type`
  * (agent|mcp|skill|workflow) and a `path` to its folder in the repo. "Set up"
@@ -33,6 +33,9 @@ const REGISTRY_REPO = "fathah/hermes-registry";
 const REGISTRY_BRANCH = "main";
 const REGISTRY_RAW_BASE = `https://raw.githubusercontent.com/${REGISTRY_REPO}/refs/heads/${REGISTRY_BRANCH}`;
 const REGISTRY_REPO_BASE = `https://github.com/${REGISTRY_REPO}/tree/${REGISTRY_BRANCH}`;
+// Icons are served by the registry web service (from its DB), not raw GitHub —
+// e.g. https://registry.hermesone.org/registry-icon/mcp/aws/icon.svg.
+const REGISTRY_ICON_BASE = "https://registry.hermesone.org/registry-icon";
 const INDEX_URL = `${REGISTRY_RAW_BASE}/index.json`;
 const MODELS_URL = `${REGISTRY_RAW_BASE}/models.json`;
 const TREE_URL = `https://api.github.com/repos/${REGISTRY_REPO}/git/trees/${REGISTRY_BRANCH}?recursive=1`;
@@ -50,6 +53,8 @@ interface IndexEntry {
   license?: string;
   platforms?: string[];
   path?: string;
+  /** Repo-relative path to the entry's icon, e.g. "mcp/ableton/icon.svg". */
+  icon?: string;
 }
 
 /** Per-entry manifest.json (mcp / agent / workflow). */
@@ -87,8 +92,12 @@ const EMPTY_CATALOG: RegistryCatalog = {
 };
 
 // Short-lived cache so flipping between Discover sub-tabs doesn't refetch.
+// Covers the raw.githubusercontent fetches (index + models), which are
+// CDN-backed and not subject to the api.github.com rate limit — so this stays
+// short to keep the catalog/model list fresh. The rate-limited git-tree fetch
+// caches separately for far longer (see TREE_CACHE_TTL_MS).
 let cache: { at: number; data: RegistryCatalog } | null = null;
-const CACHE_TTL_MS = 5 * 60 * 1000;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 min
 
 function authorName(author: IndexEntry["author"]): string | undefined {
   if (!author) return undefined;
@@ -108,6 +117,9 @@ function toItem(e: IndexEntry): RegistryItem {
     platforms: e.platforms,
     path: e.path,
     homepage: e.path ? `${REGISTRY_REPO_BASE}/${e.path}` : undefined,
+    // Resolve the repo-relative icon path to the registry service's icon URL,
+    // loaded as an <img> on a white tile — see the registry web UI's EntryIcon.
+    icon: e.icon ? `${REGISTRY_ICON_BASE}/${e.icon}` : undefined,
   };
 }
 
@@ -333,13 +345,23 @@ interface TreeBlob {
   type: string;
 }
 let treeCache: { at: number; blobs: TreeBlob[] } | null = null;
+// The recursive git tree is fetched from api.github.com, which rate-limits
+// anonymous callers at 60 req/h (token auth below raises that ceiling). Cache
+// it far longer than the CDN-backed raw fetches to keep that pressure low.
+const TREE_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 /** All file paths under a folder, via the cached recursive git tree. */
 async function listFolderFiles(folder: string): Promise<string[]> {
-  if (!treeCache || Date.now() - treeCache.at >= CACHE_TTL_MS) {
-    const res = await fetch(TREE_URL, {
-      headers: { Accept: "application/vnd.github+json" },
-    });
+  if (!treeCache || Date.now() - treeCache.at >= TREE_CACHE_TTL_MS) {
+    // Use GITHUB_TOKEN / GH_TOKEN when available to avoid anonymous
+    // rate limits (60 req/h) on api.github.com.  Authenticated requests
+    // get 5 000 req/h instead.
+    const ghToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "";
+    const headers: Record<string, string> = {
+      Accept: "application/vnd.github+json",
+    };
+    if (ghToken) headers.Authorization = `Bearer ${ghToken}`;
+    const res = await fetch(TREE_URL, { headers });
     if (!res.ok) throw new Error(`Tree fetch failed (${res.status})`);
     const json = (await res.json()) as { tree?: TreeBlob[] };
     treeCache = { at: Date.now(), blobs: json.tree ?? [] };
@@ -487,14 +509,17 @@ async function installWorkflow(
  * the published agent.
  */
 async function installAgent(item: RegistryItem): Promise<InstallResult> {
-  const created = createProfile(item.id, true);
+  const created = createProfile(item.id, "default");
   if (!created.success) return created;
   if (item.path) {
     const m = await fetchManifest(item.path);
     const entry = m?.entry || "AGENT.md";
     const md = await tryFetchText(`${item.path}/${entry}`);
     if (md && !writeSoul(md, item.id)) {
-      return { success: false, error: "Failed to write agent persona (SOUL.md)" };
+      return {
+        success: false,
+        error: "Failed to write agent persona (SOUL.md)",
+      };
     }
   }
   return { success: true };

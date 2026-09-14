@@ -1,6 +1,16 @@
 import { useState, useEffect, useCallback, memo } from "react";
-import { Folder, ChevronRight, ChevronDown, SquareTerminal } from "lucide-react";
-import { getIconForFile, getSVGStringFromFileType } from "@wesbos/code-icons";
+import {
+  Folder,
+  ChevronRight,
+  ChevronDown,
+  File,
+  FileArchive,
+  FileCode,
+  FileImage,
+  FileSpreadsheet,
+  FileText,
+  SquareTerminal,
+} from "lucide-react";
 import { FileViewer } from "./FileViewer";
 import { useI18n } from "../../components/useI18n";
 
@@ -13,6 +23,11 @@ interface WorktreePanelProps {
   folderPath: string;
 }
 
+const MIN_PANEL_WIDTH = 220;
+const WIDTH_STORAGE_KEY = "hermes:worktreePanelWidth";
+const maxPanelWidth = (): number =>
+  Math.max(MIN_PANEL_WIDTH, window.innerWidth - 360);
+
 interface TreeItemProps {
   entry: FileEntry;
   parentPath: string;
@@ -20,19 +35,114 @@ interface TreeItemProps {
   onFileClick?: (filePath: string) => void;
 }
 
+export type WorktreeFileIconKind =
+  | "archive"
+  | "code"
+  | "file"
+  | "image"
+  | "spreadsheet"
+  | "text";
+
+const CODE_EXTENSIONS = new Set([
+  "bash",
+  "c",
+  "cpp",
+  "cs",
+  "css",
+  "go",
+  "gql",
+  "graphql",
+  "h",
+  "hpp",
+  "html",
+  "java",
+  "js",
+  "json",
+  "jsx",
+  "less",
+  "mjs",
+  "php",
+  "ps1",
+  "py",
+  "rb",
+  "rs",
+  "sass",
+  "scss",
+  "sh",
+  "sql",
+  "svelte",
+  "toml",
+  "ts",
+  "tsx",
+  "vue",
+  "xml",
+  "yaml",
+  "yml",
+  "zsh",
+]);
+const IMAGE_EXTENSIONS = new Set([
+  "avif",
+  "bmp",
+  "gif",
+  "ico",
+  "jpeg",
+  "jpg",
+  "png",
+  "svg",
+  "webp",
+]);
+const ARCHIVE_EXTENSIONS = new Set([
+  "7z",
+  "bz2",
+  "gz",
+  "rar",
+  "tar",
+  "tgz",
+  "zip",
+]);
+const SPREADSHEET_EXTENSIONS = new Set(["csv", "tsv", "xls", "xlsx"]);
+const TEXT_EXTENSIONS = new Set(["log", "md", "mdx", "rtf", "txt"]);
+
+export function worktreeFileIconKind(filename: string): WorktreeFileIconKind {
+  const normalized = filename.toLowerCase();
+  const extension = normalized.includes(".")
+    ? normalized.slice(normalized.lastIndexOf(".") + 1)
+    : "";
+
+  if (IMAGE_EXTENSIONS.has(extension)) return "image";
+  if (ARCHIVE_EXTENSIONS.has(extension)) return "archive";
+  if (SPREADSHEET_EXTENSIONS.has(extension)) return "spreadsheet";
+  if (
+    TEXT_EXTENSIONS.has(extension) ||
+    /^(readme|license|changelog)/.test(normalized)
+  ) {
+    return "text";
+  }
+  if (CODE_EXTENSIONS.has(extension) || normalized.startsWith(".")) {
+    return "code";
+  }
+  return "file";
+}
+
 function FileIcon({ filename }: { filename: string }): React.JSX.Element {
-  const iconType = getIconForFile(filename);
-  const iconData = iconType ? getSVGStringFromFileType(iconType) : null;
-  const svgString =
-    iconData && typeof iconData === "object" && "svg" in iconData
-      ? iconData.svg
-      : "";
+  const kind = worktreeFileIconKind(filename);
+  const Icon =
+    kind === "code"
+      ? FileCode
+      : kind === "image"
+        ? FileImage
+        : kind === "archive"
+          ? FileArchive
+          : kind === "spreadsheet"
+            ? FileSpreadsheet
+            : kind === "text"
+              ? FileText
+              : File;
 
   return (
-    <div
-      className="worktree-file-icon-wrapper"
-      dangerouslySetInnerHTML={{ __html: svgString }}
-    />
+    <div className="worktree-file-icon-wrapper" data-file-icon={kind}>
+      <Icon size={16} aria-hidden="true" />
+    </div>
   );
 }
 
@@ -148,6 +258,41 @@ export const WorktreePanel = memo(function WorktreePanel({
   const [error, setError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [terminalError, setTerminalError] = useState<string | null>(null);
+  const [width, setWidth] = useState<number>(() => {
+    const saved = Number(localStorage.getItem(WIDTH_STORAGE_KEY));
+    return Number.isFinite(saved) && saved >= MIN_PANEL_WIDTH ? saved : 240;
+  });
+  const [isResizing, setIsResizing] = useState(false);
+
+  const startResize = (e: React.PointerEvent): void => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = width;
+    let nextWidth = startWidth;
+    setIsResizing(true);
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+
+    const onMove = (ev: PointerEvent): void => {
+      // Panel sits on the right edge, so dragging the handle left widens it.
+      const delta = startX - ev.clientX;
+      nextWidth = Math.min(
+        maxPanelWidth(),
+        Math.max(MIN_PANEL_WIDTH, startWidth + delta),
+      );
+      setWidth(nextWidth);
+    };
+    const onUp = (): void => {
+      setIsResizing(false);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      localStorage.setItem(WIDTH_STORAGE_KEY, String(Math.round(nextWidth)));
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -177,7 +322,7 @@ export const WorktreePanel = memo(function WorktreePanel({
     return () => {
       cancelled = true;
     };
-  }, [folderPath]);
+  }, [folderPath, t]);
 
   // Get the folder name from the path
   const folderName =
@@ -190,7 +335,14 @@ export const WorktreePanel = memo(function WorktreePanel({
   };
 
   return (
-    <div className="worktree-panel">
+    <div className="worktree-panel" style={{ width }}>
+      <div
+        className={`worktree-resize-handle ${
+          isResizing ? "worktree-resize-handle-active" : ""
+        }`}
+        onPointerDown={startResize}
+        title="Drag to resize"
+      />
       <div className="worktree-header">
         <Folder size={16} className="worktree-header-icon" />
         <span className="worktree-header-title" title={folderPath}>
@@ -211,7 +363,9 @@ export const WorktreePanel = memo(function WorktreePanel({
       )}
       <div className="worktree-content">
         {isLoading ? (
-          <div className="worktree-loading">{t("chat.worktree.loading")}...</div>
+          <div className="worktree-loading">
+            {t("chat.worktree.loading")}...
+          </div>
         ) : error ? (
           <div className="worktree-error">{error}</div>
         ) : entries === null || entries.length === 0 ? (

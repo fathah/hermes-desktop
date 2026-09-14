@@ -98,7 +98,7 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
     };
   }, [profile]);
 
-  const platforms = catalog?.platforms ?? [];
+  const platforms = useMemo(() => catalog?.platforms ?? [], [catalog]);
   const filteredPlatforms = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return platforms;

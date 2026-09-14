@@ -1,14 +1,45 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
+import type { SessionModelOverride } from "../shared/model-override";
 import type { DesktopSessionContinuationItem } from "../shared/session-continuation";
 import type { DesktopSessionLocalError } from "../shared/session-continuation";
+import type {
+  ImportWalletInput,
+  ProfileWallet,
+  ProvisionWalletResult,
+  WalletMutationResult,
+  WalletPortfolioResult,
+  WalletSyncResult,
+} from "../shared/wallets";
+import type { TokenBalancesResponse } from "../shared/tokens";
+import type { CustomProviderRecord } from "../shared/custom-providers";
 import type {
   MessagingPlatformsResponse,
   MessagingPlatformTestResponse,
   MessagingPlatformUpdate,
 } from "../shared/messaging-platforms";
 import type { ChatToolEvent } from "../shared/chat-stream";
+import type {
+  ApprovalChoice,
+  ChatApprovalRequest,
+} from "../shared/chat-approval";
+import type {
+  DeviceCodeInfo,
+  EnsureHermesOneKeyResult,
+  HermesAccount,
+  HermesAccountUser,
+  HermesOneCreditsResult,
+} from "../shared/account";
+import type { AgentSyncResult, AgentSyncStatus } from "../shared/agent-sync";
+import type { GpuPreferenceMode, GpuStatus } from "../shared/gpu";
+import type { AgentCapabilitySnapshot } from "../shared/agent-capabilities";
+import type { ConnectionStatusSnapshot } from "../shared/connection-status";
+import type { SessionLocation } from "../shared/session-location";
+import type {
+  SshHermesTargetInspection,
+  SshDockerProvisionResult,
+} from "../shared/ssh-docker";
 
 /**
  * Mirror of the renderer-side `CredentialPoolEntry` ambient type
@@ -41,6 +72,7 @@ interface DashboardConnection {
   baseUrl: string;
   wsUrl: string;
   token: string;
+  authMode?: "token" | "oauth";
   mode: "local" | "remote" | "ssh";
   profile?: string;
   pid?: number;
@@ -55,6 +87,34 @@ interface DashboardStatus {
   connection?: DashboardConnection;
   error?: string;
   logPath?: string;
+  needsOAuthLogin?: boolean;
+}
+
+interface PublicConnectionConfig {
+  connectionId: string;
+  name: string;
+  mode: "local" | "remote" | "ssh";
+  remoteUrl: string;
+  remoteAuthMode: "auto" | "token" | "oauth";
+  remoteChatTransport: "auto" | "dashboard" | "legacy";
+  sshChatTransport: "auto" | "dashboard" | "legacy";
+  hasApiKey: boolean;
+  apiKeyLength: number;
+  ssh: {
+    host: string;
+    port: number;
+    username: string;
+    keyPath: string;
+    remotePort: number;
+    localPort: number;
+    dockerContainerName?: string;
+  };
+}
+
+interface PublicConnectionRegistry {
+  version: 1;
+  activeConnectionId: string;
+  connections: PublicConnectionConfig[];
 }
 
 const electronAPI = {
@@ -96,6 +156,15 @@ const hermesAPI = {
 
   quitApp: (): Promise<void> => ipcRenderer.invoke("quit-app"),
 
+  getGpuStatus: (): Promise<GpuStatus> => ipcRenderer.invoke("get-gpu-status"),
+
+  reenableGpu: (): Promise<boolean> => ipcRenderer.invoke("reenable-gpu"),
+
+  setGpuPreference: (mode: GpuPreferenceMode): Promise<boolean> =>
+    ipcRenderer.invoke("set-gpu-preference", mode),
+
+  relaunchApp: (): Promise<void> => ipcRenderer.invoke("relaunch-app"),
+
   onInstallProgress: (
     callback: (progress: {
       step: number;
@@ -123,10 +192,34 @@ const hermesAPI = {
   },
 
   // Hermes engine info
-  getHermesVersion: (): Promise<string | null> =>
-    ipcRenderer.invoke("get-hermes-version"),
-  refreshHermesVersion: (): Promise<string | null> =>
-    ipcRenderer.invoke("refresh-hermes-version"),
+  getHermesVersion: (profile?: string): Promise<string | null> =>
+    ipcRenderer.invoke("get-hermes-version", profile),
+  refreshHermesVersion: (profile?: string): Promise<string | null> =>
+    ipcRenderer.invoke("refresh-hermes-version", profile),
+  getAgentCapabilities: (profile?: string): Promise<AgentCapabilitySnapshot> =>
+    ipcRenderer.invoke("get-agent-capabilities", profile),
+  recordAgentRuntimeInfo: (
+    info: unknown,
+    profile?: string,
+    connectionId?: string,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke(
+      "record-agent-runtime-info",
+      info,
+      profile,
+      connectionId,
+    ),
+  recordAgentCommandInventory: (
+    catalog: unknown,
+    profile?: string,
+    connectionId?: string,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke(
+      "record-agent-command-inventory",
+      catalog,
+      profile,
+      connectionId,
+    ),
   runHermesDoctor: (): Promise<string> =>
     ipcRenderer.invoke("run-hermes-doctor"),
   runHermesUpdate: (): Promise<{ success: boolean; error?: string }> =>
@@ -146,11 +239,68 @@ const hermesAPI = {
     ipcRenderer.invoke("oauth-login", provider, profile),
   cancelOAuthLogin: (): Promise<boolean> =>
     ipcRenderer.invoke("oauth-login-cancel"),
+  getOAuthProviderStatuses: (
+    profile?: string,
+  ): Promise<Record<string, boolean>> =>
+    ipcRenderer.invoke("get-oauth-provider-statuses", profile),
   onOAuthLoginProgress: (callback: (chunk: string) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, chunk: unknown): void =>
       callback(String(chunk));
     ipcRenderer.on("oauth-login-progress", handler);
     return () => ipcRenderer.removeListener("oauth-login-progress", handler);
+  },
+
+  // Hermes account sign-in (device authorization grant)
+  accountLogin: (
+    profile?: string,
+  ): Promise<{ success: boolean; user?: HermesAccountUser; error?: string }> =>
+    ipcRenderer.invoke("hermes-account-login", profile),
+  cancelAccountLogin: (): Promise<boolean> =>
+    ipcRenderer.invoke("hermes-account-login-cancel"),
+  onAccountLoginCode: (
+    callback: (info: DeviceCodeInfo) => void,
+  ): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, info: unknown): void =>
+      callback(info as DeviceCodeInfo);
+    ipcRenderer.on("hermes-account-login-code", handler);
+    return () =>
+      ipcRenderer.removeListener("hermes-account-login-code", handler);
+  },
+  onAccountLoginProgress: (callback: (chunk: string) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, chunk: unknown): void =>
+      callback(String(chunk));
+    ipcRenderer.on("hermes-account-login-progress", handler);
+    return () =>
+      ipcRenderer.removeListener("hermes-account-login-progress", handler);
+  },
+  getAccount: (profile?: string): Promise<HermesAccount | null> =>
+    ipcRenderer.invoke("hermes-account-get", profile),
+  accountLogout: (profile?: string): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke("hermes-account-logout", profile),
+  // Auto-provision a Hermes One Inference key from the signed-in account
+  // (no-op when the profile already has one), and read the account's
+  // AI-credit balance for the Providers account card.
+  ensureHermesOneKey: (profile?: string): Promise<EnsureHermesOneKeyResult> =>
+    ipcRenderer.invoke("hermesone-ensure-key", profile),
+  getHermesOneCredits: (): Promise<HermesOneCreditsResult> =>
+    ipcRenderer.invoke("hermesone-credits"),
+
+  // Cloud agent sync (profiles ↔ signed-in Hermes One account)
+  syncAgents: (): Promise<AgentSyncResult> =>
+    ipcRenderer.invoke("agent-sync-run"),
+  getAgentSyncStatus: (): Promise<AgentSyncStatus> =>
+    ipcRenderer.invoke("agent-sync-status"),
+  getLinkedAgentId: (profile: string): Promise<string | null> =>
+    ipcRenderer.invoke("agent-sync-linked-id", profile),
+  onAgentSyncUpdated: (
+    callback: (result: AgentSyncResult) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      result: unknown,
+    ): void => callback(result as AgentSyncResult);
+    ipcRenderer.on("agent-sync-updated", handler);
+    return () => ipcRenderer.removeListener("agent-sync-updated", handler);
   },
 
   getLocale: (): Promise<AppLocale> => ipcRenderer.invoke("get-locale"),
@@ -235,22 +385,24 @@ const hermesAPI = {
   isRemoteMode: (): Promise<boolean> => ipcRenderer.invoke("is-remote-mode"),
   isRemoteOnlyMode: (): Promise<boolean> =>
     ipcRenderer.invoke("is-remote-only-mode"),
-  getConnectionConfig: (): Promise<{
-    mode: "local" | "remote" | "ssh";
-    remoteUrl: string;
-    remoteChatTransport: "auto" | "dashboard" | "legacy";
-    sshChatTransport: "auto" | "dashboard" | "legacy";
-    hasApiKey: boolean;
-    apiKeyLength: number;
-    ssh: {
-      host: string;
-      port: number;
-      username: string;
-      keyPath: string;
-      remotePort: number;
-      localPort: number;
-    };
-  }> => ipcRenderer.invoke("get-connection-config"),
+  getConnectionConfig: (
+    connectionId?: string,
+  ): Promise<PublicConnectionConfig> =>
+    ipcRenderer.invoke("get-connection-config", connectionId),
+  getConnectionRegistry: (): Promise<PublicConnectionRegistry> =>
+    ipcRenderer.invoke("get-connection-registry"),
+  getConnectionStatuses: (
+    profile?: string,
+  ): Promise<ConnectionStatusSnapshot[]> =>
+    ipcRenderer.invoke("get-connection-statuses", profile),
+  createConnection: (): Promise<boolean> =>
+    ipcRenderer.invoke("create-connection"),
+  renameConnection: (connectionId: string, name: string): Promise<boolean> =>
+    ipcRenderer.invoke("rename-connection", connectionId, name),
+  selectConnection: (connectionId: string): Promise<boolean> =>
+    ipcRenderer.invoke("select-connection", connectionId),
+  removeConnection: (connectionId: string): Promise<boolean> =>
+    ipcRenderer.invoke("remove-connection", connectionId),
 
   setConnectionConfig: (
     mode: "local" | "remote" | "ssh",
@@ -270,47 +422,15 @@ const hermesAPI = {
     ),
 
   onConnectionConfigChanged: (
-    callback: (config: {
-      mode: "local" | "remote" | "ssh";
-      remoteUrl: string;
-      remoteChatTransport: "auto" | "dashboard" | "legacy";
-      sshChatTransport: "auto" | "dashboard" | "legacy";
-      hasApiKey: boolean;
-      apiKeyLength: number;
-      ssh: {
-        host: string;
-        port: number;
-        username: string;
-        keyPath: string;
-        remotePort: number;
-        localPort: number;
-      };
-    }) => void,
+    callback: (config: PublicConnectionConfig) => void,
   ): (() => void) => {
     const handler = (
       _event: Electron.IpcRendererEvent,
       config: unknown,
-    ): void =>
-      callback(
-        config as {
-          mode: "local" | "remote" | "ssh";
-          remoteUrl: string;
-          remoteChatTransport: "auto" | "dashboard" | "legacy";
-          sshChatTransport: "auto" | "dashboard" | "legacy";
-          hasApiKey: boolean;
-          apiKeyLength: number;
-          ssh: {
-            host: string;
-            port: number;
-            username: string;
-            keyPath: string;
-            remotePort: number;
-            localPort: number;
-          };
-        },
-      );
+    ): void => callback(config as PublicConnectionConfig);
     ipcRenderer.on("connection-config-changed", handler);
-    return () => ipcRenderer.removeListener("connection-config-changed", handler);
+    return () =>
+      ipcRenderer.removeListener("connection-config-changed", handler);
   },
 
   setSshConfig: (
@@ -320,6 +440,7 @@ const hermesAPI = {
     keyPath: string,
     remotePort: number,
     localPort: number,
+    dockerContainerName?: string,
   ): Promise<boolean> =>
     ipcRenderer.invoke(
       "set-ssh-config",
@@ -329,10 +450,68 @@ const hermesAPI = {
       keyPath,
       remotePort,
       localPort,
+      dockerContainerName,
+    ),
+
+  inspectSshHermesTarget: (
+    host: string,
+    port: number,
+    username: string,
+    keyPath: string,
+    remotePort: number,
+    dockerContainerName?: string,
+  ): Promise<SshHermesTargetInspection> =>
+    ipcRenderer.invoke(
+      "inspect-ssh-hermes-target",
+      host,
+      port,
+      username,
+      keyPath,
+      remotePort,
+      dockerContainerName,
+    ),
+
+  provisionSshDockerTarget: (
+    host: string,
+    port: number,
+    username: string,
+    keyPath: string,
+    remotePort: number,
+    dockerContainerName: string,
+  ): Promise<SshDockerProvisionResult> =>
+    ipcRenderer.invoke(
+      "provision-ssh-docker-target",
+      host,
+      port,
+      username,
+      keyPath,
+      remotePort,
+      dockerContainerName,
     ),
 
   testRemoteConnection: (url: string, apiKey?: string): Promise<boolean> =>
     ipcRenderer.invoke("test-remote-connection", url, apiKey),
+
+  connectRemoteGateway: (
+    url: string,
+    apiKey?: string,
+  ): Promise<{ connected: boolean; authMode: "token" | "oauth" }> =>
+    ipcRenderer.invoke("connect-remote-gateway", url, apiKey),
+
+  probeRemoteAuthMode: (
+    url: string,
+    connectionId?: string,
+  ): Promise<{ authMode: "token" | "oauth"; version: string | null }> =>
+    ipcRenderer.invoke("probe-remote-auth-mode", url, connectionId),
+
+  remoteOAuthLogin: (): Promise<{ signedIn: true }> =>
+    ipcRenderer.invoke("remote-oauth-login"),
+
+  remoteOAuthLogout: (): Promise<{ signedIn: false }> =>
+    ipcRenderer.invoke("remote-oauth-logout"),
+
+  remoteOAuthSessionState: (): Promise<{ signedIn: boolean }> =>
+    ipcRenderer.invoke("remote-oauth-session-state"),
 
   testSshConnection: (
     host: string,
@@ -367,6 +546,8 @@ const hermesAPI = {
     attachments?: Attachment[],
     contextFolder?: string,
     runId?: string,
+    modelOverride?: SessionModelOverride,
+    connectionId?: string,
   ): Promise<{ response: string; sessionId?: string }> =>
     ipcRenderer.invoke(
       "send-message",
@@ -377,10 +558,15 @@ const hermesAPI = {
       attachments,
       contextFolder,
       runId,
+      modelOverride,
+      connectionId,
     ),
 
-  abortChat: (runId?: string): Promise<void> =>
-    ipcRenderer.invoke("abort-chat", runId),
+  abortChat: (runId?: string, connectionId?: string): Promise<void> =>
+    ipcRenderer.invoke("abort-chat", runId, connectionId),
+
+  recordSessionLocation: (location: SessionLocation): Promise<boolean> =>
+    ipcRenderer.invoke("record-session-location", location),
 
   transcribeAudio: (
     audio: Uint8Array,
@@ -635,6 +821,25 @@ const hermesAPI = {
   respondClarify: (requestId: string, answer: string): Promise<boolean> =>
     ipcRenderer.invoke("clarify-respond", { requestId, answer }),
 
+  onApprovalRequest: (
+    callback: (runId: string, req: ChatApprovalRequest) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      runId: string,
+      req: ChatApprovalRequest,
+    ): void => callback(runId, req);
+    ipcRenderer.on("chat-approval-request", handler);
+    return () => ipcRenderer.removeListener("chat-approval-request", handler);
+  },
+
+  respondApproval: (
+    requestId: string,
+    choice: ApprovalChoice,
+    runId: string,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("approval-respond", { requestId, choice, runId }),
+
   // Gateway
   startGateway: (): Promise<GatewayStartResult> =>
     ipcRenderer.invoke("start-gateway"),
@@ -642,10 +847,32 @@ const hermesAPI = {
   restartGateway: (profile?: string): Promise<boolean> =>
     ipcRenderer.invoke("restart-gateway", profile),
   gatewayStatus: (): Promise<boolean> => ipcRenderer.invoke("gateway-status"),
-  dashboardStatus: (profile?: string): Promise<DashboardStatus> =>
-    ipcRenderer.invoke("dashboard-status", profile),
-  startDashboard: (profile?: string): Promise<DashboardStatus> =>
-    ipcRenderer.invoke("start-dashboard", profile),
+  setNativeAppearance: (source: "dark" | "light" | "system"): Promise<void> =>
+    ipcRenderer.invoke("set-native-appearance", source),
+
+  getSpellCheckerInfo: (): Promise<{
+    available: string[];
+    selected: string[];
+    system: string[];
+  }> => ipcRenderer.invoke("get-spell-checker-info"),
+
+  setSpellCheckerLanguages: (languages: string[]): Promise<string[]> =>
+    ipcRenderer.invoke("set-spell-checker-languages", languages),
+  dashboardStatus: (
+    profile?: string,
+    connectionId?: string,
+  ): Promise<DashboardStatus> =>
+    ipcRenderer.invoke("dashboard-status", profile, connectionId),
+  freshDashboardWsUrl: (
+    profile?: string,
+    connectionId?: string,
+  ): Promise<string> =>
+    ipcRenderer.invoke("fresh-dashboard-ws-url", profile, connectionId),
+  startDashboard: (
+    profile?: string,
+    connectionId?: string,
+  ): Promise<DashboardStatus> =>
+    ipcRenderer.invoke("start-dashboard", profile, connectionId),
   stopDashboard: (profile?: string): Promise<boolean> =>
     ipcRenderer.invoke("stop-dashboard", profile),
 
@@ -678,6 +905,8 @@ const hermesAPI = {
   listSessions: (
     limit?: number,
     offset?: number,
+    connectionId?: string,
+    profile?: string,
   ): Promise<
     Array<{
       id: string;
@@ -689,10 +918,13 @@ const hermesAPI = {
       title: string | null;
       preview: string;
     }>
-  > => ipcRenderer.invoke("list-sessions", limit, offset),
+  > =>
+    ipcRenderer.invoke("list-sessions", limit, offset, connectionId, profile),
 
   getSessionMessages: (
     sessionId: string,
+    connectionId?: string,
+    profile?: string,
   ): Promise<
     Array<{
       id: number;
@@ -701,7 +933,13 @@ const hermesAPI = {
       timestamp: number;
       attachments?: Attachment[];
     }>
-  > => ipcRenderer.invoke("get-session-messages", sessionId),
+  > =>
+    ipcRenderer.invoke(
+      "get-session-messages",
+      sessionId,
+      connectionId,
+      profile,
+    ),
 
   recordSessionContinuation: (
     sessionId: string,
@@ -715,9 +953,33 @@ const hermesAPI = {
   ): Promise<boolean> =>
     ipcRenderer.invoke("record-session-local-error", sessionId, error),
 
+  getSessionContextFolder: (sessionId: string): Promise<string | null> =>
+    ipcRenderer.invoke("get-session-context-folder", sessionId),
+
+  setSessionContextFolder: (
+    sessionId: string,
+    folder: string | null,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("set-session-context-folder", sessionId, folder),
+
+  listRecentSessionContextFolders: (limit?: number): Promise<string[]> =>
+    ipcRenderer.invoke("list-recent-session-context-folders", limit),
+
+  getSessionModelOverride: (
+    sessionId: string,
+  ): Promise<SessionModelOverride | null> =>
+    ipcRenderer.invoke("get-session-model-override", sessionId),
+
+  setSessionModelOverride: (
+    sessionId: string,
+    override: SessionModelOverride | null,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("set-session-model-override", sessionId, override),
+
   // Profiles
   listProfiles: (): Promise<
     Array<{
+      id: string;
       name: string;
       path: string;
       isDefault: boolean;
@@ -735,9 +997,9 @@ const hermesAPI = {
 
   createProfile: (
     name: string,
-    clone: boolean,
-  ): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke("create-profile", name, clone),
+    cloneFrom: string | null,
+  ): Promise<{ success: boolean; error?: string; id?: string }> =>
+    ipcRenderer.invoke("create-profile", name, cloneFrom),
 
   deleteProfile: (
     name: string,
@@ -753,6 +1015,12 @@ const hermesAPI = {
   ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("set-profile-color", name, color),
 
+  setProfileName: (
+    id: string,
+    name: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("set-profile-name", id, name),
+
   setProfileAvatar: (
     name: string,
     dataUrl: string,
@@ -763,6 +1031,63 @@ const hermesAPI = {
     name: string,
   ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("remove-profile-avatar", name),
+
+  listWallets: (profile?: string): Promise<ProfileWallet[]> =>
+    ipcRenderer.invoke("list-wallets", profile),
+
+  // Custom (OpenAI-compatible) providers, profile-scoped identity records.
+  listCustomProviders: (profile?: string): Promise<CustomProviderRecord[]> =>
+    ipcRenderer.invoke("list-custom-providers", profile),
+  upsertCustomProvider: (
+    profile: string | undefined,
+    input: { name: string; baseUrl: string },
+  ): Promise<CustomProviderRecord | null> =>
+    ipcRenderer.invoke("upsert-custom-provider", profile, input),
+  removeCustomProvider: (
+    profile: string | undefined,
+    name: string,
+  ): Promise<void> =>
+    ipcRenderer.invoke("remove-custom-provider", profile, name),
+
+  // Cloud wallets from the backend for the profile's linked agent.
+  syncWallets: (profile?: string): Promise<WalletSyncResult> =>
+    ipcRenderer.invoke("wallet-sync", profile),
+
+  // Backend-driven wallet ops (Office space representatives): token balances
+  // for a cloud wallet, and provisioning a cloud wallet for the linked agent.
+  getWalletPortfolio: (
+    profile: string | undefined,
+    walletId: string,
+  ): Promise<WalletPortfolioResult> =>
+    ipcRenderer.invoke("wallet-portfolio", profile, walletId),
+
+  provisionCloudWallet: (profile?: string): Promise<ProvisionWalletResult> =>
+    ipcRenderer.invoke("wallet-provision", profile),
+
+  createWallet: (
+    profile?: string,
+    name?: string,
+  ): Promise<WalletMutationResult> =>
+    ipcRenderer.invoke("create-wallet", profile, name),
+
+  importWallet: (input: ImportWalletInput): Promise<WalletMutationResult> =>
+    ipcRenderer.invoke("import-wallet", input),
+
+  renameWallet: (
+    profile: string | undefined,
+    id: string,
+    name: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("rename-wallet", profile, id, name),
+
+  deleteWallet: (
+    profile: string | undefined,
+    id: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("delete-wallet", profile, id),
+
+  getTokenBalances: (address: string): Promise<TokenBalancesResponse> =>
+    ipcRenderer.invoke("get-token-balances", address),
 
   // Memory
   readMemory: (
@@ -845,6 +1170,8 @@ const hermesAPI = {
   listCachedSessions: (
     limit?: number,
     offset?: number,
+    connectionId?: string,
+    profile?: string,
   ): Promise<
     Array<{
       id: string;
@@ -853,10 +1180,21 @@ const hermesAPI = {
       source: string;
       messageCount: number;
       model: string;
+      contextFolder: string | null;
     }>
-  > => ipcRenderer.invoke("list-cached-sessions", limit, offset),
+  > =>
+    ipcRenderer.invoke(
+      "list-cached-sessions",
+      limit,
+      offset,
+      connectionId,
+      profile,
+    ),
 
-  syncSessionCache: (): Promise<
+  syncSessionCache: (
+    connectionId?: string,
+    profile?: string,
+  ): Promise<
     Array<{
       id: string;
       title: string;
@@ -864,22 +1202,42 @@ const hermesAPI = {
       source: string;
       messageCount: number;
       model: string;
+      contextFolder: string | null;
     }>
-  > => ipcRenderer.invoke("sync-session-cache"),
+  > => ipcRenderer.invoke("sync-session-cache", connectionId, profile),
 
-  updateSessionTitle: (sessionId: string, title: string): Promise<void> =>
-    ipcRenderer.invoke("update-session-title", sessionId, title),
-  deleteSession: (sessionId: string): Promise<void> =>
-    ipcRenderer.invoke("delete-session", sessionId),
+  updateSessionTitle: (
+    sessionId: string,
+    title: string,
+    connectionId?: string,
+    profile?: string,
+  ): Promise<void> =>
+    ipcRenderer.invoke(
+      "update-session-title",
+      sessionId,
+      title,
+      connectionId,
+      profile,
+    ),
+  deleteSession: (
+    sessionId: string,
+    connectionId?: string,
+    profile?: string,
+  ): Promise<void> =>
+    ipcRenderer.invoke("delete-session", sessionId, connectionId, profile),
   deleteSessions: (
     sessionIds: string[],
+    connectionId?: string,
+    profile?: string,
   ): Promise<{ requested: number; deleted: number }> =>
-    ipcRenderer.invoke("delete-sessions", sessionIds),
+    ipcRenderer.invoke("delete-sessions", sessionIds, connectionId, profile),
 
   // Session search
   searchSessions: (
     query: string,
     limit?: number,
+    connectionId?: string,
+    profile?: string,
   ): Promise<
     Array<{
       sessionId: string;
@@ -890,7 +1248,8 @@ const hermesAPI = {
       model: string;
       snippet: string;
     }>
-  > => ipcRenderer.invoke("search-sessions", query, limit),
+  > =>
+    ipcRenderer.invoke("search-sessions", query, limit, connectionId, profile),
 
   // Credential Pool (profile-aware: reads/writes the named profile's
   // auth.json; defaults to the currently active profile when omitted)
@@ -932,6 +1291,10 @@ const hermesAPI = {
       provider: string;
       model: string;
       baseUrl: string;
+      providerLabel?: string;
+      contextLength?: number;
+      capabilities?: string[];
+      modalities?: { input?: string[]; output?: string[] };
       createdAt: number;
     }>
   > => ipcRenderer.invoke("list-models"),
@@ -941,25 +1304,95 @@ const hermesAPI = {
     provider: string,
     model: string,
     baseUrl: string,
+    contextLength?: number,
+    providerLabel?: string,
   ): Promise<{
     id: string;
     name: string;
     provider: string;
     model: string;
     baseUrl: string;
+    contextLength?: number;
+    providerLabel?: string;
     createdAt: number;
-  }> => ipcRenderer.invoke("add-model", name, provider, model, baseUrl),
+  }> =>
+    ipcRenderer.invoke(
+      "add-model",
+      name,
+      provider,
+      model,
+      baseUrl,
+      contextLength,
+      providerLabel,
+    ),
 
   removeModel: (id: string): Promise<boolean> =>
     ipcRenderer.invoke("remove-model", id),
 
-  updateModel: (id: string, fields: Record<string, string>): Promise<boolean> =>
-    ipcRenderer.invoke("update-model", id, fields),
+  updateModel: (
+    id: string,
+    fields: Record<string, string>,
+    contextLength?: number | null,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("update-model", id, fields, contextLength),
+
+  // Shared model definitions (per-model-id metadata, local-only).
+  listModelDefinitions: (): Promise<
+    Array<{
+      model: string;
+      name?: string;
+      contextLength?: number;
+      capabilities?: string[];
+      modalities?: { input?: string[]; output?: string[] };
+      createdAt: number;
+      updatedAt: number;
+    }>
+  > => ipcRenderer.invoke("list-model-definitions"),
+
+  getModelDefinition: (
+    model: string,
+  ): Promise<{
+    model: string;
+    name?: string;
+    contextLength?: number;
+    capabilities?: string[];
+    modalities?: { input?: string[]; output?: string[] };
+    createdAt: number;
+    updatedAt: number;
+  } | null> => ipcRenderer.invoke("get-model-definition", model),
+
+  setModelDefinition: (
+    model: string,
+    patch: {
+      name?: string;
+      contextLength?: number | null;
+      capabilities?: string[];
+      modalities?: { input?: string[]; output?: string[] };
+    },
+  ): Promise<{
+    model: string;
+    name?: string;
+    contextLength?: number;
+    capabilities?: string[];
+    modalities?: { input?: string[]; output?: string[] };
+    createdAt: number;
+    updatedAt: number;
+  } | null> => ipcRenderer.invoke("set-model-definition", model, patch),
+
+  removeModelDefinition: (model: string): Promise<boolean> =>
+    ipcRenderer.invoke("remove-model-definition", model),
 
   onModelLibraryChanged: (callback: () => void): (() => void) => {
     const handler = (): void => callback();
     ipcRenderer.on("model-library-changed", handler);
     return () => ipcRenderer.removeListener("model-library-changed", handler);
+  },
+
+  onCustomProvidersChanged: (callback: () => void): (() => void) => {
+    const handler = (): void => callback();
+    ipcRenderer.on("custom-providers-changed", handler);
+    return () =>
+      ipcRenderer.removeListener("custom-providers-changed", handler);
   },
 
   // Claw3D
@@ -1035,6 +1468,10 @@ const hermesAPI = {
   downloadUpdate: (): Promise<boolean> => ipcRenderer.invoke("download-update"),
   installUpdate: (): Promise<void> => ipcRenderer.invoke("install-update"),
   getAppVersion: (): Promise<string> => ipcRenderer.invoke("get-app-version"),
+  getAutoUpgradeEnabled: (): Promise<boolean> =>
+    ipcRenderer.invoke("get-auto-upgrade-enabled"),
+  setAutoUpgradeEnabled: (enabled: boolean): Promise<boolean> =>
+    ipcRenderer.invoke("set-auto-upgrade-enabled", enabled),
 
   onUpdateAvailable: (
     callback: (info: { version: string; releaseNotes: string }) => void,
@@ -1215,6 +1652,10 @@ const hermesAPI = {
     ipcRenderer.invoke("kanban-unblock-task", taskId, profile),
   kanbanArchiveTask: (taskId: string, profile?: string) =>
     ipcRenderer.invoke("kanban-archive-task", taskId, profile),
+  kanbanPromoteTask: (taskId: string, profile?: string) =>
+    ipcRenderer.invoke("kanban-promote-task", taskId, profile),
+  kanbanScheduleTask: (taskId: string, reason?: string, profile?: string) =>
+    ipcRenderer.invoke("kanban-schedule-task", taskId, reason, profile),
   kanbanSpecifyTask: (taskId: string, profile?: string) =>
     ipcRenderer.invoke("kanban-specify-task", taskId, profile),
   kanbanReclaimTask: (taskId: string, reason?: string, profile?: string) =>
@@ -1229,6 +1670,16 @@ const hermesAPI = {
   // Shell
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke("open-external", url),
+
+  inspectWebPreview: (
+    webContentsId: number,
+  ): Promise<{
+    selector: string;
+    rect: { left: number; top: number; width: number; height: number };
+  } | null> => ipcRenderer.invoke("web-preview-inspect", webContentsId),
+
+  cancelWebPreviewInspection: (webContentsId: number): Promise<void> =>
+    ipcRenderer.invoke("web-preview-cancel-inspection", webContentsId),
 
   // Backup / Import
   runHermesBackup: (
@@ -1289,6 +1740,20 @@ const hermesAPI = {
     profile?: string,
   ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("add-mcp-server", input, profile),
+  updateMcpServer: (
+    originalName: string,
+    input: {
+      name: string;
+      type: "http" | "stdio";
+      url?: string;
+      command?: string;
+      args?: string[];
+      env?: Record<string, string>;
+      auth?: string;
+    },
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("update-mcp-server", originalName, input, profile),
   removeMcpServer: (
     name: string,
     profile?: string,

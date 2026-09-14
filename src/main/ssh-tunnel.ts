@@ -18,8 +18,11 @@ export interface SshConfig {
 
 let tunnelProcess: ChildProcess | null = null;
 let activeConfig: SshConfig | null = null;
+let activeTargetKey: string | null = null;
 let tunnelRunning = false;
 let tunnelStartPromise: Promise<void> | null = null;
+let tunnelStartTargetKey: string | null = null;
+let tunnelGeneration = 0;
 
 export function getSshTunnelUrl(): string | null {
   if (!activeConfig || !tunnelRunning) return null;
@@ -119,8 +122,19 @@ function buildSshArgs(config: SshConfig, localPort: number): string[] {
   ];
 }
 
+function tunnelTargetKey(config: SshConfig): string {
+  return [
+    config.host,
+    config.port || 22,
+    config.username,
+    config.keyPath || join(homedir(), ".ssh", "id_rsa"),
+    config.remotePort,
+  ].join("\n");
+}
+
 async function startSshTunnelInner(config: SshConfig): Promise<void> {
   stopSshTunnel();
+  const generation = ++tunnelGeneration;
 
   const keyPath = config.keyPath?.trim() || join(homedir(), ".ssh", "id_rsa");
   if (!existsSync(keyPath)) {
@@ -129,31 +143,37 @@ async function startSshTunnelInner(config: SshConfig): Promise<void> {
 
   const localPort = await findFreePort(config.localPort || 18642);
   activeConfig = { ...config, localPort };
+  activeTargetKey = tunnelTargetKey(config);
   tunnelRunning = false;
 
   let spawnError: Error | null = null;
 
-  tunnelProcess = spawn("ssh", buildSshArgs(config, localPort), {
+  const spawnedProcess = spawn("ssh", buildSshArgs(config, localPort), {
     stdio: "ignore",
     detached: false,
     ...HIDDEN_SUBPROCESS_OPTIONS,
   });
+  tunnelProcess = spawnedProcess;
 
-  tunnelProcess.on("exit", () => {
-    tunnelProcess = null;
+  spawnedProcess.on("exit", () => {
+    if (tunnelProcess === spawnedProcess) tunnelProcess = null;
     // With ControlMaster=auto, the spawned SSH process exits immediately
     // after handing off to the master. The tunnel may still be alive via
-    // the mux master, so check health before declaring it dead.
+    // the mux master, so check health before declaring it dead. An older
+    // process may exit after a profile/port retarget; never let that stale
+    // callback clear the newer tunnel's global state.
     checkTunnelHealth(localPort, 2000).then((healthy) => {
-      if (!healthy) {
+      if (!healthy && generation === tunnelGeneration) {
         tunnelRunning = false;
         activeConfig = null;
+        activeTargetKey = null;
       }
     });
   });
 
-  tunnelProcess.on("error", (err) => {
-    tunnelProcess = null;
+  spawnedProcess.on("error", (err) => {
+    if (generation !== tunnelGeneration) return;
+    if (tunnelProcess === spawnedProcess) tunnelProcess = null;
     if (err && "code" in err && err.code === "ENOENT") {
       spawnError = new Error(
         "System SSH binary not found on your system PATH. Please ensure an SSH client is installed.",
@@ -163,6 +183,7 @@ async function startSshTunnelInner(config: SshConfig): Promise<void> {
     }
     tunnelRunning = false;
     activeConfig = null;
+    activeTargetKey = null;
   });
 
   try {
@@ -189,34 +210,64 @@ async function startSshTunnelInner(config: SshConfig): Promise<void> {
 
     if (spawnError) throw spawnError;
 
+    if (generation !== tunnelGeneration) {
+      throw new Error("SSH tunnel start was superseded by another target.");
+    }
     tunnelRunning = true;
     await waitForHealth(localPort, 20000);
   } catch (err) {
-    stopSshTunnel();
+    if (generation === tunnelGeneration) stopSshTunnel();
     throw err;
   }
 }
 
 export async function startSshTunnel(config: SshConfig): Promise<void> {
-  if (tunnelStartPromise) return tunnelStartPromise;
-  tunnelStartPromise = startSshTunnelInner(config);
+  const requestedTargetKey = tunnelTargetKey(config);
+  if (tunnelStartPromise) {
+    const pendingPromise = tunnelStartPromise;
+    const pendingTargetKey = tunnelStartTargetKey;
+    try {
+      await pendingPromise;
+    } catch (err) {
+      if (pendingTargetKey === requestedTargetKey) throw err;
+    }
+    if (isSshTunnelActive() && activeTargetKey === requestedTargetKey) {
+      return;
+    }
+    return startSshTunnel(config);
+  }
+
+  const startPromise = startSshTunnelInner(config);
+  tunnelStartPromise = startPromise;
+  tunnelStartTargetKey = requestedTargetKey;
   try {
-    await tunnelStartPromise;
+    await startPromise;
   } finally {
-    tunnelStartPromise = null;
+    if (tunnelStartPromise === startPromise) {
+      tunnelStartPromise = null;
+      tunnelStartTargetKey = null;
+    }
   }
 }
 
 export function stopSshTunnel(): void {
+  tunnelGeneration++;
   if (tunnelProcess && !tunnelProcess.killed) {
     tunnelProcess.kill("SIGTERM");
   }
   tunnelRunning = false;
   activeConfig = null;
+  activeTargetKey = null;
 }
 
 export async function ensureSshTunnel(config: SshConfig): Promise<void> {
-  if (isSshTunnelActive() && (await isSshTunnelHealthy())) return;
+  if (
+    isSshTunnelActive() &&
+    activeTargetKey === tunnelTargetKey(config) &&
+    (await isSshTunnelHealthy())
+  ) {
+    return;
+  }
   await startSshTunnel(config);
 }
 

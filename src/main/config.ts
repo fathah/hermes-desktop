@@ -25,9 +25,12 @@ import {
 } from "./secrets";
 import { canonicalProviderBaseUrl } from "./provider-registry";
 import {
+  customProviderEnvKey,
   expectedEnvKeyForUrl,
   OPENAI_COMPAT_PROVIDERS,
 } from "../shared/url-key-map";
+import { readModelsRaw } from "./models";
+import { normalizeModelEndpointUrl } from "../shared/model-endpoint";
 
 // ── Connection Config (local / remote / ssh) ─────────────
 
@@ -38,22 +41,45 @@ export interface SshConnectionConfig {
   keyPath: string;
   remotePort: number;
   localPort: number;
+  // Docker container on the SSH host that runs Hermes (issue #432). Used by
+  // the Settings/Welcome target inspection UI; the runtime itself routes
+  // through the provisioned remote launcher hook, not this name.
+  dockerContainerName?: string;
 }
 
 export type RemoteChatTransport = "auto" | "dashboard" | "legacy";
+export type RemoteAuthMode = "auto" | "token" | "oauth";
 
 export interface ConnectionConfig {
   mode: "local" | "remote" | "ssh";
   remoteUrl: string;
   apiKey: string;
+  remoteAuthMode: RemoteAuthMode;
   remoteChatTransport: RemoteChatTransport;
   sshChatTransport: RemoteChatTransport;
   ssh: SshConnectionConfig;
 }
 
+export const CONNECTION_REGISTRY_VERSION = 1 as const;
+
+export interface ConnectionRecord {
+  connectionId: string;
+  name: string;
+  config: ConnectionConfig;
+}
+
+export interface ConnectionRegistry {
+  version: typeof CONNECTION_REGISTRY_VERSION;
+  activeConnectionId: string;
+  connections: ConnectionRecord[];
+}
+
 export interface PublicConnectionConfig {
+  connectionId: string;
+  name: string;
   mode: "local" | "remote" | "ssh";
   remoteUrl: string;
+  remoteAuthMode: RemoteAuthMode;
   remoteChatTransport: RemoteChatTransport;
   sshChatTransport: RemoteChatTransport;
   hasApiKey: boolean;
@@ -62,6 +88,12 @@ export interface PublicConnectionConfig {
   // leaves the main process. 0 when no key is set.
   apiKeyLength: number;
   ssh: SshConnectionConfig;
+}
+
+export interface PublicConnectionRegistry {
+  version: typeof CONNECTION_REGISTRY_VERSION;
+  activeConnectionId: string;
+  connections: PublicConnectionConfig[];
 }
 
 // Lazy getter — avoids circular dependency with installer.ts
@@ -76,6 +108,10 @@ export function normalizeRemoteChatTransport(
   return value === "dashboard" || value === "legacy" ? value : "auto";
 }
 
+export function normalizeRemoteAuthMode(value: unknown): RemoteAuthMode {
+  return value === "token" || value === "oauth" ? value : "auto";
+}
+
 export function readDesktopConfig(): Record<string, unknown> {
   try {
     const f = desktopConfigFile();
@@ -86,40 +122,224 @@ export function readDesktopConfig(): Record<string, unknown> {
   }
 }
 
-export function writeDesktopConfig(data: Record<string, unknown>): void {
-  if (!existsSync(HERMES_HOME)) {
-    mkdirSync(HERMES_HOME, { recursive: true });
+function readConnectionDesktopConfig(): Record<string, unknown> {
+  const file = desktopConfigFile();
+  if (!existsSync(file)) return {};
+  try {
+    const parsed: unknown = JSON.parse(
+      readFileSync(file, "utf-8").replace(/^\uFEFF/, ""),
+    );
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("invalid root");
+    }
+    return parsed as Record<string, unknown>;
+  } catch {
+    throw new Error(
+      "Hermes Desktop could not read desktop.json; the existing file was left unchanged.",
+    );
   }
-  writeFileSync(desktopConfigFile(), JSON.stringify(data, null, 2), "utf-8");
 }
 
-export function getConnectionConfig(): ConnectionConfig {
-  const data = readDesktopConfig();
-  const ssh = (data.sshConfig as Partial<SshConnectionConfig>) ?? {};
+export function writeDesktopConfig(data: Record<string, unknown>): void {
+  // Refuse to replace an unreadable existing document. Callers often perform
+  // read-modify-write updates, and the tolerant read API returns {} on parse
+  // failure for legacy display paths.
+  readConnectionDesktopConfig();
+  safeWriteFile(desktopConfigFile(), JSON.stringify(data, null, 2));
+}
+
+function normalizeConnectionConfig(
+  value: Partial<ConnectionConfig>,
+): ConnectionConfig {
+  const ssh: Partial<SshConnectionConfig> = value.ssh ?? {};
   return {
-    mode: (data.connectionMode as "local" | "remote" | "ssh") || "local",
-    remoteUrl: (data.remoteUrl as string) || "",
-    apiKey: (data.remoteApiKey as string) || "",
+    mode:
+      value.mode === "remote" || value.mode === "ssh" ? value.mode : "local",
+    remoteUrl: typeof value.remoteUrl === "string" ? value.remoteUrl : "",
+    apiKey: typeof value.apiKey === "string" ? value.apiKey : "",
+    remoteAuthMode: normalizeRemoteAuthMode(value.remoteAuthMode),
     remoteChatTransport: normalizeRemoteChatTransport(
-      data.remoteChatTransport,
+      value.remoteChatTransport,
     ),
-    sshChatTransport: normalizeRemoteChatTransport(data.sshChatTransport),
+    sshChatTransport: normalizeRemoteChatTransport(value.sshChatTransport),
     ssh: {
-      host: (ssh.host as string) || "",
-      port: (ssh.port as number) || 22,
-      username: (ssh.username as string) || "",
-      keyPath: (ssh.keyPath as string) || "",
-      remotePort: (ssh.remotePort as number) || 8642,
-      localPort: (ssh.localPort as number) || 18642,
+      host: typeof ssh.host === "string" ? ssh.host : "",
+      port: typeof ssh.port === "number" ? ssh.port : 22,
+      username: typeof ssh.username === "string" ? ssh.username : "",
+      keyPath: typeof ssh.keyPath === "string" ? ssh.keyPath : "",
+      remotePort: typeof ssh.remotePort === "number" ? ssh.remotePort : 8642,
+      localPort: typeof ssh.localPort === "number" ? ssh.localPort : 18642,
+      dockerContainerName:
+        typeof ssh.dockerContainerName === "string"
+          ? ssh.dockerContainerName
+          : "",
     },
   };
 }
 
-export function getPublicConnectionConfig(): PublicConnectionConfig {
-  const config = getConnectionConfig();
+function legacyConnectionConfig(
+  data: Record<string, unknown>,
+): ConnectionConfig {
+  return normalizeConnectionConfig({
+    mode: data.connectionMode as ConnectionConfig["mode"],
+    remoteUrl: data.remoteUrl as string,
+    apiKey: data.remoteApiKey as string,
+    remoteAuthMode: data.remoteAuthMode as RemoteAuthMode,
+    remoteChatTransport: data.remoteChatTransport as RemoteChatTransport,
+    sshChatTransport: data.sshChatTransport as RemoteChatTransport,
+    ssh: data.sshConfig as SshConnectionConfig,
+  });
+}
+
+function migratedConnectionName(config: ConnectionConfig): string {
+  if (config.mode === "remote") return "Remote";
+  if (config.mode === "ssh") return "SSH";
+  return "Local";
+}
+
+function parseConnectionRegistry(value: unknown): ConnectionRegistry | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<ConnectionRegistry>;
+  if (
+    candidate.version !== CONNECTION_REGISTRY_VERSION ||
+    !Array.isArray(candidate.connections) ||
+    candidate.connections.length === 0
+  ) {
+    return null;
+  }
+
+  const connectionIds = new Set<string>();
+  const connections = candidate.connections.flatMap((record) => {
+    if (
+      !record ||
+      typeof record.connectionId !== "string" ||
+      !/^connection-[0-9a-f]{24}$/.test(record.connectionId) ||
+      connectionIds.has(record.connectionId) ||
+      typeof record.name !== "string" ||
+      !record.name ||
+      !record.config ||
+      typeof record.config !== "object" ||
+      Array.isArray(record.config)
+    ) {
+      return [];
+    }
+    connectionIds.add(record.connectionId);
+    return [
+      {
+        connectionId: record.connectionId,
+        name: record.name,
+        config: normalizeConnectionConfig(record.config ?? {}),
+      },
+    ];
+  });
+  if (connections.length !== candidate.connections.length) return null;
+
+  if (
+    typeof candidate.activeConnectionId !== "string" ||
+    !connections.some(
+      ({ connectionId }) => connectionId === candidate.activeConnectionId,
+    )
+  ) {
+    return null;
+  }
   return {
+    version: CONNECTION_REGISTRY_VERSION,
+    activeConnectionId: candidate.activeConnectionId,
+    connections,
+  };
+}
+
+function deleteLegacyConnectionFields(data: Record<string, unknown>): void {
+  delete data.connectionMode;
+  delete data.remoteUrl;
+  delete data.remoteApiKey;
+  delete data.remoteAuthMode;
+  delete data.remoteChatTransport;
+  delete data.sshChatTransport;
+  delete data.sshConfig;
+}
+
+function connectionRegistryFromDesktopConfig(data: Record<string, unknown>): {
+  registry: ConnectionRegistry;
+  migrated: boolean;
+} {
+  const existing = parseConnectionRegistry(data.connectionRegistry);
+  if (existing) return { registry: existing, migrated: false };
+  if ("connectionRegistry" in data) {
+    throw new Error(
+      "Hermes Desktop found an unsupported or invalid connection registry; the existing file was left unchanged.",
+    );
+  }
+
+  const config = legacyConnectionConfig(data);
+  const connectionId = `connection-${randomBytes(12).toString("hex")}`;
+  return {
+    registry: {
+      version: CONNECTION_REGISTRY_VERSION,
+      activeConnectionId: connectionId,
+      connections: [
+        { connectionId, name: migratedConnectionName(config), config },
+      ],
+    },
+    migrated: true,
+  };
+}
+
+function saveConnectionRegistry(
+  data: Record<string, unknown>,
+  registry: ConnectionRegistry,
+): void {
+  data.connectionRegistry = registry;
+  deleteLegacyConnectionFields(data);
+  writeDesktopConfig(data);
+}
+
+// @lat: [[connections#Versioned registry]]
+export function getConnectionRegistry(): ConnectionRegistry {
+  const data = readConnectionDesktopConfig();
+  const { registry, migrated } = connectionRegistryFromDesktopConfig(data);
+  if (migrated) {
+    saveConnectionRegistry(data, registry);
+  }
+  return registry;
+}
+
+function getConnection(connectionId?: unknown): ConnectionRecord {
+  const registry = getConnectionRegistry();
+  if (
+    connectionId !== undefined &&
+    (typeof connectionId !== "string" || !connectionId)
+  ) {
+    throw new Error("Connection not found.");
+  }
+  const targetConnectionId = connectionId ?? registry.activeConnectionId;
+  const connection = registry.connections.find(
+    (candidate) => candidate.connectionId === targetConnectionId,
+  );
+  if (!connection) {
+    throw new Error(`Unknown connection: ${targetConnectionId}`);
+  }
+  return connection;
+}
+
+export function getActiveConnection(): ConnectionRecord {
+  return getConnection();
+}
+
+export function getConnectionConfig(connectionId?: unknown): ConnectionConfig {
+  return getConnection(connectionId).config;
+}
+
+function publicConnectionConfig(
+  connection: ConnectionRecord,
+): PublicConnectionConfig {
+  const config = connection.config;
+  return {
+    connectionId: connection.connectionId,
+    name: connection.name,
     mode: config.mode,
     remoteUrl: config.remoteUrl,
+    remoteAuthMode: config.remoteAuthMode,
     remoteChatTransport: config.remoteChatTransport,
     sshChatTransport: config.sshChatTransport,
     hasApiKey: config.apiKey.length > 0,
@@ -128,25 +348,116 @@ export function getPublicConnectionConfig(): PublicConnectionConfig {
   };
 }
 
+export function getPublicConnectionConfig(
+  connectionId?: unknown,
+): PublicConnectionConfig {
+  return publicConnectionConfig(getConnection(connectionId));
+}
+
+export function getPublicConnectionRegistry(): PublicConnectionRegistry {
+  const registry = getConnectionRegistry();
+  return {
+    version: registry.version,
+    activeConnectionId: registry.activeConnectionId,
+    connections: registry.connections.map(publicConnectionConfig),
+  };
+}
+
+export function createConnection(): ConnectionRecord {
+  const data = readConnectionDesktopConfig();
+  const { registry } = connectionRegistryFromDesktopConfig(data);
+  const connection: ConnectionRecord = {
+    connectionId: `connection-${randomBytes(12).toString("hex")}`,
+    name: `New connection ${registry.connections.length + 1}`,
+    config: normalizeConnectionConfig({}),
+  };
+  registry.connections.push(connection);
+  registry.activeConnectionId = connection.connectionId;
+  saveConnectionRegistry(data, registry);
+  return connection;
+}
+
+export function renameConnection(connectionId: unknown, name: unknown): void {
+  const nextName = typeof name === "string" ? name.trim() : "";
+  if (!nextName || nextName.length > 80) {
+    throw new Error("Connection names must be between 1 and 80 characters.");
+  }
+  if (typeof connectionId !== "string") {
+    throw new Error("Connection not found.");
+  }
+  const data = readConnectionDesktopConfig();
+  const { registry } = connectionRegistryFromDesktopConfig(data);
+  const connection = registry.connections.find(
+    (candidate) => candidate.connectionId === connectionId,
+  );
+  if (!connection) throw new Error("Connection not found.");
+  connection.name = nextName;
+  saveConnectionRegistry(data, registry);
+}
+
+export function selectConnection(connectionId: unknown): void {
+  if (typeof connectionId !== "string") {
+    throw new Error("Connection not found.");
+  }
+  const data = readConnectionDesktopConfig();
+  const { registry } = connectionRegistryFromDesktopConfig(data);
+  if (
+    !registry.connections.some(
+      (connection) => connection.connectionId === connectionId,
+    )
+  ) {
+    throw new Error("Connection not found.");
+  }
+  registry.activeConnectionId = connectionId;
+  saveConnectionRegistry(data, registry);
+}
+
+export function removeConnection(connectionId: unknown): void {
+  if (typeof connectionId !== "string") {
+    throw new Error("Connection not found.");
+  }
+  const data = readConnectionDesktopConfig();
+  const { registry } = connectionRegistryFromDesktopConfig(data);
+  if (registry.connections.length === 1) {
+    throw new Error("The last connection cannot be removed.");
+  }
+  const index = registry.connections.findIndex(
+    (connection) => connection.connectionId === connectionId,
+  );
+  if (index === -1) throw new Error("Connection not found.");
+  registry.connections.splice(index, 1);
+  if (registry.activeConnectionId === connectionId) {
+    registry.activeConnectionId = registry.connections[0].connectionId;
+  }
+  saveConnectionRegistry(data, registry);
+}
+
 export function setConnectionConfig(config: ConnectionConfig): void {
-  const data = readDesktopConfig();
-  data.connectionMode = config.mode;
-  if (config.mode === "remote" || config.remoteUrl.trim()) {
-    data.remoteUrl = config.remoteUrl;
-  }
-  if (config.mode === "remote" || config.apiKey.trim()) {
-    data.remoteApiKey = config.apiKey;
-  }
-  data.remoteChatTransport = normalizeRemoteChatTransport(
-    config.remoteChatTransport,
+  const data = readConnectionDesktopConfig();
+  const { registry } = connectionRegistryFromDesktopConfig(data);
+  const activeIndex = registry.connections.findIndex(
+    ({ connectionId }) => connectionId === registry.activeConnectionId,
   );
-  data.sshChatTransport = normalizeRemoteChatTransport(
-    config.sshChatTransport,
-  );
-  if (config.mode === "ssh") {
-    data.sshConfig = config.ssh;
+  const active = registry.connections[activeIndex];
+  const previousDefaultName = migratedConnectionName(active.config);
+  const nextConfig = normalizeConnectionConfig({
+    ...config,
+    remoteUrl:
+      config.mode === "remote" || config.remoteUrl.trim()
+        ? config.remoteUrl
+        : active.config.remoteUrl,
+    apiKey:
+      config.mode === "remote" || config.apiKey.trim()
+        ? config.apiKey
+        : active.config.apiKey,
+    ssh: config.mode === "ssh" ? config.ssh : active.config.ssh,
+  });
+  active.config = nextConfig;
+  if (active.name === previousDefaultName) {
+    active.name = migratedConnectionName(nextConfig);
   }
-  writeDesktopConfig(data);
+  registry.connections[activeIndex] = active;
+  saveConnectionRegistry(data, registry);
 }
 
 export function resolveConnectionApiKeyUpdate(
@@ -648,7 +959,8 @@ function readTopLevelBlock(
   while (cursor < content.length) {
     const lineEnd = content.indexOf("\n", cursor);
     const lineEndExclusive = lineEnd === -1 ? content.length : lineEnd;
-    const line = content.slice(cursor, lineEndExclusive);
+    const rawLine = content.slice(cursor, lineEndExclusive);
+    const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
 
     // Stop at a non-indented, non-empty line (= next top-level key).
     if (line.trim() !== "" && !/^\s/.test(line)) break;
@@ -725,6 +1037,27 @@ export function getModelConfig(profile?: string): {
 }
 
 /**
+ * Read the active model's manual context-window override from config.yaml's
+ * `model.context_length`, paired with the active `model.default` so callers can
+ * confirm the override applies to the model they're asking about. Returns the
+ * parsed positive token count, or null when unset/invalid. Drives the context
+ * gauge ahead of provider `/models` detection (issue: 32k-instead-of-64k).
+ */
+export function getModelContextLengthOverride(
+  profile?: string,
+): { model: string; contextLength: number } | null {
+  const { configFile } = profilePaths(profile);
+  if (!existsSync(configFile)) return null;
+  const content = readFileSync(configFile, "utf-8");
+  const { children } = readTopLevelBlock(content, "model");
+  const raw = children.get("context_length")?.value;
+  if (!raw) return null;
+  const n = parseInt(raw.trim(), 10);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return { model: children.get("default")?.value || "", contextLength: n };
+}
+
+/**
  * Mirror of the runtime key-resolution fallback for OpenAI-compatible /
  * custom endpoints (see `sendMessageViaCli` in hermes.ts): the gateway tries
  * the URL-specific key, then `CUSTOM_API_KEY`, then `OPENAI_API_KEY`. Returns
@@ -739,10 +1072,8 @@ export function getModelConfig(profile?: string): {
  * does. Returns false for providers the runtime does NOT route through the
  * custom path, so their specific-key checks still apply.
  *
- * (The runtime also consults a per-model `CUSTOM_PROVIDER_<name>_KEY` ahead of
- * the generic keys; that lookup needs models.json and is intentionally omitted
- * here to keep config.ts free of a models.ts import — the generic chain covers
- * the reported cases.)
+ * Named custom providers use the same endpoint identity and per-label keys
+ * as the runtime, with the model name retained for older saved rows.
  */
 export function customEndpointKeyResolvable(
   provider: string,
@@ -758,11 +1089,31 @@ export function customEndpointKeyResolvable(
     "CUSTOM_API_KEY",
     "OPENAI_API_KEY",
   ]);
+
+  // Provider-owned models may store a per-label key like CUSTOM_PROVIDER_<NAME>_KEY.
+  // Include those so the config-health audit does not flag a configured provider
+  // whose key lives under its own env var.
+  try {
+    const modelRows = readModelsRaw();
+    const endpoint = normalizeModelEndpointUrl(baseUrl);
+    for (const row of modelRows) {
+      const label = row.providerLabel || row.name;
+      if (
+        row.provider === "custom" &&
+        label &&
+        normalizeModelEndpointUrl(row.baseUrl) === endpoint
+      ) {
+        candidates.add(customProviderEnvKey(label));
+      }
+    }
+  } catch {
+    // models.json unreadable — the fallback chain above still applies
+  }
+
   for (const k of candidates) {
     if ((env[k] ?? "").trim()) return true;
   }
-  // Vault-aware: a `command` provider with any of the fallback keys
-  // configured in the vault satisfies the requirement too — don't
+  // A matching key configured in the vault satisfies the requirement too — don't
   // return false and trigger a cascade of "MODEL_KEY_MISSING" / "set up
   // provider" warnings for a vault-only user. NOTE: ./secrets is already
   // statically imported at the top of this file, so this lazy require does
@@ -795,7 +1146,13 @@ export function upsertBlockChild(
   blockName: string,
   key: string,
   value: string,
+  // Whether to wrap the value in double quotes. Default true (every existing
+  // caller writes string scalars). Pass false for numeric/boolean scalars
+  // like `model.context_length`, which must parse as a YAML number — not a
+  // quoted string — for strict consumers.
+  quote = true,
 ): string {
+  const rendered = quote ? `"${value}"` : value;
   const { children, blockBodyStart, childIndent } = readTopLevelBlock(
     content,
     blockName,
@@ -805,13 +1162,13 @@ export function upsertBlockChild(
   if (existing) {
     return (
       content.slice(0, existing.valueStart) +
-      `"${value}"` +
+      rendered +
       content.slice(existing.valueEnd)
     );
   }
 
   if (blockBodyStart !== null) {
-    const insertion = `${childIndent}${key}: "${value}"\n`;
+    const insertion = `${childIndent}${key}: ${rendered}\n`;
     return (
       content.slice(0, blockBodyStart) +
       insertion +
@@ -824,7 +1181,30 @@ export function upsertBlockChild(
   // bootstrapping a fresh config.yaml) skip the separator so we don't
   // leave a stray leading blank line.
   const sep = content === "" || content.endsWith("\n") ? "" : "\n";
-  return `${content}${sep}${blockName}:\n  ${key}: "${value}"\n`;
+  return `${content}${sep}${blockName}:\n  ${key}: ${rendered}\n`;
+}
+
+/**
+ * Remove a direct child `key` from a top-level YAML block, if present. Returns
+ * the content unchanged when the block or key is absent. Counterpart to
+ * `upsertBlockChild` — used to clear an override (e.g. `model.context_length`)
+ * so auto-detection resumes rather than leaving a stale value behind.
+ */
+export function removeBlockChild(
+  content: string,
+  blockName: string,
+  key: string,
+): string {
+  const { children } = readTopLevelBlock(content, blockName);
+  const existing = children.get(key);
+  if (!existing) return content;
+  // Derive the full `  key: value` line bounds from the value offsets the
+  // reader records, then drop the whole line (including its trailing newline)
+  // so the rest of the block stays intact.
+  const lineStart = content.lastIndexOf("\n", existing.valueStart - 1) + 1;
+  const nl = content.indexOf("\n", existing.valueEnd);
+  const lineEnd = nl === -1 ? content.length : nl + 1;
+  return content.slice(0, lineStart) + content.slice(lineEnd);
 }
 
 /**
@@ -885,11 +1265,24 @@ function findModelBlockBody(
   return { start, end };
 }
 
+// @lat: [[model-context#Model context window#Storage and propagation]]
 export function setModelConfig(
   provider: string,
   model: string,
   baseUrl: string,
   profile?: string,
+  // Optional context-window override (tokens) mirrored into
+  // `model.context_length`. `undefined` leaves the key untouched (back-compat
+  // for callers that don't manage it); a positive number sets it; `null` or a
+  // non-positive number removes it (auto-detection / heuristic resumes).
+  contextLength?: number | null,
+  // Optional API-protocol override mirrored into `model.api_mode` (the agent's
+  // runtime-provider resolver reads it to pick the transport for
+  // custom/compatible endpoints). `undefined` leaves the key untouched
+  // (back-compat); a non-empty string (e.g. `"anthropic_messages"`,
+  // `"chat_completions"`) sets it; `null`/empty removes it so the agent
+  // re-detects the transport from the base URL.
+  apiMode?: string | null,
 ): void {
   invalidateCache(`mc:${profile || "default"}`);
   const { configFile } = profilePaths(profile);
@@ -998,6 +1391,44 @@ export function setModelConfig(
   const streamingRegex = /^(\s*streaming:\s*)(\S+)/m;
   if (streamingRegex.test(content)) {
     content = content.replace(streamingRegex, "$1true");
+  }
+
+  // Mirror the per-model context-window override into `model.context_length`,
+  // which both the desktop context gauge and the agent's auto-compaction
+  // threshold read. Skip entirely when `undefined` so existing callers that
+  // don't track it leave any user-set value alone.
+  if (contextLength !== undefined) {
+    if (typeof contextLength === "number" && contextLength > 0) {
+      content = upsertBlockChild(
+        content,
+        "model",
+        "context_length",
+        String(Math.floor(contextLength)),
+        false, // numeric scalar — write unquoted so YAML parses it as a number
+      );
+    } else {
+      content = removeBlockChild(content, "model", "context_length");
+    }
+  }
+
+  // Mirror the activated model's API-protocol override into `model.api_mode`.
+  // This MUST be rewritten on every switch: the gateway honors a persisted
+  // `model.api_mode` for custom/compatible providers, so a value left behind
+  // by a previously-active model would route the new endpoint over the wrong
+  // protocol — e.g. switching from an Anthropic-compatible endpoint
+  // (api_mode: anthropic_messages) to an OpenAI-compatible one would keep
+  // hitting /v1/messages and 404 / drop the connection (fathah/hermes-desktop
+  // — "connection lost switching OpenAI- and Anthropic-compatible models").
+  // Skip when `undefined` so callers that don't track it leave any user-set
+  // value alone; a non-empty string sets it; `null`/empty removes it so the
+  // agent auto-detects the transport from `base_url` again.
+  if (apiMode !== undefined) {
+    const trimmedMode = (apiMode || "").trim();
+    if (trimmedMode) {
+      content = upsertBlockChild(content, "model", "api_mode", trimmedMode);
+    } else {
+      content = removeBlockChild(content, "model", "api_mode");
+    }
   }
 
   safeWriteFile(configFile, content);
@@ -1451,29 +1882,23 @@ const SUPPORTED_PLATFORMS = Object.keys(PLATFORM_RULES);
  *       allowed_chats: ''
  *
  * Returns true/false if found, null if absent. The block must start at
- * column 0; `enabled:` is captured if it sits anywhere inside the
- * contiguous indented sub-block (any depth, in any position).
+ * column 0 and `enabled:` must be one of its direct children.
  */
 function readPlatformOverride(
   content: string,
   platform: string,
 ): boolean | null {
-  const blockStartRe = new RegExp(
-    `^${escapeRegex(platform)}:[ \\t]*\\r?\\n`,
-    "m",
-  );
-  const startMatch = content.match(blockStartRe);
-  if (!startMatch || startMatch.index === undefined) return null;
-
-  const after = content.slice(startMatch.index + startMatch[0].length);
-  const lines = after.split(/\r?\n/);
-  for (const line of lines) {
-    if (line.trim() === "") continue;
-    if (!/^\s/.test(line)) break; // hit next top-level key
-    const m = line.match(/^[ \t]+enabled:[ \t]*(true|false)\b/);
-    if (m) return m[1] === "true";
-  }
+  const value = readTopLevelBlock(content, platform).children.get(
+    "enabled",
+  )?.value;
+  if (value === "true") return true;
+  if (value === "false") return false;
   return null;
+}
+
+function configLineEnding(content: string): "\r\n" | "\n" {
+  const firstNewline = content.indexOf("\n");
+  return firstNewline > 0 && content[firstNewline - 1] === "\r" ? "\r\n" : "\n";
 }
 
 export function getPlatformEnabled(profile?: string): Record<string, boolean> {
@@ -1530,90 +1955,56 @@ export function setPlatformEnabled(
   }
 
   let content = readFileSync(configFile, "utf-8");
-  const enabledLineRe = new RegExp(
-    `^([ \\t]+enabled:[ \\t]*)(true|false)\\b([ \\t]*)$`,
-    "m",
-  );
-  const blockStartRe = new RegExp(
-    `^(${escapeRegex(configKey)}:[ \\t]*\\r?\\n)`,
-    "m",
-  );
+  const originalContent = content;
+  const lineEnding = configLineEnding(content);
   const flowStyleRe = new RegExp(
-    `^${escapeRegex(configKey)}:[ \\t]*\\{\\s*\\}[ \\t]*$`,
+    `^${escapeRegex(configKey)}:[ \\t]*\\{\\s*\\}[ \\t]*(?=\\r?$)`,
     "m",
   );
 
-  const blockMatch = content.match(blockStartRe);
-  const hasBlock = !!blockMatch;
   const isFlowEmpty = flowStyleRe.test(content);
 
   if (isFlowEmpty) {
+    if (enabled) return;
     // Convert `<platform>: {}` to a block we can edit.
     content = content.replace(
       flowStyleRe,
-      `${configKey}:\n  enabled: ${enabled}`,
+      `${configKey}:${lineEnding}  enabled: false`,
     );
     safeWriteFile(configFile, content);
     return;
   }
 
-  if (hasBlock && blockMatch?.index !== undefined) {
-    const blockStart = blockMatch.index + blockMatch[0].length;
-    const rest = content.slice(blockStart);
-    const restLines = rest.split(/\r?\n/);
+  const { children, blockBodyStart, childIndent } = readTopLevelBlock(
+    content,
+    configKey,
+  );
+  const existing = children.get("enabled");
 
-    // Find the extent of the platform's sub-block (indented children).
-    let subBlockEndOffset = 0;
-    let existingEnabledLineStart: number | null = null;
-    let existingEnabledLineEnd: number | null = null;
-    for (const line of restLines) {
-      const lineLen = line.length + 1; // include trailing \n
-      if (line.trim() === "") {
-        subBlockEndOffset += lineLen;
-        continue;
-      }
-      if (!/^\s/.test(line)) break;
-      const localStart = blockStart + subBlockEndOffset;
-      const enabledMatch = line.match(enabledLineRe);
-      if (enabledMatch) {
-        existingEnabledLineStart = localStart;
-        existingEnabledLineEnd = localStart + line.length;
-      }
-      subBlockEndOffset += lineLen;
-    }
-
-    if (existingEnabledLineStart !== null && existingEnabledLineEnd !== null) {
-      if (enabled) {
-        // Remove the entire `  enabled: false` line, including its newline.
-        const removeEnd =
-          content[existingEnabledLineEnd] === "\n"
-            ? existingEnabledLineEnd + 1
-            : existingEnabledLineEnd;
-        content =
-          content.slice(0, existingEnabledLineStart) + content.slice(removeEnd);
-      } else {
-        content =
-          content.slice(0, existingEnabledLineStart) +
-          `  enabled: false` +
-          content.slice(existingEnabledLineEnd);
-      }
-    } else if (!enabled) {
-      // Append `enabled: false` as the first child of the block.
+  if (blockBodyStart !== null) {
+    if (existing && enabled) {
+      content = removeBlockChild(content, configKey, "enabled");
+    } else if (existing && !enabled && existing.value !== "false") {
       content =
-        content.slice(0, blockStart) +
-        `  enabled: false\n` +
-        content.slice(blockStart);
+        content.slice(0, existing.valueStart) +
+        "false" +
+        content.slice(existing.valueEnd);
+    } else if (!existing && !enabled) {
+      content =
+        content.slice(0, blockBodyStart) +
+        `${childIndent}enabled: false${lineEnding}` +
+        content.slice(blockBodyStart);
     }
-    // (enabled=true with no existing override: nothing to do.)
 
-    safeWriteFile(configFile, content);
+    if (content !== originalContent) safeWriteFile(configFile, content);
     return;
   }
 
   // No block at all — only need to materialize one when recording a disable.
   if (!enabled) {
-    const trailingNewline = content.endsWith("\n") ? "" : "\n";
-    content += `${trailingNewline}${configKey}:\n  enabled: false\n`;
+    const separator =
+      content === "" || content.endsWith("\n") ? "" : lineEnding;
+    content += `${separator}${configKey}:${lineEnding}  enabled: false${lineEnding}`;
     safeWriteFile(configFile, content);
   }
 }

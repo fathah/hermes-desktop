@@ -1,6 +1,11 @@
 export default {
   chat: "Sohbet",
+  newChat: "Yeni Sohbet",
   sessions: "Oturumlar",
+  projects: "Projeler",
+  chats: "Sohbetler",
+  noChats: "Sohbet yok",
+  pinned: "Sabitlenenler",
   discover: "Keşfet",
   agents: "Profiller",
   office: "Ofis",

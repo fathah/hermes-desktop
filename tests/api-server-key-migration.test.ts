@@ -1,12 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { join } from "path";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 
 /**
@@ -115,10 +109,7 @@ describe("getApiServerKey migration (default profile)", () => {
       join(TEST_DIR, "config.yaml"),
       ["api_server:", "  token: sk-from-yaml", ""].join("\n"),
     );
-    writeFileSync(
-      join(TEST_DIR, ".env"),
-      "API_SERVER_KEY=sk-already-in-env\n",
-    );
+    writeFileSync(join(TEST_DIR, ".env"), "API_SERVER_KEY=sk-already-in-env\n");
     const { getApiServerKey } = await freshConfig(TEST_DIR);
 
     expect(getApiServerKey()).toBe("sk-already-in-env");
@@ -180,11 +171,7 @@ describe("getApiServerKey migration (default profile)", () => {
     const { getApiServerKey } = await freshConfig(TEST_DIR);
 
     expect(getApiServerKey("work")).toBe("sk-default-token");
-    expect(existsSync(join(TEST_DIR, "profiles", "work", ".env"))).toBe(
-      false,
-    );
-    expect(existsSync(join(TEST_DIR, "logs", "config-fixes.log"))).toBe(
-      false,
-    );
+    expect(existsSync(join(TEST_DIR, "profiles", "work", ".env"))).toBe(false);
+    expect(existsSync(join(TEST_DIR, "logs", "config-fixes.log"))).toBe(false);
   });
 });

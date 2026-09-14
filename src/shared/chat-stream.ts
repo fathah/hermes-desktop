@@ -21,9 +21,7 @@ export function chatToolEventFromPayload(
   const name = tool || label || "tool";
   const rawStatus = stringValue(payload.status);
   const status =
-    rawStatus === "completed" || rawStatus === "failed"
-      ? rawStatus
-      : "running";
+    rawStatus === "completed" || rawStatus === "failed" ? rawStatus : "running";
   const explicitCallId =
     stringValue(payload.toolCallId) ||
     stringValue(payload.tool_call_id) ||

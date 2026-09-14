@@ -1,4 +1,6 @@
 import type { ChatToolEvent } from "../../../../shared/chat-stream";
+import { normalizeApprovalRequest } from "../../../../shared/chat-approval";
+import { isLossyChunkCopy } from "./lossyText";
 import type { ActiveTurn, ChatBubbleMessage, ChatMessage } from "./types";
 
 export interface DashboardStreamEvent<T = unknown> {
@@ -14,7 +16,57 @@ export interface DashboardEventState {
 
 interface ApplyDashboardEventOptions {
   activeTurn?: ActiveTurn | null;
+  approvalRequestId?: string;
   now?: number;
+  renderAssistantDeltas?: boolean;
+}
+
+export function dashboardApprovalRequestId(
+  event: DashboardStreamEvent,
+  now = Date.now(),
+  fallbackNonce?: number,
+): string {
+  const payload = isRecord(event.payload) ? event.payload : {};
+  const supplied = textFromPayload(payload, "request_id", "id").trim();
+  if (supplied) return supplied;
+  const payloadTime = textFromPayload(
+    payload,
+    "timestamp",
+    "time",
+    "created_at",
+  );
+  if (payloadTime) {
+    return `dashboard-approval-${event.session_id || "session"}-${payloadTime}`;
+  }
+  return `dashboard-approval-${event.session_id || "session"}-${now}${
+    fallbackNonce === undefined ? "" : `-${fallbackNonce}`
+  }`;
+}
+
+function appendApprovalRequest(
+  messages: ReadonlyArray<ChatMessage>,
+  payload: unknown,
+  requestId: string,
+): ChatMessage[] {
+  if (
+    messages.some(
+      (message) =>
+        message.kind === "approval" && message.requestId === requestId,
+    )
+  ) {
+    return [...messages];
+  }
+  const request = normalizeApprovalRequest(payload, requestId);
+  return [
+    ...messages,
+    {
+      id: `approval-dashboard-${requestId}`,
+      kind: "approval",
+      role: "agent",
+      responsePath: "dashboard",
+      ...request,
+    },
+  ];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -166,9 +218,7 @@ function appendClarifyRequest(
   return [...messages, bubble];
 }
 
-function toolEventFromGatewayEvent(
-  event: DashboardStreamEvent,
-): ChatToolEvent {
+function toolEventFromGatewayEvent(event: DashboardStreamEvent): ChatToolEvent {
   const payload = isRecord(event.payload) ? event.payload : {};
   const name =
     textFromPayload(payload, "name", "tool", "function", "function_name") ||
@@ -307,11 +357,7 @@ function findToolCallIndex(
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
     if (msg.role === "user") break;
-    if (
-      "kind" in msg &&
-      msg.kind === "tool_call" &&
-      msg.callId === callId
-    ) {
+    if ("kind" in msg && msg.kind === "tool_call" && msg.callId === callId) {
       return i;
     }
   }
@@ -399,6 +445,105 @@ function normalizeText(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
+/**
+ * Length of the longest suffix of `a` that is also a prefix of `b`, used to
+ * stitch a re-streamed boundary without duplicating the shared run. The
+ * overlap is rejected when it would splice the middle of a word on either
+ * side (e.g. `"…worl" + "d…"`), so a coincidental shared character isn't
+ * treated as a real seam. Punctuation and whitespace are valid seams.
+ */
+function commonSuffixLength(a: string, b: string): number {
+  let i = a.length - 1;
+  let j = b.length - 1;
+  let n = 0;
+  while (i >= 0 && j >= 0 && a[i] === b[j]) {
+    i--;
+    j--;
+    n++;
+  }
+  return n;
+}
+
+function tailHeadOverlap(a: string, b: string): number {
+  const word = /\w/;
+  const max = Math.min(a.length, b.length);
+  for (let k = max; k > 0; k--) {
+    if (!a.endsWith(b.slice(0, k))) continue;
+    const aStart = a.length - k;
+    const startsMidWord =
+      aStart > 0 && word.test(a[aStart - 1]) && word.test(a[aStart]);
+    const endsMidWord = k < b.length && word.test(b[k - 1]) && word.test(b[k]);
+    if (!startsMidWord && !endsMidWord) return k;
+  }
+  return 0;
+}
+
+/**
+ * Reconcile the text accumulated from streamed `message.delta` chunks with the
+ * `final_response` delivered on `message.complete`.
+ *
+ * The streamed bubble can hold text produced *before* a tool call, while
+ * `final_response` may carry only the last turn's text — so blindly
+ * overwriting with the final text drops the pre-tool-call content (#746).
+ * Other times the final text is the fuller version. Resolve both:
+ *   - empty streamed   → final (the remote path never renders deltas, so the
+ *                        bubble starts empty and final is all we have)
+ *   - final ⊇ streamed → final
+ *   - streamed ⊇ final → streamed (keeps the pre-tool-call text)
+ *   - tail/head overlap → stitch, dropping the duplicated seam
+ *   - otherwise        → concatenate with a blank-line separator so the two
+ *                        segments don't run together ("check.It's" / "4answer")
+ *
+ * Comparison is whitespace-insensitive; every branch returns trimmed text so
+ * the result doesn't depend on which branch ran.
+ */
+export function mergeStreamedWithFinal(
+  streamed: string,
+  final: string,
+): string {
+  const streamedContent = streamed.trim();
+  const finalContent = final.trim();
+  if (!streamedContent) return finalContent;
+  if (!finalContent) return streamedContent;
+
+  const normStreamed = normalizeText(streamedContent);
+  const normFinal = normalizeText(finalContent);
+  if (normFinal.includes(normStreamed)) return finalContent;
+  if (normStreamed.includes(normFinal)) return streamedContent;
+
+  // Lossy re-assembly: the streamed deltas dropped chunks (e.g. the upstream
+  // tagged alternate chunks as `reasoning`, so the content stream only carried
+  // a subset), leaving the streamed bubble a chunk-dropped copy of the final
+  // text ("! What are we working on?" for "Hey! What are we working on
+  // today?"). Concatenating would stack the garbled partial above the clean
+  // answer — the final text replaces it. The run-based matcher plus its
+  // length/coverage guards keep the pre-tool-call + answer pair (#746,
+  // genuinely different texts) on the concatenate path: unrelated sentences
+  // only embed as scattered fragments, never as contiguous chunk runs.
+  if (isLossyChunkCopy(normStreamed, normFinal)) {
+    return finalContent;
+  }
+
+  const overlap = tailHeadOverlap(streamedContent, finalContent);
+  if (overlap > 0) return `${streamedContent}${finalContent.slice(overlap)}`;
+
+  // A re-streamed correction: the streamed deltas were garbled (e.g. a
+  // corrupted CJK prefix) but converged on the same ending as the final text.
+  // When the two share a substantial common tail they are the *same* sentence,
+  // not the pre-tool-call + answer pair that the concatenate branch handles —
+  // so the clean final replaces the garbled stream instead of stacking a near
+  // duplicate above it.
+  const suffix = commonSuffixLength(streamedContent, finalContent);
+  if (suffix > 0) {
+    const shared = finalContent.slice(finalContent.length - suffix);
+    const meaningful = shared.replace(/[\s\p{P}]/gu, "").length;
+    const shorter = Math.min(streamedContent.length, finalContent.length);
+    if (meaningful >= 3 && suffix / shorter >= 0.5) return finalContent;
+  }
+
+  return `${streamedContent}\n\n${finalContent}`;
+}
+
 function findLastUserIndex(messages: ReadonlyArray<ChatMessage>): number {
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].role === "user") return i;
@@ -432,16 +577,26 @@ function removeDuplicateReasoning(
   return messages.filter((msg, index) => {
     if (index <= lastUserIndex) return true;
     if (!("kind" in msg) || msg.kind !== "reasoning") return true;
-    if (activeTurn && "turnId" in msg && msg.turnId && msg.turnId !== activeTurn.turnId) {
+    if (
+      activeTurn &&
+      "turnId" in msg &&
+      msg.turnId &&
+      msg.turnId !== activeTurn.turnId
+    ) {
       return true;
     }
 
     const reasoning = normalizeText(msg.text);
-    return !(reasoning && (final.startsWith(reasoning) || reasoning.startsWith(final)));
+    return !(
+      reasoning &&
+      (final.startsWith(reasoning) || reasoning.startsWith(final))
+    );
   });
 }
 
-function hasReasoningSinceLastUser(messages: ReadonlyArray<ChatMessage>): boolean {
+function hasReasoningSinceLastUser(
+  messages: ReadonlyArray<ChatMessage>,
+): boolean {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
     if (msg.role === "user") break;
@@ -504,18 +659,16 @@ function completeAssistantWithFinalText(
     if (!isAssistantBubble(msg) || msg.error) continue;
     if (activeTurn && msg.turnId && msg.turnId !== activeTurn.turnId) continue;
 
-    const current = normalizeText(msg.content);
-    const final = normalizeText(finalText);
-    const content =
-      current && (final === current || final.startsWith(current))
-        ? finalText
-        : msg.content + finalText;
+    // Merge streamed text with finalText so content streamed before tool
+    // calls is preserved rather than clobbered by a last-turn-only
+    // final_response (#746).
+    const merged = mergeStreamedWithFinal(msg.content, finalText);
 
     return [
       ...messagesWithoutDuplicateReasoning.slice(0, i),
       {
         ...msg,
-        content,
+        content: merged,
         pending: false,
         turnId: msg.turnId || activeTurn?.turnId,
       },
@@ -545,6 +698,12 @@ export function applyDashboardStreamEvent(
     case "message.start":
       return { ...state, reasoningSegmentClosed: false };
     case "message.delta":
+      if (options.renderAssistantDeltas === false) {
+        return {
+          ...state,
+          reasoningSegmentClosed: false,
+        };
+      }
       return {
         messages: appendAssistantDelta(
           state.messages,
@@ -584,7 +743,10 @@ export function applyDashboardStreamEvent(
         return { ...state, reasoningSegmentClosed: true };
       }
       return {
-        messages: appendToolEvent(state.messages, toolEventFromGatewayEvent(event)),
+        messages: appendToolEvent(
+          state.messages,
+          toolEventFromGatewayEvent(event),
+        ),
         reasoningSegmentClosed: true,
       };
     case "clarify.request":
@@ -592,9 +754,24 @@ export function applyDashboardStreamEvent(
         messages: appendClarifyRequest(state.messages, event.payload, now),
         reasoningSegmentClosed: true,
       };
+    case "approval.request": {
+      const requestId =
+        options.approvalRequestId ?? dashboardApprovalRequestId(event, now);
+      return {
+        messages: appendApprovalRequest(
+          state.messages,
+          event.payload,
+          requestId,
+        ),
+        reasoningSegmentClosed: true,
+      };
+    }
     case "message.complete": {
       const finalText = textFromPayload(event.payload, "text", "rendered");
-      const finalReasoning = thinkingTextFromPayload(event.payload, "reasoning");
+      const finalReasoning = thinkingTextFromPayload(
+        event.payload,
+        "reasoning",
+      );
       const messagesWithReasoning = addCompletionReasoningFallback(
         state.messages,
         finalText,

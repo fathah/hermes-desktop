@@ -19,6 +19,7 @@ ul {
 body {
   font-family: var(
     --font-sans,
+    "Cairo",
     "Manrope",
     -apple-system,
     BlinkMacSystemFont,

@@ -6,16 +6,31 @@ export default {
     privacy: "プライバシー",
     credentialPool: "認証情報プール",
   },
+  nav: {
+    groups: {
+      general: "一般",
+      hermes: "Hermes One",
+    },
+    appearance: "外観",
+    language: "言語",
+    privacy: "プライバシー",
+    connection: "接続",
+    network: "ネットワーク",
+    data: "データ",
+    about: "情報とアップデート",
+    community: "コミュニティ",
+    logs: "ログと診断",
+  },
   analytics: {
     label: "匿名の利用状況分析を送信する",
-    hint: "プロジェクトの PostHog インスタンス（EU ホスト）に匿名・集計済みの利用状況データを送信することで Hermes の改善に役立てます。いつでもオフにできます。",
+    hint: "プロジェクトの分析サービスに匿名・集計済みの利用状況データを送信することで Hermes の改善に役立てます。いつでもオフにできます。",
     disclosure: {
       uuid: "このデバイスにのみ保存されるインストールごとのランダムな識別子（氏名・メールアドレス・アカウント情報は含まれません）。",
       platform: "ご利用の OS、Electron バージョン、Node.js バージョン。",
       navigation:
         "アプリ内で開いた画面（例：チャット、セッション、設定）。チャット内容、プロンプト、モデル応答、ファイルの内容は収集しません。",
       endpoint:
-        "データは eu.i.posthog.com（PostHog EU クラウド）に送信されます。セッション録画とページビューの自動取得は無効です。",
+        "データは Hermes の分析サービス（analytics.hermesone.org）に送信されます。セッション録画とページビューの自動取得は無効です。",
       notCollected:
         "収集しないもの：チャットメッセージ、ファイルパス、API キー、モデル設定、アカウント認証情報。",
     },

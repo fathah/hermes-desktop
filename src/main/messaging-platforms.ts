@@ -1,7 +1,4 @@
-import {
-  existsSync,
-  readFileSync,
-} from "fs";
+import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { profileHome } from "./utils";
 import {
@@ -51,7 +48,9 @@ export function readLocalGatewayPlatformStates(
   try {
     const statePath = join(profileHome(profile), "gateway_state.json");
     if (!existsSync(statePath)) return {};
-    const parsed = JSON.parse(readFileSync(statePath, "utf-8")) as GatewayStateFile;
+    const parsed = JSON.parse(
+      readFileSync(statePath, "utf-8"),
+    ) as GatewayStateFile;
     // The caller already passed the local gateway liveness check. Avoid doing
     // another synchronous process lookup here; on Windows that can block the
     // Electron main process during the Gateway screen's refresh loop.

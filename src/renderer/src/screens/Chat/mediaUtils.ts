@@ -201,7 +201,8 @@ function codeRanges(content: string): Array<[number, number]> {
 function markdownDestinationRanges(content: string): Array<[number, number]> {
   const ranges: Array<[number, number]> = [];
   let m: RegExpExecArray | null;
-  const link = /!?\[[^\]\n]*\]\(\s*(<[^>\n]+>|[^)\s\n]+)(?:\s+["'][^)\n]*["'])?\s*\)/g;
+  const link =
+    /!?\[[^\]\n]*\]\(\s*(<[^>\n]+>|[^)\s\n]+)(?:\s+["'][^)\n]*["'])?\s*\)/g;
   while ((m = link.exec(content)) !== null) {
     const destination = m[1];
     const relativeStart = m[0].indexOf(destination);
@@ -386,9 +387,7 @@ export function parseMediaTokens(content: string): MediaSegment[] {
   const seenImages = new Set<string>();
   const hasDirectMarkdownImage = hits.some(
     (hit) =>
-      hit.origin === "markdown-image" &&
-      hit.token.isImage &&
-      hit.token.isUrl,
+      hit.origin === "markdown-image" && hit.token.isImage && hit.token.isUrl,
   );
   const uniqueHits: Hit[] = [];
   for (const hit of hits) {

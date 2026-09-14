@@ -1,6 +1,11 @@
 export default {
   chat: "צ'אט",
+  newChat: "צ'אט חדש",
   sessions: "סשנים",
+  projects: "פרויקטים",
+  chats: "צ'אטים",
+  noChats: "אין צ'אטים",
+  pinned: "מוצמדים",
   discover: "גילוי",
   agents: "פרופילים",
   office: "אופיס",

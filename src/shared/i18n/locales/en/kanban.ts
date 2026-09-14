@@ -13,6 +13,9 @@ export default {
   newTaskTooltip: "Create a new task on the current board",
   newBoard: "New board",
   newBoardTooltip: "Create a new kanban board",
+  showArchived: "Show archived",
+  hideArchived: "Hide archived",
+  archivedTooltip: "Toggle the archived column",
 
   // Remote-mode unsupported notice
   remoteUnsupportedTitle:
@@ -24,10 +27,13 @@ export default {
   status: {
     triage: "Triage",
     todo: "To-do",
+    scheduled: "Scheduled",
     ready: "Ready",
     running: "Running",
     blocked: "Blocked",
+    review: "Review",
     done: "Done",
+    archived: "Archived",
   },
 
   // Card action tooltips

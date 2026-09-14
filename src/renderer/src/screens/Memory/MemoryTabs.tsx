@@ -1,4 +1,4 @@
-import { Database, User, Cloud, Sparkles } from "lucide-react";
+import { Database, User, Cloud, Drama } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import type { MemoryTab } from "./types";
 
@@ -7,14 +7,17 @@ interface MemoryTabsProps {
   onTabChange: (tab: MemoryTab) => void;
 }
 
-export function MemoryTabs({ activeTab, onTabChange }: MemoryTabsProps): React.JSX.Element {
+export function MemoryTabs({
+  activeTab,
+  onTabChange,
+}: MemoryTabsProps): React.JSX.Element {
   const { t } = useI18n();
 
   const tabs: { id: MemoryTab; icon: typeof Database; label: string }[] = [
     { id: "entries", icon: Database, label: t("memory.agentMemory") },
     { id: "profile", icon: User, label: t("memory.userProfile") },
     { id: "providers", icon: Cloud, label: t("memory.providersTitle") },
-    { id: "soul", icon: Sparkles, label: t("soul.title") },
+    { id: "soul", icon: Drama, label: t("soul.title") },
   ];
 
   return (

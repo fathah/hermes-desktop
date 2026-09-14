@@ -78,6 +78,7 @@ export default {
     version: "查看 Hermes 版本",
   },
   queuedCancel: "从队列中移除",
+  copyMessage: "复制消息",
   worktree: {
     loading: "加载中",
     empty: "文件夹为空",

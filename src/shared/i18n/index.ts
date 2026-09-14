@@ -245,6 +245,29 @@ import installTr from "./locales/tr/install";
 import constantsTr from "./locales/tr/constants";
 import kanbanTr from "./locales/tr/kanban";
 import diagnoseTr from "./locales/tr/diagnose";
+import commonAr from "./locales/ar/common";
+import navigationAr from "./locales/ar/navigation";
+import discoverAr from "./locales/ar/discover";
+import welcomeAr from "./locales/ar/welcome";
+import setupAr from "./locales/ar/setup";
+import chatAr from "./locales/ar/chat";
+import settingsAr from "./locales/ar/settings";
+import toolsAr from "./locales/ar/tools";
+import sessionsAr from "./locales/ar/sessions";
+import modelsAr from "./locales/ar/models";
+import providersAr from "./locales/ar/providers";
+import officeAr from "./locales/ar/office";
+import errorsAr from "./locales/ar/errors";
+import schedulesAr from "./locales/ar/schedules";
+import skillsAr from "./locales/ar/skills";
+import gatewayAr from "./locales/ar/gateway";
+import agentsAr from "./locales/ar/agents";
+import soulAr from "./locales/ar/soul";
+import memoryAr from "./locales/ar/memory";
+import installAr from "./locales/ar/install";
+import constantsAr from "./locales/ar/constants";
+import kanbanAr from "./locales/ar/kanban";
+import diagnoseAr from "./locales/ar/diagnose";
 
 export const resources = {
   en: {
@@ -525,6 +548,33 @@ export const resources = {
       constants: constantsTr,
       kanban: kanbanTr,
       diagnose: diagnoseTr,
+    },
+  },
+  ar: {
+    translation: {
+      common: commonAr,
+      navigation: navigationAr,
+      discover: discoverAr,
+      welcome: welcomeAr,
+      setup: setupAr,
+      chat: chatAr,
+      settings: settingsAr,
+      tools: toolsAr,
+      sessions: sessionsAr,
+      models: modelsAr,
+      providers: providersAr,
+      office: officeAr,
+      errors: errorsAr,
+      schedules: schedulesAr,
+      skills: skillsAr,
+      gateway: gatewayAr,
+      agents: agentsAr,
+      soul: soulAr,
+      memory: memoryAr,
+      install: installAr,
+      constants: constantsAr,
+      kanban: kanbanAr,
+      diagnose: diagnoseAr,
     },
   },
 } satisfies Resource;

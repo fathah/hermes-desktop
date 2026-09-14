@@ -300,7 +300,9 @@ export function continuationItemsToHistory(
           id,
           content: item.content,
           timestamp,
-          ...(item.attachments?.length ? { attachments: item.attachments } : {}),
+          ...(item.attachments?.length
+            ? { attachments: item.attachments }
+            : {}),
         });
         break;
       case "assistant":
@@ -310,7 +312,9 @@ export function continuationItemsToHistory(
           content: item.content,
           timestamp,
           ...(item.error ? { error: item.error } : {}),
-          ...(item.attachments?.length ? { attachments: item.attachments } : {}),
+          ...(item.attachments?.length
+            ? { attachments: item.attachments }
+            : {}),
         });
         break;
       case "reasoning":
@@ -341,7 +345,9 @@ export function continuationItemsToHistory(
           name: item.name,
           content: item.content,
           timestamp,
-          ...(item.attachments?.length ? { attachments: item.attachments } : {}),
+          ...(item.attachments?.length
+            ? { attachments: item.attachments }
+            : {}),
         });
         break;
     }
@@ -357,6 +363,8 @@ export function deleteSessionContinuationForSession(
     db.prepare(`DELETE FROM ${TABLE} WHERE session_id = ?`).run(sessionId);
   }
   if (tableExists(db, ERROR_TABLE)) {
-    db.prepare(`DELETE FROM ${ERROR_TABLE} WHERE session_id = ?`).run(sessionId);
+    db.prepare(`DELETE FROM ${ERROR_TABLE} WHERE session_id = ?`).run(
+      sessionId,
+    );
   }
 }

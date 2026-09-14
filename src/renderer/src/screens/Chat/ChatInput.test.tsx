@@ -1,5 +1,37 @@
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { HTMLAttributes, PropsWithChildren } from "react";
+
+vi.mock("border-beam", () => ({
+  BorderBeam: ({
+    children,
+    className,
+    size,
+    colorVariant,
+    strength,
+    theme,
+    ...htmlProps
+  }: PropsWithChildren<{
+    className?: string;
+    size?: string;
+    colorVariant?: string;
+    strength?: number;
+    theme?: string;
+  }> &
+    HTMLAttributes<HTMLDivElement>) => (
+    <div
+      {...htmlProps}
+      className={className}
+      data-testid="chat-input-beam"
+      data-size={size}
+      data-color-variant={colorVariant}
+      data-strength={strength}
+      data-theme={theme}
+    >
+      {children}
+    </div>
+  ),
+}));
 
 // ChatInput pulls translations through useI18n (which requires the i18next
 // provider). Stub it so the component can render in isolation; the keys are
@@ -16,7 +48,9 @@ import { ChatInput } from "./ChatInput";
 
 afterEach(cleanup);
 
-function renderInput(): {
+function renderInput(
+  slashCommands?: React.ComponentProps<typeof ChatInput>["slashCommands"],
+): {
   onSubmit: ReturnType<typeof vi.fn>;
   textarea: HTMLTextAreaElement;
 } {
@@ -28,6 +62,7 @@ function renderInput(): {
       onSubmit={onSubmit}
       onQuickAsk={vi.fn()}
       onAbort={vi.fn()}
+      slashCommands={slashCommands}
     />,
   );
   const textarea = screen.getByPlaceholderText(
@@ -35,6 +70,25 @@ function renderInput(): {
   ) as HTMLTextAreaElement;
   return { onSubmit, textarea };
 }
+
+describe("ChatInput — border beam", () => {
+  // @lat: [[chat-input#Animated composer border#Uses the requested beam preset]]
+  it("renders the requested border beam without clipping composer overlays", () => {
+    const { textarea } = renderInput();
+    const beam = screen.getByTestId("chat-input-beam");
+    const shell = beam.parentElement;
+
+    expect(beam.dataset.size).toBe("pulse-inner");
+    expect(beam.dataset.colorVariant).toBe("mono");
+    expect(beam.dataset.strength).toBe("0.7");
+    expect(beam.dataset.theme).toBe("dark");
+    expect(beam).toHaveAttribute("aria-hidden", "true");
+    expect(beam.contains(textarea)).toBe(false);
+    expect(shell).toHaveClass("chat-input-shell");
+    expect(shell).toContainElement(textarea);
+    expect(shell?.querySelector(".chat-input-toolbar")).not.toBeNull();
+  });
+});
 
 describe("ChatInput — CJK IME Enter handling", () => {
   // Repro: typing Korean (or any CJK IME), the final syllable stays in
@@ -67,5 +121,54 @@ describe("ChatInput — CJK IME Enter handling", () => {
 
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(onSubmit).toHaveBeenCalledWith("안녕하세요", []);
+  });
+});
+
+describe("ChatInput — slash command palette", () => {
+  it("opens on slash and filters commands while typing", () => {
+    const { textarea } = renderInput();
+
+    fireEvent.change(textarea, { target: { value: "/" } });
+    expect(
+      screen.getByRole("dialog", { name: "chat.commandsTitle" }),
+    ).toBeTruthy();
+    expect(screen.getByText("agents")).toBeTruthy();
+
+    fireEvent.change(textarea, { target: { value: "/lea" } });
+    expect(screen.getByText("learn")).toBeTruthy();
+    expect(screen.queryByText("agents")).toBeNull();
+  });
+
+  it("closes with Escape from anywhere in the modal while keeping the draft", () => {
+    const { textarea } = renderInput();
+
+    fireEvent.change(textarea, { target: { value: "/lea" } });
+    const option = screen.getByRole("option", { name: /learn/i });
+    option.focus();
+    fireEvent.keyDown(option, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(textarea.value).toBe("/lea");
+    expect(document.activeElement).toBe(textarea);
+  });
+
+  it("virtualizes large command catalogs", () => {
+    const commands = Array.from({ length: 1_000 }, (_, index) => ({
+      name: `/command-${index}`,
+      description: `Command ${index}`,
+      category: "agent" as const,
+    }));
+    const { textarea } = renderInput(commands);
+
+    fireEvent.change(textarea, { target: { value: "/" } });
+
+    expect(screen.getByText("1000 commands")).toBeTruthy();
+    expect(screen.getAllByRole("option").length).toBeLessThan(30);
+    expect(screen.getByText("command-0")).toBeTruthy();
+    expect(screen.queryByText("command-999")).toBeNull();
+
+    fireEvent.keyDown(textarea, { key: "ArrowUp" });
+    expect(screen.getByText("command-999")).toBeTruthy();
+    expect(screen.queryByText("command-0")).toBeNull();
   });
 });

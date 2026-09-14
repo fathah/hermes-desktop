@@ -14,17 +14,7 @@ function windowsStartCommand(
   args: string[],
 ): ReturnType<typeof resolveTerminalCommand> {
   return {
-    args: [
-      "/d",
-      "/s",
-      "/c",
-      "start",
-      "",
-      "/D",
-      dirPath,
-      target,
-      ...args,
-    ],
+    args: ["/d", "/s", "/c", "start", "", "/D", dirPath, target, ...args],
     command: WIN_CMD,
     cwd: dirPath,
   };
@@ -42,9 +32,7 @@ describe("terminal launcher command resolution", () => {
       getWindowsPackageInstallLocations: () => [
         "C:\\Program Files\\WindowsApps\\Microsoft.PowerShell_7.6.2.0_x64__8wekyb3d8bbwe",
       ],
-      exists: (filePath) =>
-        filePath === target ||
-        filePath === WIN_CMD,
+      exists: (filePath) => filePath === target || filePath === WIN_CMD,
     });
 
     expect(command).toEqual(
@@ -63,9 +51,7 @@ describe("terminal launcher command resolution", () => {
       getWindowsPackageInstallLocations: () => [
         "C:\\Program Files\\WindowsApps\\Microsoft.PowerShell_7.6.2.0_x64__8wekyb3d8bbwe",
       ],
-      exists: (filePath) =>
-        filePath === target ||
-        filePath === WIN_CMD,
+      exists: (filePath) => filePath === target || filePath === WIN_CMD,
     });
 
     expect(command?.command).toBe(WIN_CMD);
@@ -86,9 +72,7 @@ describe("terminal launcher command resolution", () => {
               "C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal_1.24.11321.0_x64__8wekyb3d8bbwe",
             ]
           : [],
-      exists: (filePath) =>
-        filePath === target ||
-        filePath === WIN_CMD,
+      exists: (filePath) => filePath === target || filePath === WIN_CMD,
     });
 
     expect(command).toEqual(
@@ -108,9 +92,7 @@ describe("terminal launcher command resolution", () => {
       getWindowsPackageInstallLocations: () => [
         "C:\\Program Files\\WindowsApps\\Microsoft.PowerShell_7.6.2.0_x64__8wekyb3d8bbwe",
       ],
-      exists: (filePath) =>
-        filePath === target ||
-        filePath === WIN_CMD,
+      exists: (filePath) => filePath === target || filePath === WIN_CMD,
     });
 
     expect(command).toBeNull();
@@ -134,9 +116,7 @@ describe("terminal launcher command resolution", () => {
 
     expect(command?.command).toBe(WIN_CMD);
     expect(command?.args).toContain(WIN_POWERSHELL);
-    expect(command?.args.join(" ")).not.toContain(
-      "Microsoft\\WindowsApps",
-    );
+    expect(command?.args.join(" ")).not.toContain("Microsoft\\WindowsApps");
   });
 
   it("rejects Windows package locations outside protected Program Files", () => {
@@ -163,9 +143,7 @@ describe("terminal launcher command resolution", () => {
       env: {
         SystemDrive: "C:",
       },
-      exists: (filePath) =>
-        filePath === WIN_CMD ||
-        filePath === WIN_POWERSHELL,
+      exists: (filePath) => filePath === WIN_CMD || filePath === WIN_POWERSHELL,
     });
 
     expect(command).toEqual(
@@ -303,7 +281,8 @@ describe("terminal launcher command resolution", () => {
         PATH: "/usr/bin",
       },
       exists: (filePath) =>
-        filePath === "/home/me/repo" || filePath === "/usr/bin/x-terminal-emulator",
+        filePath === "/home/me/repo" ||
+        filePath === "/usr/bin/x-terminal-emulator",
       realpath: (filePath) =>
         filePath === "/usr/bin/x-terminal-emulator"
           ? "/home/me/repo/bin/x-terminal-emulator"

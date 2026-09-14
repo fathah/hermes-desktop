@@ -67,12 +67,7 @@ describe("processFiles", () => {
     // the compression path which downsamples to fit the gateway. Only
     // pathologically large inputs (>50 MB) are rejected outright. Use
     // 51 MB to exercise that boundary.
-    const file = makeFile(
-      "huge.png",
-      "image/png",
-      "x",
-      51 * 1024 * 1024,
-    );
+    const file = makeFile("huge.png", "image/png", "x", 51 * 1024 * 1024);
     const out = await processFiles([file], 0);
     expect(out.attachments).toEqual([]);
     expect(out.errors).toHaveLength(1);

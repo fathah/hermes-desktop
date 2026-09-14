@@ -24,6 +24,7 @@ export default {
     cerebras: "Cerebras",
     atlascloud: "AtlasCloud",
     mistral: "Mistral",
+    aimlapi: "AIML API",
   },
   serverPreset: "Server Preset",
   localGroupLabel: "Local Servers",

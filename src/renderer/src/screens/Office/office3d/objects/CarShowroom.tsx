@@ -3,6 +3,10 @@ import { useFrame } from "@react-three/fiber";
 import { Text } from "@react-three/drei";
 import * as THREE from "three";
 import { VehicleModel, car1GlbUrl, car2GlbUrl } from "./Traffic";
+import { Interactable } from "./Interactable";
+import { GlassRoof } from "./Roofs";
+import { StaffPerson } from "./StaffPerson";
+import { CHAR_MAN, CHAR_WOMAN } from "../core/characters";
 import {
   SHOWROOM_W,
   SHOWROOM_D,
@@ -39,9 +43,15 @@ function RotatingShowcaseCar({
   });
   return (
     <group ref={groupRef} position={position}>
-      <VehicleModel url={url} tint={tint} targetLen={2.6} />
+      <VehicleModel url={url} tint={tint} targetLen={3.5} />
     </group>
   );
+}
+
+/** Info handed to `onCarActivate` when a display car is clicked. */
+export interface ShowroomCar {
+  name: string;
+  tint: string;
 }
 
 interface DisplayCar {
@@ -49,36 +59,62 @@ interface DisplayCar {
   rotY: number;
   url: string;
   tint: string;
+  name: string;
 }
 
-const DISPLAY_CARS: DisplayCar[] = [
+// Exported for the walk-mode proximity system, which needs each car's
+// showroom-local position to place its "Press E" interaction point.
+export const DISPLAY_CARS: DisplayCar[] = [
   {
     pos: [-4, 0, -7],
     rotY: Math.PI / 2 - 0.3,
     url: car1GlbUrl,
     tint: "#b03a2e",
+    name: "Hermes S1 Crimson",
   },
   {
     pos: [-4, 0, -2.5],
     rotY: Math.PI / 2 + 0.25,
     url: car2GlbUrl,
     tint: "#1f618d",
+    name: "Hermes GT Azure",
   },
   {
     pos: [-4, 0, 2.5],
     rotY: Math.PI / 2 - 0.25,
     url: car1GlbUrl,
     tint: "#e8e8e8",
+    name: "Hermes S1 Pearl",
   },
   {
     pos: [-4, 0, 7],
     rotY: Math.PI / 2 + 0.3,
     url: car2GlbUrl,
     tint: "#39414f",
+    name: "Hermes GT Gunmetal",
   },
-  { pos: [2.5, 0, -6.5], rotY: Math.PI / 2, url: car2GlbUrl, tint: "#ca6f1e" },
-  { pos: [2.5, 0, 6.5], rotY: Math.PI / 2, url: car1GlbUrl, tint: "#239b56" },
+  {
+    pos: [2.5, 0, -6.5],
+    rotY: Math.PI / 2,
+    url: car2GlbUrl,
+    tint: "#ca6f1e",
+    name: "Hermes GT Sunset",
+  },
+  {
+    pos: [2.5, 0, 6.5],
+    rotY: Math.PI / 2,
+    url: car1GlbUrl,
+    tint: "#239b56",
+    name: "Hermes S1 Emerald",
+  },
 ];
+
+export const HERO_CAR: ShowroomCar = {
+  name: "Hermes S1 Aurum",
+  tint: "#d4ac0d",
+};
+/** The hero car's pedestal position in showroom-local coordinates. */
+export const HERO_CAR_POS: [number, number] = [1.5, 0];
 
 // Storefront pillars every 4 units; the middle bay is the open entrance.
 const PILLAR_ZS = [-10, -6, -2, 2, 6, 10];
@@ -91,8 +127,16 @@ const GLASS_BAYS = [0, 1, 3, 4]; // bay 2 (centre) stays open
  */
 export const CarShowroom = memo(function CarShowroom({
   position = [SHOWROOM_X, 0, SHOWROOM_Z],
+  interactive = false,
+  roof = false,
+  onCarActivate,
 }: {
   position?: [number, number, number];
+  /** Interior mode: display cars become hover/click interactables. */
+  interactive?: boolean;
+  /** Mount the glass roof (city view, or walk mode indoors). */
+  roof?: boolean;
+  onCarActivate?: (car: ShowroomCar) => void;
 } = {}): React.JSX.Element {
   const halfW = SHOWROOM_W / 2;
   const halfD = SHOWROOM_D / 2;
@@ -114,6 +158,13 @@ export const CarShowroom = memo(function CarShowroom({
           envMapIntensity={0.9}
         />
       </mesh>
+      {roof && (
+        <GlassRoof
+          width={SHOWROOM_W}
+          depth={SHOWROOM_D}
+          height={SHOWROOM_WALL_H + 0.06}
+        />
+      )}
       {/* Back (west) wall */}
       <mesh position={[-halfW, wallH / 2, 0]}>
         <boxGeometry args={[wallT, wallH, SHOWROOM_D]} />
@@ -189,16 +240,50 @@ export const CarShowroom = memo(function CarShowroom({
         />
       </mesh>
       <Suspense fallback={null}>
-        <RotatingShowcaseCar
-          position={[1.5, 0.16, 0]}
-          url={car1GlbUrl}
-          tint="#d4ac0d"
-        />
+        <Interactable
+          enabled={interactive && !!onCarActivate}
+          label={HERO_CAR.name}
+          onActivate={() => onCarActivate?.(HERO_CAR)}
+          position={[1.5, 0, 0]}
+          labelHeight={1.9}
+          ringRadius={1.6}
+        >
+          <RotatingShowcaseCar
+            position={[0, 0.16, 0]}
+            url={car1GlbUrl}
+            tint={HERO_CAR.tint}
+          />
+        </Interactable>
         {DISPLAY_CARS.map((c, i) => (
-          <group key={`sc-${i}`} position={c.pos} rotation={[0, c.rotY, 0]}>
-            <VehicleModel url={c.url} tint={c.tint} targetLen={2.3} />
-          </group>
+          <Interactable
+            key={`sc-${i}`}
+            enabled={interactive && !!onCarActivate}
+            label={c.name}
+            onActivate={() => onCarActivate?.({ name: c.name, tint: c.tint })}
+            position={c.pos}
+            labelHeight={1.5}
+            ringRadius={1.5}
+          >
+            <group rotation={[0, c.rotY, 0]}>
+              <VehicleModel url={c.url} tint={c.tint} targetLen={3.3} />
+            </group>
+          </Interactable>
         ))}
+        {/* Staff: a salesperson greeting at the entrance bay and the manager
+            overseeing the floor from the back wall. Decorative today — car
+            sales to agents will attach to them later. */}
+        <StaffPerson
+          position={[5.8, 0, 3.2]}
+          rotationY={Math.PI / 2}
+          tint="#7a1f2b"
+          model={CHAR_WOMAN}
+        />
+        <StaffPerson
+          position={[-6.3, 0, 0]}
+          rotationY={Math.PI / 2}
+          tint="#1c2733"
+          model={CHAR_MAN}
+        />
       </Suspense>
       {/* Entrance plants */}
       {([-3.2, 3.2] as number[]).map((pz) => (

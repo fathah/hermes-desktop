@@ -120,11 +120,19 @@ describe("setAuxiliaryField", () => {
   });
 
   it("creates task sub-block when missing", async () => {
-    const content = ["auxiliary:", "  compression:", "    provider: auto", ""].join(
-      "\n",
-    );
+    const content = [
+      "auxiliary:",
+      "  compression:",
+      "    provider: auto",
+      "",
+    ].join("\n");
     const { setAuxiliaryField } = await importAuxConfigWithHome(TEST_DIR);
-    const result = setAuxiliaryField(content, "vision", "provider", "anthropic");
+    const result = setAuxiliaryField(
+      content,
+      "vision",
+      "provider",
+      "anthropic",
+    );
 
     expect(result).toContain("auxiliary:");
     expect(result).toContain("  vision:");
@@ -142,7 +150,12 @@ describe("setAuxiliaryField", () => {
       "",
     ].join("\n");
     const { setAuxiliaryField } = await importAuxConfigWithHome(TEST_DIR);
-    const result = setAuxiliaryField(content, "vision", "provider", "anthropic");
+    const result = setAuxiliaryField(
+      content,
+      "vision",
+      "provider",
+      "anthropic",
+    );
 
     expect(result).toContain('    provider: "anthropic"');
     expect(result).toContain('    model: "gpt-4o"');
@@ -279,7 +292,11 @@ describe("setAuxiliaryTask", () => {
     const { setAuxiliaryTask } = await importAuxConfigWithHome(TEST_DIR);
 
     expect(() =>
-      setAuxiliaryTask("unknown_task", { provider: "auto", model: "", baseUrl: "" }),
+      setAuxiliaryTask("unknown_task", {
+        provider: "auto",
+        model: "",
+        baseUrl: "",
+      }),
     ).toThrow("unknown auxiliary task: unknown_task");
   });
 
