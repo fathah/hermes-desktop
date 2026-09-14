@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "../useI18n";
 import { getAnalyticsConsent } from "../../utils/analytics";
+import type { AgentCapabilitySnapshot } from "../../../../shared/agent-capabilities";
 import {
   CHAT_TRANSPORT_OPTIONS,
   getCachedOpenClaw,
@@ -14,6 +15,13 @@ import {
 
 export { CHAT_TRANSPORT_OPTIONS };
 export type { RemoteChatTransport, TransportProbe };
+
+type PublicConnectionConfig = Awaited<
+  ReturnType<typeof window.hermesAPI.getConnectionConfig>
+>;
+type ConnectionStatus = Awaited<
+  ReturnType<typeof window.hermesAPI.getConnectionStatuses>
+>[number];
 
 /**
  * Owns every piece of Settings state, the config-load effect, and all the
@@ -31,6 +39,8 @@ export function useSettingsData(profile?: string) {
   const [hermesHome, setHermesHome] = useState("");
 
   const [hermesVersion, setHermesVersion] = useState<string | null>(null);
+  const [agentCapabilities, setAgentCapabilities] =
+    useState<AgentCapabilitySnapshot | null>(null);
   const [appVersion, setAppVersion] = useState("");
   const [doctorOutput, setDoctorOutput] = useState<string | null>(null);
   const [doctorRunning, setDoctorRunning] = useState(false);
@@ -62,11 +72,24 @@ export function useSettingsData(profile?: string) {
   const migrationLogRef = useRef<HTMLPreElement>(null);
 
   // Connection mode
+  const [connections, setConnections] = useState<PublicConnectionConfig[]>([]);
+  const [connectionId, setConnectionId] = useState("");
+  const [connectionName, setConnectionName] = useState("");
+  const [connectionStatuses, setConnectionStatuses] = useState<
+    ConnectionStatus[]
+  >([]);
+  const [connectionStatusesLoading, setConnectionStatusesLoading] =
+    useState(false);
   const [connMode, setConnMode] = useState<"local" | "remote" | "ssh">("local");
   const [connRemoteUrl, setConnRemoteUrl] = useState("");
   const [connApiKey, setConnApiKey] = useState("");
   const [connApiKeyMask, setConnApiKeyMask] = useState("");
   const [connHasApiKey, setConnHasApiKey] = useState(false);
+  const [remoteAuthMode, setRemoteAuthMode] = useState<
+    "auto" | "token" | "oauth"
+  >("auto");
+  const [remoteOAuthSignedIn, setRemoteOAuthSignedIn] = useState(false);
+  const [remoteOAuthBusy, setRemoteOAuthBusy] = useState(false);
   const [remoteChatTransport, setRemoteChatTransport] =
     useState<RemoteChatTransport>("auto");
   const [sshChatTransport, setSshChatTransport] =
@@ -84,6 +107,7 @@ export function useSettingsData(profile?: string) {
   const [sshKeyPath, setSshKeyPath] = useState("");
   const [sshRemotePort, setSshRemotePort] = useState("");
   const [sshLocalPort, setSshLocalPort] = useState("");
+  const [sshDockerContainer, setSshDockerContainer] = useState("");
   const [transportProbe, setTransportProbe] = useState<TransportProbe | null>(
     null,
   );
@@ -141,27 +165,48 @@ export function useSettingsData(profile?: string) {
 
   const loadConfigRequestRef = useRef(0);
 
+  const refreshConnectionStatuses = useCallback(async (): Promise<void> => {
+    setConnectionStatusesLoading(true);
+    try {
+      setConnectionStatuses(
+        await window.hermesAPI.getConnectionStatuses(profile),
+      );
+    } finally {
+      setConnectionStatusesLoading(false);
+    }
+  }, [profile]);
+
   const loadConfig = useCallback(async (): Promise<void> => {
     const requestId = ++loadConfigRequestRef.current;
     setHermesHome("");
     setHermesVersion(null);
+    setAgentCapabilities(null);
 
     // Load fast config first (cached in main process)
-    const [aVersion, conn, keyStatus, autoUpgrade] = await Promise.all([
+    const [aVersion, registry, keyStatus, autoUpgrade] = await Promise.all([
       window.hermesAPI.getAppVersion(),
-      window.hermesAPI.getConnectionConfig(),
+      window.hermesAPI.getConnectionRegistry(),
       window.hermesAPI.getApiServerKeyStatus(profile),
       window.hermesAPI.getAutoUpgradeEnabled(),
     ]);
 
     if (requestId !== loadConfigRequestRef.current) return;
+    const conn =
+      registry.connections.find(
+        (connection) => connection.connectionId === registry.activeConnectionId,
+      ) ?? registry.connections[0];
+    if (!conn) return;
 
     const cacheKey = versionCacheKey(conn, profile);
     setHermesVersion(getCachedVersion(cacheKey));
     setAppVersion(aVersion);
+    setConnections(registry.connections);
+    setConnectionId(conn.connectionId);
+    setConnectionName(conn.name);
     setConnMode(conn.mode);
     setConnRemoteUrl(conn.remoteUrl);
     setConnHasApiKey(conn.hasApiKey);
+    setRemoteAuthMode(conn.remoteAuthMode ?? "auto");
     setRemoteChatTransport(conn.remoteChatTransport ?? "auto");
     setSshChatTransport(conn.sshChatTransport ?? "auto");
     const mask = conn.hasApiKey ? makeApiKeyMask(conn.apiKeyLength) : "";
@@ -173,22 +218,39 @@ export function useSettingsData(profile?: string) {
     setSshKeyPath(conn.ssh?.keyPath || "");
     setSshRemotePort(conn.ssh?.remotePort ? String(conn.ssh.remotePort) : "");
     setSshLocalPort(conn.ssh?.localPort ? String(conn.ssh.localPort) : "");
+    setSshDockerContainer(conn.ssh?.dockerContainerName || "");
     setApiServerKeyMissing(!keyStatus.hasKey);
     setAutoUpgradeEnabled(autoUpgrade);
     connLoaded.current = true;
 
-    const homeResult = await Promise.resolve()
-      .then(() => window.hermesAPI.getHermesHome(profile))
-      .then(
-        (value) => ({ status: "fulfilled" as const, value }),
-        (reason) => ({ status: "rejected" as const, reason }),
-      );
-    const versionResult = await Promise.resolve()
-      .then(() => window.hermesAPI.getHermesVersion())
-      .then(
-        (value) => ({ status: "fulfilled" as const, value }),
-        (reason) => ({ status: "rejected" as const, reason }),
-      );
+    if (conn.mode === "remote" && conn.remoteUrl.trim()) {
+      try {
+        const detected = await window.hermesAPI.probeRemoteAuthMode(
+          conn.remoteUrl,
+        );
+        if (requestId !== loadConfigRequestRef.current) return;
+        setRemoteAuthMode(detected.authMode);
+        if (detected.authMode === "oauth") {
+          const state = await window.hermesAPI.remoteOAuthSessionState();
+          if (requestId !== loadConfigRequestRef.current) return;
+          setRemoteOAuthSignedIn(state.signedIn);
+        } else {
+          setRemoteOAuthSignedIn(false);
+        }
+      } catch {
+        if (requestId !== loadConfigRequestRef.current) return;
+        setRemoteOAuthSignedIn(false);
+      }
+    } else {
+      setRemoteOAuthSignedIn(false);
+    }
+
+    const [homeResult, versionResult, capabilityResult] =
+      await Promise.allSettled([
+        window.hermesAPI.getHermesHome(profile),
+        window.hermesAPI.getHermesVersion(profile),
+        window.hermesAPI.getAgentCapabilities(profile),
+      ]);
 
     if (requestId !== loadConfigRequestRef.current) return;
 
@@ -196,6 +258,9 @@ export function useSettingsData(profile?: string) {
     const version =
       versionResult.status === "fulfilled" ? versionResult.value : null;
     setHermesVersion(version);
+    setAgentCapabilities(
+      capabilityResult.status === "fulfilled" ? capabilityResult.value : null,
+    );
     if (version) setCachedVersion(cacheKey, version);
 
     // Load network settings from config.yaml
@@ -225,6 +290,10 @@ export function useSettingsData(profile?: string) {
   useEffect(() => {
     void Promise.resolve().then(loadConfig);
   }, [loadConfig]);
+
+  useEffect(() => {
+    void refreshConnectionStatuses();
+  }, [refreshConnectionStatuses]);
 
   useEffect(() => {
     const unsubscribe = window.hermesAPI.onConnectionConfigChanged(() => {
@@ -383,6 +452,7 @@ export function useSettingsData(profile?: string) {
       sshKeyPath.trim(),
       parseInt(sshRemotePort, 10) || 8642,
       parseInt(sshLocalPort, 10) || 18642,
+      sshDockerContainer.trim(),
     );
   }
 
@@ -423,6 +493,15 @@ export function useSettingsData(profile?: string) {
               : "Auto active: Dashboard",
           detail: status.connection.baseUrl,
           kind: "ok",
+          loading: false,
+        });
+        return;
+      }
+      if (status.needsOAuthLogin) {
+        setTransportProbe({
+          label: "Sign in required",
+          detail: status.error || "Browser authentication is required.",
+          kind: "warn",
           loading: false,
         });
         return;
@@ -480,9 +559,54 @@ export function useSettingsData(profile?: string) {
       sshChatTransport,
     );
     await loadConfig();
+    void refreshConnectionStatuses();
     setConnStatus("Saved");
     setTimeout(() => setConnStatus(null), 2000);
     void refreshTransportProbe();
+  }
+
+  async function handleCreateConnection(): Promise<void> {
+    await window.hermesAPI.createConnection();
+    await loadConfig();
+    void refreshConnectionStatuses();
+    setConnStatus(t("settings.connectionCreated"));
+  }
+
+  async function handleRenameConnection(): Promise<void> {
+    try {
+      await window.hermesAPI.renameConnection(connectionId, connectionName);
+      await loadConfig();
+      setConnStatus(t("settings.connectionRenamed"));
+    } catch (err) {
+      setConnStatus(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleSelectConnection(
+    nextConnectionId: string,
+  ): Promise<void> {
+    if (nextConnectionId === connectionId) return;
+    await window.hermesAPI.selectConnection(nextConnectionId);
+    await loadConfig();
+    setConnStatus(t("settings.connectionSelected"));
+  }
+
+  async function handleRemoveConnection(): Promise<void> {
+    if (
+      !window.confirm(
+        t("settings.removeConnectionConfirm", { name: connectionName }),
+      )
+    ) {
+      return;
+    }
+    try {
+      await window.hermesAPI.removeConnection(connectionId);
+      await loadConfig();
+      void refreshConnectionStatuses();
+      setConnStatus(t("settings.connectionRemoved"));
+    } catch (err) {
+      setConnStatus(err instanceof Error ? err.message : String(err));
+    }
   }
 
   async function handleChatTransportChange(
@@ -529,6 +653,23 @@ export function useSettingsData(profile?: string) {
       }
       setConnTesting(true);
       setConnStatus(null);
+      if (remoteAuthMode === "oauth") {
+        await window.hermesAPI.setConnectionConfig(
+          "remote",
+          url,
+          getConnectionApiKeyForSave(),
+        );
+        const status = await window.hermesAPI.dashboardStatus(profile);
+        setConnTesting(false);
+        if (status.running) setRemoteOAuthSignedIn(true);
+        if (status.needsOAuthLogin) setRemoteOAuthSignedIn(false);
+        setConnStatus(
+          status.running
+            ? t("settings.remoteSuccess")
+            : status.error || t("settings.remoteErrorFailedSimple"),
+        );
+        return;
+      }
       const ok = await window.hermesAPI.testRemoteConnection(
         url,
         getConnectionApiKeyForSave(),
@@ -539,6 +680,52 @@ export function useSettingsData(profile?: string) {
           ? t("settings.remoteSuccess")
           : t("settings.remoteErrorFailedSimple"),
       );
+    }
+  }
+
+  async function handleRemoteOAuthLogin(): Promise<void> {
+    const url = connRemoteUrl.trim();
+    if (!url) {
+      setConnStatus(t("settings.remoteErrorRequiredSimple"));
+      return;
+    }
+    setRemoteOAuthBusy(true);
+    setConnStatus(null);
+    try {
+      await window.hermesAPI.setConnectionConfig(
+        "remote",
+        url,
+        getConnectionApiKeyForSave(),
+      );
+      await window.hermesAPI.remoteOAuthLogin();
+      setRemoteAuthMode("oauth");
+      setRemoteOAuthSignedIn(true);
+      setConnStatus(t("settings.remoteOAuthLoginSuccess"));
+      void refreshTransportProbe();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setConnStatus(
+        /cancel/i.test(message)
+          ? t("settings.remoteOAuthCancelled")
+          : message || t("settings.remoteOAuthLoginFailed"),
+      );
+    } finally {
+      setRemoteOAuthBusy(false);
+    }
+  }
+
+  async function handleRemoteOAuthLogout(): Promise<void> {
+    setRemoteOAuthBusy(true);
+    setConnStatus(null);
+    try {
+      await window.hermesAPI.remoteOAuthLogout();
+      setRemoteOAuthSignedIn(false);
+      setConnStatus(t("settings.remoteOAuthLogoutSuccess"));
+      void refreshTransportProbe();
+    } catch (err) {
+      setConnStatus(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRemoteOAuthBusy(false);
     }
   }
 
@@ -650,18 +837,24 @@ export function useSettingsData(profile?: string) {
   function refreshVersion(): void {
     const requestId = ++loadConfigRequestRef.current;
     setHermesVersion(null);
+    setAgentCapabilities(null);
     window.hermesAPI
       .getConnectionConfig()
       .then((conn) => {
         const cacheKey = versionCacheKey(conn, profile);
-        return window.hermesAPI.refreshHermesVersion().then((version) => ({
+        return Promise.all([
+          window.hermesAPI.refreshHermesVersion(profile),
+          window.hermesAPI.getAgentCapabilities(profile),
+        ]).then(([version, capabilities]) => ({
           cacheKey,
           version,
+          capabilities,
         }));
       })
-      .then(({ cacheKey, version }) => {
+      .then(({ cacheKey, version, capabilities }) => {
         if (requestId !== loadConfigRequestRef.current) return;
         setHermesVersion(version);
+        setAgentCapabilities(capabilities);
         if (version) setCachedVersion(cacheKey, version);
       });
   }
@@ -706,6 +899,7 @@ export function useSettingsData(profile?: string) {
     // version / agent
     hermesHome,
     hermesVersion,
+    agentCapabilities,
     appVersion,
     parsedVersion,
     doctorOutput,
@@ -741,6 +935,13 @@ export function useSettingsData(profile?: string) {
     handleMigrate,
     handleDismissMigration,
     // connection
+    connections,
+    connectionStatuses,
+    connectionStatusesLoading,
+    refreshConnectionStatuses,
+    connectionId,
+    connectionName,
+    setConnectionName,
     connMode,
     setConnMode,
     connRemoteUrl,
@@ -748,6 +949,10 @@ export function useSettingsData(profile?: string) {
     connApiKey,
     setConnApiKey,
     connApiKeyMask,
+    remoteAuthMode,
+    setRemoteAuthMode,
+    remoteOAuthSignedIn,
+    remoteOAuthBusy,
     connTesting,
     connStatus,
     connLoaded,
@@ -760,8 +965,14 @@ export function useSettingsData(profile?: string) {
     sshChatTransport,
     transportProbe,
     handleSaveConnection,
+    handleCreateConnection,
+    handleRenameConnection,
+    handleSelectConnection,
+    handleRemoveConnection,
     handleChatTransportChange,
     handleTestConnection,
+    handleRemoteOAuthLogin,
+    handleRemoteOAuthLogout,
     handleSwitchToLocal,
     handleSwitchToRemote,
     handleSwitchToSsh,
@@ -776,6 +987,8 @@ export function useSettingsData(profile?: string) {
     setSshKeyPath,
     sshRemotePort,
     setSshRemotePort,
+    sshDockerContainer,
+    setSshDockerContainer,
     // backup / data
     backingUp,
     backupResult,

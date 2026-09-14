@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import { Search, X, Check, Plus } from "../assets/icons";
 import { PROVIDERS } from "../constants";
 import { useI18n } from "./useI18n";
+import { OrbLoader } from "./OrbLoader";
 import BrandLogo from "./common/BrandLogo";
 import type {
   ModelRegistry,
@@ -136,7 +137,7 @@ function RegistryBrowserModal({
         <div className="models-modal-body models-registry-body">
           {loading ? (
             <div className="models-loading">
-              <div className="loading-spinner" />
+              <OrbLoader state="searching" size={64} />
             </div>
           ) : registry?.error ? (
             <div className="models-empty">

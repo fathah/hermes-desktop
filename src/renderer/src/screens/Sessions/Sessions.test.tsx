@@ -23,12 +23,16 @@ const baseProps = {
   onResumeSession: (): void => {},
   onNewChat: (): void => {},
   currentSessionId: null,
+  connectionId: "connection-one",
+  profile: "work",
 };
 
 function installHermesAPI(initialSessions: unknown[] = []): {
   listCachedSessions: ReturnType<typeof vi.fn>;
   syncSessionCache: ReturnType<typeof vi.fn>;
+  getConnectionConfig: ReturnType<typeof vi.fn>;
   searchSessions: ReturnType<typeof vi.fn>;
+  updateSessionTitle: ReturnType<typeof vi.fn>;
   deleteSession: ReturnType<typeof vi.fn>;
   deleteSessions: ReturnType<typeof vi.fn>;
   emitConnectionConfigChanged: () => void;
@@ -37,7 +41,9 @@ function installHermesAPI(initialSessions: unknown[] = []): {
   const api = {
     listCachedSessions: vi.fn().mockResolvedValue(initialSessions),
     syncSessionCache: vi.fn().mockResolvedValue(initialSessions),
+    getConnectionConfig: vi.fn().mockResolvedValue({ mode: "ssh" }),
     searchSessions: vi.fn().mockResolvedValue([]),
+    updateSessionTitle: vi.fn().mockResolvedValue(undefined),
     deleteSession: vi.fn().mockResolvedValue(undefined),
     deleteSessions: vi.fn().mockResolvedValue({ requested: 0, deleted: 0 }),
     onConnectionConfigChanged: vi.fn((callback: () => void) => {
@@ -91,11 +97,61 @@ function sessionSearchResult(
 
 describe("Sessions tab live refresh (#322)", () => {
   beforeEach(() => {
+    localStorage.clear();
     vi.useFakeTimers();
   });
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  // @lat: [[connections#Test specifications#Connection-explicit session browsing#Routes renderer operations]]
+  it("routes browsing and rename operations through the selected connection and profile", async () => {
+    vi.useRealTimers();
+    const api = installHermesAPI([
+      {
+        id: "routed-session",
+        title: "Routed chat",
+        startedAt: Math.floor(Date.now() / 1000),
+        source: "desktop",
+        messageCount: 2,
+        model: "gpt-5.5",
+      },
+    ]);
+
+    render(<Sessions {...baseProps} visible={true} />);
+    await waitFor(() => {
+      expect(api.syncSessionCache).toHaveBeenCalledWith(
+        "connection-one",
+        "work",
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "sessions.rename" }));
+    const renameInput = screen.getAllByRole("textbox")[1];
+    fireEvent.change(renameInput, { target: { value: "Renamed route" } });
+    fireEvent.keyDown(renameInput, { key: "Enter" });
+    await waitFor(() => {
+      expect(api.updateSessionTitle).toHaveBeenCalledWith(
+        "routed-session",
+        "Renamed route",
+        "connection-one",
+        "work",
+      );
+    });
+
+    fireEvent.change(
+      screen.getByPlaceholderText("sessions.searchPlaceholder"),
+      { target: { value: "route" } },
+    );
+    await waitFor(() => {
+      expect(api.searchSessions).toHaveBeenCalledWith(
+        "route",
+        undefined,
+        "connection-one",
+        "work",
+      );
+    });
   });
 
   it("re-syncs from state.db on an interval while the tab is visible", async () => {
@@ -181,6 +237,155 @@ describe("Sessions tab live refresh (#322)", () => {
 
     expect(screen.getByText("SSH session")).toBeTruthy();
     expect(screen.queryByText("sessions.empty")).toBeNull();
+  });
+
+  it("removes the last native-archived local session and shows it again on restore", async () => {
+    const rows = [
+      {
+        id: "local-session",
+        title: "Local chat",
+        startedAt: 200,
+        source: "desktop",
+        messageCount: 2,
+        model: "gpt-5.5",
+      },
+    ];
+    const api = installHermesAPI(rows);
+    api.getConnectionConfig.mockResolvedValue({ mode: "local" });
+    render(<Sessions {...baseProps} visible={true} />);
+    await act(async () => {});
+    expect(screen.getByText("Local chat")).toBeTruthy();
+
+    api.syncSessionCache.mockResolvedValue([]);
+    await act(async () => {
+      vi.advanceTimersByTime(SESSIONS_REFRESH_MS);
+    });
+    expect(screen.queryByText("Local chat")).toBeNull();
+    expect(screen.getByText("sessions.empty")).toBeTruthy();
+    expect(api.getConnectionConfig).toHaveBeenCalledWith("connection-one");
+
+    api.syncSessionCache.mockResolvedValue(rows);
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(screen.getByText("Local chat")).toBeTruthy();
+  });
+
+  it("preserves visible rows when confirming a local empty refresh fails, then retries", async () => {
+    const api = installHermesAPI([
+      {
+        id: "local-session",
+        title: "Local chat",
+        startedAt: 200,
+        source: "desktop",
+        messageCount: 2,
+        model: "gpt-5.5",
+      },
+    ]);
+    render(<Sessions {...baseProps} visible={true} />);
+    await act(async () => {});
+    api.syncSessionCache.mockResolvedValue([]);
+    api.getConnectionConfig.mockRejectedValueOnce(
+      new Error("Connection unavailable"),
+    );
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await act(async () => {
+        vi.advanceTimersByTime(SESSIONS_REFRESH_MS);
+      });
+      expect(screen.getByText("Local chat")).toBeTruthy();
+      api.getConnectionConfig.mockResolvedValue({ mode: "local" });
+      await act(async () => {
+        vi.advanceTimersByTime(SESSIONS_REFRESH_MS);
+      });
+      expect(screen.queryByText("Local chat")).toBeNull();
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  it("does not apply an old empty refresh after switching profiles", async () => {
+    const api = installHermesAPI([
+      {
+        id: "local-session",
+        title: "Old profile chat",
+        startedAt: 200,
+        source: "desktop",
+        messageCount: 2,
+        model: "gpt-5.5",
+      },
+    ]);
+    const view = render(<Sessions {...baseProps} visible={true} />);
+    await act(async () => {});
+    let resolveConfig!: (value: { mode: "local" }) => void;
+    api.getConnectionConfig.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveConfig = resolve;
+      }),
+    );
+    api.syncSessionCache.mockResolvedValueOnce([]);
+    await act(async () => {
+      vi.advanceTimersByTime(SESSIONS_REFRESH_MS);
+    });
+    expect(api.getConnectionConfig).toHaveBeenCalledWith("connection-one");
+
+    api.syncSessionCache.mockResolvedValue([
+      {
+        id: "other-session",
+        title: "Other profile chat",
+        startedAt: 200,
+        source: "desktop",
+        messageCount: 2,
+        model: "gpt-5.5",
+      },
+    ]);
+    await act(async () => {
+      view.rerender(<Sessions {...baseProps} profile="other" visible={true} />);
+    });
+    expect(screen.getByText("Other profile chat")).toBeTruthy();
+    await act(async () => {
+      resolveConfig({ mode: "local" });
+    });
+    expect(screen.getByText("Other profile chat")).toBeTruthy();
+  });
+
+  it("defaults to chats and persists the automation filter", async () => {
+    vi.useRealTimers();
+    const rows = [
+      {
+        id: "chat-session",
+        title: "Manual chat",
+        startedAt: Math.floor(Date.now() / 1000),
+        source: "desktop",
+        messageCount: 2,
+        model: "gpt-5.5",
+      },
+      {
+        id: "cron-session",
+        title: "Nightly automation",
+        startedAt: Math.floor(Date.now() / 1000),
+        source: "cron",
+        messageCount: 2,
+        model: "gpt-5.5",
+      },
+    ];
+    installHermesAPI(rows);
+    const view = render(<Sessions {...baseProps} visible={true} />);
+    await waitFor(() => expect(screen.getByText("Manual chat")).toBeTruthy());
+    expect(screen.queryByText("Nightly automation")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "sessions.filter.automation" }),
+    );
+    expect(screen.queryByText("Manual chat")).toBeNull();
+    expect(screen.getByText("Nightly automation")).toBeTruthy();
+
+    view.unmount();
+    render(<Sessions {...baseProps} visible={true} />);
+    await waitFor(() =>
+      expect(screen.getByText("Nightly automation")).toBeTruthy(),
+    );
+    expect(screen.queryByText("Manual chat")).toBeNull();
   });
 
   it("clears stale rows and reloads when the connection source changes", async () => {
@@ -383,7 +588,11 @@ describe("Sessions tab — delete affordance (#408)", () => {
       );
     });
 
-    expect(api.deleteSession).toHaveBeenCalledWith("sess-abc-123");
+    expect(api.deleteSession).toHaveBeenCalledWith(
+      "sess-abc-123",
+      "connection-one",
+      "work",
+    );
   });
 
   it("does NOT call deleteSession when the confirm is cancelled", async () => {
@@ -522,7 +731,11 @@ describe("Sessions tab — bulk delete selection (#490)", () => {
     });
 
     await waitFor(() => {
-      expect(api.deleteSessions).toHaveBeenCalledWith(["sess-one", "sess-two"]);
+      expect(api.deleteSessions).toHaveBeenCalledWith(
+        ["sess-one", "sess-two"],
+        "connection-one",
+        "work",
+      );
     });
     expect(api.deleteSession).not.toHaveBeenCalled();
   });
@@ -576,10 +789,11 @@ describe("Sessions tab — bulk delete selection (#490)", () => {
     });
 
     await waitFor(() => {
-      expect(api.deleteSessions).toHaveBeenCalledWith([
-        "search-one",
-        "search-two",
-      ]);
+      expect(api.deleteSessions).toHaveBeenCalledWith(
+        ["search-one", "search-two"],
+        "connection-one",
+        "work",
+      );
     });
     expect(api.deleteSessions).not.toHaveBeenCalledWith(["main-session"]);
   });

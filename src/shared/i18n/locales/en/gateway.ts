@@ -16,11 +16,10 @@ export default {
   checkLog: "Check the gateway log:",
   gatewayHint:
     "Connects Hermes to Telegram, Discord, Slack, and other platforms",
-  subtitle: "Manage the messaging platforms Hermes Agent can connect to.",
+  subtitle: "Messaging platforms Hermes can connect to.",
   refreshTooltip: "Refresh platform status",
   refresh: "Refresh",
-  configHint:
-    "Configure platforms here. Saving changes restarts the gateway when needed so adapters pick up the latest credentials.",
+  configHint: "Saving restarts the gateway when needed.",
   searchPlaceholder: "Search platforms or env vars",
   emptyState: "No messaging platforms match this search.",
   details: "Details",
@@ -63,6 +62,6 @@ export default {
     generate: "Generate key",
     regenerating: "Generating…",
     generateHint:
-      "This key is shared between the desktop and the local gateway. Generating a new one restarts the gateway automatically.",
+      "Shared between desktop and local gateway. Regenerating restarts it.",
   },
 } as const;

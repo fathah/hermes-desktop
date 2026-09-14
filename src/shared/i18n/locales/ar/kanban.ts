@@ -18,8 +18,7 @@ export default {
   archivedTooltip: "تبديل إظهار عمود المؤرشفة",
 
   // Remote-mode unsupported notice
-  remoteUnsupportedTitle:
-    "يتطلب كانبان تثبيت Hermes محلي أو وضع نفق SSH.",
+  remoteUnsupportedTitle: "يتطلب كانبان تثبيت Hermes محلي أو وضع نفق SSH.",
   remoteUnsupportedHint:
     "الوضع البعيد العادي (HTTP + مفتاح API) لا يعرض API كانبان بعد. انتقل إلى الوضع المحلي أو نفق SSH في الإعدادات لإدارة اللوحة.",
 

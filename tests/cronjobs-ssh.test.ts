@@ -58,6 +58,50 @@ beforeEach(() => {
 });
 
 describe("SSH profile cron jobs", () => {
+  // @lat: [[scheduled-jobs#Test specifications#Completed jobs remain completed]]
+  it("preserves completed state for disabled jobs returned by the API", async () => {
+    connectionRef.value = {
+      mode: "ssh",
+      ssh: sshConfig,
+    };
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        jobs: [
+          {
+            id: "finished-once",
+            name: "Finished job",
+            state: "completed",
+            enabled: false,
+          },
+        ],
+      }),
+    });
+
+    const { listCronJobs } = await import("../src/main/cronjobs");
+    const jobs = await listCronJobs();
+
+    expect(jobs[0]).toMatchObject({
+      id: "finished-once",
+      state: "completed",
+      enabled: false,
+    });
+  });
+
+  // @lat: [[scheduled-jobs#Test specifications#Completed SSH jobs stay disabled]]
+  it("keeps completed named-profile jobs disabled and out of active-only lists", async () => {
+    sshRunCronSpy.mockResolvedValue({
+      success: true,
+      stdout: "  finished-once [completed]\n    Name: Finished job\n",
+    });
+
+    const { listCronJobs } = await import("../src/main/cronjobs");
+    await expect(listCronJobs(true, "marketing")).resolves.toEqual([
+      expect.objectContaining({ state: "completed", enabled: false }),
+    ]);
+    await expect(listCronJobs(false, "marketing")).resolves.toEqual([]);
+  });
+
   it("lists named-profile jobs through the remote Hermes launcher instead of the default API", async () => {
     sshRunCronSpy.mockResolvedValue({
       success: true,

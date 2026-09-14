@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState } from "react";
-import { ChevronDown, Check, Asterisk } from "lucide-react";
+import { ChevronDown, Check, Asterisk, Search } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import BrandLogo from "../../components/common/BrandLogo";
 import type { ModelGroup } from "./types";
@@ -168,20 +168,23 @@ export const ModelPicker = memo(function ModelPicker({
             }
           }}
         >
-          <input
-            ref={searchRef}
-            className="chat-model-search-input"
-            type="text"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                e.stopPropagation();
-                setIsOpen(false);
-              }
-            }}
-            placeholder={t("chat.searchModels")}
-          />
+          <div className="chat-model-search-wrap">
+            <Search size={14} className="chat-model-search-icon" aria-hidden />
+            <input
+              ref={searchRef}
+              className="chat-model-search-input"
+              type="text"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.stopPropagation();
+                  setIsOpen(false);
+                }
+              }}
+              placeholder={t("chat.searchModels")}
+            />
+          </div>
 
           <div className="chat-model-panes">
             {/* Left rail: scrollable brand list + a pinned Configure footer */}

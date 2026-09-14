@@ -13,10 +13,16 @@ vi.mock("./installer", () => ({
 }));
 vi.mock("./config", () => ({
   getApiServerKey: vi.fn(() => ""),
+  getActiveConnection: vi.fn(() => ({
+    connectionId: "connection-test",
+    name: "Test",
+    config: {},
+  })),
   getConnectionConfig: vi.fn(() => ({
     mode: "local",
     remoteUrl: "",
     apiKey: "",
+    remoteAuthMode: "auto",
     ssh: {},
   })),
   getConfigValue: vi.fn(() => null),
@@ -49,8 +55,10 @@ vi.mock("child_process", () => {
 });
 
 import { spawn } from "child_process";
+import { readModels } from "./models";
 import {
   getApiServerKey,
+  getActiveConnection,
   getConnectionConfig,
   getModelConfig,
   readEnv,
@@ -58,19 +66,144 @@ import {
 import type { ConnectionConfig } from "./config";
 import { providerListSafe } from "./secrets";
 import {
+  clearAgentCapabilityEvidence,
+  getAgentCapabilityEvidence,
+  getCachedAgentCapabilityEvidence,
+  getRemoteAuthHeader,
+  bindPendingApproval,
+  clearAllPendingApprovals,
+  registerPendingApproval,
+  resolvePendingApproval,
+  recordAgentCommandInventory,
+  recordAgentRuntimeInfo,
   sendMessage,
   shouldForceCliForSessionOverride,
   stopHealthPolling,
   transcribeAudio,
 } from "./hermes";
 import type { ChatCallbacks } from "./hermes";
+import { normalizeApprovalRequest } from "../shared/chat-approval";
 
 const mockedGetModelConfig = vi.mocked(getModelConfig);
 const mockedGetApiServerKey = vi.mocked(getApiServerKey);
+const mockedGetActiveConnection = vi.mocked(getActiveConnection);
 const mockedGetConnectionConfig = vi.mocked(getConnectionConfig);
 const mockedReadEnv = vi.mocked(readEnv);
 const mockedProviderListSafe = vi.mocked(providerListSafe);
 const mockedSpawn = vi.mocked(spawn);
+
+describe("chat approval normalization", () => {
+  it("preserves an explicit safe choice subset and always includes deny", () => {
+    expect(
+      normalizeApprovalRequest(
+        {
+          command: "rm -rf build",
+          reason: "recursive delete",
+          choices: ["session", "bogus", "session"],
+        },
+        "opaque-id",
+      ),
+    ).toEqual({
+      requestId: "opaque-id",
+      command: "rm -rf build",
+      description: "recursive delete",
+      choices: ["session", "deny"],
+    });
+  });
+
+  it("does not expose permanent approval when the payload forbids it", () => {
+    expect(
+      normalizeApprovalRequest(
+        {
+          cmd: "chmod 777 file",
+          choices: ["once", "always"],
+          allow_permanent: false,
+        },
+        "opaque-id",
+      ).choices,
+    ).toEqual(["once", "deny"]);
+  });
+});
+
+describe("pending chat approvals", () => {
+  afterEach(() => clearAllPendingApprovals());
+
+  it("validates offered choices and removes only an acknowledged response", async () => {
+    const responder = vi
+      .fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    const requestId = registerPendingApproval(["once", "deny"], responder);
+
+    await expect(resolvePendingApproval(requestId, "always")).resolves.toBe(
+      false,
+    );
+    await expect(resolvePendingApproval(requestId, "once")).resolves.toBe(
+      false,
+    );
+    await expect(resolvePendingApproval(requestId, "deny")).resolves.toBe(true);
+    await expect(resolvePendingApproval(requestId, "deny")).resolves.toBe(
+      false,
+    );
+    expect(responder).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects a duplicate response while acknowledgement is in flight", async () => {
+    let acknowledge!: (value: boolean) => void;
+    const responder = vi.fn(
+      () => new Promise<boolean>((resolve) => (acknowledge = resolve)),
+    );
+    const requestId = registerPendingApproval(["once"], responder);
+    const first = resolvePendingApproval(requestId, "once");
+
+    await expect(resolvePendingApproval(requestId, "once")).resolves.toBe(
+      false,
+    );
+    acknowledge(true);
+    await expect(first).resolves.toBe(true);
+    expect(responder).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not report success after a pending request is cleared", async () => {
+    let acknowledge!: (value: boolean) => void;
+    const requestId = registerPendingApproval(
+      ["once"],
+      () => new Promise<boolean>((resolve) => (acknowledge = resolve)),
+    );
+    const response = resolvePendingApproval(requestId, "once");
+
+    clearAllPendingApprovals();
+    acknowledge(true);
+    await expect(response).resolves.toBe(false);
+  });
+
+  it("scopes an approval response to its renderer and run", async () => {
+    const responder = vi.fn().mockResolvedValue(true);
+    const requestId = registerPendingApproval(["deny"], responder);
+    expect(bindPendingApproval(requestId, { ownerId: 7, runId: "run-1" })).toBe(
+      true,
+    );
+
+    await expect(
+      resolvePendingApproval(requestId, "deny", {
+        ownerId: 8,
+        runId: "run-1",
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      resolvePendingApproval(requestId, "deny", {
+        ownerId: 7,
+        runId: "run-2",
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      resolvePendingApproval(requestId, "deny", {
+        ownerId: 7,
+        runId: "run-1",
+      }),
+    ).resolves.toBe(true);
+  });
+});
 
 function testConnection(
   fields: Partial<ConnectionConfig> = {},
@@ -79,6 +212,7 @@ function testConnection(
     mode: "local",
     remoteUrl: "",
     apiKey: "",
+    remoteAuthMode: "auto",
     remoteChatTransport: "auto",
     sshChatTransport: "auto",
     ssh: {
@@ -92,6 +226,87 @@ function testConnection(
     ...fields,
   };
 }
+
+describe("Agent capability evidence cache", () => {
+  // @lat: [[agent-capabilities#Test specifications#Evidence invalidation]]
+  it("drops command evidence after catalog failure or Agent contract changes", async () => {
+    clearAgentCapabilityEvidence();
+    recordAgentRuntimeInfo({ desktop_contract: 5, version: "0.19.0" });
+    expect(recordAgentCommandInventory({ pairs: [["/queue", "Queue"]] })).toBe(
+      true,
+    );
+    expect((await getAgentCapabilityEvidence()).commandNames).toEqual([
+      "queue",
+    ]);
+
+    recordAgentRuntimeInfo({ desktop_contract: 6, version: "0.20.0" });
+    expect((await getAgentCapabilityEvidence()).commandNames).toBeNull();
+
+    recordAgentCommandInventory({ pairs: [["/steer", "Steer"]] });
+    expect(recordAgentCommandInventory(undefined)).toBe(false);
+    expect((await getAgentCapabilityEvidence()).commandNames).toBeNull();
+
+    expect(recordAgentRuntimeInfo(undefined)).toBe(false);
+    expect((await getAgentCapabilityEvidence()).runtimeInfo).toBeNull();
+    clearAgentCapabilityEvidence();
+  });
+
+  it("keeps evidence attached to a stable connection identity", () => {
+    clearAgentCapabilityEvidence();
+    mockedGetActiveConnection.mockReturnValue({
+      connectionId: "connection-a",
+      name: "A",
+      config: testConnection(),
+    });
+    recordAgentRuntimeInfo(
+      { desktop_contract: 6, version: "0.20.0" },
+      undefined,
+      "connection-a",
+    );
+
+    mockedGetActiveConnection.mockReturnValue({
+      connectionId: "connection-b",
+      name: "B",
+      config: testConnection(),
+    });
+
+    expect(
+      getCachedAgentCapabilityEvidence("connection-a").runtimeInfo,
+    ).toEqual({ desktop_contract: 6, version: "0.20.0" });
+    expect(
+      getCachedAgentCapabilityEvidence("connection-b").runtimeInfo,
+    ).toBeNull();
+    clearAgentCapabilityEvidence();
+  });
+});
+
+describe("remote authentication headers", () => {
+  // @lat: [[remote-dashboard-oauth#Test specifications#OAuth bearer suppression]]
+  it("does not reuse a stored token after the remote resolves to OAuth", () => {
+    mockedGetConnectionConfig.mockReturnValue(
+      testConnection({
+        mode: "remote",
+        remoteUrl: "https://hermes.example",
+        apiKey: "stale-token",
+        remoteAuthMode: "oauth",
+      }),
+    );
+
+    expect(getRemoteAuthHeader()).toEqual({});
+
+    mockedGetConnectionConfig.mockReturnValue(
+      testConnection({
+        mode: "remote",
+        remoteUrl: "https://hermes.example",
+        apiKey: "current-token",
+        remoteAuthMode: "token",
+      }),
+    );
+    expect(getRemoteAuthHeader()).toEqual({
+      Authorization: "Bearer current-token",
+    });
+  });
+});
 
 describe("transcribeAudio API route", () => {
   const fetchMock = vi.fn();
@@ -207,6 +422,7 @@ describe("sendMessage session model override routing", () => {
   }
 
   beforeEach(() => {
+    vi.mocked(readModels).mockReset().mockReturnValue([]);
     mockedGetApiServerKey.mockReset();
     mockedGetApiServerKey.mockReturnValue("");
     mockedGetConnectionConfig.mockReset();
@@ -235,6 +451,54 @@ describe("sendMessage session model override routing", () => {
   afterEach(() => {
     stopHealthPolling();
   });
+
+  // @lat: [[provider-setup#Provider setup#LLM-provider keys are configured-only, via modals#Named custom providers#Runtime credential parity]]
+  it.each(["env", "vault"])(
+    "passes a named custom provider's %s key to the CLI for equivalent URLs",
+    async (source) => {
+      const key = "CUSTOM_PROVIDER_TEST_LABEL_KEY";
+      vi.mocked(readModels).mockReturnValue([
+        {
+          id: "first",
+          name: "No key",
+          provider: "custom",
+          providerLabel: "Absent Label",
+          model: "test",
+          baseUrl: "https://example.com/Api",
+          createdAt: 1,
+        },
+        {
+          id: "test",
+          name: "Test",
+          provider: "custom",
+          providerLabel: "Test Label",
+          model: "test",
+          baseUrl: "https://EXAMPLE.com:443/Api/",
+          createdAt: 1,
+        },
+      ]);
+      if (source === "env")
+        mockedReadEnv.mockReturnValue({ [key]: "profile-secret" });
+      else mockedProviderListSafe.mockReturnValue({ [key]: "profile-secret" });
+      await sendMessage(
+        "hello",
+        noopCallbacks,
+        "default",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          provider: "custom",
+          model: "test",
+          baseUrl: "https://example.com/Api",
+        },
+      );
+      const options = mockedSpawn.mock.calls[0][2];
+      expect(options?.env?.OPENAI_API_KEY).toBe("profile-secret");
+      expect(options?.env?.OPENAI_BASE_URL).toBe("https://example.com/Api");
+    },
+  );
 
   // @lat: [[model-selection#Session model override#Text-only legacy fallback routes via CLI]]
   it("routes a cross-provider override through the CLI with its provider + model", async () => {

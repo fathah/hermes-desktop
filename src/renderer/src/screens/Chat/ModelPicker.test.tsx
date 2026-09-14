@@ -13,6 +13,7 @@ vi.mock("lucide-react", () => ({
   ChevronDown: () => null,
   Check: () => null,
   Asterisk: () => null,
+  Search: () => null,
 }));
 
 vi.mock("../../components/common/BrandLogo", () => ({

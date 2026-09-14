@@ -9,6 +9,8 @@ export default {
   save: "Save",
   done: "Done",
   edit: "Edit",
+  addKey: "Add key",
+  activeModel: "Active Model",
   change: "Change",
   search: "Search",
   searchPlaceholder: "Search...",

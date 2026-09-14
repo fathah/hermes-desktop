@@ -20,6 +20,14 @@ Each vehicle carries static config (model URL, tint, lane, cruise speed, precomp
 
 Car-following: within a lane each vehicle finds the nearest vehicle ahead (wrapped over the traffic loop). Inside `SLOW_GAP` it matches the leader's speed; inside `MIN_GAP` it targets zero — so cars brake, queue behind a stopped leader, and pull away again once it moves. Speeds ease toward the target with separate acceleration/braking rates so stops look like braking rather than snapping.
 
+Vehicles are sized against people: cars are 4.2 world units long, trucks 5.6 — about 2.5 person-heights ([[office-3d-interiors#People & staff|PERSON_WORLD_HEIGHT]] ≈ 1.65), matching real-world proportion. The showroom's display cars use a smaller 3.3/3.5 so they fit the room.
+
+### Braking for people
+
+Cars never drive through a person: anyone outdoors — pedestrians, trip agents, or the walk-mode player, all read from [[src/renderer/src/screens/Office/office3d/core/collision.ts#getCrowdBodies]] — who is in a vehicle's lane corridor ahead makes it creep (`PERSON_SLOW`), then hard-stop (`PERSON_STOP`).
+
+The check is one unwrapped along-axis gap plus a cross-axis corridor test per person, done in the target-speed pass; a person standing on the road holds the queue indefinitely, GTA-style. The sim also publishes every vehicle's live position as a push-out circle (`TRAFFIC_OBSTACLES` in Traffic.tsx) that [[office-3d-walk-mode|walk mode]]'s player resolves against, so walking into a stopped car shoves you off its body instead of clipping through; the list is emptied on unmount so no ghost cars exist indoors.
+
 ### Junction yielding
 
 Every E-W/N-S road crossing is a "junction box" (crossing road width plus clearance). A vehicle approaching a box stops before it while cross-axis traffic occupies it, and proceeds once clear.

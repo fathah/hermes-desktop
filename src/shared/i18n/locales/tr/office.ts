@@ -35,6 +35,11 @@ export default {
   showroomCardHint:
     "Galeriye yakından bakın — ajanlarınız için araba satın alma yakında geliyor.",
   // Space representatives (bank teller interaction menu)
+  walkMode: "Etrafta yürü",
+  walkModeExit: "Yürüyüşten çık (Esc)",
+  walkHint:
+    "Hareket için WASD / ok tuşları · Koşmak için Shift · Çıkmak için Esc",
+  you: "Sen",
   repBankTeller: "Banka Veznedarı",
   spaceBank: "Banka",
   repPanelAgentLabel: "Ajan",
@@ -47,11 +52,13 @@ export default {
   repLoading: "İşleniyor…",
   repErrorGeneric: "Bir şeyler ters gitti. Tekrar deneyin.",
   repStatusSignedOut: "Bankayı kullanmak için Hermes hesabınıza giriş yapın.",
-  repStatusUnlinked: "Bu ajan henüz bir bulut ajanına bağlı değil. Giriş yapıp tekrar deneyin.",
+  repStatusUnlinked:
+    "Bu ajan henüz bir bulut ajanına bağlı değil. Giriş yapıp tekrar deneyin.",
   repWalletsNone: "Henüz hesap yok — başlamak için bir tane oluşturun.",
   repBadgeTransactable: "İşlem yapılabilir",
   repBadgeReceiveOnly: "Yalnızca alım",
-  repBalanceNoTransactable: "Bu ajanın henüz işlem yapılabilir bir hesabı yok — önce bir tane oluşturun.",
+  repBalanceNoTransactable:
+    "Bu ajanın henüz işlem yapılabilir bir hesabı yok — önce bir tane oluşturun.",
   repBalanceEmpty: "Henüz token bakiyesi yok.",
   repBalanceTotal: "Toplam",
   repCreateSuccess: "Hesap oluşturuldu",

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import http from "http";
@@ -34,6 +34,183 @@ describe("connection config secret exposure", () => {
     rmSync(testHome, { recursive: true, force: true });
   });
 
+  // @lat: [[connections#Legacy migration#Preserves existing configurations]]
+  it.each([
+    {
+      mode: "local",
+      legacy: { connectionMode: "local" },
+      expected: { mode: "local", remoteUrl: "", apiKey: "" },
+      name: "Local",
+    },
+    {
+      mode: "remote",
+      legacy: {
+        connectionMode: "remote",
+        remoteUrl: "https://hermes.example",
+        remoteApiKey: "remote-secret",
+        remoteAuthMode: "token",
+        remoteChatTransport: "dashboard",
+      },
+      expected: {
+        mode: "remote",
+        remoteUrl: "https://hermes.example",
+        apiKey: "remote-secret",
+        remoteAuthMode: "token",
+        remoteChatTransport: "dashboard",
+      },
+      name: "Remote",
+    },
+    {
+      mode: "ssh",
+      legacy: {
+        connectionMode: "ssh",
+        remoteUrl: "https://saved-remote.example",
+        remoteApiKey: "saved-remote-secret",
+        sshChatTransport: "legacy",
+        sshConfig: {
+          host: "gateway.internal",
+          port: 2222,
+          username: "hermes",
+          keyPath: "/keys/hermes",
+          remotePort: 9000,
+          localPort: 19000,
+          dockerContainerName: "hermes-agent",
+        },
+      },
+      expected: {
+        mode: "ssh",
+        remoteUrl: "https://saved-remote.example",
+        apiKey: "saved-remote-secret",
+        sshChatTransport: "legacy",
+        ssh: {
+          host: "gateway.internal",
+          port: 2222,
+          username: "hermes",
+          keyPath: "/keys/hermes",
+          remotePort: 9000,
+          localPort: 19000,
+          dockerContainerName: "hermes-agent",
+        },
+      },
+      name: "SSH",
+    },
+  ])(
+    "migrates the existing $mode configuration",
+    async ({ legacy, expected, name }) => {
+      writeFileSync(
+        join(testHome, "desktop.json"),
+        JSON.stringify({ ...legacy, unrelatedPreference: true }),
+        "utf-8",
+      );
+      const { getConnectionConfig, getConnectionRegistry } =
+        await loadConnectionConfigModule();
+
+      const registry = getConnectionRegistry();
+      expect(registry).toMatchObject({
+        version: 1,
+        activeConnectionId: registry.connections[0].connectionId,
+        connections: [{ name, config: expected }],
+      });
+      expect(getConnectionConfig()).toMatchObject(expected);
+
+      const saved = JSON.parse(
+        readFileSync(join(testHome, "desktop.json"), "utf-8"),
+      );
+      expect(saved.connectionRegistry).toEqual(registry);
+      expect(saved.connectionMode).toBeUndefined();
+      expect(saved.remoteApiKey).toBeUndefined();
+      expect(saved.unrelatedPreference).toBe(true);
+    },
+  );
+
+  // @lat: [[connections#Stable active identity]]
+  it("keeps the active connection identity stable across updates and reloads", async () => {
+    const {
+      getConnectionRegistry,
+      getPublicConnectionConfig,
+      setConnectionConfig,
+    } = await loadConnectionConfigModule();
+    const initial = getPublicConnectionConfig();
+
+    setConnectionConfig({
+      ...getConnectionRegistry().connections[0].config,
+      mode: "remote",
+      remoteUrl: "https://hermes.example",
+      apiKey: "remote-secret",
+    });
+
+    expect(getPublicConnectionConfig()).toMatchObject({
+      connectionId: initial.connectionId,
+      name: "Remote",
+      mode: "remote",
+    });
+
+    const reloaded = await loadConnectionConfigModule();
+    expect(reloaded.getPublicConnectionConfig().connectionId).toBe(
+      initial.connectionId,
+    );
+  });
+
+  // @lat: [[connections#Named connection management]]
+  it("creates, edits, selects, renames, and removes redacted connection records", async () => {
+    const {
+      createConnection,
+      getConnectionConfig,
+      getPublicConnectionConfig,
+      getPublicConnectionRegistry,
+      removeConnection,
+      renameConnection,
+      selectConnection,
+      setConnectionConfig,
+    } = await loadConnectionConfigModule();
+    const initialId = getPublicConnectionRegistry().activeConnectionId;
+    const created = createConnection();
+
+    setConnectionConfig({
+      ...getConnectionConfig(),
+      mode: "remote",
+      remoteUrl: "https://second.example",
+      apiKey: "second-secret",
+    });
+    renameConnection(created.connectionId, "Production");
+
+    const registry = getPublicConnectionRegistry();
+    expect(registry).toMatchObject({
+      version: 1,
+      activeConnectionId: created.connectionId,
+      connections: [
+        { connectionId: initialId, name: "Local", mode: "local" },
+        {
+          connectionId: created.connectionId,
+          name: "Production",
+          mode: "remote",
+          remoteUrl: "https://second.example",
+          hasApiKey: true,
+        },
+      ],
+    });
+    expect(JSON.stringify(registry)).not.toContain("second-secret");
+    expect(getConnectionConfig(initialId).mode).toBe("local");
+    expect(getConnectionConfig(created.connectionId).apiKey).toBe(
+      "second-secret",
+    );
+    expect(getPublicConnectionConfig(initialId)).toMatchObject({
+      connectionId: initialId,
+      mode: "local",
+    });
+    expect(() => getPublicConnectionConfig({})).toThrow(
+      "Connection not found.",
+    );
+
+    selectConnection(initialId);
+    expect(getPublicConnectionRegistry().activeConnectionId).toBe(initialId);
+    removeConnection(created.connectionId);
+    expect(getPublicConnectionRegistry().connections).toHaveLength(1);
+    expect(() => removeConnection(initialId)).toThrow(
+      "The last connection cannot be removed.",
+    );
+  });
+
   it("keeps the remote API key out of the public renderer config", async () => {
     const {
       getConnectionConfig,
@@ -48,6 +225,7 @@ describe("connection config secret exposure", () => {
       apiKey: "remote-secret",
       remoteChatTransport: "dashboard",
       sshChatTransport: "auto",
+      remoteAuthMode: "auto",
       ssh: getConnectionConfig().ssh,
     });
 
@@ -59,6 +237,7 @@ describe("connection config secret exposure", () => {
       remoteUrl: "https://hermes.example",
       remoteChatTransport: "dashboard",
       sshChatTransport: "auto",
+      remoteAuthMode: "auto",
       hasApiKey: true,
       // Length is intentionally exposed so the renderer can render a
       // mask that matches the stored key's width. The secret itself
@@ -107,6 +286,49 @@ describe("connection config secret exposure", () => {
     });
   });
 
+  it.each([
+    ["malformed JSON", "{"],
+    [
+      "a newer registry version",
+      JSON.stringify({
+        connectionRegistry: {
+          version: 2,
+          activeConnectionId: "future",
+          connections: [],
+        },
+      }),
+    ],
+    [
+      "duplicate connection identities",
+      JSON.stringify({
+        connectionRegistry: {
+          version: 1,
+          activeConnectionId: "connection-000000000000000000000000",
+          connections: [
+            {
+              connectionId: "connection-000000000000000000000000",
+              name: "A",
+              config: {},
+            },
+            {
+              connectionId: "connection-000000000000000000000000",
+              name: "B",
+              config: {},
+            },
+          ],
+        },
+      }),
+    ],
+  ])("preserves desktop.json when it contains %s", async (_label, contents) => {
+    // @lat: [[connections#Test specifications#Non-destructive registry recovery]]
+    const file = join(testHome, "desktop.json");
+    writeFileSync(file, contents, "utf-8");
+    const { getConnectionRegistry } = await loadConnectionConfigModule();
+
+    expect(() => getConnectionRegistry()).toThrow(/left unchanged/);
+    expect(readFileSync(file, "utf-8")).toBe(contents);
+  });
+
   it("uses the stored remote API key for main-process connection tests", async () => {
     const { setConnectionConfig } = await loadConnectionConfigModule();
     const { testRemoteConnection } = await import("../src/main/hermes");
@@ -139,6 +361,41 @@ describe("connection config secret exposure", () => {
       await expect(testRemoteConnection(url, "wrong-secret")).resolves.toBe(
         false,
       );
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it("does not attach a stale token to OAuth Remote health probes", async () => {
+    const { setConnectionConfig } = await loadConnectionConfigModule();
+    const { testRemoteConnection } = await import("../src/main/hermes");
+    const server = http.createServer((req, res) => {
+      res.statusCode =
+        req.url === "/api/status" && !req.headers.authorization ? 200 : 401;
+      res.end();
+    });
+
+    const url = await listen(server);
+
+    try {
+      setConnectionConfig({
+        mode: "remote",
+        remoteUrl: url,
+        apiKey: "stale-token",
+        remoteAuthMode: "oauth",
+        remoteChatTransport: "auto",
+        sshChatTransport: "auto",
+        ssh: {
+          host: "",
+          port: 22,
+          username: "",
+          keyPath: "",
+          remotePort: 8642,
+          localPort: 18642,
+        },
+      });
+
+      await expect(testRemoteConnection(url)).resolves.toBe(true);
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }

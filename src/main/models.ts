@@ -4,11 +4,19 @@ import { randomUUID } from "crypto";
 import { HERMES_HOME } from "./installer";
 import { safeWriteFile, profilePaths } from "./utils";
 import { hostDerivedEnvKeyForUrl } from "./host-derived-env";
+import { mirrorFirstPartyAgentProviders } from "./agent-config-providers";
 import { customProviderEnvKey } from "../shared/url-key-map";
+import { normalizeModelEndpointUrl } from "../shared/model-endpoint";
 import DEFAULT_MODELS from "./default-models";
 
-const MODELS_FILE = join(HERMES_HOME, "models.json");
-const MODEL_DEFS_FILE = join(HERMES_HOME, "model-definitions.json");
+// Config health imports this reader through the installer/config cycle. Resolve
+// the home only when reading or writing, after module initialization finishes.
+function modelsFilePath(): string {
+  return join(HERMES_HOME, "models.json");
+}
+function modelDefinitionsFilePath(): string {
+  return join(HERMES_HOME, "model-definitions.json");
+}
 
 /**
  * A persisted `models.json` row — a pure *attachment* of a model id to a
@@ -94,8 +102,8 @@ function normalizeContextLength(value: unknown): number | undefined {
  */
 export function readModelsRaw(): SavedModelRow[] {
   try {
-    if (!existsSync(MODELS_FILE)) return [];
-    return JSON.parse(readFileSync(MODELS_FILE, "utf-8"));
+    if (!existsSync(modelsFilePath())) return [];
+    return JSON.parse(readFileSync(modelsFilePath(), "utf-8"));
   } catch {
     return [];
   }
@@ -127,15 +135,17 @@ export function readModels(): SavedModel[] {
 }
 
 function writeModels(models: SavedModelRow[]): void {
-  safeWriteFile(MODELS_FILE, JSON.stringify(models, null, 2));
+  safeWriteFile(modelsFilePath(), JSON.stringify(models, null, 2));
 }
 
 /** Read the definitions map (`{ [modelId]: ModelDefinition }`), tolerant of a
  *  missing/corrupt file. */
 export function readModelDefinitions(): Record<string, ModelDefinition> {
   try {
-    if (!existsSync(MODEL_DEFS_FILE)) return {};
-    const parsed = JSON.parse(readFileSync(MODEL_DEFS_FILE, "utf-8"));
+    if (!existsSync(modelDefinitionsFilePath())) return {};
+    const parsed = JSON.parse(
+      readFileSync(modelDefinitionsFilePath(), "utf-8"),
+    );
     return parsed && typeof parsed === "object" ? parsed : {};
   } catch {
     return {};
@@ -143,7 +153,7 @@ export function readModelDefinitions(): Record<string, ModelDefinition> {
 }
 
 function writeModelDefinitions(defs: Record<string, ModelDefinition>): void {
-  safeWriteFile(MODEL_DEFS_FILE, JSON.stringify(defs, null, 2));
+  safeWriteFile(modelDefinitionsFilePath(), JSON.stringify(defs, null, 2));
 }
 
 export function listModelDefinitions(): ModelDefinition[] {
@@ -300,6 +310,120 @@ function loadCustomProviders(profile?: string): CustomProviderEntry[] {
   return result;
 }
 
+/** Persist a `custom_providers:` entry's API key into the profile `.env`,
+ *  under both key names the two engine generations resolve. Additive only —
+ *  existing values are never overwritten. */
+function writeCustomProviderEnvKeys(
+  profile: string | undefined,
+  cp: CustomProviderEntry,
+): void {
+  if (!cp.apiKey || cp.apiKey === "no-key-required") return;
+  try {
+    const { envFile } = profilePaths(profile);
+    let envContent = existsSync(envFile) ? readFileSync(envFile, "utf-8") : "";
+    // Names to persist for this custom-provider key:
+    //   1. CUSTOM_PROVIDER_<NAME>_KEY — the historical desktop
+    //      contract; the runtime spawn in `hermes.ts` reads it
+    //      via the models.json baseUrl match.
+    //   2. <VENDOR>_API_KEY when the URL matches a known vendor
+    //      host (e.g. api.deepseek.com → DEEPSEEK_API_KEY) —
+    //      required for dual-engine compat: upstream-main's
+    //      `_host_derived_api_key()` won't accept the custom-
+    //      prefix form. Old engine (≤ v2026.5.16) doesn't have
+    //      the host-derive resolver and ignores this extra var,
+    //      so writing both is additive and safe.
+    // The gateway path in `hermes.ts:startGateway` ingests ALL
+    // profile env vars at spawn, so the host-derived form has
+    // to live in .env (not just be set at chat-time) for the
+    // long-running gateway flow to work on the new engine.
+    const customPrefixKey = customProviderEnvKey(cp.name);
+    const namesToWrite: string[] = [customPrefixKey];
+    const hostKey = hostDerivedEnvKeyForUrl(cp.baseUrl);
+    // Don't shadow real OPENAI / ANTHROPIC keys via this path —
+    // those belong to a separately-configured provider, not a
+    // custom-provider key. The persistence guard mirrors the
+    // runtime guard in `hermes.ts`.
+    if (
+      hostKey &&
+      hostKey !== "OPENAI_API_KEY" &&
+      hostKey !== "ANTHROPIC_API_KEY" &&
+      hostKey !== customPrefixKey
+    ) {
+      namesToWrite.push(hostKey);
+    }
+    let modified = false;
+    for (const envKey of namesToWrite) {
+      const keyRegex = new RegExp(
+        "^" + envKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "=.*$",
+        "m",
+      );
+      if (!keyRegex.test(envContent)) {
+        envContent =
+          envContent.trimEnd() + "\n" + envKey + "=" + cp.apiKey + "\n";
+        modified = true;
+      }
+    }
+    if (modified) {
+      safeWriteFile(envFile, envContent);
+    }
+  } catch {
+    /* best-effort */
+  }
+}
+
+/**
+ * Merge `custom_providers:` entries from the profile's config.yaml into the
+ * model library. Runs on every renderer-facing read (not just first seed), so
+ * a provider the user adds from the terminal appears in the desktop without
+ * wiping models.json. Idempotent: rows are deduped by provider + model id +
+ * base URL (the same key `addModel` uses) and env keys are written only when
+ * absent.
+ */
+export function syncAgentConfigModels(profile?: string): void {
+  // Piggyback on the library read (chat pickers hit this via list-models):
+  // keyed first-party brands must exist as named `providers:` entries so
+  // session model switches route them by slug instead of bare `custom`.
+  mirrorFirstPartyAgentProviders(profile);
+
+  let cpModels: CustomProviderEntry[];
+  try {
+    cpModels = loadCustomProviders(profile);
+  } catch (e) {
+    console.error("Failed to load custom providers:", e);
+    return;
+  }
+  if (cpModels.length === 0) return;
+
+  const models = readModelsRaw();
+  let modified = false;
+  for (const cp of cpModels) {
+    const exists = models.some(
+      (m) =>
+        m.model === cp.model &&
+        m.provider === cp.provider &&
+        normalizeModelEndpointUrl(m.baseUrl) ===
+          normalizeModelEndpointUrl(cp.baseUrl),
+    );
+    if (!exists) {
+      models.push({
+        id: randomUUID(),
+        name: cp.name,
+        provider: cp.provider,
+        model: cp.model,
+        baseUrl: cp.baseUrl,
+        apiMode: cp.apiMode || null,
+        // Group under the provider's name like desktop-added custom models,
+        // so the card union and the runtime's label-derived key lookup agree.
+        providerLabel: cp.name,
+        createdAt: Date.now(),
+      });
+      modified = true;
+    }
+    writeCustomProviderEnvKeys(profile, cp);
+  }
+  if (modified) writeModels(models);
+}
+
 function seedDefaults(profile?: string): SavedModelRow[] {
   const models: SavedModelRow[] = DEFAULT_MODELS.map((m) => ({
     id: randomUUID(),
@@ -309,84 +433,19 @@ function seedDefaults(profile?: string): SavedModelRow[] {
     baseUrl: m.baseUrl,
     createdAt: Date.now(),
   }));
-  try {
-    const { envFile } = profilePaths(profile);
-    const cpModels = loadCustomProviders(profile);
-    for (const cp of cpModels) {
-      models.push({
-        id: randomUUID(),
-        name: cp.name,
-        provider: cp.provider,
-        model: cp.model,
-        baseUrl: cp.baseUrl,
-        apiMode: cp.apiMode || null,
-        createdAt: Date.now(),
-      });
-      if (cp.apiKey && cp.apiKey !== "no-key-required") {
-        try {
-          let envContent = existsSync(envFile)
-            ? readFileSync(envFile, "utf-8")
-            : "";
-          // Names to persist for this custom-provider key:
-          //   1. CUSTOM_PROVIDER_<NAME>_KEY — the historical desktop
-          //      contract; the runtime spawn in `hermes.ts` reads it
-          //      via the models.json baseUrl match.
-          //   2. <VENDOR>_API_KEY when the URL matches a known vendor
-          //      host (e.g. api.deepseek.com → DEEPSEEK_API_KEY) —
-          //      required for dual-engine compat: upstream-main's
-          //      `_host_derived_api_key()` won't accept the custom-
-          //      prefix form. Old engine (≤ v2026.5.16) doesn't have
-          //      the host-derive resolver and ignores this extra var,
-          //      so writing both is additive and safe.
-          // The gateway path in `hermes.ts:startGateway` ingests ALL
-          // profile env vars at spawn, so the host-derived form has
-          // to live in .env (not just be set at chat-time) for the
-          // long-running gateway flow to work on the new engine.
-          const customPrefixKey = customProviderEnvKey(cp.name);
-          const namesToWrite: string[] = [customPrefixKey];
-          const hostKey = hostDerivedEnvKeyForUrl(cp.baseUrl);
-          // Don't shadow real OPENAI / ANTHROPIC keys via this path —
-          // those belong to a separately-configured provider, not a
-          // custom-provider key. The persistence guard mirrors the
-          // runtime guard in `hermes.ts`.
-          if (
-            hostKey &&
-            hostKey !== "OPENAI_API_KEY" &&
-            hostKey !== "ANTHROPIC_API_KEY" &&
-            hostKey !== customPrefixKey
-          ) {
-            namesToWrite.push(hostKey);
-          }
-          let modified = false;
-          for (const envKey of namesToWrite) {
-            const keyRegex = new RegExp(
-              "^" + envKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "=.*$",
-              "m",
-            );
-            if (!keyRegex.test(envContent)) {
-              envContent =
-                envContent.trimEnd() + "\n" + envKey + "=" + cp.apiKey + "\n";
-              modified = true;
-            }
-          }
-          if (modified) {
-            safeWriteFile(envFile, envContent);
-          }
-        } catch {
-          /* best-effort */
-        }
-      }
-    }
-  } catch (e) {
-    console.error("Failed to load custom providers:", e);
-  }
   writeModels(models);
-  return models;
+  syncAgentConfigModels(profile);
+  return readModelsRaw();
 }
 
-export function listModels(): SavedModel[] {
-  if (!existsSync(MODELS_FILE)) {
-    seedDefaults();
+export function listModels(profile?: string): SavedModel[] {
+  if (!existsSync(modelsFilePath())) {
+    seedDefaults(profile);
+  } else {
+    // Pick up providers/models added to config.yaml from the terminal since
+    // the library was first seeded — keeps `hermes` CLI edits and the desktop
+    // library in sync instead of only honoring config.yaml on first run.
+    syncAgentConfigModels(profile);
   }
   // Hoist any legacy per-row context overrides into shared definitions before
   // the merged read. This is the renderer-facing entry point (Providers screen),
@@ -414,13 +473,12 @@ export function addModel(
 
   // Dedup: same model ID + provider + base URL. Base URL is part of the key so
   // the same model id can live under two different custom endpoints.
-  const norm = (u: string): string =>
-    (u || "").trim().replace(/\/+$/, "").toLowerCase();
   const existing = models.find(
     (m) =>
       m.model === model &&
       m.provider === provider &&
-      norm(m.baseUrl) === norm(baseUrl),
+      normalizeModelEndpointUrl(m.baseUrl) ===
+        normalizeModelEndpointUrl(baseUrl),
   );
   if (existing)
     return {

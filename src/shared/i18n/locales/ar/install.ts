@@ -14,10 +14,8 @@ export default {
   continueToSetup: "متابعة إلى الإعداد",
   confirmTitle: "قبل التثبيت",
   confirmLocationLabel: "سيتم تثبيت Hermes في:",
-  confirmFresh:
-    "لم يتم العثور على تثبيت موجود هنا — سيتم إعداد نسخة جديدة.",
-  confirmUpdate:
-    "يوجد تثبيت Hermes موجود هنا — سيتم تحديثه إلى أحدث إصدار.",
+  confirmFresh: "لم يتم العثور على تثبيت موجود هنا — سيتم إعداد نسخة جديدة.",
+  confirmUpdate: "يوجد تثبيت Hermes موجود هنا — سيتم تحديثه إلى أحدث إصدار.",
   confirmReplace:
     "يوجد مجلد هنا لكنه ليس تثبيتاً صالحاً لـ Hermes — التثبيت سيحذفه ويستبدله.",
   confirmNotInherited:
@@ -27,7 +25,6 @@ export default {
   useExistingHint:
     "اختر المجلد الذي يحتوي على تثبيت Hermes الحالي (المجلد الذي يحتوي على مجلد hermes-agent).",
   useExistingInvalid: "لم يتم العثور على تثبيت Hermes صالح في هذا المجلد.",
-  useExistingDone:
-    "تم تعيين التثبيت الحالي — أغلق Hermes وأعد فتحه لتطبيقه.",
+  useExistingDone: "تم تعيين التثبيت الحالي — أغلق Hermes وأعد فتحه لتطبيقه.",
   useExistingQuitBtn: "إنهاء Hermes",
 } as const;

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   Database,
+  Bell,
   FileText,
   Info,
   Languages,
@@ -22,10 +23,12 @@ import DataPane from "./DataPane";
 import AboutPane from "./AboutPane";
 import CommunityPane from "./CommunityPane";
 import LogsPane from "./LogsPane";
+import NotificationsPane from "./NotificationsPane";
 
 export type SettingsSection =
   | "appearance"
   | "language"
+  | "notifications"
   | "privacy"
   | "connection"
   | "data"
@@ -53,6 +56,12 @@ const SETTINGS_NAV: ReadonlyArray<{
     id: "language",
     labelKey: "settings.nav.language",
     Icon: Languages,
+  },
+  {
+    group: "general",
+    id: "notifications",
+    labelKey: "settings.nav.notifications",
+    Icon: Bell,
   },
   {
     group: "general",
@@ -145,24 +154,15 @@ export default function SettingsModal({
       overlayClassName="settings-modal-overlay"
       labelledBy="settings-modal-title"
     >
-      <div className="settings-modal-header">
-        <AppModalTitle
-          id="settings-modal-title"
-          className="settings-modal-title"
-        >
-          {t("settings.title")}
-        </AppModalTitle>
-        <button
-          type="button"
-          className="settings-modal-close"
-          onClick={onClose}
-          aria-label={t("common.cancel")}
-        >
-          <X size={18} />
-        </button>
-      </div>
-
-      <div className="settings-modal-layout">
+      <aside className="settings-modal-sidebar">
+        <div className="settings-modal-sidebar-head">
+          <AppModalTitle
+            id="settings-modal-title"
+            className="settings-modal-title"
+          >
+            {t("settings.title")}
+          </AppModalTitle>
+        </div>
         <nav className="settings-modal-nav" aria-label={t("settings.title")}>
           {NAV_GROUP_ORDER.map((g) => (
             <div key={g.id} className="settings-modal-nav-group">
@@ -185,11 +185,25 @@ export default function SettingsModal({
             </div>
           ))}
         </nav>
+      </aside>
+
+      <div className="settings-modal-main">
+        <div className="settings-modal-topbar">
+          <button
+            type="button"
+            className="settings-modal-close"
+            onClick={onClose}
+            aria-label={t("common.cancel")}
+          >
+            <X size={18} />
+          </button>
+        </div>
 
         <div className="settings-modal-content">
           <SettingsDataContext.Provider value={data}>
             {section === "appearance" && <AppearancePane />}
             {section === "language" && <LanguagePane />}
+            {section === "notifications" && <NotificationsPane />}
             {section === "privacy" && <PrivacyPane />}
             {section === "connection" && <ConnectionPane />}
             {section === "data" && <DataPane />}
