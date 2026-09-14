@@ -35,6 +35,9 @@ function App(): React.JSX.Element {
   const [splashStatus, setSplashStatus] = useState<string | undefined>(
     undefined,
   );
+  const [setupProfile, setSetupProfile] = useState<string | undefined>(
+    undefined,
+  );
   const isMac = window.electron?.process?.platform === "darwin";
   // Bumped on every runInstallCheck so a superseded run (e.g. the user hit
   // "Switch to local mode" while an SSH tunnel attempt was still in flight)
@@ -47,6 +50,7 @@ function App(): React.JSX.Element {
     let next: Screen = "welcome";
     const error: string | null = null;
     let isRemote = false;
+    let nextSetupProfile = "default";
 
     try {
       setSplashStatus("Checking connection…");
@@ -75,6 +79,7 @@ function App(): React.JSX.Element {
       } else {
         setSplashStatus("Checking local install…");
         const status = await window.hermesAPI.checkInstall();
+        nextSetupProfile = status.activeProfile || "default";
         if (!status.installed) {
           next = "welcome";
         } else if (!status.hasApiKey) {
@@ -120,6 +125,7 @@ function App(): React.JSX.Element {
       await new Promise((r) => setTimeout(r, wait));
     }
     if (myRun !== runIdRef.current) return;
+    if (!isRemote) setSetupProfile(nextSetupProfile);
     setScreen(next);
 
     // Lazy deep-verify in the background after the UI is up. If the
@@ -235,6 +241,7 @@ function App(): React.JSX.Element {
         return (
           <Setup
             onComplete={() => setScreen("main")}
+            profile={setupProfile}
             verifyWarning={verifyWarning}
             onReinstall={handleVerifyReinstall}
             onDismissVerifyWarning={handleDismissVerifyWarning}
