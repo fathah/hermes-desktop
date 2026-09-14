@@ -110,3 +110,21 @@ These `.env` writes go through [[src/main/ssh-remote.ts#upsertEnvLine]], which r
 The credential depends on which transport is active. Over the **dashboard** the **session token** is used; over the **gateway `/v1`** path the remote **`API_SERVER_KEY`** is used.
 
 The dashboard's `/api/*` routes (and its `/api/ws` chat WS) reject the api_server key (401) and accept only `HERMES_DASHBOARD_SESSION_TOKEN`. [[src/main/ssh-remote.ts#sshEnsureDashboardToken]] reads the token from the remote `.env` (per profile), generating + persisting one when absent so it stays stable across reconnects and is shared by the remote dashboard process and the desktop. It writes exactly one canonical line (stripping any duplicates) under an in-flight guard — the dashboard is ensured on every chat/model-library/session op, and the old unguarded `printf >>` let concurrent first-connect callers append divergent tokens (observed as 9 conflicting lines in one `.env`, where dotenv's last-wins value drifted from a caller's cached token → 401). [[src/main/ssh-remote.ts#sshEnsureApiServerKey]] carries the same guard for the gateway `/v1` key. The desktop caches it via `setSshRemoteApiKey`. The SSH form has no API-key field (only **remote** mode does, [[src/renderer/src/components/settings/ConnectionPane.tsx]]), so the shared `conn.apiKey` is never used for SSH — avoiding the stale-key 401s the old `conn.apiKey || …` precedence caused. On the gateway `/v1` path the credential is the remote `API_SERVER_KEY`, provisioned by [[src/main/ssh-remote.ts#sshEnsureApiServerKey]] and read via [[src/main/ssh-remote.ts#sshReadRemoteApiKey]].
+
+## Dotted configuration lookup
+
+Configuration reads follow direct mapping children so a nested feature setting cannot masquerade as a root or parent-level option.
+
+[[src/main/yaml-path.ts#getYamlPath]] walks each dotted segment within its parent block, pins the first segment to column zero, and stops at parent boundaries. Its scan position advances after each match, avoiding rescans of earlier lines. Scalar parents cannot be traversed, including block text whose lines resemble configuration keys. This matches the Agent's nested dictionary lookup semantics for the supported config subset.
+
+### Root and parent boundaries
+
+A flat key resolves only at column zero, even when indented content precedes it; dotted paths cannot use an indented root or escape their parent block.
+
+### Scalar parents
+
+A path through scalar text or an inline collection returns null instead of interpreting later indented text as mapping children.
+
+### Nested siblings
+
+Deep lookups skip unrelated sibling subtrees and comments, support consistent nondefault indentation, and cannot resolve a leaf outside the selected parent.
