@@ -341,7 +341,11 @@ interface HermesAPI {
   // Configuration (profile-aware)
   getEnv: (profile?: string) => Promise<Record<string, string>>;
   setEnv: (key: string, value: string, profile?: string) => Promise<boolean>;
-  validateChatReadiness: (profile?: string) => Promise<{
+  validateChatReadiness: (
+    profile?: string,
+    override?: { provider?: string; model?: string; baseUrl?: string },
+    connectionId?: string,
+  ) => Promise<{
     ok: boolean;
     code?:
       | "NO_ACTIVE_MODEL"
