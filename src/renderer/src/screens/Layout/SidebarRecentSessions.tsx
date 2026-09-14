@@ -19,6 +19,7 @@ import {
   Pin,
   X,
 } from "../../assets/icons";
+import { confirmSessionRename } from "../Sessions/confirmSessionRename";
 import SidebarSessionMenu, {
   type SidebarMenuProject,
   type SidebarMenuTarget,
@@ -211,6 +212,12 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
   const [editingTitle, setEditingTitle] = useState("");
   const editingIdRef = useRef<string | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const [renameSaving, setRenameSaving] = useState(false);
+  const renameContext = `${connectionId}\0${activeProfile}`;
+  const renameContextRef = useRef(renameContext);
+  useEffect(() => {
+    renameContextRef.current = renameContext;
+  }, [renameContext]);
   // Pending delete confirmation (small inline dialog in a portal-free overlay).
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -507,14 +514,18 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
     });
   }, []);
 
-  const startRename = useCallback((s: RecentSession): void => {
-    setEditingId(s.id);
-    setEditingTitle(s.title || "");
-    setTimeout(() => {
-      renameInputRef.current?.focus();
-      renameInputRef.current?.select();
-    }, 0);
-  }, []);
+  const startRename = useCallback(
+    (s: RecentSession): void => {
+      if (renameSaving) return;
+      setEditingId(s.id);
+      setEditingTitle(s.title || "");
+      setTimeout(() => {
+        renameInputRef.current?.focus();
+        renameInputRef.current?.select();
+      }, 0);
+    },
+    [renameSaving],
+  );
 
   const cancelRename = useCallback((): void => {
     setEditingId(null);
@@ -523,33 +534,36 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
 
   const confirmRename = useCallback(
     async (id: string, value: string): Promise<void> => {
-      const trimmed = value.trim();
-      const current = sessionsRef.current.find((s) => s.id === id);
-      if (!trimmed || trimmed === (current?.title ?? "")) {
-        cancelRename();
-        return;
-      }
-      const previous = current?.title ?? "";
-      // Optimistic local update; roll back if the write fails.
-      setSessions((prev) =>
-        prev.map((s) => (s.id === id ? { ...s, title: trimmed } : s)),
-      );
-      if (editingIdRef.current === id) cancelRename();
-      try {
-        await window.hermesAPI.updateSessionTitle(
-          id,
-          trimmed,
-          connectionId,
-          activeProfile,
-        );
-      } catch (err) {
-        console.error("Failed to rename session", id, err);
-        setSessions((prev) =>
-          prev.map((s) => (s.id === id ? { ...s, title: previous } : s)),
-        );
-      }
+      const previous =
+        sessionsRef.current.find((s) => s.id === id)?.title ?? "";
+      await confirmSessionRename({
+        sessionId: id,
+        value,
+        currentTitle: previous,
+        isCurrentContext: () => renameContextRef.current === renameContext,
+        setSaving: setRenameSaving,
+        isStillEditing: () => editingIdRef.current === id,
+        applyOptimistic: (title) =>
+          setSessions((prev) =>
+            prev.map((s) => (s.id === id ? { ...s, title } : s)),
+          ),
+        rollback: () =>
+          setSessions((prev) =>
+            prev.map((s) => (s.id === id ? { ...s, title: previous } : s)),
+          ),
+        clearEditing: cancelRename,
+        inputRef: renameInputRef,
+        fallbackErrorMessage: t("sessions.renameFailed"),
+        persist: (sessionId, title) =>
+          window.hermesAPI.updateSessionTitle(
+            sessionId,
+            title,
+            connectionId,
+            activeProfile,
+          ),
+      });
     },
-    [activeProfile, cancelRename, connectionId],
+    [cancelRename, t, connectionId, activeProfile, renameContext],
   );
 
   const handleMoveToProject = useCallback(
@@ -687,6 +701,7 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
         >
           <input
             ref={renameInputRef}
+            disabled={renameSaving}
             className="sidebar-recent-session-rename"
             type="text"
             value={editingTitle}

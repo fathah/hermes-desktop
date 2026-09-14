@@ -154,6 +154,41 @@ describe("Sessions tab live refresh (#322)", () => {
     });
   });
 
+  it("disables the rename input during persistence and ignores a duplicate submit", async () => {
+    vi.useRealTimers();
+    const api = installHermesAPI([
+      {
+        id: "pending-session",
+        title: "Original",
+        startedAt: Date.now() / 1000,
+        source: "desktop",
+        messageCount: 1,
+        model: "test",
+      },
+    ]);
+    let complete!: () => void;
+    api.updateSessionTitle.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          complete = resolve;
+        }),
+    );
+    render(<Sessions {...baseProps} visible={true} />);
+    await waitFor(() => expect(screen.getByText("Original")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "sessions.rename" }));
+    const input = screen.getAllByRole("textbox")[1] as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Saved name" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(input.disabled).toBe(true);
+    fireEvent.blur(input);
+    expect(api.updateSessionTitle).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      complete();
+    });
+    expect(screen.getByText("Saved name")).toBeTruthy();
+    expect(screen.getAllByRole("textbox")).toHaveLength(1);
+  });
+
   it("re-syncs from state.db on an interval while the tab is visible", async () => {
     const api = installHermesAPI();
     render(<Sessions {...baseProps} visible={true} />);
