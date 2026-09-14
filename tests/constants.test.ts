@@ -69,6 +69,17 @@ describe("PROVIDERS", () => {
     }
   });
 
+  it("configures EvoLink through the custom OpenAI-compatible endpoint path", () => {
+    expect(
+      PROVIDERS.setup.find((entry) => entry.id === "evolink"),
+    ).toMatchObject({
+      envKey: "EVOLINK_API_KEY",
+      configProvider: "custom",
+      baseUrl: "https://direct.evolink.ai/v1",
+      needsKey: true,
+    });
+  });
+
   it("no duplicate option values", () => {
     const values = PROVIDERS.options.map((o) => o.value);
     expect(new Set(values).size).toBe(values.length);
@@ -202,6 +213,7 @@ describe("SETTINGS_SECTIONS", () => {
     expect(allKeys).toContain("XAI_API_KEY");
     expect(allKeys).toContain("XIAOMI_API_KEY");
     expect(allKeys).toContain("AIMLAPI_API_KEY");
+    expect(allKeys).toContain("EVOLINK_API_KEY");
   });
 
   it("includes existing keys (backward compat)", () => {
