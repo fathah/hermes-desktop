@@ -4,11 +4,13 @@ The sidebar starts with New Chat, keeps app destinations pinned, then gives conv
 
 [[src/renderer/src/screens/Layout/Layout.tsx#Layout]] renders a New Chat action before Discover, Office, Kanban, and Schedules from `PINNED_NAV_ITEMS`, then renders [[src/renderer/src/screens/Layout/SidebarRecentSessions.tsx]] inside a flexible `.sidebar-chat-section`. New Chat is active when the visible Chat view has no session id yet. The standalone `sessions` view is still absent from the `View` union; the full list opens from the Cmd/Ctrl+K menu action.
 
+Layout passes the selected connection ID and profile into both session surfaces. Cache reads, sync, pagination, search, rename, and deletion therefore remain on that machine/profile instead of consulting a later global selection; see [[connections#Session locations]].
+
 ## Collapse toggle brand mark
 
-The sidebar header's collapse control doubles as the brand mark: collapsed it shows a circular dot that swaps to the expand icon on hover; expanded it shows the full wordmark beside the collapse icon.
+The sidebar header's collapse control doubles as the brand mark: collapsed it shows a circular dot that swaps to the expand icon on hover; expanded it is just the collapse icon, parked top-right for a clean, logo-free header.
 
-[[src/renderer/src/screens/Layout/Layout.tsx#Layout]] renders `.sidebar-collapse-toggle`. Collapsed, it holds a fixed-size `.sidebar-collapse-swap` box stacking a `.sidebar-collapse-mark` circle (filled with `--text-primary`, so white on dark themes and dark on light) over the `PanelLeftOpen` icon; only opacity toggles on hover/focus, so the button never reflows. Expanded, the maskable `.sidebar-logo` wordmark shows next to the `PanelLeftClose` icon.
+[[src/renderer/src/screens/Layout/Layout.tsx#Layout]] renders `.sidebar-collapse-toggle`. Collapsed, it holds a fixed-size `.sidebar-collapse-swap` box stacking a `.sidebar-collapse-mark` circle (filled with `--text-primary`, so white on dark themes and dark on light) over the `PanelLeftOpen` icon; only opacity toggles on hover/focus, so the button never reflows. Expanded, the `.sidebar-brand` row holds only the `PanelLeftClose` collapse toggle (`justify-content: flex-end`); the wordmark was removed so the top reads clean below the traffic lights.
 
 ## Infinite sidebar list
 
@@ -19,6 +21,18 @@ The inline list lazily loads cached sessions in pages as the user scrolls, so th
 Session titles in the inline list are constrained to the sidebar width and truncate with ellipses, while the chat section only scrolls vertically. This keeps long generated titles from creating a horizontal scrollbar.
 
 The native sidebar scrollbar is hidden to avoid layout shifts. [[src/renderer/src/screens/Layout/Layout.tsx#Layout]] measures the chat scroll container and renders an absolutely positioned overlay thumb only while the user is scrolling, so showing or hiding the scrollbar never changes row width.
+
+## Native archive visibility
+
+Local lists follow the Agent's native archive flag. Archiving hides a conversation without deleting its messages or linked project folder; restoring it makes it visible on the next sync.
+
+[[src/main/db.ts#sessionVisibilityPredicate]] detects whether the selected profile's database has an `archived` column. [[src/main/sessions.ts#listSessions]] filters `archived = 0` before pagination, while legacy databases without that column remain readable.
+
+[[src/main/session-cache.ts#syncSessionCache]] reconciles the complete visible metadata set rather than using `started_at` as a change cursor: archive and restore do not change creation time. Cached titles are reused, and message bodies are read only to generate missing titles for newly visible rows. Successful sync replaces the cached membership, including an empty set; unavailable databases or failed reads retain the last good cache until retry. [[src/main/session-cache.ts#listCachedSessions]] remains DB-free, so an initial cached paint can be stale until sync finishes. Message history and search are unchanged.
+
+[[src/renderer/src/screens/Sessions/Sessions.tsx]] accepts an empty quiet-refresh result for the explicitly selected local connection, allowing the last archived row to disappear. Network-backed lists retain their transient-empty guard. Failed connection checks retain visible rows, and request identity prevents a delayed empty result from clearing a newer profile's list.
+
+[[tests/session-archive.test.ts]] executes real SQLite queries for cold and warm caches, archive/restore without timestamp changes, pagination, equal IDs across profiles, legacy schema upgrades, read failure and recovery, and retained history/project folders. [[src/renderer/src/screens/Sessions/Sessions.test.tsx]] covers the last local row disappearing and returning, failed refresh recovery, and stale responses after profile switches.
 
 ## Project grouping
 
@@ -32,15 +46,37 @@ Projects and Chats are top-level collapsible sections, and each project folder c
 
 ## Row context menu
 
-Each sidebar session row exposes a ChatGPT-style options menu — Pin, Rename, Move to project, and Delete — opened from a hover-revealed `…` button or by right-clicking the row.
+Each sidebar session row exposes a ChatGPT-style options menu — Pin, Rename, Copy session ID, Move to project, and Delete — opened from a hover-revealed `…` button or by right-clicking the row.
 
 [[src/renderer/src/screens/Layout/SidebarRecentSessions.tsx]] renders each row as a `div role="button"` (so the trailing `.sidebar-recent-session-options` button is valid nested markup) and tracks the open row in `menuTarget`. [[src/renderer/src/screens/Layout/SidebarSessionMenu.tsx#SidebarSessionMenu]] renders the menu in a `document.body` portal at clamped viewport coordinates so it escapes the sidebar's clipped scroll container, and closes on outside click, Escape, a scroll of the sidebar list's own `scrollContainer`, or window blur. The scroll listener is scoped to that one container (not a global capture listener) so the chat's streaming auto-scroll — which fires window-level scroll events on every chunk — no longer dismisses the menu mid-stream. "Move to project" swaps the menu to a second in-place page listing every distinct context folder (`projectChoices`) plus **New folder…** ([[src/preload/index.ts]] `selectFolder`) and **Remove from project**, rather than a hover flyout.
 
 Transitions are `motion/react`-driven (the same library as [[src/renderer/src/components/modal/AppModal.tsx#AppModal]]): the whole menu fades/scales/blurs from its top-left anchor on open, and an internal `open` flag plays the exit before the parent unmounts it (`AnimatePresence onExitComplete` → `onClose`). Switching between the main and project pages cross-slides them (direction-aware) inside a `.sidebar-session-menu-body` wrapper whose `layout` prop animates the height difference; the wrapper clips the sliding pages. Viewport clamping measures the offset box, not `getBoundingClientRect`, so an in-flight scale/height animation doesn't skew positioning.
 
-Each action calls an existing desktop API with an optimistic local update and rollback on failure: Rename → `updateSessionTitle` (inline `.sidebar-recent-session-rename` input), Move → [[src/main/session-context-folder-store.ts#setSessionContextFolder]] then a `hermes-session-context-folder-changed` event so other surfaces re-group, Delete → a confirmation dialog (portal overlay) then [[src/main/sessions.ts#deleteSessionRows|deleteSession]]. Deleting the open chat calls `onSessionDeleted`, which [[src/renderer/src/screens/Layout/Layout.tsx#Layout]] uses to drop to a fresh New Chat.
+The menu is styled light-based and stroke-free (`.sidebar-session-menu`): no 1px border — depth comes from the shared frosted material (`--bg-secondary` at 97% + `backdrop-filter` blur), a top inset highlight, and layered ambient shadow. Dividers are a soft `--text-primary` 7% hairline rather than a hard `--border-bright` line. In the "Move to project" page each row carries a `Folder` icon and the current location gets an `.active-project` accent-subtle fill (not an outline).
+
+Each action calls an existing desktop API with an optimistic local update and rollback on failure: Copy session ID writes the target's stable id through the preload clipboard bridge; Rename → `updateSessionTitle` (inline `.sidebar-recent-session-rename` input); Move → [[src/main/session-context-folder-store.ts#setSessionContextFolder]] then a `hermes-session-context-folder-changed` event so other surfaces re-group; Delete → a confirmation dialog (portal overlay) then [[src/main/sessions.ts#deleteSessionRows|deleteSession]]. Deleting the open chat calls `onSessionDeleted`, which [[src/renderer/src/screens/Layout/Layout.tsx#Layout]] uses to drop to a fresh New Chat.
+
+Pointer focus suppresses Chromium's host-accent ring, but keyboard focus remains visible app-wide through a subtle inset edge and luminance lift that follow each control's own shape. Increased-contrast mode strengthens the inset edge, while forced-colour mode restores the OS Highlight outline because shadows may be unavailable. Sidebar rows and menu items additionally use the same quiet background fill as hover. [[tests/focus-outline.test.ts]] protects these input-mode and accessibility distinctions, while [[src/renderer/src/screens/Layout/SidebarSessionMenu.test.tsx]] verifies that the copy action receives the selected row's stable id.
 
 Pinned rows are a desktop-only affordance: their ids live in `localStorage` (`hermes.sidebar.pinnedSessions`), and pinned sessions are pulled out of the normal grouping into a collapsible **Pinned** section at the top of the list.
+
+### Rename persistence
+
+Session renames must survive `syncSessionCache`, so the durable `state.db` write happens before the JSON cache is updated.
+
+Title policy lives in [[src/shared/session-title.ts]] (`normalizeSessionTitle`, `MAX_SESSION_TITLE_LENGTH`) so the renderer optimistic path and [[src/main/session-cache.ts#updateSessionTitle]] cannot diverge. Main writes the selected profile’s `state.db` first, recording `title_source = user` when supported, then mirrors into `sessions.json`. Database errors throw; a failed cache mirror remains recoverable from the committed title on the next full sync. Both the sidebar and Sessions modal call [[src/renderer/src/screens/Sessions/confirmSessionRename.ts#confirmSessionRename]] for optimistic update, toast/rollback, and keep-editor-on-failure. Each editor allows one save at a time; late responses from a previous connection or profile cannot roll back the current list. Normalization strips Agent-disallowed controls and counts Unicode characters for the 100-character limit.
+
+#### User title provenance
+
+Modern Agent schemas record explicit renames as user-authored so late automatic title generation cannot overwrite them; older schemas remain writable without migrations.
+
+#### Cache mirror recovery
+
+If mirroring a committed rename to JSON fails, the next full metadata sync restores the durable database title even for sessions older than the incremental sync window.
+
+#### Overlapping rename protection
+
+The editor prevents overlapping saves and restores editing after failures. Results from a previous connection or profile cannot roll back a different session list.
 
 ## Full-list modal
 
@@ -48,15 +84,23 @@ The Cmd/Ctrl+K menu action opens an 80%×80% modal that reuses the existing Sess
 
 The modal in [[src/renderer/src/screens/Layout/Layout.tsx#Layout]] renders [[src/renderer/src/screens/Sessions/Sessions.tsx]] inside a `.sessions-modal` over the shared `.models-modal-overlay` backdrop. Resuming a session or starting a new chat from the modal closes it; Esc and a backdrop click also close it. Because the Sessions screen owns its own fetching gated on `visible`, it loads only while the modal is open.
 
+The full list defaults to **Chats**, with **Automations** and **All** as type choices, plus a multi-select source menu. [[src/renderer/src/screens/Sessions/Sessions.tsx#sessionCategoryForSource]] classifies automation-like sources from metadata, and [[src/renderer/src/screens/Sessions/Sessions.tsx#matchesSessionFilters]] applies type and selected-source filters to both cached rows and full-text results. Both selections persist locally, source badges remain visible, and [[src/renderer/src/screens/Sessions/Sessions.filters.test.ts]] locks the metadata-only mapping.
+
 ## Profile switch and active chat
 
-The footer profile switcher keeps the selected shell profile aligned with the visible chat run, while preserving older conversations under their original profiles.
+The footer profile control keeps the selected shell profile aligned with the visible chat run, while preserving older conversations under their original profiles.
 
-[[src/renderer/src/screens/Layout/ProfileSwitcher.tsx#ProfileSwitcher]] persists the selected profile through main-process profile switching, then [[src/renderer/src/screens/Layout/Layout.tsx#Layout]] applies [[src/renderer/src/screens/Layout/chatRuns.ts#selectProfileRunTransition]] before rendering Chat. If the active chat is blank, it is re-homed to the selected profile; if it already belongs to another profile, the shell activates an existing blank run for the selected profile or creates a fresh one. This prevents the footer, Settings, recent sessions, and chat transport from disagreeing about which agent is active.
+[[src/renderer/src/screens/Layout/ProfileSwitcher.tsx#ProfileSwitcher]] is two affordances, not a popover: the chip (avatar + name) opens the **current** profile's edit modal via `openProfile` ([[src/renderer/src/components/profile/ProfileModalContext.ts]]), and a dedicated switch button opens a **command-palette-style picker** — picking a profile calls `setActiveProfile` and `onSwitch`, and a "Manage profiles" row jumps to the Agents screen. Collapsed, the lone avatar opens the picker.
 
-Opening a sidebar session after switching profiles consumes that blank selected-profile run instead of appending beside it. [[src/renderer/src/screens/Layout/chatRuns.ts#openSessionRunTransition]] replaces the active scratch run when it belongs to the same profile as the resumed session, so the tab strip shows the previous session without an extra "New conversation" tab.
+The picker is a fixed size (fixed width and height, capped to the viewport), so filtering the list never resizes the panel — the list scrolls or leaves empty space instead. It is styled light-based and stroke-free like the row context menu: the frosted material, a top inset highlight, and layered shadow carry the edge (no outer border), and the search field / list / manage row are separated by soft `--text-primary` 7% hairlines rather than hard `--border` strokes. It has a search field on top that fuzzy-filters by user-facing name, stable id, and model; below it, profiles split into a running group and a **Stopped** group (each row shows a monospace model, a gateway dot — green when running — and a check on the active profile). The active profile floats to the top of its group. It is keyboard-first: **Cmd/Ctrl+P toggles it open from anywhere** (P is unbound in the app menu, so the renderer keydown reliably fires; `preventDefault` suppresses the browser print dialog), the search field auto-focuses, ↑/↓ move a highlight across the flattened running+stopped order, and Enter selects. The `mod` symbol (`⌘` on macOS via `window.electron.process.platform`, else `Ctrl`) is shown both in the search-field hint and the switch button's tooltip.
 
-The switcher trigger preserves the old app-brand label for an unrenamed default profile: when `listProfiles` returns the fallback `name === id === "default"`, the button shows `common.appName`; once a custom name is stored, it shows that user-facing name.
+That switch persists the selected profile through main-process profile switching, then [[src/renderer/src/screens/Layout/Layout.tsx#Layout]] applies [[src/renderer/src/screens/Layout/chatRuns.ts#selectProfileRunTransition]] before rendering Chat. A blank run is re-homed or reused only when it belongs to the current connection; otherwise the shell creates a fresh run for the exact connection and selected profile. This prevents the footer, Settings, recent sessions, and chat transport from disagreeing about which agent or machine is active.
+
+Opening a sidebar session after switching profiles consumes that blank selected-profile run instead of appending beside it. [[src/renderer/src/screens/Layout/chatRuns.ts#openSessionRunTransition]] replaces the active scratch run only when connection and profile both match the resumed session, so equal Agent session IDs on different machines cannot collapse into one tab.
+
+The profile chip preserves the old app-brand label for an unrenamed default profile: when `listProfiles` returns the fallback `name === id === "default"`, the chip shows `common.appName`; once a custom name is stored, it shows that user-facing name.
+
+The same per-profile appearance also drives the agent avatar inside the transcript. [[src/renderer/src/screens/Layout/Layout.tsx#Layout]] passes `getAppearance(run.profile)` to each [[src/renderer/src/screens/Chat/Chat.tsx]] as `agentAppearance`, which forwards `{ name, color, avatar }` through [[src/renderer/src/screens/Chat/MessageList.tsx]] to every [[src/renderer/src/screens/Chat/MessageRow.tsx#HermesAvatar]] (and the reasoning/tool-activity rows in [[src/renderer/src/screens/Chat/HistoryRow.tsx]]). `HermesAvatar` shows the animated thinking-orb ([[loading-indicators]]) only while a turn is generating (`active`); once generation stops it swaps straight to the agent's [[src/renderer/src/components/common/ProfileAvatar.tsx]] so idle turns are identified by who produced them. The live typing indicator has no resolved agent yet, so it falls back to the orb.
 
 ### SSH tunnel profile routing
 
@@ -87,6 +131,8 @@ The Profiles page lists every workspace as table-style rows and creates new ones
 [[src/renderer/src/screens/Agents/Agents.tsx]] renders one `agents-row` per profile (avatar, user-facing `name`, stable `id` when it differs, `provider · skills`, a monospace model chip, and a `Running`/`Off` gateway pill), marking the active profile with a left green bar. Selecting a row switches by profile `id` ([[src/main/ipc/register.ts#registerIpcHandlers]]'s `set-active-profile`), which starts that profile's gateway asynchronously — so the status reads from a pid file that isn't written yet at switch time. In **SSH mode** this persists the selection to the local `~/.hermes/active_profile` (so it survives relaunch instead of resetting to `default`) and starts the profile's gateway on the remote via [[src/main/ssh-remote.ts#sshStartGateway]] (previously SSH was a no-op, so named-profile gateways never started and the selection never stuck). [[src/main/profiles.ts#setActiveProfile]] guarantees that persistence with a read-back fallback: the local `hermes profile use` CLI raises when the profile exists only on the remote (or there is no local install) and that error is swallowed, so when the CLI didn't move `active_profile`, the desktop writes the file directly — otherwise the selection silently never persisted and `activeSshProfile()` scoped the unified dashboard's data to `default`. `list-profiles` over SSH also overrides `isActive` from the local active profile (not the remote CLI's `◆` marker) so the persisted selection is the one highlighted. The page therefore polls `listProfiles` (~700ms, capped near 10s) after a switch until the selected profile reports running, flipping its pill to `Running` on its own rather than only after a manual refresh or revisit. While that poll runs (and the gateway wasn't already up), the switched row shows a `Starting…` pill with a spinner; it settles on the real `Running`/`Off` status once the gateway reports in or the poll gives up. **New Agent** opens an [[src/renderer/src/components/modal/AppModal.tsx#AppModal]] with a user-facing agent-name field, a "clone config & API keys" toggle, and — when cloning — a source-profile `<select>` defaulting to the active profile id. Create calls `window.hermesAPI.createProfile(name, cloneFrom)` where `name` is the user-facing label and `cloneFrom` is the chosen source id or `null` for a fresh profile; the modal stays open on failure so the error is visible and the user can retry. [[src/main/profiles.ts#createProfile]] generates a CLI-safe internal id from that label, stores the label as profile metadata, then maps a non-null `cloneFrom` to the agent CLI's `hermes profile create <id> --clone-from <source>` (which implies `--clone`), validating the source as `default` or a valid named profile. Once the CLI create succeeds, metadata write failures are logged and treated as display-only degradation so the desktop does not report a false create failure or nudge a retry that would generate a second id. [[src/main/ssh-remote.ts#sshCreateProfile]] keeps the remote create path's `{ success, error }` shape and surfacing behavior. [[src/main/registry.ts]] installs a published agent by cloning from `default`.
 
 The profile modal's inline name editor saves on Enter/blur, but Escape is a real cancel path: it restores the current saved name and suppresses the blur-save that browsers fire as the input unmounts.
+
+Long profile lists scroll within the Profiles page. The table keeps its full content height so its rounded-corner clipping cannot hide rows below the viewport; wheel and keyboard scrolling can reach the final profile and its actions.
 
 ## Office profile labels
 
@@ -130,7 +176,31 @@ A single global modal (80vw × 80vh) with a grouped left nav presents every app/
 
 [[src/renderer/src/components/settings/SettingsModalProvider.tsx#SettingsModalProvider]] mounts [[src/renderer/src/components/settings/SettingsModal.tsx]] at the app root (inside `ProfileModalProvider`) and exposes `openSettings(section?, { profile })` through [[src/renderer/src/components/settings/SettingsModalContext.ts#useSettingsModal]]. Three entry points call it: the sidebar-footer gear, the `/settings` command's `onOpenDiagnose` path, and a global **Cmd/Ctrl+,** keydown handler in [[src/renderer/src/screens/Layout/Layout.tsx#Layout]] — each passes the active profile so the modal reads/writes the right config. The modal reuses the shared [[src/renderer/src/components/modal/AppModal.tsx#AppModal]] shell (see [[sidebar-navigation#Profile detail modal#Shared modal shell]]).
 
-The left nav is two labelled groups — **General** (Appearance, Language, Privacy, Connection, Data) and **Hermes Agent** (About & Updates, Community, Logs & Diagnostics) — and `SETTINGS_NAV`/`resolveSection` in [[src/renderer/src/components/settings/SettingsModal.tsx]] map ids to panes. Network settings (Force IPv4 + proxy) are not a separate tab: they apply to every outgoing connection, so they live as a `Network` subsection at the bottom of [[src/renderer/src/components/settings/ConnectionPane.tsx]], and `resolveSection` aliases the legacy `/settings network` argument to the Connection pane. All shared state, the config-load effect, and the mutation handlers live in [[src/renderer/src/components/settings/useSettingsData.ts#useSettingsData]] (relocated wholesale from the former `Settings` screen) and reach each pane through [[src/renderer/src/components/settings/SettingsDataContext.ts#useSettings]], so the panes (`AppearancePane`, `ConnectionPane`, `AboutPane`, …) stay purely presentational. One exception: `AppearancePane`'s hardware-acceleration field reads `getGpuStatus` from the preload bridge directly, because GPU state is per-launch main-process state rather than profile config (see [[main-process#GPU Fallback#User preference]]). The modal's chrome is `user-select: none` (drag-selection highlighting nav labels and field captions read as broken UI); form fields and `pre`/`code` output — notably the Logs pane — opt back into text selection so they stay copyable.
+The left nav is two labelled groups — **General** (Appearance, Language, Notifications, Privacy, Connection, Data) and **Hermes Agent** (About & Updates, Community, Logs & Diagnostics) — and `SETTINGS_NAV`/`resolveSection` in [[src/renderer/src/components/settings/SettingsModal.tsx]] map ids to panes. Language also owns native spell-check selection, while Notifications owns the response-completion sound; both use the shared preferences described in [[chat-experience-preferences]]. Connection begins with the named-record selector and management controls described in [[connections#Named connection management]], then reuses the active record's Local/Remote/SSH editor. Network settings (Force IPv4 + proxy) are not a separate tab: they apply to every outgoing connection, so they live as a `Network` subsection at the bottom of [[src/renderer/src/components/settings/ConnectionPane.tsx]], and `resolveSection` aliases the legacy `/settings network` argument to the Connection pane. All shared state, the config-load effect, and the mutation handlers live in [[src/renderer/src/components/settings/useSettingsData.ts#useSettingsData]] (relocated wholesale from the former `Settings` screen) and reach each pane through [[src/renderer/src/components/settings/SettingsDataContext.ts#useSettings]], so the panes (`AppearancePane`, `ConnectionPane`, `AboutPane`, …) stay purely presentational. One exception: `AppearancePane`'s hardware-acceleration field reads `getGpuStatus` from the preload bridge directly, because GPU state is per-launch main-process state rather than profile config (see [[main-process#GPU Fallback#User preference]]). The modal's chrome is `user-select: none` (drag-selection highlighting nav labels and field captions read as broken UI); form fields and `pre`/`code` output — notably the Logs pane — opt back into text selection so they stay copyable.
+
+The grouped Appearance preferences use one shared logical text/control grid in [[src/renderer/src/components/settings/AppearancePane.tsx]], so translated labels, wrapped hints, and differently sized controls keep a stable column and vertical alignment. The control column wraps long segment labels, stacks below the copy in narrow containers, and follows document direction for Arabic and Hebrew instead of relying on physical left/right positioning.
+
+### Migration path rendering
+
+Migration banners display filesystem paths as text inside trusted localized markup, preserving the exact path without interpreting it as HTML.
+
+[[src/main/installer.ts#checkOpenClawExists]] returns the raw discovered path; filesystem names may contain HTML-significant characters. [[src/renderer/src/components/settings/DataPane.tsx#DataPane]] escapes that value at the HTML rendering boundary before translation interpolation. The path used for filesystem operations remains unchanged.
+
+[[src/renderer/src/components/settings/DataPane.test.tsx]] exercises the production translations across every supported locale, checking markup-shaped paths, literal entities, whitespace, and translation-like text. [[tests/installer-utils.test.ts]] confirms that a real populated POSIX install with HTML-significant path characters reaches discovery unchanged.
+
+### Long translated preference layout
+
+The Appearance preference markup and stylesheet must retain a shared responsive grid, shrinkable text/control cells, and wrapping segmented controls so long translations cannot restore the original independent-row flex behavior.
+
+### RTL and narrow preference layout
+
+Appearance rows must use logical spacing and separators for RTL mirroring, while the narrow-container rule changes the shared grid to a stacked row and aligns controls at the logical start.
+
+### Shared animated toggle
+
+Settings boolean preferences use one accessible controlled switch with consistent motion, sizing, disabled behavior, and switch semantics.
+
+[[src/renderer/src/components/common/Toggle.tsx#Toggle]] exposes `role="switch"` and `aria-checked`, gates the bounce until interaction so initial hydration stays still, and disables keyframes for reduced-motion users. Settings panes pass their existing localized labels and state mutations through `onCheckedChange`.
 
 ## Provisional fresh sessions
 

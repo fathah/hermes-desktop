@@ -1,6 +1,15 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { WalletSyncResult } from "../../../../shared/wallets";
+import type {
+  WalletPortfolioResult,
+  WalletSyncResult,
+} from "../../../../shared/wallets";
 import type { OfficeAgent } from "./office3d/core/types";
 import { REPRESENTATIVES } from "./office3d/interactions/registry";
 
@@ -44,11 +53,31 @@ function walletResult(name: string): WalletSyncResult {
   };
 }
 
-function stubHermesAPI(
-  syncWallets: (profile?: string) => Promise<WalletSyncResult>,
-): void {
+function stubHermesAPI(opts: {
+  syncWallets: (profile?: string) => Promise<WalletSyncResult>;
+  getWalletPortfolio?: (
+    profile?: string,
+    walletId?: string,
+  ) => Promise<WalletPortfolioResult>;
+  // The signed-in Hermes account id the panel scopes its wallet cache to; null
+  // models being signed out.
+  accountId?: string | null;
+}): void {
+  const accountId = opts.accountId === undefined ? "acct-1" : opts.accountId;
   Object.defineProperty(window, "hermesAPI", {
-    value: { syncWallets },
+    value: {
+      syncWallets: opts.syncWallets,
+      getWalletPortfolio:
+        opts.getWalletPortfolio ??
+        (async () => ({ status: "ok", totalUsd: 0, tokens: [] })),
+      getAccount: async () =>
+        accountId === null
+          ? null
+          : {
+              apiUrl: "https://api.example",
+              user: { id: accountId, email: null, name: null, avatarUrl: null },
+            },
+    },
     writable: true,
     configurable: true,
   });
@@ -57,7 +86,7 @@ function stubHermesAPI(
 describe("RepInteractionPanel", () => {
   // @lat: [[office-interactions#Tests#Panel follows the Office selection]]
   it("follows a changed Office selection while mounted", async () => {
-    stubHermesAPI(async () => walletResult("a"));
+    stubHermesAPI({ syncWallets: async () => walletResult("a") });
     const { rerender } = render(
       <RepInteractionPanel
         rep={REP}
@@ -95,13 +124,13 @@ describe("RepInteractionPanel", () => {
   // @lat: [[office-interactions#Tests#Drops stale action results]]
   it("drops an in-flight result when the agent changes mid-request", async () => {
     let resolveA: ((r: WalletSyncResult) => void) | null = null;
-    stubHermesAPI(
-      (profile) =>
+    stubHermesAPI({
+      syncWallets: (profile) =>
         new Promise((resolve) => {
           if (profile === "a") resolveA = resolve;
           else resolve(walletResult("b"));
         }),
-    );
+    });
     const { rerender } = render(
       <RepInteractionPanel
         rep={REP}
@@ -131,5 +160,95 @@ describe("RepInteractionPanel", () => {
     // Running the action for b shows b's wallets.
     fireEvent.click(screen.getByText("office.repActionAccountStatus"));
     await waitFor(() => expect(screen.getByText("b")).toBeTruthy());
+  });
+
+  // @lat: [[office-interactions#Tests#Wallet cache is account-scoped]]
+  it("never hydrates cached wallet data across an account relink", async () => {
+    const portfolio: WalletPortfolioResult = {
+      status: "ok",
+      totalUsd: 42,
+      tokens: [],
+    };
+    // Account 1 loads agent a's balance, caching it under acct-1.
+    stubHermesAPI({
+      syncWallets: async () => walletResult("a"),
+      getWalletPortfolio: async () => portfolio,
+      accountId: "acct-1",
+    });
+    const { unmount } = render(
+      <RepInteractionPanel
+        rep={REP}
+        agents={[agent("a")]}
+        initialAgentId="a"
+        onClose={() => {}}
+      />,
+    );
+    // Let getAccount() resolve so the cache is written under acct-1.
+    await act(async () => {});
+    fireEvent.click(screen.getByText("office.repActionCheckBalance"));
+    await waitFor(() => expect(screen.getByText("$42.00")).toBeTruthy());
+    unmount();
+
+    // The same local profile is relinked to a different Hermes account. The
+    // module-level cache survives, but its key changed with the account, so
+    // reopening must not surface account 1's cached balance.
+    stubHermesAPI({
+      syncWallets: async () => walletResult("a"),
+      getWalletPortfolio: async () => portfolio,
+      accountId: "acct-2",
+    });
+    render(
+      <RepInteractionPanel
+        rep={REP}
+        agents={[agent("a")]}
+        initialAgentId="a"
+        onClose={() => {}}
+      />,
+    );
+    await act(async () => {});
+    expect(screen.queryByText("$42.00")).toBeNull();
+    expect(screen.getByText("$—")).toBeTruthy();
+  });
+
+  // @lat: [[office-interactions#Tests#Account scope refreshes on re-show]]
+  it("re-resolves the account when the tab is re-shown, panel still mounted", async () => {
+    const portfolio: WalletPortfolioResult = {
+      status: "ok",
+      totalUsd: 42,
+      tokens: [],
+    };
+    const panel = (visible: boolean): React.JSX.Element => (
+      <RepInteractionPanel
+        rep={REP}
+        agents={[agent("v")]}
+        initialAgentId="v"
+        visible={visible}
+        onClose={() => {}}
+      />
+    );
+    stubHermesAPI({
+      syncWallets: async () => walletResult("v"),
+      getWalletPortfolio: async () => portfolio,
+      accountId: "vis-1",
+    });
+    const { rerender } = render(panel(true));
+    await act(async () => {});
+    fireEvent.click(screen.getByText("office.repActionCheckBalance"));
+    await waitFor(() => expect(screen.getByText("$42.00")).toBeTruthy());
+
+    // The account changes elsewhere while the panel stays mounted (Office is
+    // only hidden, never unmounted). Hiding then re-showing the tab must
+    // re-resolve the account and drop the previous account's cached balance.
+    stubHermesAPI({
+      syncWallets: async () => walletResult("v"),
+      getWalletPortfolio: async () => portfolio,
+      accountId: "vis-2",
+    });
+    rerender(panel(false));
+    await act(async () => {});
+    rerender(panel(true));
+    await act(async () => {});
+    expect(screen.queryByText("$42.00")).toBeNull();
+    expect(screen.getByText("$—")).toBeTruthy();
   });
 });

@@ -12,7 +12,9 @@ export type RepActionId =
   | "checkBalance"
   | "accountStatus"
   | "createAccount"
-  | "sendMoney";
+  | "sendMoney"
+  | "withdraw"
+  | "deposit";
 
 export interface RepAction {
   id: RepActionId;
@@ -43,7 +45,23 @@ export const REPRESENTATIVES: SpaceRepresentative[] = [
       { id: "checkBalance", labelKey: "repActionCheckBalance" },
       { id: "accountStatus", labelKey: "repActionAccountStatus" },
       { id: "createAccount", labelKey: "repActionCreateAccount" },
-      { id: "sendMoney", labelKey: "repActionSendMoney", disabled: true },
+      // "Send to agent" (sendMoney) is intentionally omitted for now; it will
+      // be re-added as a disabled/coming-soon action when the transfer flow
+      // lands. The RepActionId type + panel rendering still support it.
+    ],
+  },
+  {
+    // The bank's self-service ATM: the same wallet actions as the teller
+    // (read-only for now) plus withdraw/deposit as coming-soon.
+    id: "atm",
+    spaceId: "bank",
+    labelKey: "repAtm",
+    spaceLabelKey: "spaceBank",
+    actions: [
+      { id: "checkBalance", labelKey: "repActionCheckBalance" },
+      { id: "accountStatus", labelKey: "repActionAccountStatus" },
+      { id: "withdraw", labelKey: "repActionWithdraw", disabled: true },
+      { id: "deposit", labelKey: "repActionDeposit", disabled: true },
     ],
   },
 ];

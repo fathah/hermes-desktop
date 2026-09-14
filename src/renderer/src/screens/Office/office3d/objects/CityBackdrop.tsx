@@ -99,6 +99,12 @@ export const BACKDROP_OVERRIDES: Record<string, [number, number]> = {
  * recentred, grounded at y=0 and uniformly scaled so its footprint fits the
  * city-grid cell, with a random quarter-turn for variety.
  */
+// Footprint normalisation squashes the models' storeys to roughly person
+// height (a walking player was as tall as a ground floor). Stretching the
+// grounded model vertically restores real floor heights without widening
+// its footprint — which would overflow the 5-unit city grid cells.
+const BUILDING_Y_STRETCH = 1.55;
+
 function CityBuildingGlb({
   x,
   z,
@@ -115,10 +121,12 @@ function CityBuildingGlb({
   onClick?: (e: ThreeEvent<MouseEvent>) => void;
 }): React.JSX.Element {
   const { scene } = useGLTF(url, false, false);
-  const object = useMemo(
-    () => normalizeFootprint(glbClone(scene, null), footprint),
-    [scene, footprint],
-  );
+  const object = useMemo(() => {
+    const o = normalizeFootprint(glbClone(scene, null), footprint);
+    // Grounded at y=0, so a pure y-scale grows the building upward.
+    o.scale.y *= BUILDING_Y_STRETCH;
+    return o;
+  }, [scene, footprint]);
   return (
     <group position={[x, 0, z]} rotation={[0, rotY, 0]} onClick={onClick}>
       <primitive object={object} />
@@ -245,7 +253,7 @@ export const DistantSkyline = memo(
           placed = skylineClearOfRoads(px, pz, rad);
         }
         // Further rings grow taller so they stay visible over nearer ones.
-        const h = 8 + seededRandom(i * 7 + 5) * 28 + (radius - 75) * 0.12;
+        const h = 11 + seededRandom(i * 7 + 5) * 34 + (radius - 75) * 0.12;
         quat.setFromAxisAngle(SKYLINE_UP, seededRandom(i * 11 + 6) * Math.PI);
         pos.set(px, h / 2 - 0.1, pz);
         if (placed) scl.set(w, h, d);
@@ -433,7 +441,8 @@ function generateBackdrop(): {
           if (ov && seededRandom(seed + 14) < 0.4) plantTree(x, z, seed);
           const w = cell * (0.7 + seededRandom(seed + 1) * 0.5);
           const d = cell * (0.7 + seededRandom(seed + 2) * 0.5);
-          const h = 5 + seededRandom(seed + 3) * 14;
+          // Taller range to match the y-stretched near buildings.
+          const h = 8 + seededRandom(seed + 3) * 20;
           const lightness = 55 + seededRandom(seed + 4) * 25;
           buildings.push({
             id,

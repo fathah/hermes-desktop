@@ -78,6 +78,18 @@ describe("account store", () => {
     expect(s.getAccessToken("default")).toBe("secret-token");
   });
 
+  it("normalizes a stored remote http:// apiUrl to https on read", async () => {
+    const s = await store();
+    // Simulate a login persisted before the http→https fix.
+    s.saveAccount("default", {
+      apiUrl: "http://api.hermesone.org",
+      accessToken: "secret-token",
+      user,
+    });
+    // Sync fetches this apiUrl; http would strip the bearer on the redirect.
+    expect(s.getAccount("default")?.apiUrl).toBe("https://api.hermesone.org");
+  });
+
   it("clears the account on logout", async () => {
     const s = await store();
     s.saveAccount("default", {

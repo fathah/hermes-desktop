@@ -5,10 +5,7 @@ import { join } from "path";
 const ROOT = join(__dirname, "..");
 // After the app/ refactor, ipcMain.handle registrations live in the dedicated
 // IPC registration module plus the updater module, not in index.ts.
-const indexSrc = [
-  "src/main/ipc/register.ts",
-  "src/main/app/updater.ts",
-]
+const indexSrc = ["src/main/ipc/register.ts", "src/main/app/updater.ts"]
   .map((p) => readFileSync(join(ROOT, p), "utf-8"))
   .join("\n");
 const preloadSrc = readFileSync(join(ROOT, "src/preload/index.ts"), "utf-8");

@@ -26,12 +26,19 @@ import {
   useDashboardChatTransport,
 } from "./hooks/useDashboardChatTransport";
 import { useI18n } from "../../components/useI18n";
+import { useChatPreferences } from "../../components/ChatPreferencesProvider";
 import { buildChatTranscript } from "./transcriptUtils";
 import { ConfigHealthBanner } from "../../components/ConfigHealthBanner";
 import FollowUsModal from "../../components/FollowUsModal";
 import type { Attachment } from "../../../../shared/attachments";
+import type { ApprovalChoice } from "../../../../shared/chat-approval";
 import type { SessionModelOverride } from "../../../../shared/model-override";
-import type { ActiveTurn, ChatMessage, UsageState } from "./types";
+import type {
+  ActiveTurn,
+  ApprovalMessage,
+  ChatMessage,
+  UsageState,
+} from "./types";
 import type { ContextUsage } from "./ContextGauge";
 import { contextWindowForModel } from "./contextWindows";
 import { QueuedMessages } from "./QueuedMessages";
@@ -45,6 +52,7 @@ import type {
   AgentCommandsCatalogResponse,
   AgentSlashCommand,
 } from "./slash/types";
+import { shouldPlayCompletionSound } from "./chatNotifications";
 
 interface QueuedMessage {
   text: string;
@@ -86,6 +94,8 @@ interface ChatProps {
   /** Stable id for this conversation/run. One <Chat> is mounted per run; all
    *  remain mounted (background sessions) and only the active one is shown. */
   runId: string;
+  /** Stable Hermes machine identity for this run. */
+  connectionId: string;
   /** Seed transcript when re-opening a session from history; empty for new chats. */
   initialMessages?: ChatMessage[];
   /** Gateway session id when resuming a known session; null for a new chat. */
@@ -107,10 +117,14 @@ interface ChatProps {
   onSessionIdChange?: (runId: string, sessionId: string | null) => void;
   /** Reports the first user message as a best-effort conversation title. */
   onTitleChange?: (runId: string, title: string) => void;
+  /** Resolved avatar/colour of `profile`, so idle agent avatars in the
+   *  transcript show the agent's profile picture instead of the loading gif. */
+  agentAppearance?: { color?: string | null; avatar?: string | null };
 }
 
 function Chat({
   runId,
+  connectionId,
   initialMessages,
   initialSessionId,
   active = true,
@@ -121,8 +135,21 @@ function Chat({
   onLoadingChange,
   onSessionIdChange,
   onTitleChange,
+  agentAppearance,
 }: ChatProps): React.JSX.Element {
   const { t } = useI18n();
+  const { completionSoundEnabled } = useChatPreferences();
+  // Identity + appearance of the agent this conversation is with. Passed to the
+  // transcript so idle avatars render the agent's profile picture (the loading
+  // gif is only shown while a turn is generating).
+  const agentAvatar = useMemo(
+    () => ({
+      name: profile ?? "default",
+      color: agentAppearance?.color,
+      avatar: agentAppearance?.avatar,
+    }),
+    [profile, agentAppearance?.color, agentAppearance?.avatar],
+  );
   // Write-through transcript state: `messagesRef` is the synchronous source
   // of truth shared with the transports; see useTranscriptState for the
   // invariants the streaming coalescing depends on.
@@ -138,10 +165,14 @@ function Chat({
   useEffect(() => {
     const wasLoading = prevLoadingRef.current;
     prevLoadingRef.current = isLoading;
-    if (!wasLoading || isLoading) return;
+    if (
+      !shouldPlayCompletionSound(wasLoading, isLoading, completionSoundEnabled)
+    ) {
+      return;
+    }
     // Agent just finished — play a short notification chime (shared context).
     playFinishChime();
-  }, [isLoading]);
+  }, [completionSoundEnabled, isLoading]);
   const [hermesSessionId, setHermesSessionId] = useState<string | null>(
     initialSessionId ?? null,
   );
@@ -149,6 +180,16 @@ function Chat({
   useEffect(() => {
     onSessionIdChange?.(runId, hermesSessionId);
   }, [runId, hermesSessionId, onSessionIdChange]);
+  useEffect(() => {
+    if (!hermesSessionId) return;
+    void window.hermesAPI
+      .recordSessionLocation({
+        connectionId,
+        profile: profile ?? "default",
+        sessionId: hermesSessionId,
+      })
+      .catch(() => undefined);
+  }, [connectionId, profile, hermesSessionId]);
   // Best-effort title from the first user bubble (for the active-sessions bar).
   const reportedTitleRef = useRef(false);
   useEffect(() => {
@@ -172,6 +213,7 @@ function Chat({
     "auto" | "dashboard" | "legacy"
   >("auto");
   const [connectionModeLoaded, setConnectionModeLoaded] = useState(false);
+  const [connectionRevision, setConnectionRevision] = useState(0);
   // Working folder bound to this conversation (issue #27). Per-conversation;
   // persisted per session so a re-opened conversation restores its folder, and
   // reset on new chat below.
@@ -251,7 +293,20 @@ function Chat({
     let cancelled = false;
     const loadConnectionConfig = async (): Promise<void> => {
       try {
-        const conn = await window.hermesAPI.getConnectionConfig();
+        const conn = await window.hermesAPI.getConnectionConfig(connectionId);
+        let remoteAuthMode = conn.remoteAuthMode ?? "auto";
+        if (conn.mode === "remote" && conn.remoteUrl.trim()) {
+          try {
+            remoteAuthMode = (
+              await window.hermesAPI.probeRemoteAuthMode(
+                conn.remoteUrl,
+                connectionId,
+              )
+            ).authMode;
+          } catch {
+            // Keep stored transport choice when public status is unreachable.
+          }
+        }
         if (!cancelled) {
           setConnectionMode(conn.mode);
           setRemoteMode(conn.mode !== "local");
@@ -260,7 +315,9 @@ function Chat({
               ? "auto"
               : conn.mode === "ssh"
                 ? (conn.sshChatTransport ?? "auto")
-                : (conn.remoteChatTransport ?? "auto"),
+                : remoteAuthMode === "oauth"
+                  ? "dashboard"
+                  : (conn.remoteChatTransport ?? "auto"),
           );
         }
       } catch {
@@ -275,6 +332,8 @@ function Chat({
     };
     void loadConnectionConfig();
     const unsubscribe = window.hermesAPI.onConnectionConfigChanged((conn) => {
+      if (conn.connectionId !== connectionId) return;
+      setConnectionRevision((revision) => revision + 1);
       setConnectionModeLoaded(true);
       setConnectionMode(conn.mode);
       setRemoteMode(conn.mode !== "local");
@@ -283,17 +342,20 @@ function Chat({
           ? "auto"
           : conn.mode === "ssh"
             ? (conn.sshChatTransport ?? "auto")
-            : (conn.remoteChatTransport ?? "auto"),
+            : conn.remoteAuthMode === "oauth"
+              ? "dashboard"
+              : (conn.remoteChatTransport ?? "auto"),
       );
     });
     return (): void => {
       cancelled = true;
       unsubscribe();
     };
-  }, []);
+  }, [connectionId]);
 
   const { containerRef, bottomRef } = useChatScroll(messages);
   const modelConfig = useModelConfig(profile);
+  const { reload: reloadModelConfig, selectModel } = modelConfig;
   const chatCurrentModel =
     sessionModelOverride?.model ?? modelConfig.currentModel;
   const chatCurrentProvider =
@@ -316,7 +378,7 @@ function Chat({
           await window.hermesAPI.getSessionModelOverride(initialSessionId);
         if (!cancelled && override) {
           setSessionModelOverride(override);
-          await modelConfig.selectModel(
+          await selectModel(
             override.provider,
             override.model,
             override.baseUrl,
@@ -332,7 +394,7 @@ function Chat({
     return () => {
       cancelled = true;
     };
-  }, [initialSessionId, modelConfig.selectModel]);
+  }, [initialSessionId, selectModel]);
 
   // Persist the chat-local model/provider once a session exists. This stores
   // only routing identity, never API keys, and is gated so a resumed session's
@@ -368,7 +430,15 @@ function Chat({
     let cancelled = false;
     (async (): Promise<void> => {
       try {
-        const r = await window.hermesAPI.validateChatReadiness(profile);
+        const r = await window.hermesAPI.validateChatReadiness(
+          profile,
+          {
+            provider: chatCurrentProvider,
+            model: chatCurrentModel,
+            baseUrl: chatCurrentBaseUrl,
+          },
+          connectionId,
+        );
         if (!cancelled) setReadiness(r);
       } catch {
         // Fail open on IPC error — never block Send on validation failure
@@ -378,7 +448,14 @@ function Chat({
     return (): void => {
       cancelled = true;
     };
-  }, [profile, chatCurrentModel, chatCurrentProvider, chatCurrentBaseUrl]);
+  }, [
+    profile,
+    chatCurrentModel,
+    chatCurrentProvider,
+    chatCurrentBaseUrl,
+    connectionId,
+    connectionMode,
+  ]);
 
   // Authoritative context-window size for the active model, resolved from the
   // provider's /models catalogue (issue #597). Null until/unless the provider
@@ -414,6 +491,8 @@ function Chat({
 
   useChatIPC({
     runId,
+    connectionId,
+    profile,
     sessionScopeId: visibleSessionScopeId,
     setMessages,
     setHermesSessionId,
@@ -469,7 +548,7 @@ function Chat({
       if (msgs.length === 0) return;
       void window.hermesAPI.copyToClipboard(buildChatTranscript(msgs, format));
     });
-  }, [active]);
+  }, [active, messagesRef]);
 
   // "Select All" on a message (issue #298): the native selectAll role would
   // select the entire window, so scope it to the .chat-bubble under the
@@ -530,12 +609,12 @@ function Chat({
 
   const handleClear = useCallback(() => {
     if (isLoading) {
-      window.hermesAPI.abortChat(runId);
+      window.hermesAPI.abortChat(runId, connectionId);
       setIsLoading(false);
     }
     const idToDelete = hermesSessionId;
     if (idToDelete) {
-      void window.hermesAPI.deleteSession(idToDelete);
+      void window.hermesAPI.deleteSession(idToDelete, connectionId, profile);
       void window.hermesAPI.clearStagedAttachments(idToDelete);
     }
     setMessages([]);
@@ -544,13 +623,21 @@ function Chat({
     // Clearing the conversation reverts to the global default model — the
     // session-scoped pick belongs to the conversation being cleared (#688).
     setSessionModelOverride(undefined);
-    void modelConfig.reload();
+    void reloadModelConfig();
     activeTurnRef.current = null;
     setUsage(null);
     setToolProgress(null);
     queueRef.current = [];
     setQueuedMessages([]);
-  }, [isLoading, runId, hermesSessionId, setMessages, modelConfig.reload]);
+  }, [
+    isLoading,
+    runId,
+    connectionId,
+    profile,
+    hermesSessionId,
+    setMessages,
+    reloadModelConfig,
+  ]);
 
   const localCommands = useLocalCommands({
     profile,
@@ -574,6 +661,8 @@ function Chat({
 
   const dashboardTransport = useDashboardChatTransport({
     activeTurnRef,
+    connectionId,
+    connectionRevision,
     contextFolder,
     connectionMode,
     enabled: dashboardChatEnabled,
@@ -592,6 +681,32 @@ function Chat({
     onDashboardUnavailable: handleDashboardUnavailable,
   });
 
+  const respondDashboardApproval = dashboardTransport.respondApproval;
+  const handleApprovalRespond = useCallback(
+    (msg: ApprovalMessage, choice: ApprovalChoice): Promise<boolean> =>
+      msg.responsePath === "dashboard"
+        ? respondDashboardApproval(msg.requestId, choice)
+        : window.hermesAPI.respondApproval(
+            msg.requestId,
+            choice,
+            msg.runId || "",
+          ),
+    [respondDashboardApproval],
+  );
+
+  const handleApprovalResolved = useCallback(
+    (msg: ApprovalMessage, choice: ApprovalChoice) => {
+      setMessages((prev) =>
+        prev.map((candidate) =>
+          candidate.kind === "approval" && candidate.id === msg.id
+            ? { ...candidate, choice, resolved: true }
+            : candidate,
+        ),
+      );
+    },
+    [setMessages],
+  );
+
   const [agentCommandCatalog, setAgentCommandCatalog] =
     useState<AgentCommandsCatalogResponse | null>(null);
   const getCommandCatalog = dashboardTransport.getCommandCatalog;
@@ -606,15 +721,29 @@ function Chat({
     let cancelled = false;
     void getCommandCatalog()
       .then((catalog) => {
-        if (!cancelled) setAgentCommandCatalog(catalog);
+        if (cancelled) return;
+        setAgentCommandCatalog(catalog);
+        const recordInventory = window.hermesAPI.recordAgentCommandInventory;
+        if (typeof recordInventory === "function") {
+          void recordInventory(catalog, profile, connectionId).catch(
+            () => undefined,
+          );
+        }
       })
       .catch(() => {
-        if (!cancelled) setAgentCommandCatalog(null);
+        if (cancelled) return;
+        setAgentCommandCatalog(null);
+        const recordInventory = window.hermesAPI.recordAgentCommandInventory;
+        if (typeof recordInventory === "function") {
+          void recordInventory(null, profile, connectionId).catch(
+            () => undefined,
+          );
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [active, commandCatalogEnabled, getCommandCatalog, profile]);
+  }, [active, commandCatalogEnabled, connectionId, getCommandCatalog, profile]);
 
   const slashCatalog = useMemo(() => {
     const desktopCommands = [
@@ -675,6 +804,7 @@ function Chat({
 
   const actions = useChatActions({
     runId,
+    connectionId,
     profile,
     hermesSessionId,
     messages,
@@ -783,7 +913,7 @@ function Chat({
   // don't re-render on every streaming chunk (each chunk re-renders <Chat>).
   const handleSelectModel = useCallback(
     (provider: string, model: string, baseUrl: string) => {
-      void modelConfig.selectModel(provider, model, baseUrl, {
+      void selectModel(provider, model, baseUrl, {
         persist: false,
       });
       // Carry the full identity (not just the model name) so a cross-provider
@@ -799,7 +929,7 @@ function Chat({
           : undefined,
       );
     },
-    [modelConfig.selectModel],
+    [selectModel],
   );
 
   const handleSelectRecentFolder = useCallback((path: string) => {
@@ -874,91 +1004,11 @@ function Chat({
       }
     : null;
 
-  const prettyPrintHTML = (html: string): string => {
-    const formatNode = (node: Node, level: number = 0): string => {
-      const indent = "  ".repeat(level);
-      if (node.nodeType === Node.TEXT_NODE) {
-        const text = node.textContent?.trim();
-        return text ? `${indent}${text}\n` : "";
-      }
-      if (node.nodeType === Node.COMMENT_NODE) {
-        return `${indent}<!--${node.textContent}-->\n`;
-      }
-      if (node.nodeType === Node.ELEMENT_NODE) {
-        const el = node as Element;
-        const tagName = el.tagName.toLowerCase();
-        let attrs = "";
-        for (let i = 0; i < el.attributes.length; i++) {
-          const attr = el.attributes[i];
-          attrs += ` ${attr.name}="${attr.value}"`;
-        }
-        const isVoid = [
-          "area",
-          "base",
-          "br",
-          "col",
-          "embed",
-          "hr",
-          "img",
-          "input",
-          "link",
-          "meta",
-          "param",
-          "source",
-          "track",
-          "wbr",
-        ].includes(tagName);
-        if (isVoid) {
-          return `${indent}<${tagName}${attrs}>\n`;
-        }
-        if (
-          el.childNodes.length === 1 &&
-          el.firstChild?.nodeType === Node.TEXT_NODE
-        ) {
-          const text = el.firstChild.textContent?.trim();
-          return text
-            ? `${indent}<${tagName}${attrs}>${text}</${tagName}>\n`
-            : `${indent}<${tagName}${attrs}></${tagName}>\n`;
-        }
-        if (el.childNodes.length === 0) {
-          return `${indent}<${tagName}${attrs}></${tagName}>\n`;
-        }
-        let childrenHtml = "";
-        for (let i = 0; i < el.childNodes.length; i++) {
-          childrenHtml += formatNode(el.childNodes[i], level + 1);
-        }
-        return `${indent}<${tagName}${attrs}>\n${childrenHtml}${indent}</${tagName}>\n`;
-      }
-      return "";
-    };
-
-    try {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, "text/html");
-      const body = doc.body;
-      if (body.childNodes.length > 0) {
-        let result = "";
-        for (let i = 0; i < body.childNodes.length; i++) {
-          result += formatNode(body.childNodes[i], 0);
-        }
-        return result.trim();
-      }
-    } catch (e) {
-      console.error("Failed to pretty print HTML", e);
-    }
-    return html;
-  };
-
   const handleInspectElement = useCallback(
-    (payload: {
-      tagName: string;
-      id: string;
-      className: string;
-      outerHTML: string;
-    }) => {
-      const formattedHtml = prettyPrintHTML(payload.outerHTML);
-      const formatted = `Here is the HTML for the \`<${payload.tagName}>\` component to debug:\n\`\`\`html\n${formattedHtml}\n\`\`\``;
-      chatInputRef.current?.appendText(formatted);
+    (payload: { selector: string; comment: string }) => {
+      chatInputRef.current?.appendText(
+        `Element: \`${payload.selector}\`\nComment: ${payload.comment}`,
+      );
     },
     [],
   );
@@ -985,6 +1035,9 @@ function Chat({
               onApprove={actions.handleApprove}
               onDeny={actions.handleDeny}
               onClarifyResolved={handleClarifyResolved}
+              onApprovalRespond={handleApprovalRespond}
+              onApprovalResolved={handleApprovalResolved}
+              agentAvatar={agentAvatar}
             />
           )}
           <div ref={bottomRef} />
@@ -1030,7 +1083,7 @@ function Chat({
                 currentBaseUrl={chatCurrentBaseUrl}
                 modelGroups={modelConfig.modelGroups}
                 displayModel={chatDisplayModel}
-                onOpen={modelConfig.reload}
+                onOpen={reloadModelConfig}
                 onSelectModel={handleSelectModel}
               />
               <ReasoningEffortPicker
@@ -1045,10 +1098,17 @@ function Chat({
                 >
                   <Zap size={14} />
                 </button>
-                <div className="chat-fast-popover">
-                  <strong>
-                    {fastMode ? t("chat.fastModeOn") : t("chat.fastMode")}
-                  </strong>
+                <div
+                  className={`chat-fast-popover ${fastMode ? "chat-fast-active-popover" : ""}`}
+                >
+                  <div className="chat-fast-popover-head">
+                    <span className="chat-fast-popover-icon" aria-hidden="true">
+                      <Zap size={13} />
+                    </span>
+                    <strong>
+                      {fastMode ? t("chat.fastModeOn") : t("chat.fastMode")}
+                    </strong>
+                  </div>
                   <span>
                     {fastMode
                       ? t("chat.fastModeActive")

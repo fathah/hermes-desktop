@@ -4,6 +4,16 @@ import { dashboardApiUrl, type RemoteSessionConfig } from "./remote-sessions";
 
 type RemoteRecord = Record<string, unknown>;
 
+class RemoteMetadataHttpError extends Error {
+  constructor(
+    readonly statusCode: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "RemoteMetadataHttpError";
+  }
+}
+
 function asRecord(value: unknown): RemoteRecord {
   return value && typeof value === "object" ? (value as RemoteRecord) : {};
 }
@@ -12,13 +22,16 @@ function stringValue(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function remoteStatus(config: RemoteSessionConfig): Promise<RemoteRecord> {
+function remoteRecord(
+  config: RemoteSessionConfig,
+  path: "/api/status" | "/health",
+): Promise<RemoteRecord> {
   return new Promise((resolve, reject) => {
     // Shared builder from remote-sessions so /api/status carries the same
     // `?profile=` scoping as every other dashboard request — on the unified
     // SSH machine dashboard an unscoped status reads the DEFAULT profile's
     // hermes home/version instead of the requested one.
-    const parsed = new URL(dashboardApiUrl(config, "/api/status"));
+    const parsed = new URL(dashboardApiUrl(config, path));
     const client = parsed.protocol === "https:" ? https : http;
     const token = config.apiKey.trim();
     const req = client.request(
@@ -27,7 +40,12 @@ function remoteStatus(config: RemoteSessionConfig): Promise<RemoteRecord> {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { "X-Hermes-Session-Token": token } : {}),
+          ...(token && path === "/api/status"
+            ? { "X-Hermes-Session-Token": token }
+            : {}),
+          ...(token && path === "/health"
+            ? { Authorization: `Bearer ${token}` }
+            : {}),
         },
       },
       (res) => {
@@ -38,14 +56,18 @@ function remoteStatus(config: RemoteSessionConfig): Promise<RemoteRecord> {
           const text = Buffer.concat(chunks).toString("utf8");
           if ((res.statusCode ?? 500) >= 400) {
             reject(
-              new Error(`${res.statusCode}: ${text || res.statusMessage}`),
+              new RemoteMetadataHttpError(
+                res.statusCode ?? 500,
+                `${res.statusCode}: ${text || res.statusMessage}`,
+              ),
             );
             return;
           }
           try {
             resolve(asRecord(JSON.parse(text || "{}")));
           } catch {
-            reject(new Error(`Invalid JSON from ${parsed.toString()}`));
+            if (path === "/health") resolve({});
+            else reject(new Error(`Invalid JSON from ${parsed.toString()}`));
           }
         });
       },
@@ -56,6 +78,22 @@ function remoteStatus(config: RemoteSessionConfig): Promise<RemoteRecord> {
     });
     req.end();
   });
+}
+
+async function remoteStatus(
+  config: RemoteSessionConfig,
+): Promise<RemoteRecord> {
+  try {
+    return await remoteRecord(config, "/api/status");
+  } catch (error) {
+    if (
+      error instanceof RemoteMetadataHttpError &&
+      (error.statusCode === 404 || error.statusCode === 405)
+    ) {
+      return remoteRecord(config, "/health");
+    }
+    throw error;
+  }
 }
 
 export async function remoteGetHermesHome(

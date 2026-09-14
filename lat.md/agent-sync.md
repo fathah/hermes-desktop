@@ -30,11 +30,15 @@ Parts that failed to push (or were skipped as oversize) keep their old base, so 
 
 ## IPC and UI
 
-The main process exposes `agent-sync-run` and `agent-sync-status` in [[src/main/ipc/register.ts#registerIpcHandlers]], next to the account handlers; a completed run also emits `agent-sync-updated` so the renderer can refresh.
+The main process exposes `agent-sync-run`, `agent-sync-status`, and `agent-sync-linked-id` in [[src/main/ipc/register.ts#registerIpcHandlers]], next to the account handlers; a completed run also emits `agent-sync-updated` so the renderer can refresh.
 
-The preload bridge surfaces these as `syncAgents`, `getAgentSyncStatus`, and `onAgentSyncUpdated` on `window.hermesAPI`, typed by the shared shapes in [[src/shared/agent-sync.ts]].
+`agent-sync-linked-id` returns the cloud agent id a profile is linked to (or null) — for the per-profile Sync tab below.
+
+The preload bridge surfaces these as `syncAgents`, `getAgentSyncStatus`, `getLinkedAgentId`, and `onAgentSyncUpdated` on `window.hermesAPI`, typed by the shared shapes in [[src/shared/agent-sync.ts]].
 
 [[src/renderer/src/screens/Agents/Agents.tsx]] (local mode only — Layout shows a remote notice otherwise) renders the sync affordance in the header: a signed-out hint pointing at the Providers account card, or a Sync button with the last pass's summary (warnings in the tooltip). It auto-runs one pass per visit when signed in, and reloads the profile list when a pass pull-created profiles. [[src/renderer/src/components/HermesAccountModal.tsx]] kicks off the first sync right after a successful sign-in.
+
+The profile modal's **Sync** tab, [[src/renderer/src/components/profile/ProfileSyncPane.tsx]], is a per-profile manual path for when the auto-sync hasn't run: it shows the signed-in account, whether this profile is linked to a cloud agent (`getLinkedAgentId`), and this profile's outcome from the last pass, with a **Sync now** button that runs the same app-wide `syncAgents()`. Sign-in/unauthorized/error states are surfaced inline.
 
 ## Tests
 

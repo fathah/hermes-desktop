@@ -6,15 +6,25 @@ The symptom this guards against: in conversations with many messages, each keyst
 
 ## Transcript windowing
 
-Long transcripts mount only the newest [[src/renderer/src/screens/Chat/MessageList.tsx#TRANSCRIPT_WINDOW]] rows (100); earlier rows collapse behind a "Show N earlier messages" button, so per-delta reconciliation is O(window), not O(all rows).
+Long transcripts start with the newest [[src/renderer/src/screens/Chat/MessageList.tsx#TRANSCRIPT_WINDOW]] rows (100). Earlier rows collapse behind a "Show N earlier messages" button, bounding mounted rows while following output.
 
-The window cut is computed per render in [[src/renderer/src/screens/Chat/MessageList.tsx]] with three constraints:
+The window cut is computed per render in [[src/renderer/src/screens/Chat/MessageList.tsx]] with the following constraints:
 
 - **Never slice out the newest bubble.** The newest visible bubble owns the last-row marker (active avatar, approval bar), so the cut clamps to its index even when a longer-than-window run of reasoning/tool rows trails it.
 - **Don't split a tool run — within a bound.** The cut nudges back to the start of a contiguous tool_call/tool_result run so a ToolActivityGroup isn't cut in half, but the walk is bounded to one window: a pathological run of hundreds of tool rows splits at the bound instead of re-mounting the whole transcript (which would silently defeat the cap for exactly the agentic sessions #748 targets).
 - **Don't fake a turn at the cut.** Avatar grouping consults the hidden row just above the cut (`beforeWindow`), so a mid-turn cut doesn't render a spurious avatar.
 
-Expansion is a count of extra rows, not an absolute index, so the mounted tree stays bounded while streaming: the window slides forward as rows append, re-collapsing the oldest revealed rows (native scroll anchoring keeps the viewport steady). Each button click derives its new budget from the current effective cut, guaranteeing progress even when the cut was nudged.
+Expansion adds a budget of extra rows while following the latest output. Scrolling up pins the first mounted message by ID, preserving the text being read as new rows arrive; returning to the bottom resumes the sliding window. Each button click derives its budget from the effective cut so a tool-run adjustment cannot prevent progress.
+
+### Reading history during streaming
+
+New streamed rows cannot unmount the older message being read. The history boundary stays pinned until the reader returns to the bottom, where the normal window budget applies again.
+
+A pinned boundary is not repeatedly nudged backward through a long tool run.
+
+### Pending interaction visibility
+
+Unresolved approval and clarification cards remain mounted even when later output exceeds the normal window. Resolving a card releases that exception so old controls can collapse with history.
 
 ### Scroll-driven auto-expansion
 
@@ -69,6 +79,8 @@ The composer textarea auto-grows to its content. Reading `scrollHeight` to size 
 
 In [[src/renderer/src/screens/Chat/ChatInput.tsx]] every path that changes the value (typing, history recall, voice transcription, and the imperative `setText`/`appendText`) goes through `setInput`, so the layout effect is the single owner of resizing — the other paths only set the caret and focus. Combined with the row-level `content-visibility`, the one measurement per keystroke stays O(visible rows).
 
+The textarea opts out of the app-wide inset focus shadow and brightness filter because `.chat-input-wrapper:focus-within` already provides the composer's visible focus treatment. This avoids a redundant rectangular outline while preserving keyboard focus visibility.
+
 ## Slash command palette uses fixed-row virtualization
 
 Large Agent command catalogs must not make opening, filtering, scrolling, or keyboard navigation proportional to the number of mounted command elements.
@@ -80,3 +92,11 @@ The fixed heights are an invariant shared with the `.slash-menu-item` and `.slas
 Arrow-key selection does not query or measure command DOM nodes. [[src/renderer/src/screens/Chat/ChatInput.tsx]] computes the selected row's offset and adjusts the list scroll position only when that row leaves the viewport, including wraparound from the first command to the last.
 
 The searchable name and description are normalized once when the command catalog changes rather than once per command on every keystroke. The virtual canvas uses layout and paint containment, and the modal overlay avoids backdrop blur so opening the palette does not trigger a full-window blur pass.
+
+## Table-heavy transcript heap profile
+
+Renderer memory changes require real Chromium heap evidence before a retention fix is attempted; long transcripts legitimately retain their mounted DOM.
+
+Issue #883 was profiled with production `MessageRow`/`AgentMarkdown` rendering and heap snapshots at baseline, 5 table-heavy turns, 50 turns, and after unmount. Used heap rose from 2.50 MB to 6.68 MB while 17,169 transcript nodes were live, then fell to 4.05 MB and 19 nodes after unmount. Detached-node count stayed flat at five after content was mounted and after unmount, so the run did not reproduce a detached DOM leak; the growth was live transcript DOM.
+
+The profile did expose a redundant network request rather than retained objects. [[src/renderer/src/screens/Chat/hooks/useDashboardChatTransport.ts#useDashboardChatTransport]] now reuses the first `model.options` response when no slash command changed model state, while retaining the second read after `slash.exec` because commands can mutate the active model. [[src/renderer/src/screens/Chat/hooks/useDashboardChatTransport.test.tsx]] protects the one-read path.

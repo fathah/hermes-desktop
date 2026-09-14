@@ -1,6 +1,7 @@
 // @lat: [[hermes-account-login#Device login client]]
 import { hostname } from "os";
 import { saveAccount, type AccountUser } from "./account-store";
+import { normalizeApiUrl } from "./api-url";
 
 // Signs the desktop app into a Hermes account using the OAuth 2.0 Device
 // Authorization Grant (RFC 8628) served by hermes-one-backend: request a code,
@@ -11,31 +12,41 @@ import { saveAccount, type AccountUser } from "./account-store";
 const DEFAULT_API_URL = "http://localhost:3002";
 
 /**
- * Backend base URL. Runtime `HERMES_API_URL` wins (dev/user override), then the
- * value baked in at build time (`MAIN_VITE_HERMES_API_URL`, injected by the
- * release workflow — same pattern as the renderer's `VITE_ANALYTICS_*`), then
- * the local Nitro dev server.
+ * Backend base URL, resolved fresh on every call so switching backends is just
+ * an env edit + app restart (no rebuild). Order:
+ *   1. `HERMES_API_URL` — explicit runtime override
+ *   2. `MAIN_VITE_HERMES_API_URL` from the environment — in dev this comes from
+ *      the project `.env` (loaded into process.env at startup by load-env.ts),
+ *      so editing `.env` and relaunching points the app at a real backend.
+ *   3. the build-time baked `import.meta.env.MAIN_VITE_HERMES_API_URL` — this is
+ *      what packaged/CI builds carry (the release workflow injects it).
+ *   4. the local Nitro dev server default.
+ * `import.meta.env` is inlined at BUILD time, so on its own it can't reflect a
+ * `.env` change without a rebuild — the runtime `process.env` reads above are
+ * what make the endpoint truly env-driven. The resolved value is normalized
+ * (see {@link normalizeApiUrl}) so a remote `http://` URL can't strip the auth
+ * header via an http→https redirect.
  */
 export function getApiUrl(): string {
-  const runtime = process.env.HERMES_API_URL?.trim();
-  if (runtime) return runtime.replace(/\/+$/, "");
-  const baked = (
-    import.meta.env.MAIN_VITE_HERMES_API_URL as string | undefined
-  )?.trim();
-  if (baked) return baked.replace(/\/+$/, "");
-  return DEFAULT_API_URL;
+  const fromEnv =
+    process.env.HERMES_API_URL?.trim() ||
+    process.env.MAIN_VITE_HERMES_API_URL?.trim() ||
+    (import.meta.env.MAIN_VITE_HERMES_API_URL as string | undefined)?.trim();
+  return fromEnv ? normalizeApiUrl(fromEnv) : DEFAULT_API_URL;
 }
 
 /**
- * Optional client API key sent as `x-api-key` on backend calls. Baked in at
- * build time (`MAIN_VITE_HERMES_API_KEY`) with a runtime `HERMES_API_KEY`
- * override; empty when neither is set (the backend doesn't require it yet).
- * Note a key shipped inside a desktop binary is extractable — it can rate-limit
- * casual abuse, but it is not a real secret.
+ * Optional client API key sent as `x-api-key` on backend calls, resolved with
+ * the same runtime-first order as {@link getApiUrl} (`HERMES_API_KEY` →
+ * `MAIN_VITE_HERMES_API_KEY` from env/`.env` → build-time baked value). Empty
+ * when none is set (the backend doesn't require it yet). Note a key shipped
+ * inside a desktop binary is extractable — it can rate-limit casual abuse, but
+ * it is not a real secret.
  */
 export function getApiKey(): string {
   return (
     process.env.HERMES_API_KEY?.trim() ||
+    process.env.MAIN_VITE_HERMES_API_KEY?.trim() ||
     (import.meta.env.MAIN_VITE_HERMES_API_KEY as string | undefined)?.trim() ||
     ""
   );

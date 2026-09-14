@@ -23,6 +23,7 @@ export default {
     fireworks: "Fireworks",
     cerebras: "Cerebras",
     atlascloud: "AtlasCloud",
+    novita: "NovitaAI",
     mistral: "Mistral",
     aimlapi: "AIML API",
   },

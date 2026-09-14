@@ -6,6 +6,7 @@ export type ProfileSection =
   | "persona"
   | "agentMemory"
   | "wallet"
+  | "sync"
   | "advanced";
 
 /** Optional callbacks supplied by whoever opens the profile modal. */

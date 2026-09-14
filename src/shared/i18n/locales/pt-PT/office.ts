@@ -36,6 +36,10 @@ export default {
   showroomCardHint:
     "Dê uma vista de olhos ao stand — em breve poderá comprar carros para os seus agentes.",
   // Space representatives (bank teller interaction menu)
+  walkMode: "Caminhar",
+  walkModeExit: "Sair da caminhada (Esc)",
+  walkHint: "WASD / setas para mover · Shift para correr · Esc para sair",
+  you: "Você",
   repBankTeller: "Caixa do banco",
   spaceBank: "Banco",
   repPanelAgentLabel: "Agente",
@@ -48,11 +52,13 @@ export default {
   repLoading: "A processar…",
   repErrorGeneric: "Algo correu mal. Tente novamente.",
   repStatusSignedOut: "Inicie sessão na sua conta Hermes para usar o banco.",
-  repStatusUnlinked: "Este agente ainda não está associado a um agente na nuvem. Inicie sessão e tente novamente.",
+  repStatusUnlinked:
+    "Este agente ainda não está associado a um agente na nuvem. Inicie sessão e tente novamente.",
   repWalletsNone: "Ainda não há contas — crie uma para começar.",
   repBadgeTransactable: "Transacional",
   repBadgeReceiveOnly: "Apenas receção",
-  repBalanceNoTransactable: "Este agente ainda não tem uma conta transacional — crie uma primeiro.",
+  repBalanceNoTransactable:
+    "Este agente ainda não tem uma conta transacional — crie uma primeiro.",
   repBalanceEmpty: "Ainda não há saldos de tokens.",
   repBalanceTotal: "Total",
   repCreateSuccess: "Conta criada",

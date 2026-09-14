@@ -60,6 +60,14 @@ Renderer IPC handlers are isolated from app bootstrap so the registry can be spl
 
 Wallet and token-balance handlers sit in the same registry: `list-wallets`, `create-wallet`, `import-wallet`, `rename-wallet`, `delete-wallet` (backed by [[wallet-token-balances#Wallet Store]]) and `get-token-balances` (backed by [[wallet-token-balances#Token Balances]]).
 
+## Platform enable overrides
+
+Messaging platform availability combines credentials from `.env` with an optional direct-child `<platform>.enabled` override in `config.yaml`.
+
+[[src/main/config.ts#getPlatformEnabled]] ignores nested `enabled` keys, such as `discord.voice_fx.enabled`, so feature-specific settings cannot disable the whole platform.
+
+[[src/main/config.ts#setPlatformEnabled]] edits only the platform block's direct `enabled` child. It preserves unrelated YAML and the file's existing LF or CRLF line endings, and leaves the file byte-identical when the requested enabled state is already the default. This matters at application startup, where merely reading and reconciling a configured platform must not rewrite or corrupt a shared Windows `config.yaml`.
+
 ## Voice transcription IPC
 
 Speech-to-text IPC sends recorded desktop audio through the Hermes API server, not through the active chat model endpoint.
@@ -70,6 +78,8 @@ Speech-to-text IPC sends recorded desktop audio through the Hermes API server, n
 
 SSH mode has two chat transports because the remote serves chat from **two different servers**, and the desktop must reach the right one.
 
+Direct Remote mode also supports browser-authenticated dashboards through [[remote-dashboard-oauth]], while SSH stays on its existing session-token transport.
+
 The dashboard is **not** a `/v1` superset (a long-standing misconception in earlier comments): `hermes_cli/web_server.py` has no `/v1/chat`, `/v1/responses`, or `/v1/runs` routes and does not proxy `/v1` to the gateway.
 
 - **Gateway api_server** (port 8642, `API_SERVER_KEY` auth) serves `/v1` chat (`/v1/chat/completions`, `/v1/responses`, `/v1/runs`) + `/health`. This is the **no-build** transport — no Node, no web dist — used by `remote` mode and the SSH gateway fallback. See [[main-process#SSH api_server provisioning]].
@@ -78,6 +88,8 @@ The dashboard is **not** a `/v1` superset (a long-standing misconception in earl
 [[src/main/ssh-remote.ts#sshEnsureDashboard]] ensures the gateway is up, builds the web dist if missing ([[src/main/ssh-remote.ts#sshEnsureDashboardDist]] resolves the real install root via [[src/main/ssh-remote.ts#sshResolveDashboardRoot]] — a system-wide install lives at `/usr/local/lib/hermes-agent`, NOT under `$HOME`, so a hardcoded `~/.hermes/hermes-agent` path wrongly reported "no web dist" and forced every connection into basic chat; it now detects an already-built dist wherever hermes lives, or builds it with the vendored Node at `~/.hermes/node`, single shared in-flight build), then starts the **unified machine** `hermes dashboard --host 127.0.0.1 --port <port> --no-open --skip-build` ([[src/main/ssh-remote.ts#sshStartDashboard]]) with the session token in its env. **One dashboard serves every profile** (no `--profile`, no `--isolated`): `ensureDashboardInner` is machine-scoped (profile=undefined → default port + default token), and per-profile data is selected per-request via `?profile=` ([[src/main/remote-sessions.ts#RemoteSessionConfig]]`.profile`, applied in `dashboardApiUrl`). This is REQUIRED because the desktop has a single global SSH tunnel that can only point at one remote port: the desktop queries multiple profiles at once (e.g. `default` for the machine view + the active named profile), so per-profile dashboard ports (an earlier `--isolated` attempt) made those concurrent queries resolve different ports and thrash the one tunnel ("SSH tunnel is not active"). Readiness requires both the public `/api/status` probe ([[src/main/ssh-remote.ts#sshWaitDashboardReady]], [[src/main/ssh-remote.ts#sshDashboardRunning]]) and an authenticated `/api/sessions` probe ([[src/main/ssh-remote.ts#sshDashboardAuthenticated]]). If the preferred port belongs to a stale dashboard with another token or an unrelated HTTP service, the desktop leaves that process alone, allocates a free loopback port, and persists it as `HERMES_DESKTOP_DASHBOARD_PORT` (one canonical line, deduped) in the **default** `.env`. [[src/main/dashboard.ts#sshDashboardConnectionFromConfig]] and [[src/main/ipc/register.ts#getSshDashboardSessionConfig]] then `ensureSshTunnel` to that single dashboard port and build the connection (model library, sessions, and the `/api/ws` chat WS), carrying the requested `profile`.
 
 Because the dashboard is machine-unified, an **unscoped** request silently answers with the **default** profile's data — a named-profile user would get the default session list and open the wrong transcript. Session and metadata IPC handlers (`list-sessions`, `get-session-messages`, delete/title/search/cache ops, hermes version/home, model config) therefore default the dashboard profile to the locally persisted active profile via [[src/main/ipc/register.ts#activeSshProfile]] (explicit renderer-passed profiles win; `"default"` and already-explicit params like the session list's `profile=all` are handled in `dashboardApiUrl`). [[src/main/remote-metadata.ts]]'s `/api/status` probe shares [[src/main/remote-sessions.ts#dashboardApiUrl]] rather than building its own URL, so status-derived surfaces (Hermes home/version) are scoped the same way.
+
+The same metadata reader supports direct raw api_server connections. [[src/main/remote-metadata.ts#remoteGetHermesVersion]] and [[src/main/remote-metadata.ts#remoteGetHermesHome]] fall back from an absent dashboard `/api/status` (`404`/`405`) to bearer-authenticated `/health`; a plain health body means no optional metadata rather than a connection failure.
 
 **Every** SSH tunnel entry point that prepares chat — the `send-message` preamble and the `start-ssh-tunnel` IPC handler — routes through [[src/main/ipc/register.ts#prepareSshTunnel]]. When an authenticated dashboard is available it tunnels to the dashboard port and caches the dashboard token; otherwise (gateway-only installs with no web dist, or `legacy` transport) it provisions and tunnels to the gateway `/v1` port. This single funnel matters because the tunnel is one global resource: a path tunnelling to 8642 while another used 9119 would thrash it (each `startSshTunnel` first `stopSshTunnel`s), surfacing as "SSH tunnel is not active". The `before-quit` handler in [[src/main/app/start.ts#startMainProcess]] calls `stopSshTunnel()` on exit — without it the `ssh -N -L` child is orphaned (reparented to PID 1) and keeps holding its local port, so each relaunch leaks another tunnel and the port drifts (18642 → 61799 → …). When the dashboard can't run, `sshEnsureDashboard` returns `null`: `auto` degrades quietly to the gateway `/v1` path for chat and legacy CLI/SSH-exec ops for `withSshDashboardModelLibrary`/`withSshDashboardSessions`, while a forced `dashboard` transport surfaces the error.
 
@@ -98,3 +110,21 @@ These `.env` writes go through [[src/main/ssh-remote.ts#upsertEnvLine]], which r
 The credential depends on which transport is active. Over the **dashboard** the **session token** is used; over the **gateway `/v1`** path the remote **`API_SERVER_KEY`** is used.
 
 The dashboard's `/api/*` routes (and its `/api/ws` chat WS) reject the api_server key (401) and accept only `HERMES_DASHBOARD_SESSION_TOKEN`. [[src/main/ssh-remote.ts#sshEnsureDashboardToken]] reads the token from the remote `.env` (per profile), generating + persisting one when absent so it stays stable across reconnects and is shared by the remote dashboard process and the desktop. It writes exactly one canonical line (stripping any duplicates) under an in-flight guard — the dashboard is ensured on every chat/model-library/session op, and the old unguarded `printf >>` let concurrent first-connect callers append divergent tokens (observed as 9 conflicting lines in one `.env`, where dotenv's last-wins value drifted from a caller's cached token → 401). [[src/main/ssh-remote.ts#sshEnsureApiServerKey]] carries the same guard for the gateway `/v1` key. The desktop caches it via `setSshRemoteApiKey`. The SSH form has no API-key field (only **remote** mode does, [[src/renderer/src/components/settings/ConnectionPane.tsx]]), so the shared `conn.apiKey` is never used for SSH — avoiding the stale-key 401s the old `conn.apiKey || …` precedence caused. On the gateway `/v1` path the credential is the remote `API_SERVER_KEY`, provisioned by [[src/main/ssh-remote.ts#sshEnsureApiServerKey]] and read via [[src/main/ssh-remote.ts#sshReadRemoteApiKey]].
+
+## Dotted configuration lookup
+
+Configuration reads follow direct mapping children so a nested feature setting cannot masquerade as a root or parent-level option.
+
+[[src/main/yaml-path.ts#getYamlPath]] walks each dotted segment within its parent block, pins the first segment to column zero, and stops at parent boundaries. Its scan position advances after each match, avoiding rescans of earlier lines. Scalar parents cannot be traversed, including block text whose lines resemble configuration keys. This matches the Agent's nested dictionary lookup semantics for the supported config subset.
+
+### Root and parent boundaries
+
+A flat key resolves only at column zero, even when indented content precedes it; dotted paths cannot use an indented root or escape their parent block.
+
+### Scalar parents
+
+A path through scalar text or an inline collection returns null instead of interpreting later indented text as mapping children.
+
+### Nested siblings
+
+Deep lookups skip unrelated sibling subtrees and comments, support consistent nondefault indentation, and cannot resolve a leaf outside the selected parent.

@@ -4,6 +4,7 @@ import { existsSync, readdirSync, readFileSync, unlinkSync } from "fs";
 import { join } from "path";
 import { isValidProfileName, profileHome, safeWriteFile } from "./utils";
 import { HERMES_HOME } from "./installer";
+import { normalizeApiUrl } from "./api-url";
 
 // Persists the Hermes account session obtained via device login (see
 // hermes-account.ts). The bearer access token is encrypted at rest with the OS
@@ -65,7 +66,10 @@ function readAccountFile(profile?: string): StoredAccount | null {
 export function getAccount(profile?: string): PublicAccount | null {
   const stored = readAccountFile(profile);
   if (!stored) return null;
-  return { apiUrl: stored.apiUrl, user: stored.user };
+  // Normalize on read so a URL stored as http:// by an earlier login is
+  // corrected (remote http→https) without forcing a re-login — the sync path
+  // fetches this apiUrl, and the bearer wouldn't survive an http→https redirect.
+  return { apiUrl: normalizeApiUrl(stored.apiUrl), user: stored.user };
 }
 
 /** Decrypt and return the bearer token for authenticated backend calls, or null. */

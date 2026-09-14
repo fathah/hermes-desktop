@@ -25,6 +25,13 @@ export interface TripRoute {
   exitOfficeIdx: number;
   /** Interior wander stops inside the destination. */
   wander: Array<[number, number]>;
+  /**
+   * Named interaction stops keyed by space-representative id ("bank-teller",
+   * "atm"). A commanded mission (see interactions/missionBus.ts) walks to its
+   * interaction's stop instead of wandering; missions without a stop use the
+   * first wander point.
+   */
+  stops: Record<string, [number, number]>;
 }
 
 // ── Tuning ─────────────────────────────────────────────────────────────────
@@ -70,6 +77,13 @@ const BANK_WANDER_WORLD: Array<[number, number]> = [
   [BANK_X + 5, BANK_Z],
 ];
 
+// Interaction stops reuse proven wander points (already collision-clear):
+// the spot in front of the teller counter and the east ATM row.
+const BANK_STOPS_WORLD: Record<string, [number, number]> = {
+  "bank-teller": [BANK_X, BANK_Z - 4.4],
+  atm: [BANK_X + 5, BANK_Z],
+};
+
 const SHOWROOM_OUTDOOR_WORLD: Array<[number, number]> = [
   [OFFICE_DOOR_X, SIDEWALK_Z], // straight out through the doorway
   [-20.7, SIDEWALK_Z],
@@ -95,23 +109,57 @@ function buildRoute(
   dest: TripRoute["dest"],
   outdoorWorld: Array<[number, number]>,
   wanderWorld: Array<[number, number]>,
+  stopsWorld: Record<string, [number, number]> = {},
 ): TripRoute {
+  const stops: Record<string, [number, number]> = {};
+  for (const [key, [wx, wz]] of Object.entries(stopsWorld)) {
+    stops[key] = worldToCanvas(wx, wz);
+  }
   return {
     dest,
     points: [...OFFICE_TO_DOOR, ...toCanvasPoints(outdoorWorld)],
     exitOfficeIdx: OFFICE_TO_DOOR.length,
     wander: toCanvasPoints(wanderWorld),
+    stops,
   };
 }
 
 export const TRIP_ROUTES: TripRoute[] = [
-  buildRoute("bank", BANK_OUTDOOR_WORLD, BANK_WANDER_WORLD),
+  buildRoute("bank", BANK_OUTDOOR_WORLD, BANK_WANDER_WORLD, BANK_STOPS_WORLD),
   buildRoute("showroom", SHOWROOM_OUTDOOR_WORLD, SHOWROOM_WANDER_WORLD),
 ];
 
 /** Pick a destination — the bank is the more popular errand. */
 export function pickTripRoute(rand: number): TripRoute {
   return TRIP_ROUTES[rand < 0.6 ? 0 : 1];
+}
+
+/** Route to a specific destination (commanded missions). */
+export function getTripRoute(dest: TripRoute["dest"]): TripRoute {
+  return TRIP_ROUTES.find((r) => r.dest === dest) ?? TRIP_ROUTES[0];
+}
+
+/**
+ * Index of the route waypoint nearest to a canvas position. A mission can
+ * start anywhere (desk, sidewalk, mid-trip elsewhere); joining the route at
+ * its nearest waypoint avoids walking back to the start first.
+ */
+export function nearestRouteIdx(
+  route: TripRoute,
+  x: number,
+  y: number,
+): number {
+  let best = 0;
+  let bestDist = Infinity;
+  for (let i = 0; i < route.points.length; i++) {
+    const [px, py] = route.points[i];
+    const d = (px - x) * (px - x) + (py - y) * (py - y);
+    if (d < bestDist) {
+      bestDist = d;
+      best = i;
+    }
+  }
+  return best;
 }
 
 /**

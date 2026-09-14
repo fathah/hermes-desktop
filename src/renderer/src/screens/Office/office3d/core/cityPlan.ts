@@ -27,10 +27,14 @@ export const OFFICE_DOOR_X = 6.0;
 export const OFFICE_DOOR_W = 2.4;
 
 // ── Backdrop roads (shared by CityBackdrop + TrafficLayer) ────────────────
-export const ROAD_SOUTH_Z = WORLD_H / 2 + 4.5; // E-W road in front of office
-export const ROAD_NORTH_Z = -(WORLD_H / 2 + BANK_STREET_GAP + BANK_D + 5); // E-W road behind the office's north lot
-export const ROAD_EAST_X = WORLD_W / 2 + 4.5; // N-S roads, east/west (mirrored)
-export const ROAD_WIDTH = 5.5;
+// Road centres sit one unit further out than they used to: the carriageway
+// widened for walk-mode scale (cars are 4.2 long now), and pushing the
+// centres keeps the sidewalk strip in front of each lot (pedestrians and
+// agent trips walk z≈17.2) clear of the asphalt.
+export const ROAD_SOUTH_Z = WORLD_H / 2 + 5.5; // E-W road in front of office
+export const ROAD_NORTH_Z = -(WORLD_H / 2 + BANK_STREET_GAP + BANK_D + 6); // E-W road behind the office's north lot
+export const ROAD_EAST_X = WORLD_W / 2 + 5.5; // N-S roads, east/west (mirrored)
+export const ROAD_WIDTH = 7.0;
 // Road surface + centre-line dashes span this length so the carriageways run
 // out into the fog (far = 280) instead of ending at a visible hard edge. The
 // dashes are instanced (one draw call) so the long span is essentially free.

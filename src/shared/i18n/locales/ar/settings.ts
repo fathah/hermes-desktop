@@ -73,8 +73,7 @@ export default {
   modelBaseUrlPlaceholder: "http://localhost:1234/v1",
   networkSection: "الشبكة",
   forceIpv4: "فرض IPv4",
-  forceIpv4Hint:
-    "تعطيل IPv6 لإصلاح مشاكل انتهاء مهلة الاتصال على بعض الشبكات",
+  forceIpv4Hint: "تعطيل IPv6 لإصلاح مشاكل انتهاء مهلة الاتصال على بعض الشبكات",
   httpProxy: "وكيل HTTP",
   httpProxyHint:
     "وكيل SOCKS أو HTTP لجميع الاتصالات الصادرة (اتركه فارغاً للكشف التلقائي)",
@@ -100,8 +99,7 @@ export default {
   keyLabel: "المفتاح",
   empty: "(فارغ)",
   dataSection: "البيانات",
-  dataHint:
-    "تصدير أو استيراد إعدادات Hermes وجلساته ومهاراته وذاكرته.",
+  dataHint: "تصدير أو استيراد إعدادات Hermes وجلساته ومهاراته وذاكرته.",
   backingUp: "جارٍ النسخ الاحتياطي...",
   exportBackup: "تصدير نسخة احتياطية",
   importing: "جارٍ الاستيراد...",

@@ -5,6 +5,8 @@ import { useI18n } from "../../components/useI18n";
 import {
   Check,
   ChevronRight,
+  Copy,
+  Folder,
   FolderInput,
   Pencil,
   Pin,
@@ -69,6 +71,7 @@ function SidebarSessionMenu({
   onClose,
   onTogglePin,
   onRename,
+  onCopySessionId,
   onMoveToProject,
   onPickNewFolder,
   onDelete,
@@ -86,6 +89,7 @@ function SidebarSessionMenu({
   onClose: () => void;
   onTogglePin: () => void;
   onRename: () => void;
+  onCopySessionId: (sessionId: string) => void;
   onMoveToProject: (path: string | null) => void;
   onPickNewFolder: () => void;
   onDelete: () => void;
@@ -224,6 +228,18 @@ function SidebarSessionMenu({
                       type="button"
                       role="menuitem"
                       className="sidebar-session-menu-item"
+                      onClick={() => {
+                        onCopySessionId(target.id);
+                        requestClose();
+                      }}
+                    >
+                      <Copy size={15} />
+                      <span>{t("navigation.sessionMenu.copySessionId")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="sidebar-session-menu-item"
                       onClick={goToProjects}
                     >
                       <FolderInput size={15} />
@@ -274,13 +290,16 @@ function SidebarSessionMenu({
                               key={project.path}
                               type="button"
                               role="menuitem"
-                              className="sidebar-session-menu-item"
+                              className={`sidebar-session-menu-item ${
+                                active ? "active-project" : ""
+                              }`}
                               title={project.path}
                               onClick={() => {
                                 if (!active) onMoveToProject(project.path);
                                 requestClose();
                               }}
                             >
+                              <Folder size={15} />
                               <span className="sidebar-session-menu-project-name">
                                 {project.name}
                               </span>

@@ -83,14 +83,28 @@ describe("getApiUrl", () => {
     expect(getApiUrl()).toBe("https://api.hermes.example");
   });
 
-  it("falls back to the build-time baked URL when no runtime override", () => {
+  it("reads MAIN_VITE_HERMES_API_URL from the environment, trimming slashes", () => {
     delete process.env.HERMES_API_URL;
+    // stubEnv sets both process.env (dev/.env) and import.meta.env (baked).
     vi.stubEnv("MAIN_VITE_HERMES_API_URL", "https://api.hermesone.org/");
     expect(getApiUrl()).toBe("https://api.hermesone.org");
 
-    // A runtime override still wins over the baked value.
+    // The explicit HERMES_API_URL override still wins.
     process.env.HERMES_API_URL = "http://localhost:9999";
     expect(getApiUrl()).toBe("http://localhost:9999");
+  });
+
+  it("upgrades a remote http:// URL to https:// but leaves localhost alone", () => {
+    // Remote http → https: else the http→https redirect strips the bearer and
+    // authenticated sync calls 401 (device login survives, being anonymous).
+    process.env.HERMES_API_URL = "http://api.hermesone.org";
+    expect(getApiUrl()).toBe("https://api.hermesone.org");
+
+    // Localhost dev backend stays http.
+    process.env.HERMES_API_URL = "http://localhost:3002";
+    expect(getApiUrl()).toBe("http://localhost:3002");
+    process.env.HERMES_API_URL = "http://127.0.0.1:3002/";
+    expect(getApiUrl()).toBe("http://127.0.0.1:3002");
   });
 });
 

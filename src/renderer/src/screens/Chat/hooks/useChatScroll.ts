@@ -48,8 +48,7 @@ export function useChatScroll(messages: ChatMessage[]): {
     // view when the observer's first callback is delivered), and its scroll
     // restore would abort the smooth scroll and strand the view mid-transcript.
     const historyLoaded =
-      messages.length > 0 &&
-      (!initialScrollDoneRef.current || prevCount === 0);
+      messages.length > 0 && (!initialScrollDoneRef.current || prevCount === 0);
     if (messages.length > 0) initialScrollDoneRef.current = true;
     if (historyLoaded) {
       userScrolledUpRef.current = false;

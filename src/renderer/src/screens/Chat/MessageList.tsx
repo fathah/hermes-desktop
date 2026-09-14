@@ -8,10 +8,14 @@ import {
   useState,
 } from "react";
 import { HermesAvatar, MessageRow } from "./MessageRow";
+import type { AgentAvatarInfo } from "./MessageRow";
 import { ReasoningRow, ToolActivityGroup } from "./HistoryRow";
 import { ClarifyCard } from "./ClarifyCard";
 import { useI18n } from "../../components/useI18n";
+import { ApprovalCard } from "./ApprovalCard";
+import type { ApprovalChoice } from "../../../../shared/chat-approval";
 import type {
+  ApprovalMessage,
   ChatMessage,
   ClarifyMessage,
   ToolCallMessage,
@@ -43,16 +47,26 @@ interface MessageListProps {
   onDeny: () => void;
   /** Mark an inline clarify card resolved once the user answers/skips. */
   onClarifyResolved: (requestId: string, answer: string) => void;
+  onApprovalRespond: (
+    msg: ApprovalMessage,
+    choice: ApprovalChoice,
+  ) => Promise<boolean>;
+  onApprovalResolved: (msg: ApprovalMessage, choice: ApprovalChoice) => void;
+  /** Appearance of the agent this conversation is with, so idle avatars show
+   *  the agent's profile picture instead of the loading gif. */
+  agentAvatar?: AgentAvatarInfo;
 }
 
 function TypingIndicator({
   toolProgress,
+  agentAvatar,
 }: {
   toolProgress: string | null;
+  agentAvatar?: AgentAvatarInfo;
 }): React.JSX.Element {
   return (
     <div className="chat-message chat-message-agent">
-      <HermesAvatar active />
+      <HermesAvatar active agent={agentAvatar} />
       <div className="chat-bubble chat-bubble-agent">
         {toolProgress ? (
           <div className="chat-tool-progress">{toolProgress}</div>
@@ -87,14 +101,15 @@ export const MessageList = memo(function MessageList({
   onApprove,
   onDeny,
   onClarifyResolved,
+  onApprovalRespond,
+  onApprovalResolved,
+  agentAvatar,
 }: MessageListProps): React.JSX.Element {
   const { t } = useI18n();
-  // Rows the user expanded beyond the default window. Kept as a count of
-  // *extra* rows (not an absolute index) so the mounted tree stays bounded:
-  // the window slides forward as new rows stream in, re-collapsing the oldest
-  // revealed rows rather than growing without limit. Native scroll anchoring
-  // keeps the viewport steady when rows unmount above it.
+  // Extra rows bound the tree while following the latest output. When the
+  // reader scrolls up, retain the first mounted row until they return below.
   const [extraRows, setExtraRows] = useState(0);
+  const [readingFromId, setReadingFromId] = useState<string | null>(null);
 
   // Reset the expansion when the component is reused for a different
   // conversation (same mounted screen, new session/clear): otherwise a large
@@ -106,6 +121,7 @@ export const MessageList = memo(function MessageList({
   if (conversationId !== prevConversationId) {
     setPrevConversationId(conversationId);
     setExtraRows(0);
+    setReadingFromId(null);
   }
 
   // ── Scroll-driven expansion (infinite history) ────────────────────────────
@@ -123,6 +139,31 @@ export const MessageList = memo(function MessageList({
   // Rows currently rendered (windowed count), snapshotted each render so
   // expandEarlier can derive the next budget from the *effective* cut.
   const renderedCountRef = useRef(0);
+  const windowSnapshotRef = useRef<{ messages: ChatMessage[]; start: number }>({
+    messages: [],
+    start: 0,
+  });
+
+  useEffect(() => {
+    const container = earlierMarkerRef.current?.closest(".chat-messages");
+    if (!container) return;
+    const onScroll = (): void => {
+      const atBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight <
+        60;
+      if (atBottom) {
+        setReadingFromId(null);
+      } else {
+        const snapshot = windowSnapshotRef.current;
+        setReadingFromId(
+          (previous) =>
+            previous ?? snapshot.messages[snapshot.start]?.id ?? null,
+        );
+      }
+    };
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => container.removeEventListener("scroll", onScroll);
+  }, []);
 
   const expandEarlier = useCallback(() => {
     const container = earlierMarkerRef.current?.closest(
@@ -139,6 +180,11 @@ export const MessageList = memo(function MessageList({
     // budget from the rendered count (instead of incrementing it) guarantees
     // every click makes progress even when the cut was nudged for a tool run.
     setExtraRows(renderedCountRef.current);
+    const snapshot = windowSnapshotRef.current;
+    setReadingFromId(
+      snapshot.messages[Math.max(0, snapshot.start - TRANSCRIPT_WINDOW)]?.id ??
+        null,
+    );
   }, []);
 
   // Restore the viewport after the newly revealed rows commit (pre-paint, so
@@ -203,10 +249,28 @@ export const MessageList = memo(function MessageList({
   while (windowStart > nudgeFloor && isToolRow(visibleMessages[windowStart])) {
     windowStart--;
   }
+  // Apply pinned boundaries after the tool-run nudge: a boundary already
+  // chosen while reading must not walk back another window on each update.
+  const readingIndex =
+    readingFromId === null
+      ? -1
+      : visibleMessages.findIndex((m) => m.id === readingFromId);
+  if (readingIndex >= 0) windowStart = Math.min(windowStart, readingIndex);
+  // Interactive cards can precede later output. Never hide a pending card
+  // that the transport is waiting on behind the history disclosure.
+  const pendingIndex = visibleMessages.findIndex(
+    (message) =>
+      (message.kind === "approval" &&
+        !message.resolved &&
+        !message.unavailable) ||
+      (message.kind === "clarify" && !message.resolved),
+  );
+  if (pendingIndex >= 0) windowStart = Math.min(windowStart, pendingIndex);
   const hiddenCount = windowStart;
   const windowedMessages =
     windowStart > 0 ? visibleMessages.slice(windowStart) : visibleMessages;
   renderedCountRef.current = windowedMessages.length;
+  windowSnapshotRef.current = { messages: visibleMessages, start: windowStart };
 
   // The button label counts hidden *messages* (user/agent bubbles), not raw
   // rows — reasoning and tool rows would triple the number in agentic
@@ -259,6 +323,14 @@ export const MessageList = memo(function MessageList({
     }
   }
   const lastMessageIsAgent = !!lastBubble && lastBubble.role === "agent";
+  const awaitingApproval = messages.some(
+    (message) =>
+      message.kind === "approval" && !message.resolved && !message.unavailable,
+  );
+  const activeApprovalId = messages.find(
+    (message) =>
+      message.kind === "approval" && !message.resolved && !message.unavailable,
+  )?.id;
 
   // Render plan: bubble/reasoning rows pass through one-to-one, but a
   // contiguous run of tool_call/tool_result rows folds into a single
@@ -292,6 +364,7 @@ export const MessageList = memo(function MessageList({
           // Active (spinner) only while streaming and this run is trailing.
           active={isLoading && i === windowedMessages.length - 1}
           showAvatar={!groupPrev || groupPrev.role !== "agent"}
+          agent={agentAvatar}
         />,
       );
       continue;
@@ -308,6 +381,7 @@ export const MessageList = memo(function MessageList({
           // a completed "Thought".
           active={isLoading && i === windowedMessages.length - 1}
           showAvatar={showAvatar}
+          agent={agentAvatar}
         />,
       );
       continue;
@@ -319,6 +393,19 @@ export const MessageList = memo(function MessageList({
           key={msg.id}
           msg={msg as ClarifyMessage}
           onResolved={onClarifyResolved}
+        />,
+      );
+      continue;
+    }
+
+    if (k === "approval") {
+      rows.push(
+        <ApprovalCard
+          key={msg.id}
+          msg={msg as ApprovalMessage}
+          isActive={msg.id === activeApprovalId}
+          onRespond={onApprovalRespond}
+          onResolved={onApprovalResolved}
         />,
       );
       continue;
@@ -336,14 +423,18 @@ export const MessageList = memo(function MessageList({
         onApprove={onApprove}
         onDeny={onDeny}
         showAvatar={showAvatar}
+        agent={agentAvatar}
       />,
     );
   }
 
   return (
     <>
-      {hiddenCount > 0 && (
-        <div className="chat-transcript-earlier" ref={earlierMarkerRef}>
+      <div
+        className={hasEarlier ? "chat-transcript-earlier" : undefined}
+        ref={earlierMarkerRef}
+      >
+        {hasEarlier && (
           <button
             type="button"
             className="chat-transcript-earlier-btn"
@@ -353,13 +444,16 @@ export const MessageList = memo(function MessageList({
               count: hiddenMessageCount > 0 ? hiddenMessageCount : hiddenCount,
             })}
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {rows}
 
-      {isLoading && !lastMessageIsAgent && (
-        <TypingIndicator toolProgress={toolProgress} />
+      {isLoading && !lastMessageIsAgent && !awaitingApproval && (
+        <TypingIndicator
+          toolProgress={toolProgress}
+          agentAvatar={agentAvatar}
+        />
       )}
 
       {isLoading && toolProgress && lastMessageIsAgent && (

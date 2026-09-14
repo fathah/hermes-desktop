@@ -21,13 +21,26 @@ can open and the modal can show it, then polls `/api/device/token` until the gra
 resolves. [[src/main/hermes-account.ts#cancelDeviceLogin]] stops an abandoned flow
 (single-flight, mirroring [[src/main/hermes-auth.ts#runHermesAuthLogin]]).
 
-The backend base URL resolves in [[src/main/hermes-account.ts#getApiUrl]]:
-runtime `HERMES_API_URL` (dev/user override) → build-time
-`MAIN_VITE_HERMES_API_URL` (baked in by the release workflow, same pattern as
-the renderer's `VITE_ANALYTICS_*`) → the local Nitro dev server
-(`http://localhost:3002`). An optional client key
-([[src/main/hermes-account.ts#getApiKey]], `MAIN_VITE_HERMES_API_KEY` /
-`HERMES_API_KEY`) is sent as `x-api-key` via
+The backend base URL is resolved fresh on every call by
+[[src/main/hermes-account.ts#getApiUrl]], **runtime env first** so switching
+backends is an env edit + relaunch (no rebuild): `HERMES_API_URL` (explicit
+override) → `MAIN_VITE_HERMES_API_URL` from `process.env` → the build-time
+baked `import.meta.env.MAIN_VITE_HERMES_API_URL` → `http://localhost:3002`.
+Because Vite inlines `import.meta.env` at *build* time, the `process.env` reads
+are what make it truly env-driven in dev — [[src/main/load-env.ts#loadDotEnvForDev]]
+copies the project `.env` into `process.env` at startup (dev only; called from
+[[src/main/index.ts]]), and packaged/CI builds carry the value baked in by the
+release workflow. The resolved value is normalized by
+[[src/main/api-url.ts#normalizeApiUrl]] — a remote `http://` origin is upgraded
+to `https://` (localhost stays http), because remote backends 301-redirect
+http→https and Node's fetch drops the `Authorization` header across that
+scheme-change redirect, so authenticated sync calls would 401 while anonymous
+device login still succeeds. [[src/main/account-store.ts#getAccount]] applies
+the same normalization when reading the `apiUrl` persisted in `account.json`, so
+a URL stored as http by an earlier login is corrected on read (the sync path
+uses that stored value) without a re-login. An optional client key
+([[src/main/hermes-account.ts#getApiKey]], same order with
+`MAIN_VITE_HERMES_API_KEY` / `HERMES_API_KEY`) is sent as `x-api-key` via
 [[src/main/hermes-account.ts#apiHeaders]] on all backend calls (device login
 and [[agent-sync|agent sync]]); the backend doesn't require it yet, and a key
 shipped in a desktop binary is extractable — abuse-limiting, not a secret.
@@ -79,6 +92,32 @@ account" card that opens it; once signed in it renders an identity card —
 avatar (or letter fallback), name/email, a "Connected" status line — with a
 Sign out action.
 
+## Auto-provisioned inference key and credits
+
+Signing in should yield model access without hand-copying keys: the desktop auto-issues a Hermes One Inference gateway key from the account and shows the account's AI-credit balance on the Providers card.
+
+[[src/main/hermesone-provision.ts]] is the convenience layer. `ensureHermesOneApiKey` checks the profile's `.env` for `HERMESONE_API_KEY`; when missing, it POSTs the backend's `/api/credits/keys` (bearer device-login token, key named `Hermes Desktop (<hostname>)` so the console list shows its origin) and persists the one-time raw `hs-live-…` key via `setEnvValue`. Setting that env var **is** what "adds the provider": the Hermes One card ([[provider-setup]]) and the active-model picker both key off it, so no store writes are needed. `fetchHermesOneCredits` GETs `/api/credits/balance` for the USD-denominated balance.
+
+It runs from two places, both idempotent: the `hermes-account-login` IPC handler right after a successful device login, and the Providers screen whenever it loads with a signed-in account (covering users who signed in before this feature). Both are **local-mode only** — the key lands in the local profile `.env`, which remote/SSH chat doesn't read, and provisioning there would strand an orphan backend key per visit. The account card renders a credits chip (`$X.XX credits`, Coins icon) next to Connected/Sync-on, backed by the `hermesone-credits` IPC; a `created` result makes the screen re-read env so the Hermes One card appears immediately.
+
+### Issues a key only when missing
+
+An existing `HERMESONE_API_KEY` is always kept — the backend shows a raw key exactly once, so re-issuing would orphan the old one. No backend call happens at all in that case.
+
+### Provisions and persists a fresh key
+
+With a signed-in account and no local key, one authenticated POST issues the key and it is written to the target profile's `.env` under `HERMESONE_API_KEY`.
+
+### Single-flight provisioning
+
+Concurrent ensure calls (post-login hook + Providers screen mount) coalesce into one backend key issue per profile, preventing orphan keys.
+
+The latch is **per profile** — provisioning writes that profile's `.env`, so a global latch would let profile B piggyback on A's run and report `created` without receiving a key.
+
+### Credits for the account card
+
+The balance endpoint is called with the bearer token and returns the numeric USD credit balance; signed-out or malformed responses yield `null` so the chip simply hides.
+
 ## Tests
 
 Unit tests cover the two pieces that can break silently.
@@ -87,7 +126,7 @@ Unit tests cover the two pieces that can break silently.
 public shape never leaks it, and checks logout and the "secure storage
 unavailable" guard. [[src/main/hermes-account.test.ts]] exercises
 [[src/main/hermes-account.ts#interpretTokenResponse]] across every RFC branch,
-the base-URL resolution order (runtime override → baked build-time value →
+the base-URL resolution order (runtime env → baked build-time value →
 localhost default), and the conditional `x-api-key` header.
 
 ### Signs out everywhere

@@ -65,6 +65,11 @@ vi.mock("./HistoryRow", () => ({
     </div>
   ),
 }));
+vi.mock("./ApprovalCard", () => ({
+  ApprovalCard: ({ msg }: { msg: { id: string } }) => (
+    <div data-testid="approval">{msg.id}</div>
+  ),
+}));
 vi.mock("./ClarifyCard", () => ({
   ClarifyCard: ({ msg }: { msg: { id: string } }) => (
     <div data-testid="clarify">{msg.id}</div>
@@ -100,11 +105,119 @@ function renderList(messages: ChatMessage[]): ReturnType<typeof render> {
       onApprove={vi.fn()}
       onDeny={vi.fn()}
       onClarifyResolved={vi.fn()}
+      onApprovalRespond={vi.fn()}
+      onApprovalResolved={vi.fn()}
     />,
   );
 }
 
 describe("MessageList windowing", () => {
+  // @lat: [[chat-performance#Chat message-list rendering performance#Transcript windowing#Pending interaction visibility]]
+  it.each(["approval", "clarify"] as const)(
+    "retains a pending %s before the trailing window",
+    (kind) => {
+      const interaction = {
+        id: "pending",
+        kind,
+        role: "agent",
+        resolved: false,
+      } as ChatMessage;
+      const messages = [
+        bubble("u0"),
+        interaction,
+        ...Array.from({ length: 150 }, (_, i) => bubble(`tail${i}`, "agent")),
+      ];
+      const { rerender } = renderList(messages);
+      expect(screen.getByTestId(kind).textContent).toBe("pending");
+      rerender(
+        <MessageList
+          messages={messages.map((m) =>
+            m.id === "pending" ? ({ ...m, resolved: true } as ChatMessage) : m,
+          )}
+          isLoading={false}
+          toolProgress={null}
+          onApprove={vi.fn()}
+          onDeny={vi.fn()}
+          onClarifyResolved={vi.fn()}
+          onApprovalRespond={vi.fn()}
+          onApprovalResolved={vi.fn()}
+        />,
+      );
+      expect(screen.queryByTestId(kind)).toBeNull();
+    },
+  );
+
+  // @lat: [[chat-performance#Chat message-list rendering performance#Transcript windowing#Reading history during streaming]]
+  it("keeps the history boundary while scrolled up and resumes windowing at the bottom", () => {
+    const messages = Array.from({ length: 250 }, (_, i) => bubble(`m${i}`));
+    const show = (rows: ChatMessage[]): React.JSX.Element => (
+      <div className="chat-messages">
+        <MessageList
+          messages={rows}
+          isLoading={false}
+          toolProgress={null}
+          onApprove={vi.fn()}
+          onDeny={vi.fn()}
+          onClarifyResolved={vi.fn()}
+          onApprovalRespond={vi.fn()}
+          onApprovalResolved={vi.fn()}
+        />
+      </div>
+    );
+    const { container, rerender } = render(show(messages));
+    const scroll = container.firstElementChild as HTMLElement;
+    Object.defineProperties(scroll, {
+      scrollHeight: { configurable: true, value: 1000 },
+      clientHeight: { configurable: true, value: 200 },
+    });
+    scroll.scrollTop = 300;
+    fireEvent.scroll(scroll);
+    const updated = [
+      ...messages,
+      ...Array.from({ length: 110 }, (_, i) => bubble(`new${i}`, "agent")),
+    ];
+    rerender(show(updated));
+    expect(screen.getByText("m150")).toBeTruthy();
+    expect(screen.getByText("new109")).toBeTruthy();
+    scroll.scrollTop = 800;
+    fireEvent.scroll(scroll);
+    expect(screen.queryByText("m150")).toBeNull();
+    expect(screen.getAllByTestId("bubble")).toHaveLength(TRANSCRIPT_WINDOW);
+  });
+
+  it("does not repeatedly nudge a pinned tool-run boundary while streaming", () => {
+    const messages = [
+      ...Array.from({ length: 500 }, (_, i) => toolCall(`t${i}`)),
+      bubble("answer", "agent"),
+    ];
+    const show = (rows: ChatMessage[]): React.JSX.Element => (
+      <div className="chat-messages">
+        <MessageList
+          messages={rows}
+          isLoading={false}
+          toolProgress={null}
+          onApprove={vi.fn()}
+          onDeny={vi.fn()}
+          onClarifyResolved={vi.fn()}
+          onApprovalRespond={vi.fn()}
+          onApprovalResolved={vi.fn()}
+        />
+      </div>
+    );
+    const { container, rerender } = render(show(messages));
+    const scroll = container.firstElementChild as HTMLElement;
+    Object.defineProperties(scroll, {
+      scrollHeight: { configurable: true, value: 1000 },
+      clientHeight: { configurable: true, value: 200 },
+    });
+    const before = screen.getByTestId("tool-group").textContent;
+    scroll.scrollTop = 300;
+    fireEvent.scroll(scroll);
+    expect(screen.getByTestId("tool-group").textContent).toBe(before);
+    rerender(show([...messages, bubble("next", "agent")]));
+    expect(screen.getByTestId("tool-group").textContent).toBe(before);
+  });
+
   it("renders every row when under the window size", () => {
     const messages = Array.from({ length: 20 }, (_, i) => bubble(`m${i}`));
     renderList(messages);
@@ -280,6 +393,8 @@ describe("MessageList windowing", () => {
         onApprove={vi.fn()}
         onDeny={vi.fn()}
         onClarifyResolved={vi.fn()}
+        onApprovalRespond={vi.fn()}
+        onApprovalResolved={vi.fn()}
       />,
     );
     // Expansion budget must not carry over.
