@@ -78,6 +78,18 @@ describe("account store", () => {
     expect(s.getAccessToken("default")).toBe("secret-token");
   });
 
+  it("normalizes a stored remote http:// apiUrl to https on read", async () => {
+    const s = await store();
+    // Simulate a login persisted before the http→https fix.
+    s.saveAccount("default", {
+      apiUrl: "http://api.hermesone.org",
+      accessToken: "secret-token",
+      user,
+    });
+    // Sync fetches this apiUrl; http would strip the bearer on the redirect.
+    expect(s.getAccount("default")?.apiUrl).toBe("https://api.hermesone.org");
+  });
+
   it("clears the account on logout", async () => {
     const s = await store();
     s.saveAccount("default", {
@@ -110,6 +122,26 @@ describe("account store", () => {
       user,
     });
     expect(s.findAccountProfile()).toBe("default");
+  });
+
+  // @lat: [[hermes-account-login#Tests#Signs out everywhere]]
+  it("clearAllAccounts signs out every profile holding an account", async () => {
+    const s = await store();
+    // Two sign-ins on different profiles leave two account files.
+    s.saveAccount("work", {
+      apiUrl: "http://localhost:3002",
+      accessToken: "t1",
+      user,
+    });
+    s.saveAccount("default", {
+      apiUrl: "http://localhost:3002",
+      accessToken: "t2",
+      user,
+    });
+    s.clearAllAccounts();
+    expect(s.findAccountProfile()).toBeNull();
+    expect(s.getAccount("work")).toBeNull();
+    expect(s.getAccount("default")).toBeNull();
   });
 
   it("refuses to save when secure storage is unavailable", async () => {

@@ -8,9 +8,13 @@ import type { CloudWalletRaw } from "../shared/wallets";
 const mockState = vi.hoisted(() => ({
   account: null as { apiUrl: string; token: string } | null,
   linkedAgentId: null as string | null,
+  /** Owner recorded in the profile's sync state (null = legacy/untagged). */
+  linkedAccountId: null as string | null,
   syncAgentsCalls: 0,
   // A value the auto-sync "creates" — returned by getLinkedAgentId after sync.
   linkAfterSync: null as string | null,
+  // Owner the sync pass stamps onto the state (null = pass couldn't adopt).
+  ownerAfterSync: null as string | null,
 }));
 
 vi.mock("./account-store", () => ({
@@ -32,9 +36,13 @@ vi.mock("./hermes-account", () => ({
 
 vi.mock("./agent-sync", () => ({
   getLinkedAgentId: () => mockState.linkedAgentId,
+  getLinkedAgentAccountId: () => mockState.linkedAccountId,
   syncAgents: vi.fn(async () => {
     mockState.syncAgentsCalls++;
-    mockState.linkedAgentId = mockState.linkAfterSync;
+    if (mockState.linkAfterSync) {
+      mockState.linkedAgentId = mockState.linkAfterSync;
+    }
+    mockState.linkedAccountId = mockState.ownerAfterSync;
     return { status: "ok", outcomes: [], finishedAt: Date.now() };
   }),
 }));
@@ -75,7 +83,9 @@ async function engine(): Promise<typeof import("./wallet-sync")> {
 beforeEach(() => {
   mockState.account = { apiUrl: "http://localhost:3002", token: "tok" };
   mockState.linkedAgentId = null;
+  mockState.linkedAccountId = null;
   mockState.linkAfterSync = null;
+  mockState.ownerAfterSync = null;
   mockState.syncAgentsCalls = 0;
   vi.resetModules();
 });
@@ -121,6 +131,7 @@ describe("syncWalletsForProfile", () => {
 
   it("fetches wallets for an already-linked agent", async () => {
     mockState.linkedAgentId = "agent-1";
+    mockState.linkedAccountId = "u1";
     const calls = stubFetch([
       rawWallet(),
       rawWallet({ id: "wal-2", evmAddress: null }),
@@ -137,6 +148,8 @@ describe("syncWalletsForProfile", () => {
   it("auto-syncs first when the profile has no linked agent", async () => {
     mockState.linkedAgentId = null;
     mockState.linkAfterSync = "agent-new";
+    // A link created by the pass is stamped with the current account.
+    mockState.ownerAfterSync = "u1";
     const calls = stubFetch([rawWallet()]);
     const { syncWalletsForProfile } = await engine();
     const result = await syncWalletsForProfile("default");
@@ -158,10 +171,56 @@ describe("syncWalletsForProfile", () => {
 
   it("surfaces an HTTP error", async () => {
     mockState.linkedAgentId = "agent-1";
+    mockState.linkedAccountId = "u1";
     stubFetch([], false, 401);
     const { syncWalletsForProfile } = await engine();
     const result = await syncWalletsForProfile("default");
     expect(result.status).toBe("error");
     expect(result.error).toContain("401");
+  });
+
+  it("refuses to act on an agent linked to a different account", async () => {
+    mockState.linkedAgentId = "agent-1";
+    mockState.linkedAccountId = "someone-else";
+    const calls = stubFetch([rawWallet()]);
+    const { syncWalletsForProfile } = await engine();
+    const result = await syncWalletsForProfile("default");
+    expect(result.status).toBe("foreign");
+    expect(result.wallets).toEqual([]);
+    // The refusal is client-side: no backend call is made for the foreign agent.
+    expect(calls).toHaveLength(0);
+  });
+
+  it("still acts when the link owner matches the signed-in account", async () => {
+    mockState.linkedAgentId = "agent-1";
+    mockState.linkedAccountId = "u1";
+    stubFetch([rawWallet()]);
+    const { syncWalletsForProfile } = await engine();
+    const result = await syncWalletsForProfile("default");
+    expect(result.status).toBe("ok");
+  });
+
+  it("adopts a legacy untagged link via one sync pass, then proceeds", async () => {
+    mockState.linkedAgentId = "agent-1";
+    mockState.linkedAccountId = null; // legacy state, owner unknown
+    mockState.ownerAfterSync = "u1"; // the pass finds the agent in this account
+    const calls = stubFetch([rawWallet()]);
+    const { syncWalletsForProfile } = await engine();
+    const result = await syncWalletsForProfile("default");
+    expect(mockState.syncAgentsCalls).toBe(1);
+    expect(result.status).toBe("ok");
+    expect(calls[0]).toContain("agentId=agent-1");
+  });
+
+  it("treats a legacy link the pass can't adopt as foreign — no backend call", async () => {
+    mockState.linkedAgentId = "agent-1";
+    mockState.linkedAccountId = null; // legacy state, owner unknown
+    mockState.ownerAfterSync = null; // agent not in this account's list
+    const calls = stubFetch([rawWallet()]);
+    const { syncWalletsForProfile } = await engine();
+    const result = await syncWalletsForProfile("default");
+    expect(mockState.syncAgentsCalls).toBe(1);
+    expect(result.status).toBe("foreign");
+    expect(calls).toHaveLength(0);
   });
 });

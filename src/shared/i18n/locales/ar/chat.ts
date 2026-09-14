@@ -5,8 +5,7 @@ export default {
   auto: "تلقائي",
   commandsTitle: "الأوامر",
   typeMessage: "اسأل أي شيء",
-  quickAskTitle:
-    "سؤال سريع (/btw) — سؤال جانبي لا يؤثر على سياق المحادثة",
+  quickAskTitle: "سؤال سريع (/btw) — سؤال جانبي لا يؤثر على سياق المحادثة",
   send: "إرسال",
   searchModels: "البحث في النماذج...",
   custom: "مخصص",
@@ -64,7 +63,8 @@ export default {
   contextWindow: "نافذة السياق",
   contextUsed: "{{pct}}% مستخدم ({{left}}% متبقي)",
   contextTokens: "{{used}} / {{total}} رمز مستخدم",
-  contextCache: "الذاكرة المؤقتة: {{pct}}% إصابة ({{read}} قراءة / {{write}} كتابة)",
+  contextCache:
+    "الذاكرة المؤقتة: {{pct}}% إصابة ({{read}} قراءة / {{write}} كتابة)",
   removeAttachment: "إزالة المرفق",
   dropToAttach: "أسقط الملفات للإرفاق",
   dashboardUnavailableFallback:

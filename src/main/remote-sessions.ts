@@ -1,5 +1,7 @@
 import http from "http";
 import https from "https";
+import type { ConnectionConfig } from "./config";
+import { requestRemoteOAuthJson } from "./remote-oauth";
 import type { CachedSession } from "./session-cache";
 import {
   extractLeadingVisionImageFallback,
@@ -25,7 +27,7 @@ export interface RemoteSessionConfig {
   profile?: string;
 }
 
-type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
+type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 interface RemoteRequestOptions {
   method?: HttpMethod;
@@ -67,10 +69,24 @@ export function dashboardApiUrl(
 }
 
 export function remoteRequestJson<T>(
-  config: RemoteSessionConfig,
+  config: RemoteSessionConfig | ConnectionConfig,
   path: string,
   options: RemoteRequestOptions = {},
 ): Promise<T> {
+  if ("mode" in config) {
+    if (config.mode !== "remote") {
+      throw new Error(
+        "Remote dashboard API is available only in direct Remote mode.",
+      );
+    }
+    if (config.remoteAuthMode === "oauth") {
+      return requestRemoteOAuthJson(
+        dashboardApiUrl(config, path),
+        options,
+      ) as Promise<T>;
+    }
+  }
+
   const token = config.apiKey.trim();
   if (!token)
     throw new Error("Remote Hermes dashboard token is not configured.");
@@ -86,6 +102,12 @@ export function remoteRequestJson<T>(
         method: options.method ?? "GET",
         headers: {
           "Content-Type": "application/json",
+          // URL credentials let Node authenticate a reverse proxy with Basic
+          // auth; preserve that header and use the dedicated dashboard token.
+          // Otherwise support gateways that accept only Bearer authentication.
+          ...(!parsed.username && !parsed.password
+            ? { Authorization: `Bearer ${token}` }
+            : {}),
           "X-Hermes-Session-Token": token,
           ...(body ? { "Content-Length": Buffer.byteLength(body) } : {}),
         },
@@ -269,9 +291,10 @@ async function remoteSessionListPage(
   limit: number,
   offset: number,
 ): Promise<unknown> {
+  const profile = config.profile?.trim() || "all";
   const profileEndpoint =
     `/api/profiles/sessions?limit=${limit}&offset=${offset}` +
-    "&min_messages=0&archived=exclude&order=recent&profile=all";
+    `&min_messages=0&archived=exclude&order=recent&profile=${encodeURIComponent(profile)}`;
 
   try {
     return await remoteRequestJson(config, profileEndpoint);

@@ -5,7 +5,11 @@ import {
   getAccessToken,
 } from "./account-store";
 import { apiHeaders } from "./hermes-account";
-import { getLinkedAgentId, syncAgents } from "./agent-sync";
+import {
+  getLinkedAgentAccountId,
+  getLinkedAgentId,
+  syncAgents,
+} from "./agent-sync";
 import { BASE_NETWORK_ID } from "../shared/wallets";
 import type {
   CloudWalletRaw,
@@ -39,19 +43,27 @@ export function mapCloudWallet(raw: CloudWalletRaw): WalletView | null {
   };
 }
 
+/** Everything a backend wallet call needs for a profile's linked agent. */
+export type LinkedAgentResolution =
+  | { status: "signed-out" | "unlinked" | "foreign" }
+  | { status: "ok"; apiUrl: string; token: string; agentId: string };
+
 /**
- * Cloud wallets for `profile`'s linked agent. Signed out → no wallets; a
- * profile that has never synced triggers one agent sync first (so it gets an
- * agent id), then the fetch. Errors (network/401) surface as `status: "error"`.
+ * Resolve the signed-in account and the profile's linked cloud-agent id, the
+ * common preamble of every backend wallet call. A profile that has never
+ * synced triggers one agent sync first (so it gets an agent id). A profile
+ * whose link is owned by a different account resolves as `foreign` — wallet
+ * actions must not act on another account's agent (the backend enforces
+ * ownership too; this makes the refusal explicit client-side).
  */
-export async function syncWalletsForProfile(
+export async function resolveLinkedAgent(
   profile?: string,
-): Promise<WalletSyncResult> {
+): Promise<LinkedAgentResolution> {
   const name = profile || "default";
   const accountProfile = findAccountProfile();
   const account = accountProfile ? getAccount(accountProfile) : null;
   const token = accountProfile ? getAccessToken(accountProfile) : null;
-  if (!account || !token) return { status: "signed-out", wallets: [] };
+  if (!account || !token) return { status: "signed-out" };
 
   let agentId = getLinkedAgentId(name);
   if (!agentId) {
@@ -59,11 +71,40 @@ export async function syncWalletsForProfile(
     await syncAgents();
     agentId = getLinkedAgentId(name);
   }
-  if (!agentId) return { status: "unlinked", wallets: [] };
+  if (!agentId) return { status: "unlinked" };
+
+  let owner = getLinkedAgentAccountId(name);
+  if (!owner) {
+    // Legacy link with no recorded owner. Run one sync pass: it stamps the
+    // current account onto links whose agent belongs to this account and
+    // leaves foreign/ambiguous ones untagged. Without this, a stale agent id
+    // from a previously signed-in account would be sent under the new
+    // account's token and surface as a generic error.
+    await syncAgents();
+    agentId = getLinkedAgentId(name);
+    if (!agentId) return { status: "unlinked" };
+    owner = getLinkedAgentAccountId(name);
+  }
+  if (owner !== account.user.id) return { status: "foreign" };
+  return { status: "ok", apiUrl: account.apiUrl, token, agentId };
+}
+
+/**
+ * Cloud wallets for `profile`'s linked agent. Signed out → no wallets.
+ * Errors (network/401) surface as `status: "error"`.
+ */
+export async function syncWalletsForProfile(
+  profile?: string,
+): Promise<WalletSyncResult> {
+  const resolved = await resolveLinkedAgent(profile);
+  if (resolved.status !== "ok") {
+    return { status: resolved.status, wallets: [] };
+  }
+  const { apiUrl, token, agentId } = resolved;
 
   try {
     const res = await fetch(
-      `${account.apiUrl}/api/wallets?agentId=${encodeURIComponent(agentId)}`,
+      `${apiUrl}/api/wallets?agentId=${encodeURIComponent(agentId)}`,
       { headers: { ...apiHeaders(false), authorization: `Bearer ${token}` } },
     );
     if (!res.ok) {
@@ -84,7 +125,7 @@ export async function syncWalletsForProfile(
     return {
       status: "error",
       wallets: [],
-      error: `Couldn't reach ${account.apiUrl}: ${(err as Error).message}`,
+      error: `Couldn't reach ${apiUrl}: ${(err as Error).message}`,
     };
   }
 }

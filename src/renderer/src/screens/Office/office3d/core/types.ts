@@ -19,6 +19,8 @@ export type OfficeAgent = {
   model?: string;
   provider?: string;
   gatewayRunning?: boolean;
+  /** Number of running Kanban cards currently assigned to this profile. */
+  activeTaskCount?: number;
   /** Org position; defaults to "employee" when unset. The CEO gets a desk. */
   position?: AgentPosition;
 };
@@ -40,6 +42,13 @@ export type JanitorActor = {
 
 export type SceneActor = OfficeAgent | JanitorActor;
 
+/**
+ * Where an agent currently is. Drives interior-mode visibility: each interior
+ * view renders only the agents whose place matches it ("outside" = walking
+ * between buildings, so visible only in the city view).
+ */
+export type AgentPlace = "office" | "bank" | "showroom" | "outside";
+
 export type RenderAgent = SceneActor & {
   x: number;
   y: number;
@@ -50,6 +59,8 @@ export type RenderAgent = SceneActor & {
   frame: number;
   walkSpeed: number;
   phaseOffset: number;
+  /** Building the agent is currently in (defaults to the office). */
+  place?: AgentPlace;
   state:
     | "walking"
     | "sitting"

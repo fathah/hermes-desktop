@@ -86,19 +86,24 @@ const NO_KEY_PROVIDERS = new Set(["auto"]);
  * no network calls. Fast (single readEnv + getModelConfig).
  *
  * `profile` defaults to the active profile. `override` is the chat-local model
- * picker selection; when present it is the model that will actually be sent.
+ * picker selection. Non-local calls disable all local config/credential reads.
  */
 export function validateChatReadiness(
   profile?: string,
   override?: ChatReadinessModelConfig,
+  options: { checkLocalConfig?: boolean } = {},
 ): ChatReadiness {
   try {
-    const mc = getModelConfig(profile);
-    const provider = (override?.provider ?? mc.provider ?? "")
-      .trim()
-      .toLowerCase();
-    const model = (override?.model ?? mc.model ?? "").trim();
-    const baseUrl = (override?.baseUrl ?? mc.baseUrl ?? "").trim();
+    // A picker choice is one routing identity; never combine its provider
+    // with a different persisted endpoint. Empty local picks use the default.
+    const mc = override?.model?.trim()
+      ? override
+      : options.checkLocalConfig === false
+        ? (override ?? {})
+        : getModelConfig(profile);
+    const provider = (mc.provider || "").trim().toLowerCase();
+    const model = (mc.model || "").trim();
+    const baseUrl = (mc.baseUrl || "").trim();
 
     // Provider="auto" lets hermes-agent pick a model at runtime based
     // on whatever keys are present in .env. No key-presence check
@@ -113,6 +118,9 @@ export function validateChatReadiness(
         fixLocation: "models",
       };
     }
+
+    // Credential absence on this computer says nothing about another host.
+    if (options.checkLocalConfig === false) return OK;
 
     if (OAUTH_PROVIDERS.has(provider) || NO_KEY_PROVIDERS.has(provider)) {
       // OAuth/no-key providers — skip the env-var check; the gateway's

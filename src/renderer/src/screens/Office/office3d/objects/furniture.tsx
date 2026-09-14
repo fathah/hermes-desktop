@@ -3,6 +3,7 @@ import { memo, useMemo } from "react";
 import * as THREE from "three";
 import { SCALE } from "../core/constants";
 import { toWorld } from "../core/geometry";
+import { Interactable } from "./Interactable";
 import type { FurniturePlacement, FurnitureType, Workstation } from "../layout";
 import deskUrl from "../assets/desk.glb?url";
 import executiveDeskUrl from "../assets/ceo_desk.glb?url";
@@ -321,38 +322,64 @@ export const FurniturePieces = memo(function FurniturePieces({
 /** Render every workstation (a desk + its chair) in the work area. */
 export const Workstations = memo(function Workstations({
   workstations,
+  interactive = false,
+  onDeskActivate,
+  agentNameById,
 }: {
   workstations: Workstation[];
+  /** Office-interior mode: desks become hover/click interactables. */
+  interactive?: boolean;
+  onDeskActivate?: (agentId: string) => void;
+  /** Hover-label text per agent id (the agent's display name). */
+  agentNameById?: Map<string, string>;
 }): React.JSX.Element {
   return (
     <>
-      {workstations.map((w) =>
-        w.isExecutive ? (
-          <ExecutiveWorkstation key={w.id} station={w} />
-        ) : (
-          <group key={w.id}>
-            <GlbItem
-              type="desk"
-              x={w.deskX}
-              y={w.deskY}
-              facingDeg={w.deskFacingDeg}
-            />
-            <GlbItem
-              type="computer"
-              x={w.deskX + 20}
-              y={w.deskY - 40}
-              facingDeg={180}
-              yOffset={0.58}
-            />
-            <GlbItem
-              type="chair"
-              x={w.chairX}
-              y={w.chairY}
-              facingDeg={w.chairFacingDeg}
-            />
-          </group>
-        ),
-      )}
+      {workstations.map((w) => {
+        // GlbItems place themselves at absolute world positions, so the
+        // hover label/ring gets the desk's world centre as its indicator.
+        const [ix, , iz] = toWorld(
+          w.isExecutive ? w.deskX : w.deskX + 50,
+          w.isExecutive ? w.deskY : w.deskY - 15,
+        );
+        return (
+          <Interactable
+            key={w.id}
+            enabled={interactive && !!onDeskActivate}
+            label={agentNameById?.get(w.agentId) ?? w.agentId}
+            onActivate={() => onDeskActivate?.(w.agentId)}
+            indicatorPosition={[ix, 0, iz]}
+            labelHeight={1.7}
+            ringRadius={1.3}
+          >
+            {w.isExecutive ? (
+              <ExecutiveWorkstation station={w} />
+            ) : (
+              <group>
+                <GlbItem
+                  type="desk"
+                  x={w.deskX}
+                  y={w.deskY}
+                  facingDeg={w.deskFacingDeg}
+                />
+                <GlbItem
+                  type="computer"
+                  x={w.deskX + 20}
+                  y={w.deskY - 40}
+                  facingDeg={180}
+                  yOffset={0.58}
+                />
+                <GlbItem
+                  type="chair"
+                  x={w.chairX}
+                  y={w.chairY}
+                  facingDeg={w.chairFacingDeg}
+                />
+              </group>
+            )}
+          </Interactable>
+        );
+      })}
     </>
   );
 });

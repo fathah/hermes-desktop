@@ -1,16 +1,64 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Crown, Move, RefreshCw, TriangleAlert, Users, X } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  Crown,
+  DoorOpen,
+  Footprints,
+  LogOut,
+  Move,
+  RefreshCw,
+  TriangleAlert,
+  Users,
+  X,
+} from "lucide-react";
 import type { GpuStatus } from "../../../../shared/gpu";
 import { useI18n } from "../../components/useI18n";
 import oneChatIcon from "../../assets/images/one-chat.svg";
 import OneChatModal from "./OneChatModal";
 import Office3D from "./office3d/Office3D";
+import RepInteractionPanel from "./RepInteractionPanel";
 import { officeAgentsChanged, profilesToOfficeAgents } from "./office3d/agents";
-import type { OfficeAgent } from "./office3d/core/types";
+import {
+  getRepresentative,
+  type RepActionId,
+} from "./office3d/interactions/registry";
+import {
+  completeMission,
+  dispatchMission,
+  makeMissionId,
+  onMissionEvent,
+  type Mission,
+} from "./office3d/interactions/missionBus";
+import {
+  planWorldActions,
+  type WorldAction,
+} from "./office3d/interactions/worldActions";
+import type { ShowroomCar } from "./office3d/objects/CarShowroom";
+import type { BuildingId, OfficeLocation } from "./office3d/core/locations";
+import type { AgentPlace, OfficeAgent } from "./office3d/core/types";
+import type { PlayerInteraction } from "./office3d/interactions/proximity";
+
+function isEditableTarget(t: EventTarget | null): boolean {
+  return (
+    t instanceof HTMLElement &&
+    (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)
+  );
+}
 
 interface OfficeProps {
   profile?: string;
   visible?: boolean;
+}
+
+interface AgentStatusRequest {
+  profile: string | undefined;
+  promise: Promise<OfficeAgent[]>;
 }
 
 // The CEO assignment is desktop-local UI state (one agent at a time), persisted
@@ -29,13 +77,32 @@ function readStoredCeo(): string | null {
  * The Office tab. Renders a native, in-renderer 3D office (no external dev
  * server / webview) where each Hermes profile appears as an interactive agent.
  */
-function Office({ visible }: OfficeProps): React.JSX.Element {
+function Office({ visible, profile }: OfficeProps): React.JSX.Element {
   const { t } = useI18n();
   const [agents, setAgents] = useState<OfficeAgent[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [ceoId, setCeoId] = useState<string | null>(readStoredCeo);
   const [chatOpen, setChatOpen] = useState(false);
+  // Enterable buildings: clicking one in the city view focuses it (shows the
+  // Enter prompt); entering switches the whole screen to that interior and
+  // unmounts the rest of the city.
+  const [location, setLocation] = useState<OfficeLocation>("city");
+  const [focusedBuilding, setFocusedBuilding] = useState<BuildingId | null>(
+    null,
+  );
+  const [carCard, setCarCard] = useState<ShowroomCar | null>(null);
+  // Space-representative menu (bank tellers today): which rep's panel is open.
+  const [activeRepId, setActiveRepId] = useState<string | null>(null);
+  // Chat-commanded world action in flight: the mission the agent is walking,
+  // and the rep-panel action to auto-run when its modal opens on arrival.
+  const missionRef = useRef<Mission | null>(null);
+  const missionRepOpenRef = useRef(false);
+  const [autoAction, setAutoAction] = useState<RepActionId | null>(null);
+  // GTA-style walk mode: the user's avatar walks the city; interiors load by
+  // walking through doorways and interactions fire with E near their points.
+  const [walkMode, setWalkMode] = useState(false);
+  const [nearby, setNearby] = useState<PlayerInteraction | null>(null);
   // Developer building-mover: click a building, then click ground to reposition
   // it; positions are logged to the console so the cityPlan constants can be
   // updated to match.
@@ -58,27 +125,88 @@ function Office({ visible }: OfficeProps): React.JSX.Element {
     }
   }, []);
   // Avoid refetching every time the tab regains visibility within a session;
-  // only the first reveal and explicit refreshes hit IPC.
+  // the first reveal, profile changes, and explicit refreshes hit IPC.
   const loadedOnce = useRef(false);
+  const lastVisibleProfileRef = useRef(profile);
+
+  // Profile/Kanban IPC can take longer than the polling interval. Share one
+  // request across initial/manual loads and quiet polls so ticks never stack
+  // subprocesses, and track the committed profile so stale results cannot land.
+  const statusRequestRef = useRef<AgentStatusRequest | null>(null);
+  const activeProfileRef = useRef(profile);
+  useLayoutEffect(() => {
+    activeProfileRef.current = profile;
+  }, [profile]);
+
+  const requestAgentStatuses = useCallback((): AgentStatusRequest => {
+    const activeRequest = statusRequestRef.current;
+    if (activeRequest) return activeRequest;
+
+    const requestProfile = profile;
+    const promise = (async (): Promise<OfficeAgent[]> => {
+      const [profilesResult, runningTasksResult] = await Promise.allSettled([
+        window.hermesAPI.listProfiles(),
+        window.hermesAPI.kanbanListTasks({
+          status: "running",
+          profile: requestProfile,
+        }),
+      ]);
+      if (profilesResult.status === "rejected") throw profilesResult.reason;
+      const runningTasks =
+        runningTasksResult.status === "fulfilled"
+          ? runningTasksResult.value
+          : null;
+      return profilesToOfficeAgents(
+        profilesResult.value,
+        runningTasks?.success ? (runningTasks.data ?? []) : null,
+      );
+    })();
+    const request = { profile: requestProfile, promise };
+    statusRequestRef.current = request;
+    const clearRequest = (): void => {
+      if (statusRequestRef.current === request) statusRequestRef.current = null;
+    };
+    void promise.then(clearRequest, clearRequest);
+    return request;
+  }, [profile]);
 
   const loadAgents = useCallback(async () => {
+    const requestProfile = profile;
     setLoading(true);
     try {
-      const profiles = await window.hermesAPI.listProfiles();
-      setAgents(profilesToOfficeAgents(profiles));
-    } catch {
-      setAgents([]);
+      // A profile change during a slow request waits for that request to settle,
+      // then immediately starts the newest profile rather than overlapping it.
+      while (activeProfileRef.current === requestProfile) {
+        const request = requestAgentStatuses();
+        try {
+          const next = await request.promise;
+          if (activeProfileRef.current !== requestProfile) return;
+          if (request.profile !== requestProfile) continue;
+          setAgents(next);
+          break;
+        } catch {
+          if (activeProfileRef.current !== requestProfile) return;
+          if (request.profile !== requestProfile) continue;
+          setAgents([]);
+          break;
+        }
+      }
     } finally {
-      setLoading(false);
-      loadedOnce.current = true;
+      if (activeProfileRef.current === requestProfile) {
+        setLoading(false);
+        loadedOnce.current = true;
+      }
     }
-  }, []);
+  }, [profile, requestAgentStatuses]);
 
   useEffect(() => {
-    if (visible && !loadedOnce.current) {
+    if (!visible) return;
+    const profileChanged = lastVisibleProfileRef.current !== profile;
+    lastVisibleProfileRef.current = profile;
+    if (!loadedOnce.current || profileChanged) {
       void loadAgents();
     }
-  }, [visible, loadAgents]);
+  }, [visible, profile, loadAgents]);
 
   // GPU state is fixed for the lifetime of the process (changing it requires a
   // relaunch), so one fetch on first reveal is enough.
@@ -103,22 +231,32 @@ function Office({ visible }: OfficeProps): React.JSX.Element {
     }
   }, []);
 
-  // Background poll: re-read profiles while the tab is visible so a gateway
-  // starting/stopping flips an agent's status (idle <-> working). The 3D
-  // controller reacts to that change by walking the agent to its desk or to
-  // the rest room. We update state only when something actually changed and
-  // never toggle `loading`, so this stays flicker-free.
+  // Background poll: re-read profiles and running Kanban cards while the tab is
+  // visible. A profile walks to its desk while it owns a running card and goes
+  // idle after that card leaves `running`. Gateway liveness remains separate
+  // metadata for chat availability and is the fallback when Kanban is
+  // unavailable. State updates only on a real change, so this stays flicker-free.
   const refreshAgentStatuses = useCallback(async () => {
+    // Initial/manual loads and earlier ticks own the single request slot. Skip
+    // this tick; the interval keeps its existing four-second cadence.
+    if (statusRequestRef.current) return;
+    const requestProfile = profile;
+    const request = requestAgentStatuses();
     try {
-      const profiles = await window.hermesAPI.listProfiles();
-      const next = profilesToOfficeAgents(profiles);
+      const next = await request.promise;
+      if (
+        activeProfileRef.current !== requestProfile ||
+        request.profile !== requestProfile
+      ) {
+        return;
+      }
       setAgents((prev) => {
         return officeAgentsChanged(prev, next) ? next : prev;
       });
     } catch {
       // Transient IPC failures are ignored; the next tick retries.
     }
-  }, []);
+  }, [profile, requestAgentStatuses]);
 
   useEffect(() => {
     if (!visible) return;
@@ -128,10 +266,10 @@ function Office({ visible }: OfficeProps): React.JSX.Element {
     return () => window.clearInterval(interval);
   }, [visible, refreshAgentStatuses]);
 
-  // The initial fetch is driven solely by the visible-guard effect above
-  // (gated on `!loadedOnce.current`). A second unconditional mount effect used
-  // to live here too, but when the tab was visible on first render both fired
-  // in the same commit and raced two concurrent `listProfiles` calls.
+  // Initial and profile-change fetches are driven solely by the visible-guard
+  // effect above. A second unconditional mount effect used to live here too,
+  // but when the tab was visible on first render both fired in the same commit
+  // and raced two concurrent `listProfiles` calls.
 
   // Reset selection / CEO if the underlying profile disappears on refresh.
   useEffect(() => {
@@ -146,6 +284,184 @@ function Office({ visible }: OfficeProps): React.JSX.Element {
     if (ceoId && !agents.some((a) => a.id === ceoId)) setCeo(null);
   }, [loading, agents, ceoId, setCeo]);
 
+  const enterBuilding = useCallback((building: BuildingId) => {
+    setLocation(building);
+    setFocusedBuilding(null);
+    setCarCard(null);
+    setActiveRepId(null);
+  }, []);
+
+  const exitToCity = useCallback(() => {
+    setLocation("city");
+    setCarCard(null);
+    setActiveRepId(null);
+  }, []);
+
+  const enterWalkMode = useCallback(() => {
+    setWalkMode(true);
+    // The avatar spawns on the street outside HQ, so the world starts in
+    // city view regardless of which interior the orbit camera was in.
+    setLocation("city");
+    setFocusedBuilding(null);
+    setCarCard(null);
+    setActiveRepId(null);
+  }, []);
+
+  const exitWalkMode = useCallback(() => {
+    setWalkMode(false);
+    setNearby(null);
+    setLocation("city");
+    setCarCard(null);
+    setActiveRepId(null);
+  }, []);
+
+  // Walk mode is a foreground control scheme — leaving the tab exits it so
+  // its window-level key listeners never capture typing elsewhere.
+  useEffect(() => {
+    if (!visible && walkMode) exitWalkMode();
+  }, [visible, walkMode, exitWalkMode]);
+
+  // The avatar crossed a doorway: mount that building's interior (or the
+  // city when back outside). Building-scoped overlays close on any move.
+  const handlePlayerPlace = useCallback((place: AgentPlace) => {
+    setLocation(place === "outside" ? "city" : place);
+    setCarCard(null);
+    setActiveRepId(null);
+  }, []);
+
+  // Escape exits walk mode, or backs out of an interior to the city view.
+  // A rep panel (modal) owns Escape while it's open — its own listener closes
+  // it — so this handler stays detached until the modal is gone. Otherwise a
+  // single Escape would dismiss the modal *and* drop out of walk mode.
+  useEffect(() => {
+    if (activeRepId) return;
+    if (!visible || (!walkMode && location === "city")) return;
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.key !== "Escape") return;
+      if (walkMode) exitWalkMode();
+      else exitToCity();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [visible, location, walkMode, activeRepId, exitWalkMode, exitToCity]);
+
+  // Bank ATM → the ATM representative menu (wallet actions; withdraw/deposit
+  // coming soon), same modal machinery as the teller.
+  const handleAtmActivate = useCallback(() => {
+    setActiveRepId("atm");
+  }, []);
+
+  const handleCarActivate = useCallback(
+    (car: ShowroomCar) => setCarCard(car),
+    [],
+  );
+
+  // Bank teller → the representative menu (account status, balances, new
+  // accounts) for a chosen agent.
+  const handleTellerActivate = useCallback(() => {
+    setActiveRepId("bank-teller");
+  }, []);
+
+  const closeRepPanel = useCallback(() => setActiveRepId(null), []);
+  const activeRep = getRepresentative(activeRepId);
+
+  // Chat-driven world actions: the agent's reply asked for a physical errand.
+  // Compose a mission, hand it to the 3D simulation, and pull the camera back
+  // to the city so the user watches the walk (walk mode keeps its own camera).
+  const handleWorldActions = useCallback(
+    (agentId: string, actions: WorldAction[]) => {
+      const plan = planWorldActions(actions);
+      if (!plan || !agents.some((a) => a.id === agentId)) return;
+      const mission: Mission = {
+        id: makeMissionId(),
+        agentId,
+        dest: plan.dest,
+        interaction: plan.interaction,
+      };
+      missionRef.current = mission;
+      missionRepOpenRef.current = false;
+      setChatOpen(false);
+      setActiveRepId(null);
+      setAutoAction(null);
+      setCarCard(null);
+      if (!walkMode) {
+        setLocation("city");
+        setFocusedBuilding(null);
+      }
+      dispatchMission(mission);
+    },
+    [agents, walkMode],
+  );
+
+  // Mission progress from the simulation. Arrival flies the camera into the
+  // destination, selects the agent, and opens the rep panel with the
+  // commanded action; "ended" (walked home, superseded, timed out) clears it.
+  useEffect(() => {
+    return onMissionEvent((evt) => {
+      const pending = missionRef.current;
+      if (!pending || evt.mission.id !== pending.id) return;
+      if (evt.type === "arrived") {
+        setSelectedId(pending.agentId);
+        if (!walkMode) setLocation(pending.dest);
+        if (pending.interaction) {
+          missionRepOpenRef.current = true;
+          setAutoAction(pending.interaction.actionId);
+          setActiveRepId(pending.interaction.repId);
+        }
+      } else {
+        missionRef.current = null;
+        // The simulation gave up (interaction hold timed out) while the
+        // panel was still open: close it too, or the UI would keep serving
+        // an interaction whose agent has already walked home.
+        if (missionRepOpenRef.current) {
+          missionRepOpenRef.current = false;
+          setAutoAction(null);
+          setActiveRepId(null);
+        }
+      }
+    });
+  }, [walkMode]);
+
+  // However the mission's modal goes away (close button, Escape, exiting the
+  // interior, walk-mode moves), completing the mission sends the agent home.
+  useEffect(() => {
+    if (activeRepId !== null || !missionRepOpenRef.current) return;
+    missionRepOpenRef.current = false;
+    setAutoAction(null);
+    if (missionRef.current) completeMission(missionRef.current.id);
+  }, [activeRepId]);
+
+  // Office desk → select its owner (opens the agent details sidebar).
+  const handleDeskActivate = useCallback(
+    (agentId: string) => setSelectedId(agentId),
+    [],
+  );
+
+  // Walk mode: E fires the nearby interaction point — the same actions the
+  // click-Interactables fire in orbit mode.
+  useEffect(() => {
+    if (!visible || !walkMode || !nearby) return;
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.code !== "KeyE" || isEditableTarget(e.target)) return;
+      if (e.metaKey || e.ctrlKey) return;
+      if (nearby.kind === "atm") handleAtmActivate();
+      else if (nearby.kind === "teller") handleTellerActivate();
+      else if (nearby.kind === "car")
+        handleCarActivate({ name: nearby.carName, tint: nearby.carTint });
+      else handleDeskActivate(nearby.agentId);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    visible,
+    walkMode,
+    nearby,
+    handleAtmActivate,
+    handleTellerActivate,
+    handleCarActivate,
+    handleDeskActivate,
+  ]);
+
   // Tag each agent with its org position; the CEO drives the executive desk.
   const positionedAgents = useMemo<OfficeAgent[]>(
     () =>
@@ -159,6 +475,16 @@ function Office({ visible }: OfficeProps): React.JSX.Element {
   const selectedAgent =
     positionedAgents.find((a) => a.id === selectedId) ?? null;
   const selectedIsCeo = selectedAgent?.position === "ceo";
+
+  // Default the rep panel's agent picker to the active profile (falling back to
+  // the first agent) so it opens on the current profile instead of empty.
+  const defaultAgentId = useMemo(
+    () =>
+      positionedAgents.some((a) => a.id === profile)
+        ? (profile ?? null)
+        : (positionedAgents[0]?.id ?? null),
+    [positionedAgents, profile],
+  );
   const selectedStatusColor =
     selectedAgent?.status === "working"
       ? "#22c55e"
@@ -277,9 +603,230 @@ function Office({ visible }: OfficeProps): React.JSX.Element {
           agents={positionedAgents}
           selectedId={selectedId}
           onSelectAgent={setSelectedId}
+          location={location}
+          onFocusBuilding={setFocusedBuilding}
+          onAtmActivate={handleAtmActivate}
+          tellerLabel={t("office.repBankTeller")}
+          onTellerActivate={handleTellerActivate}
+          onCarActivate={handleCarActivate}
+          onDeskActivate={handleDeskActivate}
+          walkMode={walkMode}
+          playerLabel={t("office.you")}
+          onPlayerPlaceChange={handlePlayerPlace}
+          onNearbyInteraction={setNearby}
           devMode={devMode}
           onDevLog={setDevLog}
         />
+
+        {/* Walk-mode toggle: drop in as an avatar / return to the sky view. */}
+        {!devMode && (
+          <button
+            type="button"
+            onClick={walkMode ? exitWalkMode : enterWalkMode}
+            title={walkMode ? t("office.walkModeExit") : t("office.walkMode")}
+            style={{
+              position: "absolute",
+              bottom: 24,
+              left: 20,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "10px 16px",
+              borderRadius: 12,
+              border: walkMode
+                ? "1px solid rgba(244,180,31,0.6)"
+                : "1px solid rgba(125,211,252,0.5)",
+              background: "rgba(20,24,33,0.94)",
+              color: walkMode ? "#f4b41f" : "#7dd3fc",
+              cursor: "pointer",
+              fontSize: 13,
+              fontWeight: 600,
+              zIndex: 10,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+            }}
+          >
+            <Footprints size={16} />
+            {walkMode ? t("office.walkModeExit") : t("office.walkMode")}
+          </button>
+        )}
+
+        {/* Walk-mode HUD: the nearby Press-E prompt, or the controls hint. */}
+        {walkMode && (
+          <div
+            style={{
+              position: "absolute",
+              bottom: 24,
+              left: "50%",
+              transform: "translateX(-50%)",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 10,
+              padding: nearby ? "10px 16px" : "8px 14px",
+              borderRadius: 12,
+              background: "rgba(20,24,33,0.92)",
+              border: nearby
+                ? "1px solid rgba(244,180,31,0.55)"
+                : "1px solid rgba(255,255,255,0.12)",
+              color: nearby ? "#fff" : "rgba(255,255,255,0.65)",
+              fontSize: 13,
+              fontWeight: nearby ? 600 : 500,
+              zIndex: 10,
+              pointerEvents: "none",
+            }}
+          >
+            {nearby ? (
+              <>
+                <kbd
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    minWidth: 22,
+                    height: 22,
+                    padding: "0 5px",
+                    borderRadius: 6,
+                    background: "rgba(244,180,31,0.18)",
+                    border: "1px solid rgba(244,180,31,0.6)",
+                    color: "#f4b41f",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    fontFamily: "inherit",
+                  }}
+                >
+                  E
+                </kbd>
+                {nearby.label}
+              </>
+            ) : (
+              t("office.walkHint")
+            )}
+          </div>
+        )}
+
+        {location === "city" && focusedBuilding && !devMode && !walkMode && (
+          <button
+            type="button"
+            onClick={() => enterBuilding(focusedBuilding)}
+            style={{
+              position: "absolute",
+              bottom: 24,
+              left: "50%",
+              transform: "translateX(-50%)",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "12px 20px",
+              borderRadius: 12,
+              border: "1px solid rgba(125,211,252,0.5)",
+              background: "rgba(20,24,33,0.94)",
+              color: "#7dd3fc",
+              cursor: "pointer",
+              fontSize: 14,
+              fontWeight: 600,
+              zIndex: 10,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+            }}
+          >
+            <DoorOpen size={17} />
+            {t(`office.enter_${focusedBuilding}`)}
+          </button>
+        )}
+
+        {location !== "city" && !walkMode && (
+          <button
+            type="button"
+            onClick={exitToCity}
+            title={t("office.exitToCity")}
+            style={{
+              position: "absolute",
+              top: 16,
+              left: 16,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "10px 14px",
+              borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.16)",
+              background: "rgba(20,24,33,0.92)",
+              color: "#fff",
+              cursor: "pointer",
+              fontSize: 13,
+              fontWeight: 600,
+              zIndex: 10,
+            }}
+          >
+            <LogOut size={15} />
+            {t("office.exitToCity")}
+          </button>
+        )}
+
+        {location === "showroom" && carCard && (
+          <div
+            style={{
+              position: "absolute",
+              left: 20,
+              bottom: 20,
+              width: 260,
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+              padding: "14px 16px",
+              borderRadius: 12,
+              background: "rgba(20,24,33,0.94)",
+              border: "1px solid rgba(255,255,255,0.12)",
+              color: "#fff",
+              zIndex: 10,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+              }}
+            >
+              <span style={{ fontWeight: 700, fontSize: 14 }}>
+                {carCard.name}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCarCard(null)}
+                title={t("office.close")}
+                style={{
+                  display: "inline-flex",
+                  padding: 4,
+                  borderRadius: 6,
+                  border: "none",
+                  background: "transparent",
+                  color: "rgba(255,255,255,0.7)",
+                  cursor: "pointer",
+                }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span
+                style={{
+                  width: 14,
+                  height: 14,
+                  borderRadius: 4,
+                  background: carCard.tint,
+                  border: "1px solid rgba(255,255,255,0.25)",
+                  flex: "0 0 auto",
+                }}
+              />
+              <span style={{ fontSize: 12, opacity: 0.7 }}>
+                {t("office.showroomCardColor")}
+              </span>
+            </div>
+            <span style={{ fontSize: 12, opacity: 0.6, lineHeight: 1.45 }}>
+              {t("office.showroomCardHint")}
+            </span>
+          </div>
+        )}
 
         {gpuStatus?.disabled && !gpuNoticeDismissed && (
           <div
@@ -393,9 +940,21 @@ function Office({ visible }: OfficeProps): React.JSX.Element {
           open={chatOpen}
           onClose={() => setChatOpen(false)}
           agents={positionedAgents}
+          onWorldActions={handleWorldActions}
         />
 
-        {selectedAgent && (
+        {activeRep && (
+          <RepInteractionPanel
+            rep={activeRep}
+            agents={positionedAgents}
+            initialAgentId={selectedId ?? defaultAgentId}
+            visible={visible ?? true}
+            autoAction={autoAction}
+            onClose={closeRepPanel}
+          />
+        )}
+
+        {selectedAgent && !activeRep && (
           <aside
             style={{
               position: "absolute",

@@ -16,7 +16,8 @@ describe("contextWindowForModel", () => {
     expect(contextWindowForModel("claude-sonnet-4-6")).toBe(200000);
     // DeepSeek V3.x is 128K, not 64K ("65.5k") or 1M — issue #597.
     expect(contextWindowForModel("deepseek-chat")).toBe(131072);
-    expect(contextWindowForModel("deepseek-ai/deepseek-v4-pro")).toBe(131072);
+    expect(contextWindowForModel("deepseek-ai/deepseek-v4-pro")).toBe(1048576);
+    expect(contextWindowForModel("deepseek-v4-flash-vision-exp")).toBe(1048576);
     expect(contextWindowForModel("moonshotai/Kimi-K2-Instruct")).toBe(262144);
   });
 

@@ -1,8 +1,12 @@
 import { memo, useMemo } from "react";
 import { HermesAvatar, MessageRow } from "./MessageRow";
+import type { AgentAvatarInfo } from "./MessageRow";
 import { ReasoningRow, ToolActivityGroup } from "./HistoryRow";
 import { ClarifyCard } from "./ClarifyCard";
+import { ApprovalCard } from "./ApprovalCard";
+import type { ApprovalChoice } from "../../../../shared/chat-approval";
 import type {
+  ApprovalMessage,
   ChatMessage,
   ClarifyMessage,
   ToolCallMessage,
@@ -22,16 +26,26 @@ interface MessageListProps {
   onDeny: () => void;
   /** Mark an inline clarify card resolved once the user answers/skips. */
   onClarifyResolved: (requestId: string, answer: string) => void;
+  onApprovalRespond: (
+    msg: ApprovalMessage,
+    choice: ApprovalChoice,
+  ) => Promise<boolean>;
+  onApprovalResolved: (msg: ApprovalMessage, choice: ApprovalChoice) => void;
+  /** Appearance of the agent this conversation is with, so idle avatars show
+   *  the agent's profile picture instead of the loading gif. */
+  agentAvatar?: AgentAvatarInfo;
 }
 
 function TypingIndicator({
   toolProgress,
+  agentAvatar,
 }: {
   toolProgress: string | null;
+  agentAvatar?: AgentAvatarInfo;
 }): React.JSX.Element {
   return (
     <div className="chat-message chat-message-agent">
-      <HermesAvatar active />
+      <HermesAvatar active agent={agentAvatar} />
       <div className="chat-bubble chat-bubble-agent">
         {toolProgress ? (
           <div className="chat-tool-progress">{toolProgress}</div>
@@ -66,6 +80,9 @@ export const MessageList = memo(function MessageList({
   onApprove,
   onDeny,
   onClarifyResolved,
+  onApprovalRespond,
+  onApprovalResolved,
+  agentAvatar,
 }: MessageListProps): React.JSX.Element {
   // Bubbles with empty content are still hidden (live-stream placeholders).
   // History rows pass through unconditionally.
@@ -80,6 +97,14 @@ export const MessageList = memo(function MessageList({
 
   const lastBubble = [...messages].reverse().find(isBubble);
   const lastMessageIsAgent = !!lastBubble && lastBubble.role === "agent";
+  const awaitingApproval = messages.some(
+    (message) =>
+      message.kind === "approval" && !message.resolved && !message.unavailable,
+  );
+  const activeApprovalId = messages.find(
+    (message) =>
+      message.kind === "approval" && !message.resolved && !message.unavailable,
+  )?.id;
 
   // Render plan: bubble/reasoning rows pass through one-to-one, but a
   // contiguous run of tool_call/tool_result rows folds into a single
@@ -112,6 +137,7 @@ export const MessageList = memo(function MessageList({
             !visibleMessages[start - 1] ||
             visibleMessages[start - 1].role !== "agent"
           }
+          agent={agentAvatar}
         />,
       );
       continue;
@@ -128,6 +154,7 @@ export const MessageList = memo(function MessageList({
           // a completed "Thought".
           active={isLoading && i === visibleMessages.length - 1}
           showAvatar={showAvatar}
+          agent={agentAvatar}
         />,
       );
       continue;
@@ -144,6 +171,19 @@ export const MessageList = memo(function MessageList({
       continue;
     }
 
+    if (k === "approval") {
+      rows.push(
+        <ApprovalCard
+          key={msg.id}
+          msg={msg as ApprovalMessage}
+          isActive={msg.id === activeApprovalId}
+          onRespond={onApprovalRespond}
+          onResolved={onApprovalResolved}
+        />,
+      );
+      continue;
+    }
+
     const bubble = msg as Extract<ChatMessage, { role: "user" | "agent" }>;
     rows.push(
       <MessageRow
@@ -154,6 +194,7 @@ export const MessageList = memo(function MessageList({
         onApprove={onApprove}
         onDeny={onDeny}
         showAvatar={showAvatar}
+        agent={agentAvatar}
       />,
     );
   }
@@ -162,8 +203,11 @@ export const MessageList = memo(function MessageList({
     <>
       {rows}
 
-      {isLoading && !lastMessageIsAgent && (
-        <TypingIndicator toolProgress={toolProgress} />
+      {isLoading && !lastMessageIsAgent && !awaitingApproval && (
+        <TypingIndicator
+          toolProgress={toolProgress}
+          agentAvatar={agentAvatar}
+        />
       )}
 
       {isLoading && toolProgress && lastMessageIsAgent && (

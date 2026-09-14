@@ -16,6 +16,16 @@ export const toWorld = (cx: number, cy: number): [number, number, number] => [
   cy * SCALE - CANVAS_H * SCALE * 0.5,
 ];
 
+/**
+ * Inverse of `toWorld`. The mapping is linear, so canvas coordinates are valid
+ * outside the 0..1800 office rectangle too — agent trips to other buildings
+ * express their world-space waypoints in canvas units through this.
+ */
+export const worldToCanvas = (wx: number, wz: number): [number, number] => [
+  (wx + CANVAS_W * SCALE * 0.5) / SCALE,
+  (wz + CANVAS_H * SCALE * 0.5) / SCALE,
+];
+
 export const snap = (value: number) =>
   Math.round(value / SNAP_GRID) * SNAP_GRID;
 

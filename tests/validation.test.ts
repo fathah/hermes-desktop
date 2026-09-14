@@ -106,6 +106,59 @@ describe("validateChatReadiness", () => {
     ).toEqual({ ok: true });
   });
 
+  // @lat: [[model-selection#Session model override#Readiness follows chat routing#Picker identity and empty selections]]
+  it("falls back for an empty local pick and never borrows its URL for a selected provider", async () => {
+    writeConfig(
+      "model:\n  provider: custom\n  default: local-model\n  base_url: http://localhost:1234/v1\n",
+    );
+    const { validateChatReadiness } = await freshValidation(TEST_DIR);
+    expect(
+      validateChatReadiness(undefined, {
+        provider: "auto",
+        model: "  ",
+        baseUrl: "",
+      }),
+    ).toEqual({ ok: true });
+    expect(
+      validateChatReadiness(undefined, {
+        provider: "openrouter",
+        model: "selected",
+      }),
+    ).toMatchObject({
+      ok: false,
+      code: "MISSING_API_KEY",
+      expectedEnvKey: "OPENROUTER_API_KEY",
+    });
+  });
+
+  // @lat: [[model-selection#Session model override#Readiness follows chat routing#Remote credential boundary]]
+  it("validates a remote selection without borrowing local credentials or defaults", async () => {
+    writeConfig("model:\n  provider: openrouter\n  default: local-only\n");
+    const { validateChatReadiness } = await freshValidation(TEST_DIR);
+    const override = {
+      provider: "ollama-cloud",
+      model: "minimax-m3",
+      baseUrl: "https://ollama.com/v1",
+    };
+    expect(validateChatReadiness(undefined, override)).toMatchObject({
+      ok: false,
+      code: "MISSING_API_KEY",
+    });
+    expect(
+      validateChatReadiness(undefined, override, { checkLocalConfig: false }),
+    ).toEqual({ ok: true });
+    expect(
+      validateChatReadiness(
+        undefined,
+        { ...override, model: "" },
+        { checkLocalConfig: false },
+      ),
+    ).toMatchObject({ ok: false, code: "NO_ACTIVE_MODEL" });
+    expect(
+      validateChatReadiness(undefined, undefined, { checkLocalConfig: false }),
+    ).toEqual({ ok: true });
+  });
+
   it("treats whitespace-only key value as missing", async () => {
     writeConfig(
       [

@@ -52,4 +52,33 @@ describe("remote Hermes metadata", () => {
       remoteGetHermesVersion({ remoteUrl: url, apiKey: "token" }),
     ).resolves.toContain("Hermes Agent v0.16.0 (2026.6.5)");
   });
+
+  it("falls back to raw gateway health when dashboard metadata is absent", async () => {
+    const requests: Array<{ url: string; authorization?: string }> = [];
+    const { url } = await startServer((req, res) => {
+      requests.push({
+        url: req.url || "",
+        authorization: req.headers.authorization,
+      });
+      if (req.url === "/api/status") {
+        res.statusCode = 404;
+        res.end("missing");
+        return;
+      }
+      expect(req.url).toBe("/health");
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ status: "ok", version: "0.8.0" }));
+    });
+
+    await expect(
+      remoteGetHermesHome({ remoteUrl: url, apiKey: "server-key" }),
+    ).resolves.toBe("");
+    await expect(
+      remoteGetHermesVersion({ remoteUrl: url, apiKey: "server-key" }),
+    ).resolves.toBe("Hermes Agent v0.8.0");
+    expect(requests).toContainEqual({
+      url: "/health",
+      authorization: "Bearer server-key",
+    });
+  });
 });

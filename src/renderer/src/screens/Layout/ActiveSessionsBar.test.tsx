@@ -19,6 +19,7 @@ vi.mock("../../components/common/ProfileAvatar", () => ({
 function run(patch: Partial<ChatRun> = {}): ChatRun {
   return {
     runId: "run-1",
+    connectionId: "connection-main",
     profile: "test-writer",
     sessionId: null,
     loading: false,

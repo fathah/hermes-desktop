@@ -14,6 +14,9 @@ export interface AgentSyncOutcome {
     | "created-remote"
     | "created-local"
     | "unlinked"
+    // Left untouched: the link belongs to a different Hermes account (or a
+    // legacy link whose agent this account can't see).
+    | "skipped"
     | "error";
   /** Human-readable notes: skipped oversize parts, name mismatches, errors. */
   warnings: string[];

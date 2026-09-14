@@ -442,6 +442,9 @@ describe("syncAgents", () => {
       JSON.stringify({
         version: 1,
         agentId: "gone",
+        // Provably this account's link — only then is a missing agent a
+        // console deletion rather than an account switch.
+        accountId: "u1",
         remoteName: "beta",
         base: {},
       }),
@@ -460,5 +463,102 @@ describe("syncAgents", () => {
     // "beta" became unlinked only this pass — it is created remotely again on
     // the *next* pass, never deleted.
     expect(calls.every((c) => c.method !== "DELETE")).toBe(true);
+  });
+
+  // @lat: [[agent-sync#Tests#Skips foreign-linked profiles]]
+  it("skips a profile linked to a different account — no unlink, no push", async () => {
+    mockState.profiles = [fakeProfile("beta")];
+    const stateFile = join(
+      mockState.home,
+      "profiles",
+      "beta",
+      "cloud-sync.json",
+    );
+    mkdirSync(dirname(stateFile), { recursive: true });
+    writeFileSync(
+      stateFile,
+      JSON.stringify({
+        version: 1,
+        agentId: "a-owned-elsewhere",
+        accountId: "other-user",
+        remoteName: "beta",
+        base: {},
+      }),
+    );
+    const calls = stubFetch([]);
+
+    const { syncAgents } = await engine();
+    const result = await syncAgents();
+
+    expect(result.outcomes[0]).toMatchObject({
+      profile: "beta",
+      action: "skipped",
+    });
+    // The link survives for when its account signs back in, and nothing was
+    // uploaded to the current account.
+    expect(existsSync(stateFile)).toBe(true);
+    expect(calls.every((c) => c.method === "GET")).toBe(true);
+  });
+
+  // @lat: [[agent-sync#Tests#Leaves ambiguous legacy links alone]]
+  it("leaves a legacy link alone when its agent is missing (ambiguous owner)", async () => {
+    mockState.profiles = [fakeProfile("beta")];
+    const stateFile = join(
+      mockState.home,
+      "profiles",
+      "beta",
+      "cloud-sync.json",
+    );
+    mkdirSync(dirname(stateFile), { recursive: true });
+    // Pre-account-tagging state: no accountId recorded.
+    writeFileSync(
+      stateFile,
+      JSON.stringify({
+        version: 1,
+        agentId: "gone",
+        remoteName: "beta",
+        base: {},
+      }),
+    );
+    const calls = stubFetch([]);
+
+    const { syncAgents } = await engine();
+    const result = await syncAgents();
+
+    expect(result.outcomes[0]).toMatchObject({
+      profile: "beta",
+      action: "skipped",
+    });
+    expect(existsSync(stateFile)).toBe(true);
+    expect(calls.every((c) => c.method === "GET")).toBe(true);
+  });
+
+  // @lat: [[agent-sync#Tests#Records the owning account]]
+  it("stamps the account id on sync, adopting legacy links whose agent exists", async () => {
+    mockState.profiles = [fakeProfile("beta")];
+    const stateFile = join(
+      mockState.home,
+      "profiles",
+      "beta",
+      "cloud-sync.json",
+    );
+    mkdirSync(dirname(stateFile), { recursive: true });
+    writeFileSync(
+      stateFile,
+      JSON.stringify({
+        version: 1,
+        agentId: "a1",
+        remoteName: "beta",
+        base: {},
+      }),
+    );
+    stubFetch([remoteAgent({ id: "a1", name: "beta" })]);
+
+    const { syncAgents } = await engine();
+    const result = await syncAgents();
+
+    expect(result.status).toBe("ok");
+    const state = JSON.parse(readFileSync(stateFile, "utf-8"));
+    expect(state.accountId).toBe("u1");
   });
 });

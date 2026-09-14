@@ -1,4 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+
+const profileHomeRef = vi.hoisted(() => ({ value: "C:/hermes" }));
 
 const { execFileSpy } = vi.hoisted(() => ({
   execFileSpy: vi.fn(
@@ -17,7 +28,7 @@ vi.mock("child_process", () => ({
 }));
 
 vi.mock("../src/main/utils", () => ({
-  profileHome: () => "C:/hermes",
+  profileHome: () => profileHomeRef.value,
 }));
 
 vi.mock("../src/main/hermes", () => ({
@@ -61,6 +72,46 @@ describe("createCronJob", () => {
       "telegram",
     ]);
     expect(execFileSpy.mock.calls[0][1]).not.toContain("--");
+  });
+});
+
+describe("local cron jobs", () => {
+  // @lat: [[scheduled-jobs#Test specifications#Local terminal-state normalization]]
+  it("preserves completed jobs from disk and filters disabled jobs without rewriting them", async () => {
+    const home = mkdtempSync(join(tmpdir(), "hermes-cron-states-"));
+    const previousHome = profileHomeRef.value;
+    try {
+      profileHomeRef.value = home;
+      mkdirSync(join(home, "cron"));
+      const file = join(home, "cron", "jobs.json");
+      const content = JSON.stringify({
+        jobs: [
+          { id: "finished", state: "completed", enabled: false },
+          { id: "paused", state: "paused", enabled: false },
+          { id: "legacy-disabled", enabled: false },
+          { id: "active", state: "scheduled", enabled: true },
+        ],
+      });
+      writeFileSync(file, content);
+
+      const { listCronJobs } = await import("../src/main/cronjobs");
+      const jobs = await listCronJobs();
+      expect(
+        jobs.map(({ id, state, enabled }) => ({ id, state, enabled })),
+      ).toEqual([
+        { id: "finished", state: "completed", enabled: false },
+        { id: "paused", state: "paused", enabled: false },
+        { id: "legacy-disabled", state: "paused", enabled: false },
+        { id: "active", state: "active", enabled: true },
+      ]);
+      await expect(listCronJobs(false)).resolves.toEqual([
+        expect.objectContaining({ id: "active" }),
+      ]);
+      expect(readFileSync(file, "utf-8")).toBe(content);
+    } finally {
+      profileHomeRef.value = previousHome;
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 });
 
