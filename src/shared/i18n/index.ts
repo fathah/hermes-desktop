@@ -141,6 +141,7 @@ import constantsZh from "./locales/zh-CN/constants";
 import kanbanZh from "./locales/zh-CN/kanban";
 import commonZhTw from "./locales/zh-TW/common";
 import navigationZhTw from "./locales/zh-TW/navigation";
+import discoverZhTw from "./locales/zh-TW/discover";
 import welcomeZhTw from "./locales/zh-TW/welcome";
 import setupZhTw from "./locales/zh-TW/setup";
 import chatZhTw from "./locales/zh-TW/chat";
@@ -160,6 +161,7 @@ import memoryZhTw from "./locales/zh-TW/memory";
 import installZhTw from "./locales/zh-TW/install";
 import constantsZhTw from "./locales/zh-TW/constants";
 import kanbanZhTw from "./locales/zh-TW/kanban";
+import diagnoseZhTw from "./locales/zh-TW/diagnose";
 import commonJa from "./locales/ja/common";
 import navigationJa from "./locales/ja/navigation";
 import welcomeJa from "./locales/ja/welcome";
@@ -428,6 +430,7 @@ export const resources = {
     translation: {
       common: commonZhTw,
       navigation: navigationZhTw,
+      discover: discoverZhTw,
       welcome: welcomeZhTw,
       setup: setupZhTw,
       chat: chatZhTw,
@@ -447,6 +450,7 @@ export const resources = {
       install: installZhTw,
       constants: constantsZhTw,
       kanban: kanbanZhTw,
+      diagnose: diagnoseZhTw,
     },
   },
   "pt-BR": {

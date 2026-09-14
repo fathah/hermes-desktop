@@ -1,5 +1,5 @@
 export default {
-  preparing: "準備中...",
+  preparing: "準備中…",
   startingInstall: "開始安裝",
   installationComplete: "安裝完成",
   installationFailed: "安裝失敗",
@@ -9,7 +9,7 @@ export default {
   copied: "已複製！",
   copyLogs: "複製記錄",
   stepLabel: "步驟 {{step}}/{{total}}：{{title}}",
-  waitingToStart: "等待開始...",
+  waitingToStart: "等待開始…",
   continueToSetup: "繼續前往設定",
   confirmTitle: "安裝前確認",
   confirmLocationLabel: "Hermes 將安裝到：",
@@ -18,11 +18,12 @@ export default {
   confirmReplace:
     "此處存在一個資料夾，但不是有效的 Hermes 安裝 — 安裝將刪除並取代它。",
   confirmNotInherited:
-    "如果你在其他位置或透過命令列安裝過 Hermes，那些安裝不會被沿用。",
+    "如果曾在其他位置或使用命令列安裝 Hermes，這些安裝不會被沿用。",
+  cancelInstallation: "取消安裝",
   confirmInstallBtn: "安裝 Hermes",
   useExistingBtn: "使用現有安裝",
   useExistingHint:
-    "選擇包含你現有 Hermes 安裝的資料夾（即包含 hermes-agent 資料夾的那個）。",
+    "請選擇現有 Hermes 安裝資料夾。（此資料夾應包含 hermes-agent。）",
   useExistingInvalid: "在該資料夾中未找到可用的 Hermes 安裝。",
   useExistingDone: "已設定現有安裝 — 結束並重新開啟 Hermes 以套用。",
   useExistingQuitBtn: "結束 Hermes",
