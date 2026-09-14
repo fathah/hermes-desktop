@@ -1,5 +1,9 @@
 import http from "http";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ConnectionConfig } from "../src/main/config";
+
+const requestRemoteOAuthJson = vi.hoisted(() => vi.fn());
+vi.mock("../src/main/remote-oauth", () => ({ requestRemoteOAuthJson }));
 import {
   remoteDeleteSession,
   remoteGetSessionMessages,
@@ -15,6 +19,7 @@ interface RecordedRequest {
   method: string;
   url: string;
   token: string;
+  authorization: string;
   body: string;
 }
 
@@ -25,6 +30,7 @@ describe("remote session REST bridge", () => {
 
   beforeEach(async () => {
     requests.length = 0;
+    requestRemoteOAuthJson.mockReset();
     server = http.createServer((req, res) => {
       const chunks: Buffer[] = [];
       req.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -34,6 +40,7 @@ describe("remote session REST bridge", () => {
           method: req.method || "GET",
           url: req.url || "",
           token: String(req.headers["x-hermes-session-token"] || ""),
+          authorization: String(req.headers["authorization"] || ""),
           body,
         });
 
@@ -306,6 +313,63 @@ describe("remote session REST bridge", () => {
     ]);
   });
 
+  // @lat: [[remote-dashboard-oauth#Test specifications#Session token compatibility]]
+  it.each([
+    ["authorization", "Bearer test-token"],
+    ["x-hermes-session-token", "test-token"],
+  ])("authenticates a server accepting only %s", async (header, expected) => {
+    const originalHandler = server.listeners("request")[0];
+    server.removeListener("request", originalHandler);
+    server.on("request", (req, res) => {
+      if (req.headers[header] !== expected) {
+        res.writeHead(401).end();
+        return;
+      }
+      originalHandler(req, res);
+    });
+
+    await expect(remoteListSessions(config(), 2, 3)).resolves.toEqual([
+      expect.objectContaining({ id: "sess-list" }),
+    ]);
+
+    expect(requests[0]).toMatchObject({
+      token: "test-token",
+      authorization: "Bearer test-token",
+    });
+  });
+
+  // @lat: [[remote-dashboard-oauth#Test specifications#Reverse proxy authentication]]
+  it("preserves URL Basic auth alongside the dashboard session token", async () => {
+    const remoteUrl = new URL(`${baseUrl}/api`);
+    remoteUrl.username = "proxy-user";
+    remoteUrl.password = "p@ss:word";
+    const basic = `Basic ${Buffer.from("proxy-user:p@ss:word").toString("base64")}`;
+    const originalHandler = server.listeners("request")[0];
+    server.removeListener("request", originalHandler);
+    server.on("request", (req, res) => {
+      if (
+        req.headers.authorization !== basic ||
+        req.headers["x-hermes-session-token"] !== "test-token"
+      ) {
+        res.writeHead(401).end();
+        return;
+      }
+      originalHandler(req, res);
+    });
+
+    await expect(
+      remoteListSessions(
+        { ...config(), remoteUrl: remoteUrl.toString() },
+        2,
+        3,
+      ),
+    ).resolves.toEqual([expect.objectContaining({ id: "sess-list" })]);
+    expect(requests[0]).toMatchObject({
+      authorization: basic,
+      token: "test-token",
+    });
+  });
+
   it("falls back to the legacy session list endpoint for older dashboards", async () => {
     const originalHandler = server.listeners("request")[0];
     server.removeListener("request", originalHandler);
@@ -314,6 +378,7 @@ describe("remote session REST bridge", () => {
         method: req.method || "GET",
         url: req.url || "",
         token: String(req.headers["x-hermes-session-token"] || ""),
+        authorization: String(req.headers["authorization"] || ""),
         body: "",
       });
 
@@ -368,6 +433,25 @@ describe("remote session REST bridge", () => {
         contextFolder: null,
       },
     ]);
+  });
+
+  // @lat: [[connections#Test specifications#Connection-explicit session browsing#Scopes Remote list requests]]
+  it("uses the persistent OAuth session and selected profile for direct Remote session lists", async () => {
+    const connection = {
+      mode: "remote",
+      remoteUrl: "https://remote.example",
+      apiKey: "",
+      remoteAuthMode: "oauth",
+      profile: "work profile",
+    } as ConnectionConfig;
+    requestRemoteOAuthJson.mockResolvedValue({ sessions: [] });
+
+    await expect(remoteListCachedSessions(connection)).resolves.toEqual([]);
+    expect(requestRemoteOAuthJson).toHaveBeenCalledWith(
+      "https://remote.example/api/profiles/sessions?limit=50&offset=0&min_messages=0&archived=exclude&order=recent&profile=work%20profile",
+      {},
+    );
+    expect(requests).toEqual([]);
   });
 
   it("expands remote stored messages into rich history items", async () => {

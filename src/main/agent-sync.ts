@@ -47,6 +47,14 @@ const STATE_FILE = "cloud-sync.json";
 interface SyncState {
   version: 1;
   agentId: string;
+  /**
+   * Backend user id the link belongs to. A device can see several accounts
+   * over time (sign out, sign in as someone else); sync must never push one
+   * account's agents to another, so every pass records the owner and skips
+   * links owned by a different account. Absent in legacy state files written
+   * before account switching was handled.
+   */
+  accountId?: string;
   /** Cloud-side name at last sync — display/diagnostics only; linkage is by id. */
   remoteName: string;
   /** Content hash per part at the last successful sync (the common base). */
@@ -174,6 +182,8 @@ function readSyncState(profile: string): SyncState | null {
       return {
         version: 1,
         agentId: parsed.agentId,
+        accountId:
+          typeof parsed.accountId === "string" ? parsed.accountId : undefined,
         remoteName:
           typeof parsed.remoteName === "string" ? parsed.remoteName : "",
         base: parsed.base,
@@ -195,6 +205,16 @@ function writeSyncState(profile: string, state: SyncState): void {
  */
 export function getLinkedAgentId(profile: string): string | null {
   return readSyncState(profile)?.agentId ?? null;
+}
+
+/**
+ * The backend user id that owns a profile's cloud link, or null when the
+ * profile has never synced or its state predates account tagging. Wallet
+ * flows use it to refuse acting on an agent linked to a different account
+ * than the one currently signed in.
+ */
+export function getLinkedAgentAccountId(profile: string): string | null {
+  return readSyncState(profile)?.accountId ?? null;
 }
 
 function clearSyncState(profile: string): void {
@@ -398,15 +418,31 @@ async function runSyncPass(): Promise<AgentSyncResult> {
   const linked: Linked[] = [];
   const unlinkedLocals: ProfileInfo[] = [];
 
+  const userId = account.user.id;
   for (const profile of profiles) {
     const state = readSyncState(profile.id);
     if (state) {
+      // Linked to a different account: leave it completely alone. Unlinking
+      // here would make the profile look never-synced and push the other
+      // account's persona/memory to this one on the next pass.
+      if (state.accountId && state.accountId !== userId) {
+        outcomes.push({
+          profile: profile.id,
+          agentId: state.agentId,
+          action: "skipped",
+          warnings: [
+            "Linked to a different Hermes account; left untouched. It resumes syncing when that account signs back in.",
+          ],
+        });
+        continue;
+      }
       const agent = remoteById.get(state.agentId);
       if (agent) {
         claimed.add(agent.id);
         linked.push({ profile, state, agent });
-      } else {
-        // Deleted in the console: unlink, keep the local profile untouched.
+      } else if (state.accountId === userId) {
+        // The link is provably this account's and the agent is gone:
+        // deleted in the console. Unlink, keep the local profile untouched.
         clearSyncState(profile.id);
         outcomes.push({
           profile: profile.id,
@@ -414,6 +450,19 @@ async function runSyncPass(): Promise<AgentSyncResult> {
           action: "unlinked",
           warnings: [
             "Cloud agent was deleted in the console; this profile is local-only again.",
+          ],
+        });
+      } else {
+        // Legacy state without an owner record, and the agent isn't in this
+        // account's list — ambiguous between "deleted in the console" and
+        // "belongs to the previously signed-in account". Skipping is the safe
+        // read: a wrong unlink re-uploads someone else's agent here.
+        outcomes.push({
+          profile: profile.id,
+          agentId: state.agentId,
+          action: "skipped",
+          warnings: [
+            "Cloud agent not found for this account — the link may belong to a previously signed-in account. Left untouched.",
           ],
         });
       }
@@ -434,6 +483,7 @@ async function runSyncPass(): Promise<AgentSyncResult> {
         state: {
           version: 1,
           agentId: match.id,
+          accountId: userId,
           remoteName: match.name,
           base: {},
         },
@@ -508,6 +558,7 @@ async function runSyncPass(): Promise<AgentSyncResult> {
       writeSyncState(profile.id, {
         version: 1,
         agentId: agent.id,
+        accountId: userId,
         remoteName: agent.name,
         base,
       });
@@ -563,6 +614,7 @@ async function runSyncPass(): Promise<AgentSyncResult> {
       writeSyncState(profile.id, {
         version: 1,
         agentId: created.id,
+        accountId: userId,
         remoteName: created.name,
         base,
       });
@@ -603,6 +655,7 @@ async function runSyncPass(): Promise<AgentSyncResult> {
     writeSyncState(id, {
       version: 1,
       agentId: agent.id,
+      accountId: userId,
       remoteName: agent.name,
       base: partHashes(remote),
     });

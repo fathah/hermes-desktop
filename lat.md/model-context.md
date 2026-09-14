@@ -1,20 +1,30 @@
 # Model context window
 
-A model can carry an optional manual context-window override (tokens), for providers that don't advertise `context_length` over `/models` — without it the desktop can't size the context gauge or the agent's auto-compaction.
+A model id can carry an optional manual context-window override (tokens), for providers that don't advertise `context_length` over `/models` — without it the desktop can't size the context gauge or the agent's auto-compaction.
+
+The override is a **shared model definition** keyed by model id, so it is entered once and reused across every provider serving that id.
 
 The same value fixes two symptoms at once: the context gauge showing a wrong heuristic size (e.g. 32k for a 64k model), and the agent never auto-compacting. hermes-agent auto-compacts at `context_length × compression.threshold` (default 0.50, enabled by default), so a correct `context_length` re-enables compaction without any extra UI.
 
 ## Storage and propagation
 
-The override is stored per-model in `models.json` as `contextLength` and mirrored into `config.yaml`'s `model.context_length` whenever a model is activated — the single value both the gauge and the agent read.
+The override lives once per model id in `model-definitions.json` (a [[src/main/models.ts#ModelDefinition]] keyed by `model`), not per attachment row.
 
-Per-model storage (set in the Models add/edit dialog) survives switching between models. On activation, [[src/main/config.ts#setModelConfig]] writes or clears `model.context_length` from the activated model's library entry; an absent override clears any stale value left by a previously-active model. Remote/SSH activation does not propagate the override yet (local-mode only).
+`models.json` rows are pure provider attachments; [[src/main/models.ts#readModels]] merges the matching definition's `contextLength` (and display `name`/capabilities) onto every row at read time, so `resolveLibraryModelEntry` and the pickers still see a flat `contextLength`. Writers use [[src/main/models.ts#readModelsRaw]] so merged fields are never persisted back onto a row. Legacy per-row `contextLength` is hoisted into definitions once by [[src/main/models.ts#ensureModelDefinitionsMigrated]] (larger window wins on conflict), run from `listModels()`.
+
+The value is entered via the per-model-chip **pencil** editor in [[src/renderer/src/components/ProviderKeysSection.tsx#ProviderModelsManager]] (writing `setModelDefinition`), or captured from the registry on pick. On activation, [[src/main/config.ts#setModelConfig]] writes or clears `config.yaml`'s `model.context_length` from the (merged) library entry — the single value both the gauge and the agent read; an absent override clears any stale value left by a previously-active model. Definitions are local-only, so Remote/SSH activation does not propagate them. Instead, the desktop reads the active remote profile's own `model.context_length`: [[src/main/ssh-remote.ts#sshGetModelConfig]] reads it directly for legacy SSH, while the dashboard compatibility endpoint scopes its library path and config load to the requested `?profile=` before exposing the active model row for SSH Dashboard and Remote connections.
 
 ## Gauge resolution order
 
-The context gauge resolves its window size as: config override (active model) → provider `/models` `context_length` → static heuristic.
+The context gauge resolves its window size as: connection-owned config override (active model) → provider `/models` `context_length` → static heuristic.
 
-[[src/main/model-discovery.ts#getModelContextWindow]] consults [[src/main/config.ts#getModelContextLengthOverride]] first, returning it only when it targets the model being asked about (so a stale value can't leak onto a different model id), before falling through to the authoritative `/models` lookup and finally the renderer's substring heuristic.
+For local connections, [[src/main/model-discovery.ts#getModelContextWindow]] consults [[src/main/config.ts#getModelContextLengthOverride]]. For SSH and Remote connections, the IPC route reads the active model config from that connection and [[src/main/model-context.ts#resolveActiveModelContextWindow]] applies its override only when the requested model still matches, so a delayed response cannot leak the previous model's context window. Missing or invalid overrides fall through to the existing `/models` lookup and finally the renderer heuristic. DeepSeek V4 identifiers have a 1M static fallback; older DeepSeek aliases retain their 128K fallback.
+
+## Dashboard default profile isolation
+
+An explicit `default` query reads both the root model library and root config, even when the Dashboard process runs from a named profile. Omitted or `current` queries retain that process's profile.
+
+The compatibility handler uses upstream's context-local Hermes home override for every explicit profile, including `default`, and resets it after successful or failed config reads. [[tests/hermes-agent-compat-profiles.test.ts]] executes the injected handlers with separate root and named-profile files to verify matching library/config scope, endpoint-aware writes, and recovery after a read failure.
 
 ## Occupancy estimate when the provider omits usage
 

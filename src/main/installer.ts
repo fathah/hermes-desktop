@@ -9,7 +9,7 @@ import {
 } from "fs";
 import { join, delimiter, resolve } from "path";
 import { homedir, tmpdir } from "os";
-import { randomBytes } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import { app, type BrowserWindow } from "electron";
 import {
   getConnectionConfig,
@@ -21,6 +21,10 @@ import { getActiveProfileNameSync, profileHome, stripAnsi } from "./utils";
 import { setupAskpass, AskpassHandle } from "./askpass";
 import { precacheSudoCredentials } from "./sudoCreds";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
+import {
+  INSTALLER_VERIFICATION_FAILED,
+  verifiedInstallerCommand,
+} from "./installer-download";
 
 const IS_WINDOWS = process.platform === "win32";
 
@@ -80,8 +84,10 @@ function defaultHermesHome(): string {
 // A Hermes home the user explicitly pointed the app at via the "use an
 // existing installation" flow (issue #272). Persisted in the desktop's own
 // userData dir — outside any Hermes home — so it can be read here, before
-// HERMES_HOME is resolved. Strictly additive: with no override file the
-// behaviour is identical to before.
+// HERMES_HOME is resolved. When the selection replaces an inherited
+// HERMES_HOME, remember a one-way fingerprint of that exact value so the same
+// launch environment cannot mask the user's choice again after restart. A
+// different later HERMES_HOME remains authoritative.
 function hermesHomeOverrideFile(): string {
   // `app` is undefined outside an Electron runtime (e.g. unit tests) —
   // optional-chain it so module load degrades to "no override" instead of
@@ -90,19 +96,50 @@ function hermesHomeOverrideFile(): string {
   return userData ? join(userData, "hermes-home.json") : "";
 }
 
-function readHermesHomeOverride(): string {
+const inheritedHermesHome = process.env.HERMES_HOME?.trim() || "";
+
+interface StoredHermesHomeOverride {
+  hermesHome: string;
+  shadowedHermesHomeHash?: string;
+}
+
+function normalizedHomePath(home: string): string {
+  const normalized = resolve(home);
+  return IS_WINDOWS ? normalized.toLowerCase() : normalized;
+}
+
+function sameHomePath(left: string, right: string): boolean {
+  return normalizedHomePath(left) === normalizedHomePath(right);
+}
+
+function homePathFingerprint(home: string): string {
+  return createHash("sha256").update(normalizedHomePath(home)).digest("hex");
+}
+
+function readHermesHomeOverride(): StoredHermesHomeOverride | null {
   try {
     const file = hermesHomeOverrideFile();
-    if (!file || !existsSync(file)) return "";
+    if (!file || !existsSync(file)) return null;
     const parsed = JSON.parse(readFileSync(file, "utf-8")) as {
       hermesHome?: unknown;
+      shadowedHermesHomeHash?: unknown;
     };
-    const p =
+    const hermesHome =
       typeof parsed.hermesHome === "string" ? parsed.hermesHome.trim() : "";
-    // Ignore a stale override whose directory no longer exists.
-    return p && existsSync(p) ? p : "";
+    // Ignore an override whose desktop-compatible installation is stale or incomplete.
+    if (!hermesHome || !validateHermesHome(hermesHome)) return null;
+    const shadowedHermesHomeHash =
+      typeof parsed.shadowedHermesHomeHash === "string"
+        ? parsed.shadowedHermesHomeHash.trim()
+        : "";
+    return {
+      hermesHome,
+      ...(/^[a-f0-9]{64}$/.test(shadowedHermesHomeHash)
+        ? { shadowedHermesHomeHash }
+        : {}),
+    };
   } catch {
-    return "";
+    return null;
   }
 }
 
@@ -111,23 +148,33 @@ export function setHermesHomeOverride(home: string): void {
   try {
     const file = hermesHomeOverrideFile();
     if (!file) return;
-    if (!home.trim()) {
+    const hermesHome = home.trim();
+    if (!hermesHome) {
       if (existsSync(file)) unlinkSync(file);
       return;
     }
-    writeFileSync(
-      file,
-      JSON.stringify({ hermesHome: home.trim() }, null, 2),
-      "utf-8",
-    );
+    const stored: StoredHermesHomeOverride = { hermesHome };
+    if (inheritedHermesHome && !sameHomePath(inheritedHermesHome, hermesHome)) {
+      stored.shadowedHermesHomeHash = homePathFingerprint(inheritedHermesHome);
+    }
+    writeFileSync(file, JSON.stringify(stored, null, 2), "utf-8");
   } catch {
     /* best effort — a failed write just means no override next launch */
   }
 }
 
+const storedHermesHome = readHermesHomeOverride();
+const storedHomeShadowsInherited = Boolean(
+  inheritedHermesHome &&
+  storedHermesHome?.shadowedHermesHomeHash &&
+  homePathFingerprint(inheritedHermesHome) ===
+    storedHermesHome.shadowedHermesHomeHash,
+);
+
 export const HERMES_HOME =
-  process.env.HERMES_HOME?.trim() ||
-  readHermesHomeOverride() ||
+  (storedHomeShadowsInherited ? storedHermesHome?.hermesHome : "") ||
+  inheritedHermesHome ||
+  storedHermesHome?.hermesHome ||
   defaultHermesHome();
 export const HERMES_REPO = join(HERMES_HOME, "hermes-agent");
 export const HERMES_VENV = join(HERMES_REPO, "venv");
@@ -937,10 +984,11 @@ export async function runInstall(
       // then run the official install script. Electron apps launched from Finder
       // don't inherit the terminal environment.
       const shellProfile = getShellProfile(home);
+
       const installCmd = [
         shellProfile ? `source "${shellProfile}" 2>/dev/null;` : "",
-        "curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash -s -- --skip-setup",
-      ].join(" ");
+        verifiedInstallerCommand(),
+      ].join("\n");
 
       const basePath = getEnhancedPath();
       const proc = spawn("bash", ["-c", installCmd], {
@@ -965,6 +1013,14 @@ export async function runInstall(
       });
 
       proc.on("close", (code) => {
+        if (code === INSTALLER_VERIFICATION_FAILED) {
+          reject(
+            new Error(
+              "Installer download or checksum verification failed. Installation was not run.",
+            ),
+          );
+          return;
+        }
         if (code === 0) {
           emit("\nInstallation complete!\n");
           resolve();

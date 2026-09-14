@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "../useI18n";
 import BrandLogo from "../common/BrandLogo";
+import { Toggle } from "../common/Toggle";
 import hermesIcon from "../../assets/hermes-icon.svg";
 import pythonLogo from "../../assets/logos/python.svg";
 import openaiLogo from "../../assets/logos/openai.svg";
@@ -28,6 +29,7 @@ export default function AboutPane(): React.JSX.Element {
   const {
     hermesHome,
     hermesVersion,
+    agentCapabilities,
     appVersion,
     parsedVersion,
     doctorOutput,
@@ -52,7 +54,10 @@ export default function AboutPane(): React.JSX.Element {
     handleDesktopUpdate,
   } = useSettings();
 
-  const engineHasUpdate = !!parsedVersion?.updateInfo;
+  const engineHasUpdate =
+    !!parsedVersion?.updateInfo ||
+    agentCapabilities?.compatibility === "update-recommended";
+  const canUpdateEngine = agentCapabilities?.canUpdate !== false;
   const loading = hermesVersion === null;
 
   return (
@@ -102,6 +107,11 @@ export default function AboutPane(): React.JSX.Element {
             >
               {parsedVersion?.date || "—"}
             </Meta>
+            <Meta label="Desktop API" loading={loading && !agentCapabilities}>
+              {agentCapabilities?.desktopContract
+                ? `v${agentCapabilities.desktopContract} / v${agentCapabilities.recommendedDesktopContract}`
+                : "—"}
+            </Meta>
             <Meta
               label="Python"
               loading={loading}
@@ -132,7 +142,8 @@ export default function AboutPane(): React.JSX.Element {
 
           {engineHasUpdate && (
             <div className="settings-hermes-update-badge">
-              {parsedVersion?.updateInfo}
+              {parsedVersion?.updateInfo ||
+                `Desktop API v${agentCapabilities?.desktopContract ?? 0} is behind recommended v${agentCapabilities?.recommendedDesktopContract}.`}
             </div>
           )}
 
@@ -141,7 +152,13 @@ export default function AboutPane(): React.JSX.Element {
               <button
                 className="btn btn-primary"
                 onClick={handleUpdateHermes}
-                disabled={updating}
+                disabled={updating || !canUpdateEngine}
+                title={
+                  canUpdateEngine
+                    ? undefined
+                    : agentCapabilities?.updateCommand ||
+                      "Update this Hermes Agent on its remote host."
+                }
               >
                 {updating ? (
                   <Loader size={14} className="settings-spin" />
@@ -276,14 +293,11 @@ export default function AboutPane(): React.JSX.Element {
                 {t("settings.autoUpgradeDesktopHint")}
               </div>
             </div>
-            <label className="tools-toggle">
-              <input
-                type="checkbox"
-                checked={autoUpgradeEnabled}
-                onChange={(e) => void handleAutoUpgradeChange(e.target.checked)}
-              />
-              <span className="tools-toggle-track" />
-            </label>
+            <Toggle
+              checked={autoUpgradeEnabled}
+              label={t("settings.autoUpgradeDesktop")}
+              onCheckedChange={handleAutoUpgradeChange}
+            />
           </div>
         </div>
       </section>

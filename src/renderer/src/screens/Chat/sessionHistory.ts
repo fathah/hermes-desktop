@@ -4,6 +4,7 @@ import {
   isBubbleMessage,
   normalizeMessageText,
 } from "./chatMessages";
+import { isLossyChunkCopy } from "./lossyText";
 import type { ActiveTurn, ChatMessage, ChatBubbleMessage } from "./types";
 
 /**
@@ -880,36 +881,102 @@ export function reconcileStreamedWithDb(
   // landing *below* any agent content the gateway streamed after the user
   // answered (the reverse of what the user saw live). Re-anchor each card
   // immediately after the streamed message that preceded it.
-  return repositionClarifyCards(dedupeMessageIds(merged), streamed);
+  return repositionInteractiveCards(
+    dropLossyStreamedReasoning(dedupeMessageIds(merged)),
+    streamed,
+  );
+}
+
+const normalizeReasoningText = (text: string): string =>
+  (text || "").replace(/\s+/g, " ").trim();
+
+/**
+ * Drop live-streamed reasoning rows that are lossy previews of a canonical DB
+ * reasoning row in the same turn.
+ *
+ * The live reasoning stream is best-effort: dropped delta chunks leave the
+ * streamed row with garbled text (e.g. "moon-k3 … ous" for
+ * "moonshotai/kimi-k3 … nous"), so its text-based reconciliation key never
+ * matches the DB row and both survive the merge — the user sees the corrupt
+ * partial AND the full thought stacked in one Thought block. A dropped-chunks
+ * preview is, by construction, a concatenation of contiguous runs of the
+ * canonical text — matched by [[isLossyChunkCopy]], whose run/length/coverage
+ * guards separate "same thought, chunks missing" (drop) from a genuinely
+ * distinct short reasoning segment whose characters merely embed as scattered
+ * fragments (keep). Scoped per turn (between user rows) so identical thoughts
+ * in different turns can't cross-cancel, and only a strictly shorter streamed
+ * row is dropped — equal text means the key match already handled it.
+ */
+function dropLossyStreamedReasoning(
+  messages: ReadonlyArray<ChatMessage>,
+): ChatMessage[] {
+  const isReasoning = (
+    m: ChatMessage,
+  ): m is Extract<ChatMessage, { kind: "reasoning" }> =>
+    "kind" in m && m.kind === "reasoning";
+
+  const drop = new Set<string>();
+  let turnStart = 0;
+  const scanTurn = (end: number): void => {
+    const canonical: string[] = [];
+    for (let i = turnStart; i < end; i++) {
+      const m = messages[i];
+      if (isReasoning(m) && m.id.startsWith("db-r-")) {
+        canonical.push(normalizeReasoningText(m.text));
+      }
+    }
+    if (canonical.length === 0) return;
+    for (let i = turnStart; i < end; i++) {
+      const m = messages[i];
+      if (!isReasoning(m) || m.id.startsWith("db-r-")) continue;
+      const text = normalizeReasoningText(m.text);
+      if (!text) continue;
+      if (canonical.some((c) => isLossyChunkCopy(text, c))) {
+        drop.add(m.id);
+      }
+    }
+  };
+
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    if (isBubbleMessage(m) && m.role === "user") {
+      scanTurn(i);
+      turnStart = i + 1;
+    }
+  }
+  scanTurn(messages.length);
+
+  if (drop.size === 0) return [...messages];
+  return messages.filter((m) => !drop.has(m.id));
 }
 
 /**
- * Move `kind === "clarify"` cards from wherever the reconcile placed them back
+ * Move interactive cards from wherever the reconcile placed them back
  * to their streamed position: directly after the message that immediately
  * preceded them in `streamed`. Pure, order-preserving for all other rows.
  */
-function repositionClarifyCards(
+function repositionInteractiveCards(
   merged: ChatMessage[],
   streamed: ReadonlyArray<ChatMessage>,
 ): ChatMessage[] {
-  const isClarify = (m: ChatMessage): boolean =>
-    "kind" in m && m.kind === "clarify";
-  if (!streamed.some(isClarify)) return merged;
+  const isInteractive = (m: ChatMessage): boolean =>
+    "kind" in m && (m.kind === "clarify" || m.kind === "approval");
+  if (!streamed.some(isInteractive)) return merged;
 
-  // Pull clarify cards out of the merged list; remember each card's streamed
+  // Pull interactive cards out of the merged list; remember each card's streamed
   // predecessor id so we can re-anchor it.
-  const cards = merged.filter(isClarify);
+  const cards = merged.filter(isInteractive);
   if (cards.length === 0) return merged;
-  const without = merged.filter((m) => !isClarify(m));
+  const without = merged.filter((m) => !isInteractive(m));
 
   const predecessorIdByCardId = new Map<string, string | null>();
   for (let i = 0; i < streamed.length; i++) {
     const m = streamed[i];
-    if (!isClarify(m)) continue;
-    // Nearest preceding non-clarify message in the streamed order.
+    if (!isInteractive(m)) continue;
+    // Nearest preceding non-card message in the streamed order.
     let predId: string | null = null;
     for (let j = i - 1; j >= 0; j--) {
-      if (!isClarify(streamed[j])) {
+      if (!isInteractive(streamed[j])) {
         predId = streamed[j].id;
         break;
       }

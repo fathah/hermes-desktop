@@ -3,6 +3,7 @@ import toast from "react-hot-toast";
 import { Search, X, Download, Trash, Refresh } from "../../assets/icons";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
 import { useI18n } from "../../components/useI18n";
+import { OrbLoader } from "../../components/OrbLoader";
 
 interface InstalledSkill {
   name: string;
@@ -146,7 +147,7 @@ function Skills({
     return (
       <div className="skills-container">
         <div className="skills-loading">
-          <div className="loading-spinner" />
+          <OrbLoader state="searching" size={64} />
         </div>
       </div>
     );

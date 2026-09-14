@@ -87,6 +87,8 @@ export const PROVIDERS = {
   ],
 
   labels: {
+    hermesone: "Hermes One",
+    atlascloud: "AtlasCloud",
     openrouter: "constants.openrouterName",
     aimlapi: "constants.aimlapiName",
     anthropic: "constants.anthropicName",
@@ -108,6 +110,9 @@ export const PROVIDERS = {
     zai: "Z.ai / GLM",
     alibaba: "Alibaba DashScope",
     minimax: "MiniMax",
+    "minimax-cn": "MiniMax (China)",
+    "opencode-zen": "OpenCode Zen",
+    "opencode-go": "OpenCode Go",
     nous: "constants.nousName",
     lmstudio: "constants.lmstudio",
     atomicchat: "constants.atomicchat",
@@ -389,6 +394,36 @@ export const OPENAI_COMPATIBLE_BASE_URLS: Record<string, string> = {
   llamacpp: "http://localhost:8080/v1",
 };
 
+/**
+ * Reverse-map a stored (provider, baseUrl) back to its display brand id.
+ *
+ * OpenAI-compatible providers (Hermes One, Groq, DeepSeek, …) are persisted as
+ * `provider: "custom"` + their base URL because the agent can't resolve their
+ * brand id. For display — grouping in the chat model picker, the provider
+ * summary/logo — map that base URL back to the brand id via
+ * `OPENAI_COMPATIBLE_BASE_URLS`, so e.g. an `inference.hermesone.org` model shows
+ * under "Hermes One" instead of the generic "OpenAI Compatible / Local" bucket.
+ *
+ * Routing is unaffected: callers keep the raw `provider`/`baseUrl` for
+ * `setModelConfig`; only the label/grouping uses the returned brand.
+ */
+export function displayBrandFromConfig(
+  provider: string,
+  baseUrl: string,
+): string {
+  // Legacy configs store `qwen` (the pre-#825 grid id); the agent aliases
+  // qwen → alibaba, so land those on the DashScope brand.
+  if (provider === "qwen") return "alibaba";
+  if (provider !== "custom" || !baseUrl) return provider;
+  const norm = (u: string): string =>
+    (u || "").trim().replace(/\/+$/, "").toLowerCase();
+  const target = norm(baseUrl);
+  const match = Object.entries(OPENAI_COMPATIBLE_BASE_URLS).find(
+    ([, url]) => norm(url) === target,
+  );
+  return match ? match[0] : provider;
+}
+
 export const LOCAL_PRESETS: LocalPreset[] = [
   {
     id: "lmstudio",
@@ -490,9 +525,106 @@ export const LOCAL_PRESETS: LocalPreset[] = [
 // keeps the per-provider Models manager saving entries exactly the way the
 // Models screen / Providers tab would. Unknown keys fall back to a bare `custom`
 // route so any provider can still hold models.
-export function providerRouteForEnvKey(
-  envKey: string,
-): { provider: string; baseUrl: string } {
+// Native-provider keys that appear as "LLM Providers" FieldDefs but have no
+// `PROVIDERS.setup` card carrying their envKey (the setup card is absent, or —
+// like Nous — is the OAuth variant with `envKey: ""`). Without an explicit
+// route these fell through to the bare `custom` fallback, whose empty base URL
+// made the Providers tab's active-model picker silently drop the provider even
+// with a key set (the "key set but not in the Change modal" bug). Slugs and
+// env vars mirror hermes-agent's own registry (plugins/model-providers/*):
+// e.g. GLM_API_KEY is the `zai` provider, KIMI_API_KEY is `kimi-coding`.
+export const NATIVE_ENV_KEY_ROUTES: Record<
+  string,
+  { provider: string; baseUrl: string }
+> = {
+  NOUS_API_KEY: { provider: "nous", baseUrl: "" },
+  GLM_API_KEY: { provider: "zai", baseUrl: "" },
+  KIMI_API_KEY: { provider: "kimi-coding", baseUrl: "" },
+  MINIMAX_API_KEY: { provider: "minimax", baseUrl: "" },
+  MINIMAX_CN_API_KEY: { provider: "minimax-cn", baseUrl: "" },
+  NVIDIA_API_KEY: { provider: "nvidia", baseUrl: "" },
+  OPENCODE_ZEN_API_KEY: { provider: "opencode-zen", baseUrl: "" },
+  OPENCODE_GO_API_KEY: { provider: "opencode-go", baseUrl: "" },
+  HF_TOKEN: { provider: "huggingface", baseUrl: "" },
+  // Perplexity has no native agent slug — it routes like the compat presets.
+  PERPLEXITY_API_KEY: {
+    provider: "custom",
+    baseUrl: "https://api.perplexity.ai",
+  },
+};
+
+// Display priority for the LLM-provider cards + Add-provider picker. The
+// `SETTINGS_SECTIONS` FieldDef order is grouped by how providers were added
+// over time, which surfaces niche endpoints (e.g. AIML API) above household
+// names. This front-loads the well-known providers — Hermes One first — and
+// anything not listed keeps its FieldDef order after them, ahead of the
+// explicitly demoted keys. Keys are env-var names (a FieldDef's `key`).
+export const PROVIDER_KEY_ORDER: readonly string[] = [
+  "HERMESONE_API_KEY",
+  "OPENAI_API_KEY",
+  "ANTHROPIC_API_KEY",
+  "OPENROUTER_API_KEY",
+  "GOOGLE_API_KEY",
+  "GROQ_API_KEY",
+  "DEEPSEEK_API_KEY",
+  "XAI_API_KEY",
+  "MISTRAL_API_KEY",
+  "NOUS_API_KEY",
+  "TOGETHER_API_KEY",
+  "FIREWORKS_API_KEY",
+  "CEREBRAS_API_KEY",
+  "PERPLEXITY_API_KEY",
+  "GLM_API_KEY",
+  "KIMI_API_KEY",
+  "MINIMAX_API_KEY",
+  "DASHSCOPE_API_KEY",
+  "NVIDIA_API_KEY",
+  "HF_TOKEN",
+  "OLLAMA_API_KEY",
+];
+
+// Keys pushed to the very end of the list regardless of FieldDef order — niche
+// endpoints most users won't reach for. Ordered among themselves by this list.
+export const PROVIDER_KEY_DEMOTED: readonly string[] = ["AIMLAPI_API_KEY"];
+
+/**
+ * Rank an LLM-provider env key for display ordering: prioritized keys first
+ * (in `PROVIDER_KEY_ORDER`), then everything unlisted, then demoted keys last.
+ * Pair with a **stable** sort so unlisted keys keep their FieldDef order.
+ */
+export function providerKeyRank(envKey: string): number {
+  const demoted = PROVIDER_KEY_DEMOTED.indexOf(envKey);
+  if (demoted !== -1) return 20000 + demoted;
+  const ranked = PROVIDER_KEY_ORDER.indexOf(envKey);
+  if (ranked !== -1) return ranked;
+  return 10000; // unlisted — after prioritized, before demoted
+}
+
+/**
+ * The plain provider name for an LLM-provider env key — "Hermes One", not
+ * "Hermes One API Key". The provider cards/picker are a list of providers, so
+ * the "API Key" suffix in every FieldDef label is noise there (and the label
+ * can't be suffix-stripped reliably across locales). Derives the display brand
+ * via the same route mapping the active-model picker uses, then looks up
+ * `PROVIDERS.labels`. Returns the (possibly untranslated) label, or null for
+ * keys with no brand (bare custom fallback) — callers keep the FieldDef label.
+ */
+export function providerNameForEnvKey(envKey: string): string | null {
+  const r = providerRouteForEnvKey(envKey);
+  const brand =
+    r.provider === "custom"
+      ? r.baseUrl
+        ? displayBrandFromConfig("custom", r.baseUrl)
+        : "custom"
+      : r.provider;
+  if (!brand || brand === "custom") return null;
+  return PROVIDERS.labels[brand] ?? null;
+}
+
+export function providerRouteForEnvKey(envKey: string): {
+  provider: string;
+  baseUrl: string;
+} {
   // The setup array is a heterogeneous literal (not every entry carries
   // configProvider/baseUrl), so read it through a partial shape.
   type SetupRoute = {
@@ -512,6 +644,8 @@ export function providerRouteForEnvKey(
   }
   const preset = LOCAL_PRESETS.find((p) => p.envKey === envKey);
   if (preset) return { provider: "custom", baseUrl: preset.baseUrl ?? "" };
+  const native = NATIVE_ENV_KEY_ROUTES[envKey];
+  if (native) return { ...native };
   return { provider: "custom", baseUrl: "" };
 }
 
@@ -583,10 +717,10 @@ export const FONT_OPTIONS: FontOption[] = [
       '"Cairo", "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   },
   {
-    value: "system",
-    label: "settings.font.system",
+    value: "gsans",
+    label: "settings.font.gsans",
     stack:
-      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, Cantarell, "Helvetica Neue", sans-serif',
+      '"Google Sans", "Google Sans Text", "Product Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, Cantarell, "Helvetica Neue", sans-serif',
   },
 ];
 

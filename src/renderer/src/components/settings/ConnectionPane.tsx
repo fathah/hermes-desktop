@@ -1,7 +1,9 @@
 import { Laptop, Server, Terminal, Wifi } from "lucide-react";
+import { Toggle } from "../common/Toggle";
 import { useI18n } from "../useI18n";
 import { useSettings } from "./SettingsDataContext";
 import { CHAT_TRANSPORT_OPTIONS } from "./settingsHelpers";
+import SshDockerTargetSection from "./SshDockerTargetSection";
 
 /**
  * Local / Remote / SSH connection mode, chat transport, server config, and the
@@ -13,6 +15,13 @@ export default function ConnectionPane(): React.JSX.Element {
   const s = useSettings();
   const {
     profile,
+    connections,
+    connectionStatuses,
+    connectionStatusesLoading,
+    refreshConnectionStatuses,
+    connectionId,
+    connectionName,
+    setConnectionName,
     connMode,
     setConnMode,
     connStatus,
@@ -23,6 +32,10 @@ export default function ConnectionPane(): React.JSX.Element {
     connApiKey,
     setConnApiKey,
     connApiKeyMask,
+    remoteAuthMode,
+    setRemoteAuthMode,
+    remoteOAuthSignedIn,
+    remoteOAuthBusy,
     connTesting,
     apiServerKeyMissing,
     setApiServerKeyMissing,
@@ -41,8 +54,16 @@ export default function ConnectionPane(): React.JSX.Element {
     setSshKeyPath,
     sshRemotePort,
     setSshRemotePort,
+    sshDockerContainer,
+    setSshDockerContainer,
     handleSaveConnection,
+    handleCreateConnection,
+    handleRenameConnection,
+    handleSelectConnection,
+    handleRemoveConnection,
     handleTestConnection,
+    handleRemoteOAuthLogin,
+    handleRemoteOAuthLogout,
     handleChatTransportChange,
     handleSwitchToLocal,
     handleSwitchToRemote,
@@ -56,10 +77,118 @@ export default function ConnectionPane(): React.JSX.Element {
     networkSaved,
     setNetworkSaved,
   } = s;
+  const connectionHealth = connectionStatuses.find(
+    (status) => status.connectionId === connectionId,
+  );
 
   return (
     <div className="settings-modal-pane">
       {connStatus && <div className="settings-pane-flash">{connStatus}</div>}
+
+      <div className="settings-field">
+        <label className="settings-field-label" htmlFor="connection-select">
+          {t("settings.savedConnections")}
+        </label>
+        <div className="settings-connection-row">
+          <select
+            id="connection-select"
+            className="input"
+            value={connectionId}
+            onChange={(event) =>
+              void handleSelectConnection(event.target.value)
+            }
+          >
+            {connections.map((connection) => (
+              <option
+                key={connection.connectionId}
+                value={connection.connectionId}
+              >
+                {connection.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => void handleCreateConnection()}
+          >
+            {t("settings.addConnection")}
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={connectionStatusesLoading}
+            onClick={() => void refreshConnectionStatuses()}
+          >
+            {connectionStatusesLoading ? "Checking…" : "Refresh status"}
+          </button>
+        </div>
+        <div className="settings-field-hint">
+          {t("settings.savedConnectionsHint")}
+        </div>
+        {(connectionHealth || connectionStatusesLoading) && (
+          <div
+            className={`settings-transport-status settings-transport-status--${
+              connectionHealth?.health === "online" ? "ok" : "warn"
+            }`}
+          >
+            <span>
+              {connectionStatusesLoading
+                ? "Checking…"
+                : connectionHealth?.health === "online"
+                  ? "Online"
+                  : "Offline"}
+            </span>
+            {connectionHealth && (
+              <>
+                <code>{connectionHealth.latencyMs} ms</code>
+                <code>Auth: {connectionHealth.authentication}</code>
+                <code>
+                  Agent: {connectionHealth.capabilities.version || "unknown"}
+                </code>
+                <code>
+                  Compatibility: {connectionHealth.capabilities.compatibility}
+                </code>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="settings-field">
+        <label className="settings-field-label" htmlFor="connection-name">
+          {t("settings.connectionName")}
+        </label>
+        <div className="settings-connection-row">
+          <input
+            id="connection-name"
+            className="input"
+            type="text"
+            maxLength={80}
+            value={connectionName}
+            onChange={(event) => setConnectionName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void handleRenameConnection();
+            }}
+          />
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={!connectionName.trim()}
+            onClick={() => void handleRenameConnection()}
+          >
+            {t("settings.renameConnection")}
+          </button>
+          <button
+            type="button"
+            className="btn btn-danger-ghost"
+            disabled={connections.length <= 1}
+            onClick={() => void handleRemoveConnection()}
+          >
+            {t("settings.remove")}
+          </button>
+        </div>
+      </div>
 
       <div className="settings-field">
         <label className="settings-field-label">
@@ -147,14 +276,18 @@ export default function ConnectionPane(): React.JSX.Element {
       {connMode === "remote" && (
         <>
           <div className="settings-field">
-            <label className="settings-field-label">
+            <label className="settings-field-label" htmlFor="remote-url">
               {t("settings.remoteUrl")}
             </label>
             <input
+              id="remote-url"
               className="input"
               type="url"
               value={connRemoteUrl}
-              onChange={(e) => setConnRemoteUrl(e.target.value)}
+              onChange={(e) => {
+                setConnRemoteUrl(e.target.value);
+                setRemoteAuthMode("auto");
+              }}
               placeholder="http://192.168.1.100:8642"
               onBlur={handleSaveConnection}
             />
@@ -162,31 +295,67 @@ export default function ConnectionPane(): React.JSX.Element {
               {t("settings.remoteUrlHint")}
             </div>
           </div>
-          <div className="settings-field">
-            <label className="settings-field-label">
-              {t("settings.remoteApiKey")}
-            </label>
-            <input
-              className="input"
-              type="password"
-              value={connApiKey}
-              onChange={(e) => setConnApiKey(e.target.value)}
-              onFocus={(e) => {
-                if (connApiKey === connApiKeyMask) {
-                  e.currentTarget.select();
-                }
-              }}
-              placeholder={t("settings.remoteApiKey")}
-              onBlur={handleSaveConnection}
-            />
-            <div className="settings-field-hint">
-              {t("settings.remoteApiKeyHint")}
+          {remoteAuthMode === "oauth" ? (
+            <div className="settings-field">
+              <label className="settings-field-label">
+                {t("settings.remoteOAuthTitle")}
+              </label>
+              <div className="settings-field-hint">
+                {remoteOAuthSignedIn
+                  ? t("settings.remoteOAuthConnected")
+                  : t("settings.remoteOAuthHint")}
+              </div>
+              <div className="settings-hermes-actions">
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={remoteOAuthBusy}
+                  onClick={() =>
+                    void (remoteOAuthSignedIn
+                      ? handleRemoteOAuthLogout()
+                      : handleRemoteOAuthLogin())
+                  }
+                >
+                  {remoteOAuthBusy
+                    ? t("settings.remoteOAuthWorking")
+                    : remoteOAuthSignedIn
+                      ? t("settings.remoteOAuthSignOut")
+                      : t("settings.remoteOAuthSignIn")}
+                </button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="settings-field">
+              <label className="settings-field-label" htmlFor="remote-api-key">
+                {t("settings.remoteApiKey")}
+              </label>
+              <input
+                id="remote-api-key"
+                className="input"
+                type="password"
+                value={connApiKey}
+                onChange={(e) => setConnApiKey(e.target.value)}
+                onFocus={(e) => {
+                  if (connApiKey === connApiKeyMask) {
+                    e.currentTarget.select();
+                  }
+                }}
+                placeholder={t("settings.remoteApiKey")}
+                onBlur={handleSaveConnection}
+              />
+              <div className="settings-field-hint">
+                {remoteAuthMode === "auto"
+                  ? t("settings.remoteAuthDetecting")
+                  : t("settings.remoteApiKeyHint")}
+              </div>
+            </div>
+          )}
           <div className="settings-field">
             <label className="settings-field-label">Chat transport</label>
             <div className="settings-theme-options">
-              {CHAT_TRANSPORT_OPTIONS.map((option) => (
+              {CHAT_TRANSPORT_OPTIONS.filter(
+                (option) => remoteAuthMode !== "oauth" || option !== "legacy",
+              ).map((option) => (
                 <button
                   key={option}
                   type="button"
@@ -202,9 +371,7 @@ export default function ConnectionPane(): React.JSX.Element {
               ))}
             </div>
             <div className="settings-field-hint">
-              Auto tries the Hermes dashboard WebSocket first, then falls back
-              to the legacy remote API. Dashboard requires the remote Hermes
-              dashboard URL and a valid dashboard session token.
+              {t("settings.remoteChatTransportHint")}
             </div>
             {transportProbe && (
               <div
@@ -306,6 +473,18 @@ export default function ConnectionPane(): React.JSX.Element {
               })}
             </div>
           </div>
+          <SshDockerTargetSection
+            draft={{
+              host: sshHost,
+              port: parseInt(sshPort, 10) || 22,
+              username: sshUser,
+              keyPath: sshKeyPath,
+              remotePort: parseInt(sshRemotePort, 10) || 8642,
+            }}
+            value={sshDockerContainer}
+            onChange={setSshDockerContainer}
+            onProvisioned={() => void handleSaveConnection()}
+          />
           <div className="settings-field">
             <label className="settings-field-label">Chat transport</label>
             <div className="settings-theme-options">
@@ -373,34 +552,29 @@ export default function ConnectionPane(): React.JSX.Element {
             <span className="settings-saved">{t("settings.saved")}</span>
           )}
         </div>
-        <div className="settings-field">
-          <label className="settings-field-label">
-            {t("settings.forceIpv4")}
-            <label
-              className="tools-toggle"
-              style={{ marginLeft: 12, verticalAlign: "middle" }}
-            >
-              <input
-                type="checkbox"
-                checked={forceIpv4}
-                onChange={async (e) => {
-                  const val = e.target.checked;
-                  setForceIpv4(val);
-                  await window.hermesAPI.setConfig(
-                    "network.force_ipv4",
-                    val ? "true" : "false",
-                    profile,
-                  );
-                  setNetworkSaved(true);
-                  setTimeout(() => setNetworkSaved(false), 2000);
-                }}
-              />
-              <span className="tools-toggle-track" />
-            </label>
-          </label>
-          <div className="settings-field-hint">
-            {t("settings.forceIpv4Hint")}
+        <div className="settings-field settings-toggle-row">
+          <div className="settings-toggle-text">
+            <div className="settings-toggle-title">
+              {t("settings.forceIpv4")}
+            </div>
+            <div className="settings-field-hint">
+              {t("settings.forceIpv4Hint")}
+            </div>
           </div>
+          <Toggle
+            checked={forceIpv4}
+            label={t("settings.forceIpv4")}
+            onCheckedChange={async (enabled) => {
+              setForceIpv4(enabled);
+              await window.hermesAPI.setConfig(
+                "network.force_ipv4",
+                enabled ? "true" : "false",
+                profile,
+              );
+              setNetworkSaved(true);
+              setTimeout(() => setNetworkSaved(false), 2000);
+            }}
+          />
         </div>
         <div className="settings-field">
           <label className="settings-field-label">

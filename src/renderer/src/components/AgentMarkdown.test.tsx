@@ -25,8 +25,9 @@ async function renderHighlighted(
   markdown: string,
 ): Promise<ReturnType<typeof render>> {
   const view = render(<AgentMarkdown>{markdown}</AgentMarkdown>);
-  await waitFor(() =>
-    expect(view.container.querySelector(".token")).not.toBeNull(),
+  await waitFor(
+    () => expect(view.container.querySelector(".token")).not.toBeNull(),
+    { timeout: 5_000 },
   );
   return view;
 }

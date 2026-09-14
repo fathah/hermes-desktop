@@ -1,10 +1,5 @@
 import { app, ipcMain, type BrowserWindow } from "electron";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-} from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import type { AppUpdater } from "electron-updater";
 import { dirname, join } from "path";
 import { updaterLogger } from "../updater-log";

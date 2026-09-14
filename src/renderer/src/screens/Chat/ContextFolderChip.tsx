@@ -58,7 +58,10 @@ export const ContextFolderChip = memo(function ContextFolderChip({
   useEffect(() => {
     if (!isOpen) return;
     function handleClickOutside(e: MouseEvent): void {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
         setIsOpen(false);
       }
     }
@@ -100,9 +103,14 @@ export const ContextFolderChip = memo(function ContextFolderChip({
                 }}
                 title={path}
               >
-                <span className="chat-ctxfolder-dropdown-item-name">{folderName(path)}</span>
+                <span className="chat-ctxfolder-dropdown-item-name">
+                  {folderName(path)}
+                </span>
                 {isSelected && (
-                  <Check size={14} className="chat-ctxfolder-dropdown-item-check" />
+                  <Check
+                    size={14}
+                    className="chat-ctxfolder-dropdown-item-check"
+                  />
                 )}
               </button>
             );

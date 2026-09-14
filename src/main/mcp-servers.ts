@@ -729,6 +729,73 @@ export async function addMcpServer(
   }
 }
 
+export async function updateMcpServer(
+  originalName: string,
+  input: McpServerInput,
+  profile?: string,
+): Promise<McpOperationResult> {
+  const validated = validateServerInput(input);
+  if (!validated.ok) return { success: false, error: validated.error };
+
+  try {
+    if (isRemoteMode()) {
+      // Remote has no rename-in-place; drop the old entry if the name changed.
+      if (originalName !== validated.value.name) {
+        await mcpApi(
+          `/api/mcp/servers/${encodeURIComponent(originalName)}`,
+          { method: "DELETE" },
+          profile,
+        );
+      }
+      await mcpApi(
+        "/api/mcp/servers",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            name: validated.value.name,
+            url:
+              validated.value.type === "http" ? validated.value.url : undefined,
+            command:
+              validated.value.type === "stdio"
+                ? validated.value.command
+                : undefined,
+            args: validated.value.args || [],
+            env: validated.value.env || {},
+            auth: validated.value.auth,
+          }),
+        },
+        profile,
+      );
+      return { success: true };
+    }
+
+    let config = readConfig(profile);
+    const renamed = originalName !== validated.value.name;
+    if (
+      renamed &&
+      parseMcpServersFromConfig(config).some(
+        (server) => server.name === validated.value.name,
+      )
+    ) {
+      return {
+        success: false,
+        error: `MCP server "${validated.value.name}" already exists.`,
+      };
+    }
+    if (renamed) {
+      config = removeMcpServerFromConfig(config, originalName);
+    }
+    // upsert overwrites the same-named entry in place — atomic, no delete gap.
+    writeConfig(upsertMcpServerInConfig(config, validated.value), profile);
+    return { success: true };
+  } catch (err) {
+    return {
+      success: false,
+      error: (err as Error).message || "Failed to update MCP server.",
+    };
+  }
+}
+
 export async function removeMcpServer(
   name: string,
   profile?: string,

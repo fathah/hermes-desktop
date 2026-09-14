@@ -1,0 +1,74 @@
+/**
+ * Space representatives: the staff NPCs in the city's transaction spaces that
+ * agents can do business with (bank tellers now; showroom sales, building
+ * space later). The 3D side of a representative is the interior's StaffPerson
+ * wrapped in an Interactable; this registry holds its identity and the
+ * actions its interaction menu offers. Adding a new space's representative is
+ * one entry here, i18n strings, an Interactable hookup in the interior, and
+ * (if the space needs new capabilities) action wiring in RepInteractionPanel.
+ */
+
+export type RepActionId =
+  | "checkBalance"
+  | "accountStatus"
+  | "createAccount"
+  | "sendMoney"
+  | "withdraw"
+  | "deposit";
+
+export interface RepAction {
+  id: RepActionId;
+  /** i18n key under the `office.` namespace. */
+  labelKey: string;
+  /** Shown but not yet executable (renders a "coming soon" caption). */
+  disabled?: boolean;
+}
+
+export interface SpaceRepresentative {
+  id: string;
+  /** The space this rep belongs to ("bank", "showroom", ...). */
+  spaceId: string;
+  /** i18n key for the rep's display name (e.g. "Bank Teller"). */
+  labelKey: string;
+  /** i18n key for the space's display name (e.g. "Bank"). */
+  spaceLabelKey: string;
+  actions: RepAction[];
+}
+
+export const REPRESENTATIVES: SpaceRepresentative[] = [
+  {
+    id: "bank-teller",
+    spaceId: "bank",
+    labelKey: "repBankTeller",
+    spaceLabelKey: "spaceBank",
+    actions: [
+      { id: "checkBalance", labelKey: "repActionCheckBalance" },
+      { id: "accountStatus", labelKey: "repActionAccountStatus" },
+      { id: "createAccount", labelKey: "repActionCreateAccount" },
+      // "Send to agent" (sendMoney) is intentionally omitted for now; it will
+      // be re-added as a disabled/coming-soon action when the transfer flow
+      // lands. The RepActionId type + panel rendering still support it.
+    ],
+  },
+  {
+    // The bank's self-service ATM: the same wallet actions as the teller
+    // (read-only for now) plus withdraw/deposit as coming-soon.
+    id: "atm",
+    spaceId: "bank",
+    labelKey: "repAtm",
+    spaceLabelKey: "spaceBank",
+    actions: [
+      { id: "checkBalance", labelKey: "repActionCheckBalance" },
+      { id: "accountStatus", labelKey: "repActionAccountStatus" },
+      { id: "withdraw", labelKey: "repActionWithdraw", disabled: true },
+      { id: "deposit", labelKey: "repActionDeposit", disabled: true },
+    ],
+  },
+];
+
+export function getRepresentative(
+  id: string | null | undefined,
+): SpaceRepresentative | null {
+  if (!id) return null;
+  return REPRESENTATIVES.find((rep) => rep.id === id) ?? null;
+}

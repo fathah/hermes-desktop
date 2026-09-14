@@ -9,8 +9,7 @@ export default {
   all: "الكل",
   noMatchingInstalled: "لم يتم العثور على مهارات مطابقة",
   noInstalled: "لم يتم تثبيت مهارات بعد",
-  noInstalledHint:
-    "تصفح المهارات المتاحة وقم بتثبيتها لتوسيع وكيلك",
+  noInstalledHint: "تصفح المهارات المتاحة وقم بتثبيتها لتوسيع وكيلك",
   noMatchingHint: "جرب مصطلح بحث مختلف",
   noBrowseResults: "لم يتم العثور على مهارات",
   noBrowseResultsHint: "جرب مصطلح بحث مختلف أو تصفية فئة مختلفة",

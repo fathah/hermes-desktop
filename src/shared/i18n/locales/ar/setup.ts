@@ -2,7 +2,11 @@ export default {
   title: "إعداد مزوّد الذكاء الاصطناعي",
   subtitle: "اختر مزوّداً وقم بتكوينه للبدء",
   providerCards: {
-    openrouter: { name: "OpenRouter", desc: "أكثر من 200 نموذج", tag: "موصى به" },
+    openrouter: {
+      name: "OpenRouter",
+      desc: "أكثر من 200 نموذج",
+      tag: "موصى به",
+    },
     anthropic: { name: "Anthropic", desc: "نماذج Claude", tag: "" },
     openai: { name: "OpenAI", desc: "نماذج GPT", tag: "" },
     local: {
@@ -32,7 +36,8 @@ export default {
   serverUrl: "الرابط الأساسي",
   modelName: "اسم النموذج",
   localServerHint: "تأكد من أن خادمك المحلي يعمل قبل المتابعة",
-  customServerHint: "اختر إعداداً مسبقاً أو الصق أي رابط أساسي متوافق مع OpenAI",
+  customServerHint:
+    "اختر إعداداً مسبقاً أو الصق أي رابط أساسي متوافق مع OpenAI",
   customApiKeyLabel: "مفتاح API",
   customApiKeyHint: "مطلوب لـ APIs البعيدة. اتركه فارغاً للنطاق المحلي.",
   defaultModelHint: "اتركه فارغاً لاستخدام النموذج الافتراضي للخادم",

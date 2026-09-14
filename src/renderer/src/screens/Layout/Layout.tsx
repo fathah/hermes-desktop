@@ -11,12 +11,13 @@ import {
   isScratchRun,
   openSessionRunTransition,
   selectProfileRunTransition,
-  findRunBySession,
+  findRunByLocation,
   cycleRunId,
   runIdAtOrdinal,
   loadingSessionIds as deriveLoadingSessionIds,
 } from "./chatRuns";
 import { ActiveSessionsBar } from "./ActiveSessionsBar";
+import { StatusBar } from "./StatusBar";
 import Sessions from "../Sessions/Sessions";
 import Agents from "../Agents/Agents";
 import Discover from "../Discover/Discover";
@@ -33,7 +34,6 @@ import Kanban from "../Kanban/Kanban";
 import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import { useSettingsModal } from "../../components/settings/SettingsModalContext";
-import hermeslogo from "../../assets/hermes-one.svg";
 import {
   Compass,
   Settings as SettingsIcon,
@@ -87,16 +87,18 @@ const SIDEBAR_COLLAPSED_KEY = "hermes.sidebar.collapsed";
 const SIDEBAR_SCROLLBAR_HIDE_MS = 700;
 
 interface LayoutProps {
+  connectionId: string;
   verifyWarning?: boolean;
   onReinstall?: () => void;
   onDismissVerifyWarning?: () => void;
 }
 
 function Layout({
+  connectionId,
   verifyWarning,
   onReinstall,
   onDismissVerifyWarning,
-}: LayoutProps = {}): React.JSX.Element {
+}: LayoutProps): React.JSX.Element {
   const { t } = useI18n();
   const { openSettings } = useSettingsModal();
   const [view, setView] = useState<View>("chat");
@@ -105,7 +107,9 @@ function Layout({
   // preserve existing conversations and activate a scratch run for the selected
   // agent so `activeProfile` stays aligned with the visible chat transport.
   const [activeProfile, setActiveProfile] = useState("default");
-  const [runs, setRuns] = useState<ChatRun[]>(() => [mintRun("default")]);
+  const [runs, setRuns] = useState<ChatRun[]>(() => [
+    mintRun(connectionId, "default"),
+  ]);
   const [activeRunId, setActiveRunId] = useState<string>(() => runs[0].runId);
   // While a resume's history is loading, show its spinner immediately.
   const [resumingSessionId, setResumingSessionId] = useState<string | null>(
@@ -432,15 +436,20 @@ function Layout({
     // current chat is already a blank scratch, reuse it instead of stacking
     // another empty tab.
     const active = runs.find((r) => r.runId === activeRunId);
-    if (active && !active.sessionId && !active.loading && !active.title) {
+    if (
+      active?.connectionId === connectionId &&
+      !active.sessionId &&
+      !active.loading &&
+      !active.title
+    ) {
       goTo("chat");
       return;
     }
-    const run = mintRun(activeProfile);
+    const run = mintRun(connectionId, activeProfile);
     setRuns((prev) => [...prev, run]);
     setActiveRunId(run.runId);
     goTo("chat");
-  }, [runs, activeRunId, activeProfile, goTo]);
+  }, [runs, activeRunId, connectionId, activeProfile, goTo]);
 
   // Listen for menu IPC events (Cmd+N, Cmd+K from app menu)
   useEffect(() => {
@@ -474,11 +483,16 @@ function Layout({
       // to a scratch run for the selected profile so the footer and transport
       // never point at different agents.
       setActiveProfile(name);
-      const next = selectProfileRunTransition(runs, activeRunId, name);
+      const next = selectProfileRunTransition(
+        runs,
+        activeRunId,
+        connectionId,
+        name,
+      );
       setRuns(next.runs);
       setActiveRunId(next.activeRunId);
     },
-    [runs, activeRunId],
+    [runs, activeRunId, connectionId],
   );
 
   // The "Chat" affordance: start (or reuse a blank) conversation with an agent
@@ -487,20 +501,20 @@ function Layout({
     (name: string) => {
       setActiveProfile(name);
       const active = runs.find((r) => r.runId === activeRunId);
-      if (active && isScratchRun(active)) {
+      if (active?.connectionId === connectionId && isScratchRun(active)) {
         setRuns((prev) =>
           prev.map((r) =>
             r.runId === active.runId ? { ...r, profile: name } : r,
           ),
         );
       } else {
-        const run = mintRun(name);
+        const run = mintRun(connectionId, name);
         setRuns((prev) => [...prev, run]);
         setActiveRunId(run.runId);
       }
       goTo("chat");
     },
-    [runs, activeRunId, goTo],
+    [runs, activeRunId, connectionId, goTo],
   );
 
   // Jump to an already-open run (e.g. from the active-sessions bar), switching
@@ -521,11 +535,11 @@ function Layout({
   // open so the chat view is never empty.
   const handleCloseRun = useCallback(
     (runId: string) => {
-      window.hermesAPI.abortChat(runId);
       const idx = runs.findIndex((r) => r.runId === runId);
+      window.hermesAPI.abortChat(runId, runs[idx]?.connectionId);
       const remaining = runs.filter((r) => r.runId !== runId);
       if (remaining.length === 0) {
-        const fresh = mintRun(activeProfile);
+        const fresh = mintRun(connectionId, activeProfile);
         setRuns([fresh]);
         setActiveRunId(fresh.runId);
         return;
@@ -537,7 +551,7 @@ function Layout({
         setActiveProfile(neighbour.profile);
       }
     },
-    [runs, activeRunId, activeProfile],
+    [runs, activeRunId, connectionId, activeProfile],
   );
 
   // Chrome/iTerm-style tab shortcuts for the conversation tabs: Ctrl+Tab /
@@ -613,7 +627,11 @@ function Layout({
   const handleResumeSession = useCallback(
     async (sessionId: string) => {
       // Already open as a live run? Re-attach to it (keeps live streaming).
-      const live = findRunBySession(runs, sessionId);
+      const live = findRunByLocation(runs, {
+        connectionId,
+        profile: activeProfile,
+        sessionId,
+      });
       if (live) {
         handleActivateRun(live.runId);
         return;
@@ -627,8 +645,14 @@ function Layout({
       try {
         const items = (await window.hermesAPI.getSessionMessages(
           sessionId,
+          connectionId,
+          activeProfile,
         )) as DbHistoryItem[];
-        const run = mintRun(activeProfile, dbItemsToChatMessages(items));
+        const run = mintRun(
+          connectionId,
+          activeProfile,
+          dbItemsToChatMessages(items),
+        );
         run.sessionId = sessionId;
         setRuns(
           (prev) => openSessionRunTransition(prev, activeRunId, run).runs,
@@ -640,7 +664,7 @@ function Layout({
         setResumingSessionId(null);
       }
     },
-    [runs, activeRunId, handleActivateRun, activeProfile, goTo],
+    [runs, activeRunId, handleActivateRun, connectionId, activeProfile, goTo],
   );
 
   const toggleSidebar = useCallback(() => {
@@ -660,354 +684,358 @@ function Layout({
     : t("navigation.collapseSidebar");
 
   return (
-    <div className={`layout ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
-      <aside className="sidebar">
-        <div className="sidebar-brand">
-          <span
-            className="sidebar-logo"
-            role="img"
-            aria-label="Hermes"
-            style={{
-              maskImage: `url(${hermeslogo})`,
-              WebkitMaskImage: `url(${hermeslogo})`,
-            }}
-          />
-          <button
-            className="sidebar-collapse-toggle"
-            type="button"
-            onClick={toggleSidebar}
-            title={sidebarToggleLabel}
-            aria-label={sidebarToggleLabel}
-            aria-expanded={!sidebarCollapsed}
-          >
-            {sidebarCollapsed ? (
-              // Collapsed: show the circular brand mark by default and swap to
-              // the expand icon on hover/focus. Both sit in a fixed-size box so
-              // the swap never changes the button's footprint.
-              <span className="sidebar-collapse-swap">
-                <span className="sidebar-collapse-mark" aria-hidden="true" />
-                <PanelLeftOpen
-                  size={16}
-                  className="sidebar-collapse-expand-icon"
-                />
+    <div className="layout-shell">
+      <div className={`layout ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+        <aside className="sidebar">
+          <div className="sidebar-brand">
+            <button
+              className="sidebar-collapse-toggle"
+              type="button"
+              onClick={toggleSidebar}
+              title={sidebarToggleLabel}
+              aria-label={sidebarToggleLabel}
+              aria-expanded={!sidebarCollapsed}
+            >
+              {sidebarCollapsed ? (
+                // Collapsed: show the circular brand mark by default and swap to
+                // the expand icon on hover/focus. Both sit in a fixed-size box so
+                // the swap never changes the button's footprint.
+                <span className="sidebar-collapse-swap">
+                  <span className="sidebar-collapse-mark" aria-hidden="true" />
+                  <PanelLeftOpen
+                    size={16}
+                    className="sidebar-collapse-expand-icon"
+                  />
+                </span>
+              ) : (
+                <PanelLeftClose size={16} />
+              )}
+            </button>
+          </div>
+
+          <nav className="sidebar-nav sidebar-nav-pinned">
+            <button
+              className={`sidebar-nav-item sidebar-new-chat ${
+                view === "chat" && currentSessionId === null ? "active" : ""
+              }`}
+              onClick={handleNewChat}
+              title={t("navigation.newChat")}
+              aria-label={t("navigation.newChat")}
+            >
+              <Plus size={16} />
+              <span className="sidebar-nav-label">
+                {t("navigation.newChat")}
               </span>
-            ) : (
-              <PanelLeftClose size={16} />
-            )}
-          </button>
-        </div>
+            </button>
+            {PINNED_NAV_ITEMS.map(({ view: v, icon: Icon, labelKey }) => {
+              return (
+                <button
+                  key={v}
+                  className={`sidebar-nav-item ${view === v ? "active" : ""}`}
+                  onClick={() => goTo(v)}
+                  title={t(labelKey)}
+                  aria-label={t(labelKey)}
+                >
+                  <Icon size={16} />
+                  <span className="sidebar-nav-label">{t(labelKey)}</span>
+                </button>
+              );
+            })}
+          </nav>
 
-        <nav className="sidebar-nav sidebar-nav-pinned">
-          <button
-            className={`sidebar-nav-item sidebar-new-chat ${
-              view === "chat" && currentSessionId === null ? "active" : ""
-            }`}
-            onClick={handleNewChat}
-            title={t("navigation.newChat")}
-            aria-label={t("navigation.newChat")}
-          >
-            <Plus size={16} />
-            <span className="sidebar-nav-label">{t("navigation.newChat")}</span>
-          </button>
-          {PINNED_NAV_ITEMS.map(({ view: v, icon: Icon, labelKey }) => {
-            return (
-              <button
-                key={v}
-                className={`sidebar-nav-item ${view === v ? "active" : ""}`}
-                onClick={() => goTo(v)}
-                title={t(labelKey)}
-                aria-label={t(labelKey)}
-              >
-                <Icon size={16} />
-                <span className="sidebar-nav-label">{t(labelKey)}</span>
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="sidebar-chat-section">
-          <div className="sidebar-nav-sessions">
-            <div className="sidebar-chat-scroll" ref={sidebarChatScrollRef}>
-              <SidebarRecentSessions
-                open={!sidebarCollapsed}
-                activeProfile={activeProfile}
-                currentSessionId={currentSessionId}
-                loadingSessionIds={loadingSessionIds}
-                resumingSessionId={resumingSessionId}
-                onSelect={handleResumeSession}
-                onSessionDeleted={(id) => {
-                  // If the open chat was the one deleted, drop to a fresh chat
-                  // so the user isn't left viewing a now-gone conversation.
-                  if (id === currentSessionId) handleNewChat();
-                }}
-                scrollRootRef={sidebarChatScrollRef}
-              />
-            </div>
-            {sidebarScrollbar.scrollable && (
-              <div
-                className={`sidebar-chat-scrollbar ${
-                  sidebarScrollbar.visible ? "visible" : ""
-                }`}
-                aria-hidden="true"
-              >
-                <div
-                  className="sidebar-chat-scrollbar-thumb"
-                  style={{
-                    height: sidebarScrollbar.height,
-                    transform: `translateY(${sidebarScrollbar.top}px)`,
+          <div className="sidebar-chat-section">
+            <div className="sidebar-nav-sessions">
+              <div className="sidebar-chat-scroll" ref={sidebarChatScrollRef}>
+                <SidebarRecentSessions
+                  open={!sidebarCollapsed}
+                  connectionId={connectionId}
+                  activeProfile={activeProfile}
+                  currentSessionId={currentSessionId}
+                  loadingSessionIds={loadingSessionIds}
+                  resumingSessionId={resumingSessionId}
+                  onSelect={handleResumeSession}
+                  onSessionDeleted={(id) => {
+                    // If the open chat was the one deleted, drop to a fresh chat
+                    // so the user isn't left viewing a now-gone conversation.
+                    if (id === currentSessionId) handleNewChat();
                   }}
+                  scrollRootRef={sidebarChatScrollRef}
                 />
               </div>
-            )}
+              {sidebarScrollbar.scrollable && (
+                <div
+                  className={`sidebar-chat-scrollbar ${
+                    sidebarScrollbar.visible ? "visible" : ""
+                  }`}
+                  aria-hidden="true"
+                >
+                  <div
+                    className="sidebar-chat-scrollbar-thumb"
+                    style={{
+                      height: sidebarScrollbar.height,
+                      transform: `translateY(${sidebarScrollbar.top}px)`,
+                    }}
+                  />
+                </div>
+              )}
+            </div>
           </div>
-        </div>
 
-        <div className="sidebar-footer">
-          {/* Show an upgrade affordance at startup when GitHub has a newer
+          <div className="sidebar-footer">
+            {/* Show an upgrade affordance at startup when GitHub has a newer
               release; it becomes a restart action once downloaded. */}
-          {updateState && (
-            <button
-              className={`sidebar-update-btn ${
-                updateState === "error" ? "error" : ""
-              }`}
-              onClick={handleUpdate}
-              disabled={updateState === "downloading"}
-              title={updateButtonTitle}
-              aria-label={updateButtonTitle}
-            >
-              <Download size={13} />
-              {updateState === "available" && (
-                <span>
-                  {updateVersion
-                    ? t("common.updateAvailable", { version: updateVersion })
-                    : t("common.updateAvailable", { version: "" })}
-                </span>
-              )}
-              {updateState === "downloading" && (
-                <span>
-                  {t("common.downloading", { percent: updatePercent ?? 0 })}
-                </span>
-              )}
-              {updateState === "ready" && (
-                <span>{t("common.restartToUpdate")}</span>
-              )}
-              {updateState === "error" && (
-                <span>{t("common.updateFailed")}</span>
-              )}
-            </button>
-          )}
-          <div className="sidebar-footer-actions" aria-label="Workspace tools">
-            {FOOTER_NAV_ITEMS.map(({ view: v, icon: Icon, labelKey }) => (
+            {updateState && (
               <button
-                key={v}
-                className={`sidebar-footer-action ${view === v ? "active" : ""}`}
-                onClick={() => goTo(v)}
-                aria-label={t(labelKey)}
-                data-tooltip={t(labelKey)}
+                className={`sidebar-update-btn ${
+                  updateState === "error" ? "error" : ""
+                }`}
+                onClick={handleUpdate}
+                disabled={updateState === "downloading"}
+                title={updateButtonTitle}
+                aria-label={updateButtonTitle}
               >
-                <Icon size={16} />
+                <Download size={13} />
+                {updateState === "available" && (
+                  <span>
+                    {updateVersion
+                      ? t("common.updateAvailable", { version: updateVersion })
+                      : t("common.updateAvailable", { version: "" })}
+                  </span>
+                )}
+                {updateState === "downloading" && (
+                  <span>
+                    {t("common.downloading", { percent: updatePercent ?? 0 })}
+                  </span>
+                )}
+                {updateState === "ready" && (
+                  <span>{t("common.restartToUpdate")}</span>
+                )}
+                {updateState === "error" && (
+                  <span>{t("common.updateFailed")}</span>
+                )}
               </button>
-            ))}
-            <button
-              className="sidebar-footer-action"
-              onClick={() =>
-                openSettings(undefined, { profile: activeProfile })
-              }
-              aria-label={t("navigation.settings")}
-              data-tooltip={t("navigation.settings")}
-            >
-              <SettingsIcon size={16} />
-            </button>
-          </div>
-          <ProfileSwitcher
-            activeProfile={activeProfile}
-            onSwitch={handleSelectProfile}
-            onManage={() => goTo("agents")}
-            compact={sidebarCollapsed}
-          />
-        </div>
-      </aside>
-
-      <main className="content">
-        {/* Doubles as the window drag strip — keep it first so it owns the top
-            band; the warning banner (if any) sits just below it. */}
-        <ActiveSessionsBar
-          runs={runs}
-          activeRunId={activeRunId}
-          onSelect={handleActivateRun}
-          onClose={handleCloseRun}
-          onNew={handleNewChat}
-          getAppearance={getAppearance}
-        />
-        {verifyWarning && onReinstall && onDismissVerifyWarning && (
-          <VerifyWarningBanner
-            onReinstall={onReinstall}
-            onDismiss={onDismissVerifyWarning}
-          />
-        )}
-        <div style={paneStyle("chat")}>
-          {runs.map((run) => (
+            )}
             <div
-              key={run.runId}
-              style={{
-                display:
-                  view === "chat" && run.runId === activeRunId
-                    ? "flex"
-                    : "none",
-                flex: 1,
-                flexDirection: "column",
-                overflow: "hidden",
-              }}
+              className="sidebar-footer-actions"
+              aria-label="Workspace tools"
             >
-              <Chat
-                runId={run.runId}
-                initialMessages={run.seed}
-                initialSessionId={run.sessionId}
-                active={run.runId === activeRunId}
-                profile={run.profile}
-                onNewChat={handleNewChat}
-                onOpenDiagnose={(section?: string) =>
-                  openSettings(section, { profile: run.profile })
+              {FOOTER_NAV_ITEMS.map(({ view: v, icon: Icon, labelKey }) => (
+                <button
+                  key={v}
+                  className={`sidebar-footer-action ${view === v ? "active" : ""}`}
+                  onClick={() => goTo(v)}
+                  aria-label={t(labelKey)}
+                  data-tooltip={t(labelKey)}
+                >
+                  <Icon size={16} />
+                </button>
+              ))}
+              <button
+                className="sidebar-footer-action"
+                onClick={() =>
+                  openSettings(undefined, { profile: activeProfile })
                 }
-                onLoadingChange={handleRunLoading}
-                onSessionIdChange={handleRunSessionId}
-                onTitleChange={handleRunTitle}
-              />
+                aria-label={t("navigation.settings")}
+                data-tooltip={t("navigation.settings")}
+              >
+                <SettingsIcon size={16} />
+              </button>
             </div>
-          ))}
-        </div>
-
-        {sessionsModalOpen && (
-          <div
-            className="models-modal-overlay"
-            onClick={() => setSessionsModalOpen(false)}
-          >
-            <div
-              className="sessions-modal"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Sessions
-                onResumeSession={(id) => {
-                  setSessionsModalOpen(false);
-                  void handleResumeSession(id);
-                }}
-                onNewChat={() => {
-                  setSessionsModalOpen(false);
-                  handleNewChat();
-                }}
-                currentSessionId={currentSessionId}
-                visible={sessionsModalOpen}
-              />
-            </div>
-          </div>
-        )}
-
-        {visitedViews.has("discover") && (
-          <div style={paneStyle("discover")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Discover" />
-            ) : (
-              <Discover
-                profile={activeProfile}
-                visible={view === "discover"}
-                focusKind={discoverFocus ?? undefined}
-              />
-            )}
-          </div>
-        )}
-
-        {visitedViews.has("agents") && (
-          <div style={paneStyle("agents")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Profiles" />
-            ) : (
-              <Agents
-                activeProfile={activeProfile}
-                onSelectProfile={handleSelectProfile}
-                onChatWith={handleChatWithProfile}
-              />
-            )}
-          </div>
-        )}
-
-        {visitedViews.has("office") && (
-          <div style={paneStyle("office")}>
-            <Office profile={activeProfile} visible={view === "office"} />
-          </div>
-        )}
-
-        {visitedViews.has("providers") && (
-          <div style={paneStyle("providers")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Providers" />
-            ) : (
-              <Providers
-                profile={activeProfile}
-                visible={view === "providers"}
-              />
-            )}
-          </div>
-        )}
-
-        {visitedViews.has("skills") && (
-          <div style={paneStyle("skills")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Skills" />
-            ) : (
-              <Skills profile={activeProfile} />
-            )}
-          </div>
-        )}
-
-        {visitedViews.has("memory") && (
-          <div style={paneStyle("memory")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Memory" />
-            ) : (
-              <Memory profile={activeProfile} />
-            )}
-          </div>
-        )}
-
-        {visitedViews.has("tools") && (
-          <div style={paneStyle("tools")}>
-            <Tools
-              profile={activeProfile}
-              showPlatformToolsets={!remoteMode}
-              remoteMode={remoteMode}
-              visible={view === "tools"}
-              onBrowseSkills={() => focusDiscover("skills")}
-              onBrowseMcps={() => focusDiscover("mcps")}
+            <ProfileSwitcher
+              activeProfile={activeProfile}
+              onSwitch={handleSelectProfile}
+              onManage={() => goTo("agents")}
+              compact={sidebarCollapsed}
             />
           </div>
-        )}
+        </aside>
 
-        {visitedViews.has("schedules") && (
-          <div style={paneStyle("schedules")}>
-            <Schedules profile={activeProfile} />
+        <main className="content">
+          {/* Doubles as the window drag strip — keep it first so it owns the top
+            band; the warning banner (if any) sits just below it. */}
+          <ActiveSessionsBar
+            runs={runs}
+            activeRunId={activeRunId}
+            onSelect={handleActivateRun}
+            onClose={handleCloseRun}
+            onNew={handleNewChat}
+            getAppearance={getAppearance}
+          />
+          {verifyWarning && onReinstall && onDismissVerifyWarning && (
+            <VerifyWarningBanner
+              onReinstall={onReinstall}
+              onDismiss={onDismissVerifyWarning}
+            />
+          )}
+          <div style={paneStyle("chat")}>
+            {runs.map((run) => (
+              <div
+                key={run.runId}
+                style={{
+                  display:
+                    view === "chat" && run.runId === activeRunId
+                      ? "flex"
+                      : "none",
+                  flex: 1,
+                  flexDirection: "column",
+                  overflow: "hidden",
+                }}
+              >
+                <Chat
+                  runId={run.runId}
+                  connectionId={run.connectionId}
+                  initialMessages={run.seed}
+                  initialSessionId={run.sessionId}
+                  active={run.runId === activeRunId}
+                  profile={run.profile}
+                  onNewChat={handleNewChat}
+                  onOpenDiagnose={(section?: string) =>
+                    openSettings(section, { profile: run.profile })
+                  }
+                  onLoadingChange={handleRunLoading}
+                  onSessionIdChange={handleRunSessionId}
+                  onTitleChange={handleRunTitle}
+                  agentAppearance={getAppearance(run.profile)}
+                />
+              </div>
+            ))}
           </div>
-        )}
 
-        {visitedViews.has("kanban") && (
-          <div style={paneStyle("kanban")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Kanban" />
-            ) : (
-              <Kanban profile={activeProfile} visible={view === "kanban"} />
-            )}
-          </div>
-        )}
+          {sessionsModalOpen && (
+            <div
+              className="models-modal-overlay"
+              onClick={() => setSessionsModalOpen(false)}
+            >
+              <div
+                className="sessions-modal"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Sessions
+                  connectionId={connectionId}
+                  profile={activeProfile}
+                  onResumeSession={(id) => {
+                    setSessionsModalOpen(false);
+                    void handleResumeSession(id);
+                  }}
+                  onNewChat={() => {
+                    setSessionsModalOpen(false);
+                    handleNewChat();
+                  }}
+                  currentSessionId={currentSessionId}
+                  visible={sessionsModalOpen}
+                />
+              </div>
+            </div>
+          )}
 
-        {visitedViews.has("gateway") && (
-          <div style={paneStyle("gateway")}>
-            {remoteMode ? (
-              <RemoteNotice feature="Gateway" />
-            ) : (
-              <Gateway profile={activeProfile} />
-            )}
-          </div>
-        )}
-      </main>
+          {visitedViews.has("discover") && (
+            <div style={paneStyle("discover")}>
+              {remoteMode ? (
+                <RemoteNotice feature="Discover" />
+              ) : (
+                <Discover
+                  profile={activeProfile}
+                  visible={view === "discover"}
+                  focusKind={discoverFocus ?? undefined}
+                />
+              )}
+            </div>
+          )}
+
+          {visitedViews.has("agents") && (
+            <div style={paneStyle("agents")}>
+              {remoteMode ? (
+                <RemoteNotice feature="Profiles" />
+              ) : (
+                <Agents
+                  activeProfile={activeProfile}
+                  onSelectProfile={handleSelectProfile}
+                  onChatWith={handleChatWithProfile}
+                />
+              )}
+            </div>
+          )}
+
+          {visitedViews.has("office") && (
+            <div style={paneStyle("office")}>
+              <Office profile={activeProfile} visible={view === "office"} />
+            </div>
+          )}
+
+          {visitedViews.has("providers") && (
+            <div style={paneStyle("providers")}>
+              {remoteMode ? (
+                <RemoteNotice feature="Providers" />
+              ) : (
+                <Providers
+                  profile={activeProfile}
+                  visible={view === "providers"}
+                />
+              )}
+            </div>
+          )}
+
+          {visitedViews.has("skills") && (
+            <div style={paneStyle("skills")}>
+              {remoteMode ? (
+                <RemoteNotice feature="Skills" />
+              ) : (
+                <Skills profile={activeProfile} />
+              )}
+            </div>
+          )}
+
+          {visitedViews.has("memory") && (
+            <div style={paneStyle("memory")}>
+              {remoteMode ? (
+                <RemoteNotice feature="Memory" />
+              ) : (
+                <Memory profile={activeProfile} />
+              )}
+            </div>
+          )}
+
+          {visitedViews.has("tools") && (
+            <div style={paneStyle("tools")}>
+              <Tools
+                profile={activeProfile}
+                showPlatformToolsets={!remoteMode}
+                remoteMode={remoteMode}
+                visible={view === "tools"}
+                onBrowseSkills={() => focusDiscover("skills")}
+                onBrowseMcps={() => focusDiscover("mcps")}
+              />
+            </div>
+          )}
+
+          {visitedViews.has("schedules") && (
+            <div style={paneStyle("schedules")}>
+              <Schedules profile={activeProfile} />
+            </div>
+          )}
+
+          {visitedViews.has("kanban") && (
+            <div style={paneStyle("kanban")}>
+              {remoteMode ? (
+                <RemoteNotice feature="Kanban" />
+              ) : (
+                <Kanban profile={activeProfile} visible={view === "kanban"} />
+              )}
+            </div>
+          )}
+
+          {visitedViews.has("gateway") && (
+            <div style={paneStyle("gateway")}>
+              {remoteMode ? (
+                <RemoteNotice feature="Gateway" />
+              ) : (
+                <Gateway profile={activeProfile} />
+              )}
+            </div>
+          )}
+        </main>
+      </div>
+      <StatusBar activeProfile={activeProfile} />
     </div>
   );
 }

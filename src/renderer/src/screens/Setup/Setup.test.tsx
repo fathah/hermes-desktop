@@ -37,30 +37,34 @@ function installHermesAPI(): {
 }
 
 describe("Setup", () => {
-  it("saves DashScope credentials to the active setup profile", async () => {
-    const api = installHermesAPI();
-    const onComplete = vi.fn();
-    render(<Setup profile="work" onComplete={onComplete} />);
+  // @lat: [[provider-setup#Provider setup#Setup profile credentials]]
+  it.each(["work", "default"])(
+    "saves DashScope credentials to setup profile %s",
+    async (profile) => {
+      const api = installHermesAPI();
+      const onComplete = vi.fn();
+      render(<Setup profile={profile} onComplete={onComplete} />);
 
-    fireEvent.click(screen.getByText("Alibaba DashScope"));
-    fireEvent.change(screen.getByPlaceholderText("sk-..."), {
-      target: { value: "sk-dashscope" },
-    });
-    fireEvent.click(screen.getByText("setup.continue"));
+      fireEvent.click(screen.getByText("Alibaba DashScope"));
+      fireEvent.change(screen.getByPlaceholderText("sk-..."), {
+        target: { value: "sk-dashscope" },
+      });
+      fireEvent.click(screen.getByText("setup.continue"));
 
-    await waitFor(() => {
-      expect(api.setEnv).toHaveBeenCalledWith(
-        "DASHSCOPE_API_KEY",
-        "sk-dashscope",
-        "work",
+      await waitFor(() => {
+        expect(api.setEnv).toHaveBeenCalledWith(
+          "DASHSCOPE_API_KEY",
+          "sk-dashscope",
+          profile,
+        );
+      });
+      expect(api.setModelConfig).toHaveBeenCalledWith(
+        "alibaba",
+        "",
+        DEFAULT_DASHSCOPE_BASE_URL,
+        profile,
       );
-    });
-    expect(api.setModelConfig).toHaveBeenCalledWith(
-      "alibaba",
-      "",
-      DEFAULT_DASHSCOPE_BASE_URL,
-      "work",
-    );
-    expect(onComplete).toHaveBeenCalled();
-  });
+      expect(onComplete).toHaveBeenCalled();
+    },
+  );
 });
