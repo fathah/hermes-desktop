@@ -102,7 +102,7 @@ export default {
   atlascloudApiKey: "AtlasCloud API Key",
   atlascloudHint: "Claude, GPT & open models via AtlasCloud",
   novitaApiKey: "Novita API Key",
-  novitaHint: "90+ open and commercial models via Novita",
+  novitaHint: "Models hosted by Novita",
   mistralApiKey: "Mistral API Key",
   mistralHint: "Mistral and Codestral models",
   perplexityApiKey: "Perplexity API Key",

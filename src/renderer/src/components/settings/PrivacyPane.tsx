@@ -1,5 +1,6 @@
 import { useI18n } from "../useI18n";
 import { setAnalyticsConsent } from "../../utils/analytics";
+import { Toggle } from "../common/Toggle";
 import { useSettings } from "./SettingsDataContext";
 
 /** Anonymous usage analytics consent. */
@@ -9,28 +10,23 @@ export default function PrivacyPane(): React.JSX.Element {
 
   return (
     <div className="settings-modal-pane">
-      <div className="settings-field">
-        <label className="settings-field-label">
-          {t("settings.analytics.label")}
-          <label
-            className="tools-toggle"
-            style={{ marginLeft: 12, verticalAlign: "middle" }}
-          >
-            <input
-              type="checkbox"
-              checked={analyticsEnabled}
-              onChange={(e) => {
-                const enabled = e.target.checked;
-                setAnalyticsEnabled(enabled);
-                setAnalyticsConsent(enabled);
-              }}
-            />
-            <span className="tools-toggle-track" />
-          </label>
-        </label>
-        <div className="settings-field-hint">
-          {t("settings.analytics.hint")}
+      <div className="settings-field settings-toggle-row">
+        <div className="settings-toggle-text">
+          <div className="settings-toggle-title">
+            {t("settings.analytics.label")}
+          </div>
+          <div className="settings-field-hint">
+            {t("settings.analytics.hint")}
+          </div>
         </div>
+        <Toggle
+          checked={analyticsEnabled}
+          label={t("settings.analytics.label")}
+          onCheckedChange={(enabled) => {
+            setAnalyticsEnabled(enabled);
+            setAnalyticsConsent(enabled);
+          }}
+        />
       </div>
     </div>
   );

@@ -90,6 +90,27 @@ describe("mergeStreamedWithFinal", () => {
     ).toBe("abcdefghijkl\n\na1b2c3d4e5f6g7h8i9j0k1l2");
   });
 
+  it.each([
+    { length: 11, gap: 3 },
+    { length: 12, gap: 29 },
+  ])(
+    "retains a distinct supplementary-plane stream below the guards ($length/$gap)",
+    ({ length, gap }) => {
+      const characters = Array.from({ length }, (_, index) =>
+        String.fromCodePoint(0x20000 + index),
+      );
+      const streamed = characters.join("");
+      const final =
+        characters.slice(0, 6).join("") +
+        "x".repeat(gap) +
+        characters.slice(6).join("") +
+        "!";
+      expect(mergeStreamedWithFinal(streamed, final)).toBe(
+        `${streamed}\n\n${final}`,
+      );
+    },
+  );
+
   it("stitches a re-streamed boundary, dropping the duplicated seam", () => {
     // Tail of streamed repeats the head of final at a word boundary.
     expect(mergeStreamedWithFinal("The answer is 4", "answer is 4.")).toBe(
@@ -207,5 +228,78 @@ describe("applyDashboardStreamEvent — message.complete text reconciliation", (
     const bubble = next.messages.find((m) => m.role === "agent");
     expect(bubble).toBeDefined();
     expect((bubble as { content: string }).content).toBe("Remote answer");
+  });
+});
+
+describe("applyDashboardStreamEvent approval requests", () => {
+  it("projects a structured dashboard approval and dedupes repeated events", () => {
+    const state: DashboardEventState = {
+      messages: [],
+      reasoningSegmentClosed: false,
+    };
+    const event = {
+      type: "approval.request",
+      session_id: "session-1",
+      payload: {
+        request_id: "request-1",
+        command: "npm publish",
+        description: "Publish this package",
+        choices: ["once", "always", "bogus"],
+      },
+    };
+
+    const first = applyDashboardStreamEvent(state, event);
+    const second = applyDashboardStreamEvent(first, event);
+
+    expect(first.reasoningSegmentClosed).toBe(true);
+    expect(first.messages).toEqual([
+      {
+        id: "approval-dashboard-request-1",
+        kind: "approval",
+        role: "agent",
+        responsePath: "dashboard",
+        requestId: "request-1",
+        command: "npm publish",
+        description: "Publish this package",
+        choices: ["once", "always", "deny"],
+      },
+    ]);
+    expect(second.messages).toHaveLength(1);
+  });
+
+  it("creates a session/time-scoped identity when the gateway omits one", () => {
+    const next = applyDashboardStreamEvent(
+      { messages: [], reasoningSegmentClosed: false },
+      {
+        type: "approval.request",
+        session_id: "session-2",
+        payload: { command: "echo hello" },
+      },
+      { now: 1234 },
+    );
+
+    expect(next.messages[0]).toMatchObject({
+      requestId: "dashboard-approval-session-2-1234",
+      responsePath: "dashboard",
+    });
+  });
+
+  it("keeps distinct gateway request IDs even when request content matches", () => {
+    const first = applyDashboardStreamEvent(
+      { messages: [], reasoningSegmentClosed: false },
+      {
+        type: "approval.request",
+        payload: { request_id: "one", command: "echo hello" },
+      },
+    );
+    const second = applyDashboardStreamEvent(first, {
+      type: "approval.request",
+      payload: { request_id: "two", command: "echo hello" },
+    });
+
+    expect(second.messages.map((message) => message.id)).toEqual([
+      "approval-dashboard-one",
+      "approval-dashboard-two",
+    ]);
   });
 });

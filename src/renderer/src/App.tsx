@@ -4,6 +4,7 @@ import { ThemeProvider } from "./components/ThemeProvider";
 import { FontProvider } from "./components/FontProvider";
 import { ProfileModalProvider } from "./components/profile/ProfileModalProvider";
 import { SettingsModalProvider } from "./components/settings/SettingsModalProvider";
+import { ChatPreferencesProvider } from "./components/ChatPreferencesProvider";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Welcome from "./screens/Welcome/Welcome";
 import Install from "./screens/Install/Install";
@@ -24,6 +25,7 @@ function App(): React.JSX.Element {
   const [connectionMode, setConnectionMode] = useState<
     "local" | "remote" | "ssh"
   >("local");
+  const [connectionId, setConnectionId] = useState("");
   // Soft warning: install files exist but the deep `verifyInstall` probe
   // failed (e.g. slow Python startup, restricted network). We surface this
   // as a dismissible banner instead of bouncing the user back to Welcome,
@@ -31,6 +33,9 @@ function App(): React.JSX.Element {
   // loop on every launch (#130).
   const [verifyWarning, setVerifyWarning] = useState(false);
   const [splashStatus, setSplashStatus] = useState<string | undefined>(
+    undefined,
+  );
+  const [setupProfile, setSetupProfile] = useState<string | undefined>(
     undefined,
   );
   const isMac = window.electron?.process?.platform === "darwin";
@@ -45,12 +50,14 @@ function App(): React.JSX.Element {
     let next: Screen = "welcome";
     const error: string | null = null;
     let isRemote = false;
+    let nextSetupProfile = "default";
 
     try {
       setSplashStatus("Checking connection…");
       const conn = await window.hermesAPI.getConnectionConfig();
       isRemote = conn.mode === "remote" || conn.mode === "ssh";
       setConnectionMode(conn.mode);
+      setConnectionId(conn.connectionId);
 
       if (conn.mode === "ssh" && conn.ssh) {
         setSplashStatus("Starting SSH tunnel…");
@@ -72,6 +79,7 @@ function App(): React.JSX.Element {
       } else {
         setSplashStatus("Checking local install…");
         const status = await window.hermesAPI.checkInstall();
+        nextSetupProfile = status.activeProfile || "default";
         if (!status.installed) {
           next = "welcome";
         } else if (!status.hasApiKey) {
@@ -117,6 +125,7 @@ function App(): React.JSX.Element {
       await new Promise((r) => setTimeout(r, wait));
     }
     if (myRun !== runIdRef.current) return;
+    if (!isRemote) setSetupProfile(nextSetupProfile);
     setScreen(next);
 
     // Lazy deep-verify in the background after the UI is up. If the
@@ -139,6 +148,15 @@ function App(): React.JSX.Element {
   useEffect(() => {
     runInstallCheck();
   }, [runInstallCheck]);
+
+  useEffect(
+    () =>
+      window.hermesAPI.onConnectionConfigChanged((connection) => {
+        setConnectionMode(connection.mode);
+        setConnectionId(connection.connectionId);
+      }),
+    [],
+  );
 
   // Track screen views for analytics
   useEffect(() => {
@@ -223,6 +241,7 @@ function App(): React.JSX.Element {
         return (
           <Setup
             onComplete={() => setScreen("main")}
+            profile={setupProfile}
             verifyWarning={verifyWarning}
             onReinstall={handleVerifyReinstall}
             onDismissVerifyWarning={handleDismissVerifyWarning}
@@ -231,6 +250,7 @@ function App(): React.JSX.Element {
       case "main":
         return (
           <Layout
+            connectionId={connectionId}
             verifyWarning={verifyWarning}
             onReinstall={handleVerifyReinstall}
             onDismissVerifyWarning={handleDismissVerifyWarning}
@@ -242,32 +262,34 @@ function App(): React.JSX.Element {
   return (
     <ThemeProvider>
       <FontProvider>
-        <ProfileModalProvider>
-          <SettingsModalProvider>
-            <ErrorBoundary>
-              <div
-                className={`app${isMac ? " is-mac" : ""}${
-                  isMac && screen === "main" ? " shell-vibrant" : ""
-                }`}
-              >
-                {isMac && <div className="drag-region" />}
-                <div className="app-content">{renderScreen()}</div>
-              </div>
-              <Toaster
-                position="bottom-right"
-                reverseOrder={false}
-                toastOptions={{
-                  style: {
-                    background: "var(--bg-elevated)",
-                    color: "var(--text-primary)",
-                    border: "1px solid var(--border-bright)",
-                    fontSize: 13,
-                  },
-                }}
-              />
-            </ErrorBoundary>
-          </SettingsModalProvider>
-        </ProfileModalProvider>
+        <ChatPreferencesProvider>
+          <ProfileModalProvider>
+            <SettingsModalProvider>
+              <ErrorBoundary>
+                <div
+                  className={`app${isMac ? " is-mac" : ""}${
+                    isMac && screen === "main" ? " shell-vibrant" : ""
+                  }`}
+                >
+                  {isMac && <div className="drag-region" />}
+                  <div className="app-content">{renderScreen()}</div>
+                </div>
+                <Toaster
+                  position="bottom-right"
+                  reverseOrder={false}
+                  toastOptions={{
+                    style: {
+                      background: "var(--bg-elevated)",
+                      color: "var(--text-primary)",
+                      border: "1px solid var(--border-bright)",
+                      fontSize: 13,
+                    },
+                  }}
+                />
+              </ErrorBoundary>
+            </SettingsModalProvider>
+          </ProfileModalProvider>
+        </ChatPreferencesProvider>
       </FontProvider>
     </ThemeProvider>
   );

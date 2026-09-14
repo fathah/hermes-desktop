@@ -13,6 +13,7 @@ export default {
     },
     appearance: "Appearance",
     language: "Language",
+    notifications: "Notifications",
     privacy: "Privacy",
     connection: "Connection",
     network: "Network",
@@ -71,6 +72,23 @@ export default {
     portuguese: "Portuguese",
     turkish: "Türkçe",
     hint: "Choose the interface language",
+  },
+  notifications: {
+    completionSound: "Play a sound when a response finishes",
+    completionSoundHint:
+      "Applies to active and background conversations. Visual status indicators remain enabled.",
+  },
+  spellcheck: {
+    enable: "Enable spellcheck",
+    enableHint: "Show spelling suggestions in message fields.",
+    useSystem: "Use system languages",
+    useSystemHint:
+      "Use the dictionaries Electron selected from your operating-system language settings.",
+    chooseLanguages: "Choose spellcheck languages",
+    chooseLanguagesHint:
+      "Select one or more installed dictionaries. The selection applies immediately.",
+    unavailable:
+      "No spellcheck dictionaries are available in this installation.",
   },
   analytics: {
     label: "Send anonymous usage analytics",
@@ -143,6 +161,17 @@ export default {
   apiKeyPlaceholder: "API Key",
   labelPlaceholder: "Label ({{optional}})",
   connectionSection: "Connection",
+  savedConnections: "Saved connections",
+  savedConnectionsHint:
+    "Select which Hermes installation new chats and settings use.",
+  addConnection: "Add connection",
+  connectionName: "Connection name",
+  renameConnection: "Rename",
+  removeConnectionConfirm: 'Remove the connection "{{name}}"?',
+  connectionCreated: "Connection created.",
+  connectionRenamed: "Connection renamed.",
+  connectionSelected: "Connection selected.",
+  connectionRemoved: "Connection removed.",
   modeLocal: "Local",
   modeRemote: "Remote",
   modeLocalHint: "Using Hermes installed on this device",

@@ -3,7 +3,9 @@ This directory defines the high-level concepts, business logic, and architecture
 > **Hermes One** is a community-maintained project. This desktop app is a wrapper around **Hermes Agent** — it is **not affiliated with, endorsed by, or supported by Nous Research**. "Hermes One" is the name of this community project; "Hermes"/"Hermes Agent" refer to the upstream agent it builds on.
 
 - [[chat-commands]] — how typed slash commands are routed through the gateway's `slash.exec`/`command.dispatch` pipeline instead of being sent as prompt text.
+- [[chat-input]] — the unified chat composer surface and its theme-aware animated border treatment.
 - [[chat-performance]] — how chat rendering stays responsive through contained transcript rows, batched textarea resizing, and fixed-row slash-command virtualization.
+- [[chat-experience-preferences]] — user-message Markdown plus persisted completion-sound and native multi-language spell-check preferences.
 - [[model-context]] — the per-model context-window override that drives the context gauge and the agent's auto-compaction.
 - [[model-selection]] — the session-scoped in-chat model override that switches the model (and provider) for one conversation without touching the global default.
 - [[reasoning-effort]] — the composer's Faster⟷Smarter effort control: a draggable `role="slider"` over six ordered levels that stays open until dismissed and commits one `onChange` per real change.
@@ -12,6 +14,9 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[loading-indicators]] — the thinking-orbs dotted-orb loaders behind every loading state, and the OrbLoader wrapper that pins dark/light from the Hermes theme registry instead of the library's auto-detection.
 - [[window-chrome]] — the browser-style title bar where open-conversation tabs sit on top of the window drag region, clickable while empty space still drags.
 - [[desktop-updates]] — GitHub release checks, startup upgrade button behavior, and the Settings auto-upgrade preference.
+- [[desktop-security]] — verified Unix bootstrap execution and safe rendering of runtime provider names.
+- [[agent-capabilities]] — capability-based compatibility between the independent desktop and system-installed Hermes Agent, including bounded runtime evidence and update gating.
+- [[connections]] — the versioned main-process connection registry, stable active connection identity, and lossless migration from the legacy singleton configuration.
 - [[sidebar-navigation]] — the recent-sessions list under the Chat nav item, capped at five with a "Show more" button that opens the full session list in a modal.
 - [[context-folder]] — the per-session linked working folder, persisted in a desktop-owned state.db table so a re-opened conversation restores its folder.
 - [[main-process]] — the Electron main-process entrypoint, app lifecycle modules, and centralized IPC registry.
@@ -29,3 +34,4 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[office-interactions]] — space representatives: interactive bank tellers whose menu runs account status, balances, and account creation against the hermes-one backend for a chosen agent; the extensible pattern for future spaces (showroom sales, building space).
 - [[office-world-actions]] — chat-commanded errands: the agent's LLM emits world-action blocks from the office chat, its avatar walks the trip route to the bank/showroom, and the rep modal auto-opens running the requested action on arrival.
 - [[mcp-servers]] — add / edit / remove / enable / test MCP servers from the Capabilities → MCP tab; the shared add+edit modal and the in-place atomic `updateMcpServer` upsert (config.yaml locally, gateway REST in Remote/SSH).
+- [[scheduled-jobs]] — schedule state normalization across local files, remote API responses, and named SSH profiles.

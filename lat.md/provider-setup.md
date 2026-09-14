@@ -4,6 +4,12 @@ The first-run screen where the user picks an AI provider and enters credentials 
 
 The provider list is data-driven from `PROVIDERS.setup` in [[src/renderer/src/constants.ts]]. Each entry carries an `envKey`, `configProvider`, `baseUrl`, and `needsKey`; selecting a card drives which form fields show (API key, or the Local server/base-URL flow).
 
+## Setup profile credentials
+
+Setup saves credentials and model configuration to the profile returned by the successful install check, keeping named profiles isolated from the default workspace.
+
+The first-run gate is profile-aware: `checkInstall` decides whether setup is needed for the active profile, so [[src/renderer/src/App.tsx#App]] passes that profile into [[src/renderer/src/screens/Setup/Setup.tsx#Setup]]. Setup writes both `.env` and `config.yaml` to the same profile, preventing a named active profile from losing the key to the default workspace. Only the latest completed install check may update the setup profile, so an older check cannot overwrite the profile chosen by a newer startup attempt.
+
 ## Hermes One is the first-priority provider
 
 **Hermes One Inference** (`https://inference.hermesone.org/v1`) is Hermes One's own OpenAI-compatible gateway, listed **first** in `PROVIDERS.setup`, `PROVIDER_CARDS`, and the `SETTINGS_SECTIONS` "LLM Providers" items — so it leads the Add-provider picker.
@@ -36,7 +42,19 @@ The **MODEL** section shows a read-only summary (logo + provider label + model).
 
 That modal (`model-select-modal`) is styled **light-based** (no strokes): the container border, header/footer dividers, and control outlines are dropped in favor of filled controls (`--bg-elevated`, `--bg-hover` on hover/open) — matching the branded config modal's treatment. Crucially it sets `overflow: visible` (the base `.models-modal` clips with `overflow: hidden`), so the `LogoSelect` dropdown — which is absolutely positioned and can extend past the modal — isn't clipped; the menu itself caps at `max-height` and scrolls internally when the provider list is long. Without the override the lower providers were hidden and unreachable.
 
-The provider list (`pickerProviders`) is sourced from the **configured providers** — the same set shown as LLM cards — NOT from which providers happen to have saved models: keyed FieldDef providers (`env[f.key]` set, in FieldDef order so Hermes One leads) plus named custom providers whose `customProviderEnvKey(label)` is set. So a freshly-keyed provider with no models yet still appears.
+The provider list (`pickerProviders`) is sourced from the **configured providers**, NOT from which providers happen to have saved models: keyed FieldDef providers, authenticated OAuth plans, plus named custom providers whose `customProviderEnvKey(label)` is set. So a newly configured provider with no models yet still appears.
+
+### Authenticated OAuth providers are selectable
+
+OAuth plans with usable `auth.json` credentials appear in the active-model picker even though they have no API-key environment variable.
+
+Each picker open asks the main process for a boolean status per supported OAuth provider. Local mode uses [[src/main/config.ts#hasOAuthCredentials]] so both `providers` and `credential_pool` auth shapes and profile fallback work. Access and refresh tokens never enter renderer state. [[src/renderer/src/screens/Providers/provider-picker.ts#buildAuthenticatedOAuthPickerProviders]] merges authenticated plans with saved and discovered models, while deduplicating providers such as Nous that may also have an API key. [[tests/provider-picker.test.ts]] covers the keyless Codex-plan regression.
+
+#### Connection-specific credential source
+
+OAuth usability is read from the machine that owns the active model library, preventing a local token from leaking into Remote or SSH picker decisions.
+
+Dashboard-backed Remote and SSH connections call the authenticated `/api/providers/oauth` endpoint through [[src/main/remote-provider-statuses.ts#remoteGetOAuthProviderStatuses]], scoped to the selected named profile when present, reduce its response to supported-provider booleans in the main process, and discard every token preview and metadata field. Legacy SSH reads the selected remote profile's `auth.json` through [[src/main/ssh-remote.ts#sshGetOAuthProviderStatuses]], with default-profile fallback and boolean-only output. Direct Remote legacy transport has no credential-status API and therefore fails closed instead of consulting desktop-local state. Status failures do not prevent the picker from opening; they only omit unverified OAuth entries. [[tests/remote-provider-statuses.test.ts]] covers dashboard authentication and profile scoping, boolean reduction, allowlisting, and malformed-response fail-closed behavior.
 
 ### Native keys without a setup card still route
 
@@ -74,11 +92,21 @@ The section is rendered **standalone, above the credential pool** rather than in
 
 The picker offers a **Custom provider** tile (last) for any OpenAI-compatible endpoint not covered by a built-in card. You can add **multiple**, each with a distinct name, base URL, and its own key.
 
-A custom provider's **identity** (name + base URL) is a first-class record in the desktop's per-profile store [[src/main/providers-store.ts]] (`providers.json`, plaintext — it holds no secrets, only name + base URL). Its **key** still lives in the profile `.env` and its **models** in `models.json`; the store is *additive* so a provider renders as a card the moment it is saved, independent of whether any model has been added. This fixed the prior gap where a keyed-but-modelless provider was invisible.
+A custom provider's **identity** (name + base URL) is a first-class record in the desktop's per-profile store [[src/main/providers-store.ts]] (`providers.json`, plaintext — it holds no secrets, only name + base URL). Its **key** still lives in the profile `.env` and its **models** in `models.json`; the store is _additive_ so a provider renders as a card the moment it is saved, independent of whether any model has been added. This fixed the prior gap where a keyed-but-modelless provider was invisible.
 
 The config modal collects **Name**, **Base URL**, and an API key. On save (modal close) the identity is upserted via `upsertCustomProvider` ([[src/main/providers-store.ts#upsertCustomProvider]]), deduped by the derived env-key anchor so a re-save updates in place. The key is stored under the provider's dedicated env var, [[src/shared/url-key-map.ts#customProviderEnvKey]]`(name)` → `CUSTOM_PROVIDER_<SANITISED_NAME>_KEY` — so two custom providers never share a key. Models are added through the same [[src/renderer/src/components/ProviderKeysSection.tsx#ProviderModelsManager]] with an explicit `{ provider: "custom", baseUrl }` route plus `providerLabel = name`; that label is persisted on each [[src/main/models.ts#SavedModel]] (`providerLabel`) via [[src/main/models.ts#addModel]] (whose dedup now includes base URL, so the same model id can exist under two endpoints).
 
-Configured custom-provider cards are the **union** of three sources, deduped by env-key anchor (in [[src/renderer/src/components/ProviderKeysSection.tsx#ProviderKeysSection]]): (1) the authoritative `providers.json` records via `listCustomProviders`; (2) back-compat — `provider: "custom"` models in `models.json` whose host resolves to `CUSTOM_API_KEY` (known compat hosts like groq/hermesone are excluded — they own dedicated key cards), grouped by `providerLabel`; (3) **orphan recovery** — any `CUSTOM_PROVIDER_*_KEY` env var with a value but no record/model, surfaced with an empty base URL so the user can complete or remove it. The active-model picker in [[src/renderer/src/screens/Providers/Providers.tsx]] unions (1) with the models-derived labels too, so a keyed custom provider is selectable before a model is saved; it prefers the authoritative `providers.json` base URL over a saved model's URL, so editing an existing provider's endpoint reroutes newly picked models instead of pinning them to the stale URL (a saved model's URL is used only for legacy/orphan records whose stored base URL is blank). **Remove provider** deletes its models, drops its `providers.json` record (`removeCustomProvider`), and clears its `CUSTOM_PROVIDER_*` key. The runtime is unchanged: [[src/main/hermes.ts]] still looks up the base-URL-matched model and derives `customProviderEnvKey(providerLabel ?? name)`, so every model under a provider shares that provider's key.
+Configured custom-provider cards are the **union** of three sources, deduped by env-key anchor (in [[src/renderer/src/components/ProviderKeysSection.tsx#ProviderKeysSection]]): (1) the authoritative `providers.json` records via `listCustomProviders`; (2) back-compat — `provider: "custom"` models in `models.json` whose host resolves to `CUSTOM_API_KEY` (known compat hosts like groq/hermesone are excluded — they own dedicated key cards), grouped by `providerLabel`; (3) **orphan recovery** — any `CUSTOM_PROVIDER_*_KEY` env var with a value but no record/model, surfaced with an empty base URL so the user can complete or remove it. The active-model picker in [[src/renderer/src/screens/Providers/Providers.tsx]] unions (1) with the models-derived labels too, so a keyed custom provider is selectable before a model is saved; it prefers the authoritative `providers.json` base URL over a saved model's URL, so editing an existing provider's endpoint reroutes newly picked models instead of pinning them to the stale URL (a saved model's URL is used only for legacy/orphan records whose stored base URL is blank). **Remove provider** deletes its models, drops its `providers.json` record (`removeCustomProvider`), and clears its `CUSTOM_PROVIDER_*` key. [[src/main/hermes.ts]] resolves each matching model’s `customProviderEnvKey(providerLabel || name)` from profile environment values or enumerated vault secrets. Endpoint comparison normalizes scheme/host case, default ports, and trailing slashes while preserving path and query case.
+
+#### Credential readiness
+
+Config health and pre-send checks recognize per-label custom-provider keys only for matching endpoint identities and the selected profile, preventing false missing-key warnings without crossing host or path boundaries.
+
+The model store resolves file paths at read/write time so the config-to-models import does not access the installer’s home path before its module has initialized.
+
+#### Runtime credential parity
+
+CLI launch uses the same normalized endpoint match, skips saved labels without credentials, and accepts keys from the selected profile’s environment or enumerated secret provider.
 
 ### Adding a curated partner provider
 
@@ -139,6 +167,12 @@ This exists because desktop models on `inference.hermesone.org` are saved as bar
 
 A provider's config modal manages the models it serves — the **only** place models are added/edited, since there is no standalone Models screen. The provider→models hierarchy lives in one place instead of a separate flat list.
 
+### Transport-consistent attachment identity
+
+Local, Dashboard, and legacy SSH model-library writes identify an attachment by provider + model id + normalized base URL.
+
+URL schemes and hosts are case-insensitive and trailing path slashes are ignored, while case-sensitive path, query, credential, and fragment components remain distinct. This lets two custom endpoints expose the same model id without collapsing separate routes.
+
 [[src/renderer/src/components/ProviderKeysSection.tsx#ProviderModelsManager]] renders below the key field in the config modal: a key-status line, the model pills, and an add-input. It reads/writes the same `models.json` library the chat picker reads (`listModels`/`addModel`/`removeModel`, and re-syncs on `onModelLibraryChanged`), so added models immediately appear in the chat model picker. Models show as chips with a remove button and a **pencil** that opens a small editor for the model's shared definition (display name + context window — see [[model-context]]); because the definition is keyed by model id, editing it under one provider reflects under every provider serving that id. The add-input autocompletes off live discovery and strips whitespace as typed/pasted (model IDs never contain spaces, so `"hello there"` can't be saved).
 
 The single [[src/renderer/src/hooks/useDiscoveredModels.ts#useDiscoveredModels]] call does double duty: it feeds the add-input's `<datalist>` **and** drives the "Connected · key verified" status line — a `status: "ok"` means the endpoint accepted the key and returned a model list, so the "verified" claim is truthful. `unsupported`/`unknown-host` degrade to a plain "Connected" (key set, list not exposed), `error` to "Couldn't verify key", and an empty key to "Add a key to connect".
@@ -148,6 +182,12 @@ The env key is the only anchor the modal has, so persistence routing is derived 
 DashScope is a native provider rather than a compatible/custom endpoint, but it follows the same inline editing pattern: the endpoint selector writes either `dashscope.aliyuncs.com` or `dashscope-intl.aliyuncs.com` to `base_url`, and the key field writes `DASHSCOPE_API_KEY`.
 
 Ids the agent can't resolve by id are listed in `OPENAI_COMPATIBLE_BASE_URLS` ([[src/renderer/src/constants.ts]]) — openai, perplexity, and every `LOCAL_PRESETS` chip (local servers + remote endpoints like groq, deepseek, atlascloud, mistral, …). This map MUST contain every preset id, or selecting that chip mis-routes; a test in `tests/constants.test.ts` enforces it. Selecting one autofills its base URL and shows the base-URL field; on save it is persisted as `provider: custom` + `base_url`, which the gateway accepts and uses to host-derive the API key (`runtime_provider._host_derived_api_key`, e.g. `api.groq.com` → `GROQ_API_KEY`). `displayProviderFromConfig` reverse-maps a stored `custom` + known base URL back to the brand id so the dropdown re-selects it on load. Native providers (the gateway hardcodes their base URL) clear the field instead.
+
+#### Explicit endpoint ports
+
+An explicit non-default port, including zero, remains part of endpoint identity in desktop and injected Dashboard comparisons. Only the default HTTP and HTTPS ports are omitted.
+
+[[tests/hermes-agent-compat.test.ts]] executes the injected Python normalizer against [[src/shared/model-endpoint.ts#normalizeModelEndpointUrl]] to verify that a port is never discarded merely because its numeric value is falsey.
 
 ## Switching providers rewrites the transport (`api_mode`)
 
@@ -166,3 +206,9 @@ Each card's logo is resolved by [[src/renderer/src/components/common/BrandLogo.t
 `detectBrand` matches the provider/model string to a `BrandKey`, and `matchTheme` flattens every logo to a single white/black tint so colored and `currentColor` SVGs render uniformly in the grid's logo tiles.
 
 The Local/Remote preset chips are also branded: each renders the same `BrandLogo` (by preset id) to the left of its name in a row. `llama.cpp` is mapped off the Meta logo to the generic API mark (the `/llama/` substring would otherwise tag it, and Ollama, as Meta); any preset without a bundled logo falls back to the generic mark.
+
+## Novita provider preset
+
+Novita is available as a remote OpenAI-compatible preset, with a dedicated API-key field and the same endpoint used by Hermes Agent.
+
+The desktop stores the model as `custom` at `https://api.novita.ai/openai/v1`. Setup, the configured-provider picker, installer readiness, and runtime key lookup use `NOVITA_API_KEY`; provider branding identifies the endpoint as NovitaAI. The shared URL mapping is covered alongside the other supported commercial endpoints.

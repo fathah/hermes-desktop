@@ -2,6 +2,8 @@
 
 The first-run screens (Welcome, Install) share one cinematic shell — a dark aurora backdrop, twinkling starfield, and an animated Hermes emblem — provided by [[src/renderer/src/components/common/OnboardHero.tsx#OnboardHero]]. Titles are upright sans; the design intentionally runs dark regardless of theme.
 
+The `.onboard-screen` CSS scope owns `color-scheme: dark`, its dark surface and text tokens, and its background colour. It never inherits saved light-theme tokens, so the first frame and every onboarding child retain the designed contrast. [[tests/onboarding-theme.test.ts]] protects that scope.
+
 ## OnboardHero
 
 [[src/renderer/src/components/common/OnboardHero.tsx#OnboardHero]] renders the shared `onboard-*` chrome: aurora + vignette + starfield backdrop, a glowing emblem, an uppercase `eyebrow` label, an upright `title`, and page-specific `children` inside a reveal-on-settle body.
@@ -31,6 +33,22 @@ The hero carries the "HERMES ONE" eyebrow, subtitle, a gradient "Get Started" pi
 The confirm view (eyebrow "SETUP", title "Before installing") shows the target path in an `.onboard-field`, a `.onboard-note-card` describing the fresh/update/replace state, and Install / Use-existing / Cancel actions.
 
 The progress view (`wide`) shows a step + percent header with a progress bar, then a **fixed-size** terminal log window (`.onboard-terminal`): its body has a constant height and scrolls internally, so streaming log lines never reflow the surrounding layout. The log auto-scrolls to the newest line.
+
+Unix execution follows the [[desktop-security#Runtime security#Verified Unix bootstrap|verified bootstrap boundary]] before running downloaded code.
+
+### Existing-install environment handoff
+
+An adopted install wins over the exact inherited `HERMES_HOME` active during selection, preventing restart loops while preserving a different later environment override.
+
+[[src/main/installer.ts#setHermesHomeOverride]] records a one-way fingerprint of that shadowed environment value beside the selected home. On restart, a matching fingerprint activates the saved selection only while it remains a desktop-compatible install; absent, legacy, incomplete, and later-different values keep the existing precedence.
+
+[[tests/installer-home-override.test.ts]] covers the same-environment handoff, launch-time capture, cleartext-path minimization, legacy precedence, absent environments, later-different environments, deleted selections, and incomplete installs.
+
+### Single-run installation
+
+After confirmation, one mounted install screen starts exactly one installer run even if the active locale changes while that run is pending.
+
+The running effect is keyed only by its phase. A current translation reference supplies localized fallback errors without making translation identity an effect dependency, which prevents language changes from restarting installation. [[src/renderer/src/screens/Install/Install.test.tsx]] covers the invariant.
 
 ## Startup splash
 

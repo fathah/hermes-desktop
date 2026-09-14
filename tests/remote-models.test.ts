@@ -297,7 +297,7 @@ describe("remote dashboard models", () => {
     ]);
   });
 
-  it("preserves the active custom model base URL from the remote library", async () => {
+  it("preserves active model metadata from the remote library", async () => {
     const { url } = await startServer((req, res) => {
       expect(req.headers["x-hermes-session-token"]).toBe("token");
       if (req.url === "/api/model/library") {
@@ -310,6 +310,7 @@ describe("remote dashboard models", () => {
                 provider: "custom",
                 model: "deepseek-v4-pro",
                 baseUrl: "https://api.deepseek.com/v1",
+                contextLength: 1000000,
               },
             ],
           }),
@@ -325,6 +326,41 @@ describe("remote dashboard models", () => {
       provider: "custom",
       model: "deepseek-v4-pro",
       baseUrl: "https://api.deepseek.com/v1",
+      contextLength: 1000000,
+    });
+  });
+
+  it("reads an active context length from legacy model options", async () => {
+    const { url } = await startServer((req, res) => {
+      if (req.url === "/api/model/library") {
+        res.statusCode = 404;
+        res.end(JSON.stringify({ detail: "not found" }));
+        return;
+      }
+      expect(req.url).toBe("/api/model/options");
+      res.setHeader("Content-Type", "application/json");
+      res.end(
+        JSON.stringify({
+          provider: "opencode-go",
+          model: "deepseek-v4-flash-vision-exp",
+          context_length: "1000000",
+          providers: [
+            {
+              slug: "opencode-go",
+              models: ["deepseek-v4-flash-vision-exp"],
+            },
+          ],
+        }),
+      );
+    });
+
+    await expect(
+      remoteGetModelConfig({ remoteUrl: url, apiKey: "token" }),
+    ).resolves.toEqual({
+      provider: "opencode-go",
+      model: "deepseek-v4-flash-vision-exp",
+      baseUrl: "",
+      contextLength: 1000000,
     });
   });
 

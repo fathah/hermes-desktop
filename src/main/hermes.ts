@@ -1,5 +1,5 @@
 import { ChildProcess, spawn } from "child_process";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import {
   existsSync,
   readFileSync,
@@ -27,10 +27,12 @@ import {
 } from "./installer";
 import {
   getApiServerKey,
+  getActiveConnection,
   getConnectionConfig,
   getConfigValue,
   getModelConfig,
   readEnv,
+  type ConnectionConfig,
 } from "./config";
 import {
   getSshTunnelUrl,
@@ -50,10 +52,17 @@ import { getProfilePort } from "./gateway-ports";
 import { promptSudoPassword, promptSecretValue } from "./gatewayPrompt";
 import { getSecret } from "./secrets";
 import { readModels } from "./models";
+import { normalizeModelEndpointUrl } from "../shared/model-endpoint";
 import { providerListSafe } from "./secrets";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { type Attachment, escapeXmlAttr } from "../shared/attachments";
 import { type SessionModelOverride } from "../shared/model-override";
+import {
+  gatewayApprovalRequestId,
+  normalizeApprovalRequest,
+  type ApprovalChoice,
+  type ChatApprovalRequest,
+} from "../shared/chat-approval";
 import {
   OPENAI_COMPAT_PROVIDERS,
   customProviderEnvKey,
@@ -84,6 +93,10 @@ import {
   hostDerivedEnvKeyForUrl,
   shouldPruneOpenRouterApiKey,
 } from "./host-derived-env";
+import {
+  sanitizeAgentCommandInventory,
+  sanitizeAgentRuntimeInfo,
+} from "../shared/agent-capabilities";
 
 /**
  * Resolve which profile a gateway call targets. An explicit profile always
@@ -122,8 +135,10 @@ export function normaliseRemoteUrl(raw: string): string {
   return url;
 }
 
-export function getApiUrl(profile?: string): string {
-  const conn = getConnectionConfig();
+export function getApiUrl(
+  profile?: string,
+  conn: ConnectionConfig = getConnectionConfig(),
+): string {
   if (conn.mode === "ssh") {
     const sshUrl = getSshTunnelUrl();
     if (sshUrl) return normaliseRemoteUrl(sshUrl);
@@ -139,14 +154,18 @@ export function getApiUrl(profile?: string): string {
   return `http://127.0.0.1:${getProfilePort(resolveProfile(profile))}`;
 }
 
-export function isRemoteMode(): boolean {
-  const mode = getConnectionConfig().mode;
+export function isRemoteMode(
+  conn: ConnectionConfig = getConnectionConfig(),
+): boolean {
+  const mode = conn.mode;
   return mode === "remote" || mode === "ssh";
 }
 
 /** True only for pure remote HTTP — SSH tunnel has full local access via SSH exec */
-export function isRemoteOnlyMode(): boolean {
-  return getConnectionConfig().mode === "remote";
+export function isRemoteOnlyMode(
+  conn: ConnectionConfig = getConnectionConfig(),
+): boolean {
+  return conn.mode === "remote";
 }
 
 // Cached API key read from the remote .env when SSH tunnel starts
@@ -156,8 +175,9 @@ export function setSshRemoteApiKey(key: string): void {
   _sshRemoteApiKey = key;
 }
 
-export function getRemoteAuthHeader(): Record<string, string> {
-  const conn = getConnectionConfig();
+export function getRemoteAuthHeader(
+  conn: ConnectionConfig = getConnectionConfig(),
+): Record<string, string> {
   if (conn.mode === "ssh") {
     if (_sshRemoteApiKey)
       return { Authorization: `Bearer ${_sshRemoteApiKey}` };
@@ -173,14 +193,17 @@ export function getRemoteAuthHeader(): Record<string, string> {
   return {};
 }
 
-function getApiAuthHeaders(profile?: string): Record<string, string> {
+function getApiAuthHeaders(
+  profile?: string,
+  conn: ConnectionConfig = getConnectionConfig(),
+): Record<string, string> {
   const headers: Record<string, string> = {
-    ...getRemoteAuthHeader(),
+    ...getRemoteAuthHeader(conn),
   };
   // Local API server key (API_SERVER_KEY in the profile's .env /
   // config.yaml) only applies in local mode — in remote/SSH mode the
   // remote endpoint's own auth header is authoritative.
-  if (!isRemoteMode()) {
+  if (!isRemoteMode(conn)) {
     const apiServerKey = getApiServerKey(profile);
     if (apiServerKey) {
       headers.Authorization = `Bearer ${apiServerKey}`;
@@ -192,32 +215,40 @@ function getApiAuthHeaders(profile?: string): Record<string, string> {
 function getJsonApiHeaders(
   profile: string | undefined,
   bodyBuf: Buffer,
+  conn: ConnectionConfig = getConnectionConfig(),
 ): Record<string, string> {
   return {
     "Content-Type": "application/json",
     "Content-Length": String(bodyBuf.length),
-    ...getApiAuthHeaders(profile),
+    ...getApiAuthHeaders(profile, conn),
   };
 }
 
-function capabilityCacheKey(profile?: string): string {
-  const auth = getApiAuthHeaders(profile).Authorization ? "auth" : "anon";
-  return `${getApiUrl(profile)}|${auth}`;
+function capabilityCacheKey(
+  profile?: string,
+  conn: ConnectionConfig = getConnectionConfig(),
+): string {
+  const auth = getApiAuthHeaders(profile, conn).Authorization ?? "";
+  const authScope = auth
+    ? createHash("sha256").update(auth).digest("hex")
+    : "anon";
+  return `${getApiUrl(profile, conn)}|${authScope}`;
 }
 
 async function getApiCapabilities(
   profile?: string,
+  conn: ConnectionConfig = getConnectionConfig(),
 ): Promise<HermesApiCapabilities | null> {
   let key: string;
   try {
-    key = capabilityCacheKey(profile);
+    key = capabilityCacheKey(profile, conn);
   } catch {
     return null;
   }
   const cached = capabilitiesCache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
 
-  const url = `${getApiUrl(profile)}/v1/capabilities`;
+  const url = `${getApiUrl(profile, conn)}/v1/capabilities`;
   const requester = url.startsWith("https") ? https : http;
   const value = await new Promise<HermesApiCapabilities | null>((resolve) => {
     let done = false;
@@ -232,7 +263,7 @@ async function getApiCapabilities(
       url,
       {
         method: "GET",
-        headers: getApiAuthHeaders(profile),
+        headers: getApiAuthHeaders(profile, conn),
         timeout: CAPABILITIES_TIMEOUT_MS,
       },
       (res) => {
@@ -813,6 +844,11 @@ class TuiGatewayClient {
     this.readyReject = null;
     this.readyResolve = null;
     this.token = "";
+    if (ws) {
+      for (const handler of this.handlers) {
+        handler({ type: "gateway.disconnected" });
+      }
+    }
   }
 }
 
@@ -926,18 +962,137 @@ const capabilitiesCache = new Map<
   { expiresAt: number; value: HermesApiCapabilities | null }
 >();
 
+const agentRuntimeInfoCache = new Map<string, Record<string, unknown>>();
+const agentCommandInventoryCache = new Map<string, string[]>();
+
+function agentCapabilityLocationKey(
+  profile?: string,
+  connectionId = getActiveConnection().connectionId,
+): string {
+  return `${connectionId}:${profileKey(profile)}`;
+}
+
+/**
+ * Keep only the bounded compatibility fields from gateway session.info. The
+ * renderer already receives this payload, but the main process never retains
+ * model prompts, tools, paths, or other session data just to gate desktop UI.
+ */
+// @lat: [[agent-capabilities#Bounded runtime evidence]]
+export function recordAgentRuntimeInfo(
+  value: unknown,
+  profile?: string,
+  connectionId?: string,
+): boolean {
+  const location = agentCapabilityLocationKey(profile, connectionId);
+  const info = sanitizeAgentRuntimeInfo(value);
+  if (!info) {
+    agentRuntimeInfoCache.delete(location);
+    agentCommandInventoryCache.delete(location);
+    capabilitiesCache.clear();
+    return false;
+  }
+  const previous = agentRuntimeInfoCache.get(location);
+  if (
+    previous &&
+    (previous.version !== info.version ||
+      previous.desktop_contract !== info.desktop_contract)
+  ) {
+    agentCommandInventoryCache.delete(location);
+  }
+  agentRuntimeInfoCache.set(location, info);
+  // session.info is emitted again after reconnect, so the API feature probe
+  // must not retain evidence from the previous Agent process.
+  capabilitiesCache.clear();
+  return true;
+}
+
+// @lat: [[agent-capabilities#Bounded command inventory]]
+export function recordAgentCommandInventory(
+  value: unknown,
+  profile?: string,
+  connectionId?: string,
+): boolean {
+  const commands = sanitizeAgentCommandInventory(value);
+  const location = agentCapabilityLocationKey(profile, connectionId);
+  if (!commands) {
+    agentCommandInventoryCache.delete(location);
+    return false;
+  }
+  agentCommandInventoryCache.set(location, commands);
+  return true;
+}
+
+export async function getAgentCapabilityEvidence(
+  profile?: string,
+  connectionId = getActiveConnection().connectionId,
+  conn: ConnectionConfig = getConnectionConfig(connectionId),
+): Promise<{
+  apiRunsTransport: boolean | null;
+  commandNames: string[] | null;
+  runtimeInfo: Record<string, unknown> | null;
+}> {
+  const capabilities = await getApiCapabilities(profile, conn);
+  const location = agentCapabilityLocationKey(profile, connectionId);
+  return {
+    apiRunsTransport: capabilities
+      ? supportsHermesRunsTransport(capabilities)
+      : null,
+    commandNames: agentCommandInventoryCache.get(location) ?? null,
+    runtimeInfo: agentRuntimeInfoCache.get(location) ?? null,
+  };
+}
+
+export function getCachedAgentCapabilityEvidence(
+  connectionId: string,
+  profile?: string,
+): {
+  apiRunsTransport: null;
+  commandNames: string[] | null;
+  runtimeInfo: Record<string, unknown> | null;
+} {
+  const location = agentCapabilityLocationKey(profile, connectionId);
+  return {
+    apiRunsTransport: null,
+    commandNames: agentCommandInventoryCache.get(location) ?? null,
+    runtimeInfo: agentRuntimeInfoCache.get(location) ?? null,
+  };
+}
+
+export function clearAgentCapabilityEvidence(connectionId?: string): void {
+  capabilitiesCache.clear();
+  if (!connectionId) {
+    agentCommandInventoryCache.clear();
+    agentRuntimeInfoCache.clear();
+    return;
+  }
+  const prefix = `${connectionId}:`;
+  for (const key of agentCommandInventoryCache.keys()) {
+    if (key.startsWith(prefix)) agentCommandInventoryCache.delete(key);
+  }
+  for (const key of agentRuntimeInfoCache.keys()) {
+    if (key.startsWith(prefix)) agentRuntimeInfoCache.delete(key);
+  }
+}
+
 // ────────────────────────────────────────────────────
 //  API Server health check
 // ────────────────────────────────────────────────────
 
-function isApiServerReady(profile?: string): Promise<boolean> {
+function isApiServerReady(
+  profile?: string,
+  conn: ConnectionConfig = getConnectionConfig(),
+): Promise<boolean> {
   return new Promise((resolve) => {
     try {
-      const url = `${getApiUrl(profile)}/health`;
+      const url = `${getApiUrl(profile, conn)}/health`;
       const mod = url.startsWith("https") ? https : http;
       const req = mod.request(
         url,
-        { method: "GET", timeout: 1500, headers: getRemoteAuthHeader() },
+        {
+          method: "GET",
+          timeout: 1500,
+          headers: getRemoteAuthHeader(conn),
+        },
         (res) => {
           resolve(res.statusCode === 200);
           res.resume();
@@ -1066,6 +1221,87 @@ export function clearPendingClarify(requestId: string): void {
   pendingClarify.delete(requestId);
 }
 
+interface PendingApproval {
+  choices: ReadonlySet<ApprovalChoice>;
+  ownerId?: number;
+  responding: boolean;
+  responder: (choice: ApprovalChoice) => Promise<boolean>;
+  runId?: string;
+}
+
+const pendingApprovals = new Map<string, PendingApproval>();
+
+export function registerPendingApproval(
+  choices: readonly ApprovalChoice[],
+  responder: (choice: ApprovalChoice) => Promise<boolean>,
+): string {
+  const requestId = `approval-${randomUUID()}`;
+  pendingApprovals.set(requestId, {
+    choices: new Set(choices),
+    responding: false,
+    responder,
+  });
+  return requestId;
+}
+
+export function bindPendingApproval(
+  requestId: string,
+  owner: { ownerId: number; runId: string },
+): boolean {
+  const pending = pendingApprovals.get(requestId);
+  if (
+    !pending ||
+    pending.ownerId !== undefined ||
+    pending.runId !== undefined
+  ) {
+    return false;
+  }
+  pending.ownerId = owner.ownerId;
+  pending.runId = owner.runId;
+  return true;
+}
+
+export async function resolvePendingApproval(
+  requestId: string,
+  choice: unknown,
+  owner?: { ownerId: number; runId: string },
+): Promise<boolean> {
+  const pending = pendingApprovals.get(requestId);
+  if (
+    !pending ||
+    (pending.ownerId !== undefined && pending.ownerId !== owner?.ownerId) ||
+    (pending.runId !== undefined && pending.runId !== owner?.runId) ||
+    typeof choice !== "string" ||
+    !pending.choices.has(choice as ApprovalChoice) ||
+    pending.responding
+  ) {
+    return false;
+  }
+
+  pending.responding = true;
+  try {
+    const acknowledged = await pending.responder(choice as ApprovalChoice);
+    if (!acknowledged || pendingApprovals.get(requestId) !== pending)
+      return false;
+    pendingApprovals.delete(requestId);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    if (pendingApprovals.get(requestId) === pending) {
+      pending.responding = false;
+    }
+  }
+}
+
+export function clearPendingApproval(requestId: string): void {
+  pendingApprovals.delete(requestId);
+}
+
+export function clearAllPendingApprovals(): void {
+  pendingApprovals.clear();
+}
+
 export interface ChatCallbacks {
   onChunk: (text: string) => void;
   /** Streaming reasoning / thinking tokens, when the provider emits them
@@ -1099,6 +1335,7 @@ export interface ChatCallbacks {
     question: string;
     choices: string[];
   }) => void;
+  onApproval?: (req: ChatApprovalRequest) => boolean | void;
 }
 
 type ChatContent =
@@ -1210,6 +1447,7 @@ function sendMessageViaApi(
   attachments?: Attachment[],
   contextFolder?: string,
   override?: SessionModelOverride,
+  conn: ConnectionConfig = getConnectionConfig(),
 ): ChatHandle {
   const mc = effectiveModelConfig(profile, override);
   const controller = new AbortController();
@@ -1260,7 +1498,7 @@ function sendMessageViaApi(
   //     client_max_size overflow path. See #405.
   const bodyBuf = Buffer.from(body, "utf-8");
 
-  const headers = getJsonApiHeaders(profile, bodyBuf);
+  const headers = getJsonApiHeaders(profile, bodyBuf, conn);
 
   // Session id: always send via `X-Hermes-Session-Id` so the gateway
   // doesn't fall back to its `_derive_chat_session_id` fingerprint —
@@ -1343,7 +1581,7 @@ function sendMessageViaApi(
       ...headers,
       "Content-Length": String(probeBodyBuf.length),
     };
-    const probeUrl = `${getApiUrl(profile)}/v1/chat/completions`;
+    const probeUrl = `${getApiUrl(profile, conn)}/v1/chat/completions`;
     const probeMod = probeUrl.startsWith("https") ? https : http;
     const probeReq = probeMod.request(
       probeUrl,
@@ -1471,7 +1709,7 @@ function sendMessageViaApi(
     return false;
   }
 
-  const chatUrl = `${getApiUrl(profile)}/v1/chat/completions`;
+  const chatUrl = `${getApiUrl(profile, conn)}/v1/chat/completions`;
   const requester = chatUrl.startsWith("https") ? https.request : http.request;
   const req = requester(
     chatUrl,
@@ -1599,12 +1837,13 @@ function postRunStop(
   apiUrl: string,
   profile: string | undefined,
   runId: string,
+  conn: ConnectionConfig = getConnectionConfig(),
 ): void {
   const url = `${apiUrl}/v1/runs/${encodeURIComponent(runId)}/stop`;
   const requester = url.startsWith("https") ? https : http;
   const req = requester.request(url, {
     method: "POST",
-    headers: getApiAuthHeaders(profile),
+    headers: getApiAuthHeaders(profile, conn),
     timeout: 3000,
   });
   req.on("error", () => undefined);
@@ -1621,11 +1860,12 @@ function sendMessageViaRuns(
   attachments?: Attachment[],
   contextFolder?: string,
   override?: SessionModelOverride,
+  conn: ConnectionConfig = getConnectionConfig(),
 ): ChatHandle {
   const mc = effectiveModelConfig(profile, override);
   const controller = new AbortController();
-  const apiUrl = getApiUrl(profile);
-  const headersForAuth = getApiAuthHeaders(profile);
+  const apiUrl = getApiUrl(profile, conn);
+  const headersForAuth = getApiAuthHeaders(profile, conn);
   const sessionId =
     resumeSessionId ||
     (headersForAuth.Authorization ? `desk-${Date.now()}-${randomUUID()}` : "");
@@ -1640,7 +1880,7 @@ function sendMessageViaRuns(
   if (sessionId) bodyObj.session_id = sessionId;
   if (ctxSystem) bodyObj.instructions = ctxSystem.content;
   const bodyBuf = Buffer.from(JSON.stringify(bodyObj), "utf-8");
-  const headers = getJsonApiHeaders(profile, bodyBuf);
+  const headers = getJsonApiHeaders(profile, bodyBuf, conn);
   if (sessionId) {
     headers["X-Hermes-Session-Id"] = sessionId;
   }
@@ -1662,12 +1902,14 @@ function sendMessageViaRuns(
   let startReq: http.ClientRequest | null = null;
   let eventsReq: http.ClientRequest | null = null;
   let fallbackHandle: ChatHandle | null = null;
-
+  let approvalInteraction = false;
   function finish(error?: string): void {
     if (finished || fallbackStarted) return;
     finished = true;
     if (error) {
-      cb.onError(error);
+      cb.onError(
+        approvalInteraction ? `Approval flow failed: ${error}` : error,
+      );
     } else {
       cb.onDone(sessionId || undefined);
     }
@@ -1675,6 +1917,12 @@ function sendMessageViaRuns(
 
   function fallbackToChatCompletions(): void {
     if (finished || fallbackStarted) return;
+    if (approvalInteraction) {
+      finish(
+        "Hermes lost the run after requesting approval. The prompt was not replayed.",
+      );
+      return;
+    }
     fallbackStarted = true;
     fallbackHandle = sendMessageViaApi(
       message,
@@ -1685,17 +1933,19 @@ function sendMessageViaRuns(
       attachments,
       contextFolder,
       override,
+      conn,
     );
   }
 
   function stopRunAndFallback(): void {
     if (finished || fallbackStarted) return;
-    if (runId) postRunStop(apiUrl, profile, runId);
+    if (runId) postRunStop(apiUrl, profile, runId, conn);
     eventsReq?.destroy();
     fallbackToChatCompletions();
   }
 
   function handleRunEvent(raw: Record<string, unknown>): void {
+    if (finished || fallbackStarted) return;
     const eventName = typeof raw.event === "string" ? raw.event : "";
     if (eventName === "message.delta") {
       const delta = typeof raw.delta === "string" ? raw.delta : "";
@@ -1757,11 +2007,15 @@ function sendMessageViaRuns(
     }
 
     if (eventName === "approval.request") {
-      // The current renderer's approval controls are wired to the legacy chat
-      // flow and only appear after a response finishes. A run pauses before it
-      // can finish, so fall back to the existing path instead of deadlocking
-      // the user on a hidden approval request.
-      stopRunAndFallback();
+      approvalInteraction = true;
+      // The current upstream Runs endpoint ignores request_id and resolves
+      // FIFO. A stale card could approve a different command after a timeout.
+      // Keep ordinary Runs streaming, but never approve through that endpoint.
+      if (runId) postRunStop(apiUrl, profile, runId, conn);
+      finish(
+        "Hermes stopped this run because its approval API cannot safely target a specific command. Use Dashboard chat for manual command approvals.",
+      );
+      eventsReq?.destroy();
     }
   }
 
@@ -1772,7 +2026,7 @@ function sendMessageViaRuns(
       eventsUrl,
       {
         method: "GET",
-        headers: getApiAuthHeaders(profile),
+        headers: getApiAuthHeaders(profile, conn),
         signal: controller.signal,
         timeout: 120000,
       },
@@ -1813,7 +2067,14 @@ function sendMessageViaRuns(
               }
             }
           }
-          if (!finished) finish();
+          if (!finished && approvalInteraction) {
+            if (runId) postRunStop(apiUrl, profile, runId, conn);
+            finish(
+              "Run event stream ended while approval was pending. The run was stopped without approving.",
+            );
+          } else if (!finished) {
+            finish();
+          }
         });
       },
     );
@@ -1888,7 +2149,7 @@ function sendMessageViaRuns(
       startReq?.destroy();
       eventsReq?.destroy();
       fallbackHandle?.abort();
-      if (runId) postRunStop(apiUrl, profile, runId);
+      if (runId) postRunStop(apiUrl, profile, runId, conn);
     },
   };
 }
@@ -1900,6 +2161,8 @@ async function sendMessageViaTuiGateway(
   resumeSessionId?: string,
   history?: Array<{ role: string; content: string }>,
   contextFolder?: string,
+  conn: ConnectionConfig = getConnectionConfig(),
+  connectionId?: string,
 ): Promise<ChatHandle> {
   const client = getTuiGatewayClient(profile);
   let activeSessionId = "";
@@ -1912,10 +2175,19 @@ async function sendMessageViaTuiGateway(
   let fallbackHandle: ChatHandle | null = null;
   let fallbackStarted = false;
   let promptSubmitted = false;
+  let approvalInteraction = false;
   let cleanup = (): void => undefined;
   // request_id of an in-flight clarify question, if the agent is awaiting an
   // answer. Cleared on turn end so an abandoned turn leaks no stale resolver.
   let pendingClarifyId: string | null = null;
+  const pendingApprovalIds = new Set<string>();
+
+  function clearApprovals(): void {
+    for (const requestId of pendingApprovalIds) {
+      clearPendingApproval(requestId);
+    }
+    pendingApprovalIds.clear();
+  }
 
   function finish(error?: string): void {
     if (finished) return;
@@ -1924,9 +2196,12 @@ async function sendMessageViaTuiGateway(
       clearPendingClarify(pendingClarifyId);
       pendingClarifyId = null;
     }
+    clearApprovals();
     cleanup();
     if (error) {
-      cb.onError(error);
+      cb.onError(
+        approvalInteraction ? `Approval flow failed: ${error}` : error,
+      );
     } else {
       cb.onDone(storedSessionId || undefined);
     }
@@ -1939,11 +2214,18 @@ async function sendMessageViaTuiGateway(
       clearPendingClarify(pendingClarifyId);
       pendingClarifyId = null;
     }
+    clearApprovals();
     cleanup();
   }
 
   function startApiFallback(reason: string): void {
     if (finished || fallbackStarted) return;
+    if (approvalInteraction) {
+      finish(
+        `${reason} The prompt was not replayed after the approval request.`,
+      );
+      return;
+    }
     fallbackStarted = true;
     cleanup();
     client.stop();
@@ -1959,6 +2241,8 @@ async function sendMessageViaTuiGateway(
       history,
       undefined,
       contextFolder,
+      undefined,
+      conn,
     )
       .then((handle) => {
         fallbackHandle = handle;
@@ -1970,7 +2254,22 @@ async function sendMessageViaTuiGateway(
   }
 
   cleanup = client.onEvent((event) => {
+    if (finished || fallbackStarted) return;
+    if (event.type === "gateway.disconnected" && approvalInteraction) {
+      finish(
+        "The gateway disconnected after requesting approval. The prompt was not replayed.",
+      );
+      return;
+    }
     if (event.session_id && event.session_id !== activeSessionId) return;
+
+    if (event.type === "session.info") {
+      if (connectionId) {
+        recordAgentRuntimeInfo(event.payload, profile, connectionId);
+      }
+      hasSessionInfo = true;
+      return;
+    }
 
     const delta = gatewayMessageDelta(event);
     if (delta) {
@@ -2026,28 +2325,70 @@ async function sendMessageViaTuiGateway(
     }
 
     if (event.type === "approval.request") {
-      // Match the existing local chat posture: Hermes One does not expose a
-      // mid-stream approval dialog, so answer the dashboard protocol once and
-      // keep the transcript focused on the resulting tool call/result events.
-      void client
-        .request(
-          "approval.respond",
-          {
-            session_id: activeSessionId,
-            choice: "once",
-            all: false,
-          },
-          30_000,
-        )
-        .catch((error) => {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          if (!hasGatewayOutput) {
-            startApiFallback(message);
-            return;
+      approvalInteraction = true;
+      const gatewayRequestId = gatewayApprovalRequestId(event.payload);
+      if (!gatewayRequestId) {
+        void client
+          .request("session.interrupt", { session_id: activeSessionId }, 5_000)
+          .catch(() => undefined);
+        finish(
+          "Hermes did not provide an addressable approval request. The turn was stopped without approving.",
+        );
+        return;
+      }
+      let requestId = "";
+      const normalized = normalizeApprovalRequest(event.payload, "");
+      requestId = registerPendingApproval(
+        normalized.choices,
+        async (choice) => {
+          if (pendingApprovalIds.values().next().value !== requestId) {
+            return false;
           }
-          finish(message);
-        });
+          const result = await client.request<{ resolved?: unknown }>(
+            "approval.respond",
+            {
+              session_id: activeSessionId,
+              request_id: gatewayRequestId,
+              choice,
+              all: false,
+            },
+            30_000,
+          );
+          if (result?.resolved !== 1) {
+            void client
+              .request(
+                "session.interrupt",
+                { session_id: activeSessionId },
+                5_000,
+              )
+              .catch(() => undefined);
+            finish(
+              "Hermes could not confirm the selected approval request. The turn was stopped without replaying the prompt.",
+            );
+            return false;
+          }
+          pendingApprovalIds.delete(requestId);
+          return true;
+        },
+      );
+      pendingApprovalIds.add(requestId);
+      const request = { ...normalized, requestId };
+      let delivered = false;
+      try {
+        delivered = cb.onApproval?.(request) !== false && !!cb.onApproval;
+      } catch {
+        delivered = false;
+      }
+      if (!delivered) {
+        clearPendingApproval(requestId);
+        pendingApprovalIds.delete(requestId);
+        void client
+          .request("session.interrupt", { session_id: activeSessionId }, 5_000)
+          .catch(() => undefined);
+        finish(
+          "Hermes requested approval, but no approval listener is available. The turn was stopped without approving.",
+        );
+      }
       return;
     }
 
@@ -2174,6 +2515,9 @@ async function sendMessageViaTuiGateway(
       activeSessionId = String(resumed.session_id || "");
       storedSessionId = String(resumed.resumed || resumeSessionId);
       hasSessionInfo = !!resumed.info;
+      if (connectionId) {
+        recordAgentRuntimeInfo(resumed.info, profile, connectionId);
+      }
     } else {
       const created = await client.request<{
         info?: unknown;
@@ -2187,6 +2531,9 @@ async function sendMessageViaTuiGateway(
       activeSessionId = String(created.session_id || "");
       storedSessionId = String(created.stored_session_id || activeSessionId);
       hasSessionInfo = !!created.info;
+      if (connectionId) {
+        recordAgentRuntimeInfo(created.info, profile, connectionId);
+      }
     }
 
     if (!activeSessionId) {
@@ -2208,11 +2555,18 @@ async function sendMessageViaTuiGateway(
       text: message,
     });
   } catch (error) {
-    cleanup();
-    if (!promptSubmitted) {
-      client.stop();
+    if (approvalInteraction) {
+      void client
+        .request("session.interrupt", { session_id: activeSessionId }, 5_000)
+        .catch(() => undefined);
+      finish(
+        "The gateway lost the prompt acknowledgment after requesting approval. The prompt was not replayed.",
+      );
+    } else {
+      cleanup();
+      if (!promptSubmitted) client.stop();
+      throw error;
     }
-    throw error;
   }
 
   return {
@@ -2421,7 +2775,9 @@ function sendMessageViaCli(
     let modelApiMode: string | null = null;
     try {
       const modelEntry = readModels().find(
-        (m) => m.baseUrl === mc.baseUrl && m.model === mc.model,
+        (m) =>
+          normalizeModelEndpointUrl(m.baseUrl) ===
+            normalizeModelEndpointUrl(mc.baseUrl) && m.model === mc.model,
       );
       if (modelEntry) modelApiMode = modelEntry.apiMode || null;
     } catch {
@@ -2465,15 +2821,22 @@ function sendMessageViaCli(
     if (!resolvedKey) {
       // Try custom provider auto-generated key from models.json
       try {
-        const models = readModels();
-        const matching = models.find((m) => m.baseUrl === mc.baseUrl);
-        if (matching) {
-          // Key off the provider label (stable across all of a named custom
-          // provider's models) when present, else the model's own name.
-          const envKey2 = customProviderEnvKey(
-            matching.providerLabel || matching.name,
-          );
-          resolvedKey = profileEnv[envKey2] || env[envKey2] || "";
+        const endpoint = normalizeModelEndpointUrl(mc.baseUrl);
+        for (const matching of readModels()) {
+          if (
+            matching.provider !== "custom" ||
+            normalizeModelEndpointUrl(matching.baseUrl) !== endpoint
+          )
+            continue;
+          const label = matching.providerLabel || matching.name;
+          if (!label) continue;
+          const envKey2 = customProviderEnvKey(label);
+          resolvedKey =
+            profileEnv[envKey2] ||
+            env[envKey2] ||
+            providerSecrets[envKey2] ||
+            "";
+          if (resolvedKey) break;
         }
       } catch {
         /* ignore */
@@ -2642,10 +3005,11 @@ async function sendMessageViaNonGatewayApi(
   attachments?: Attachment[],
   contextFolder?: string,
   override?: SessionModelOverride,
+  conn: ConnectionConfig = getConnectionConfig(),
 ): Promise<ChatHandle> {
   const approvalCommand = /^\/(?:approve|deny)\b/i.test(message.trim());
   if (!attachments?.length && !approvalCommand) {
-    const capabilities = await getApiCapabilities(profile);
+    const capabilities = await getApiCapabilities(profile, conn);
     if (supportsHermesRunsTransport(capabilities)) {
       return sendMessageViaRuns(
         message,
@@ -2656,6 +3020,7 @@ async function sendMessageViaNonGatewayApi(
         attachments,
         contextFolder,
         override,
+        conn,
       );
     }
   }
@@ -2669,6 +3034,7 @@ async function sendMessageViaNonGatewayApi(
     attachments,
     contextFolder,
     override,
+    conn,
   );
 }
 
@@ -2681,6 +3047,8 @@ async function sendMessageViaBestApi(
   attachments?: Attachment[],
   contextFolder?: string,
   override?: SessionModelOverride,
+  conn: ConnectionConfig = getConnectionConfig(),
+  connectionId?: string,
 ): Promise<ChatHandle> {
   const approvalCommand = /^\/(?:approve|deny)\b/i.test(message.trim());
   // Skip the TUI gateway when a session-scoped model override is active — the
@@ -2688,7 +3056,7 @@ async function sendMessageViaBestApi(
   // override mechanism. The API path below already honours the override.
   if (
     shouldUseTuiGatewayClient() &&
-    !isRemoteMode() &&
+    !isRemoteMode(conn) &&
     !attachments?.length &&
     !approvalCommand &&
     !override
@@ -2701,6 +3069,8 @@ async function sendMessageViaBestApi(
         resumeSessionId,
         history,
         contextFolder,
+        conn,
+        connectionId,
       );
     } catch (error) {
       console.warn(
@@ -2719,6 +3089,7 @@ async function sendMessageViaBestApi(
     attachments,
     contextFolder,
     override,
+    conn,
   );
 }
 
@@ -2731,6 +3102,8 @@ async function sendMessageViaBestApiWithLocalRecovery(
   attachments?: Attachment[],
   contextFolder?: string,
   override?: SessionModelOverride,
+  conn: ConnectionConfig = getConnectionConfig(),
+  connectionId?: string,
 ): Promise<ChatHandle> {
   let aborted = false;
   let retrying = false;
@@ -2776,6 +3149,8 @@ async function sendMessageViaBestApiWithLocalRecovery(
         attachments,
         contextFolder,
         override,
+        conn,
+        connectionId,
       );
       return;
     }
@@ -2842,6 +3217,11 @@ async function sendMessageViaBestApiWithLocalRecovery(
       cb.onDone(sessionId);
     },
     onError: (error) => {
+      if (error.startsWith("Approval flow failed:")) {
+        settled = true;
+        cb.onError(error);
+        return;
+      }
       if (sawOutput) {
         recoverAfterPartialOutput(error);
         return;
@@ -2865,11 +3245,14 @@ async function sendMessageViaBestApiWithLocalRecovery(
     attachments,
     contextFolder,
     override,
+    conn,
+    connectionId,
   );
 
   return handle;
 }
 
+// @lat: [[connections#Session locations#Connection-explicit legacy transport]]
 export async function sendMessage(
   message: string,
   cb: ChatCallbacks,
@@ -2879,12 +3262,14 @@ export async function sendMessage(
   attachments?: Attachment[],
   contextFolder?: string,
   override?: SessionModelOverride,
+  conn: ConnectionConfig = getConnectionConfig(),
+  connectionId?: string,
 ): Promise<ChatHandle> {
   ensureInitialized();
 
   // Remote mode: always use API, no CLI fallback. Cross-provider session
   // overrides are limited to the model string here (no CLI transport remotely).
-  if (isRemoteMode()) {
+  if (isRemoteMode(conn)) {
     return sendMessageViaBestApi(
       message,
       cb,
@@ -2894,6 +3279,8 @@ export async function sendMessage(
       attachments,
       contextFolder,
       override,
+      conn,
+      connectionId,
     );
   }
 
@@ -2919,7 +3306,7 @@ export async function sendMessage(
   // transport error wrapper handle a stale cache caused by external lifecycle
   // events such as `hermes update` or Windows sleep/resume.
   if (apiServerAvailable === null || apiServerAvailable === false) {
-    apiServerAvailable = await isApiServerReady(profile);
+    apiServerAvailable = await isApiServerReady(profile, conn);
     if (!apiServerAvailable) {
       apiServerAvailable = await startGatewayWithRecovery(profile);
     }
@@ -2935,6 +3322,8 @@ export async function sendMessage(
       attachments,
       contextFolder,
       override,
+      conn,
+      connectionId,
     );
   }
 

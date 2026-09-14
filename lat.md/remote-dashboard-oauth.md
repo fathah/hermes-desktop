@@ -4,9 +4,11 @@ Direct Remote mode detects browser-authenticated Hermes dashboards and connects 
 
 ## Authentication selection
 
-The public dashboard status endpoint selects token or OAuth behavior automatically for direct Remote connections.
+The public dashboard status endpoint and raw-gateway health endpoint select token or OAuth behavior automatically for direct Remote connections.
 
-[[src/main/remote-oauth.ts#probeRemoteAuthMode]] reads `/api/status`; `auth_required: true` selects OAuth. The detected mode is persisted as bounded configuration state. Token Remote mode and SSH token transport remain unchanged.
+[[src/main/remote-oauth.ts#probeRemoteAuthMode]] reads `/api/status`; `auth_required: true` selects OAuth. A `404` or `405` then probes `/health` with the supplied `API_SERVER_KEY`: a healthy response or an explicit `401`/`403` identifies the raw token gateway. Other probe failures remain errors rather than transport guesses.
+
+The first-run `connect-remote-gateway` operation in [[src/main/ipc/register.ts#registerIpcHandlers]] owns detection, authentication, validation, and configuration commit as one main-process transaction. OAuth opens the dedicated login window before saving; token mode verifies `/health`; either failure leaves the previous connection configuration untouched. [[src/renderer/src/screens/Welcome/Welcome.tsx#Welcome]] surfaces that single operation and explains that the remote key comes from `API_SERVER_KEY` in the remote `~/.hermes/.env`.
 
 The public startup probe uses `/api/status` without a stored token after OAuth is selected, avoiding the authenticated `/health` redirect and stale-token false negatives.
 
@@ -34,13 +36,13 @@ For non-loopback HTTP gateways, [[src/main/dashboard-websocket-relay.ts#createLo
 
 Remote session history uses the same selected authentication transport as management APIs.
 
-[[src/main/remote-sessions.ts#remoteRequestJson]] routes direct OAuth session lists, search, messages, media, titles, and deletion through the persistent cookie partition. Token and SSH session requests retain the session-token header.
+[[src/main/remote-sessions.ts#remoteRequestJson]] routes direct OAuth session lists, search, messages, media, titles, and deletion through the persistent cookie partition. Token and SSH session requests send `X-Hermes-Session-Token` plus `Authorization: Bearer` for gateway compatibility. When the configured URL contains Basic credentials for a reverse proxy, Node supplies Basic authorization and the dashboard still receives its separate session-token header. The gateway API key and dashboard session token remain distinct credentials; adding a header does not make them interchangeable.
 
 ## Authenticated management request boundary
 
 Direct Remote management features share one main-process request client that selects cookie or token authentication without exposing reusable credentials through IPC.
 
-[[src/main/remote-api.ts#remoteDashboardRequestJson]] resolves `auto` through the public status probe, routes OAuth through the persistent Electron partition, and routes token mode through `X-Hermes-Session-Token`. Probe failures never guess another transport or fall back to local state.
+[[src/main/remote-api.ts#remoteDashboardRequestJson]] resolves `auto` through the public status probe, routes OAuth through the persistent Electron partition, and routes token mode through the shared session request client with the same Bearer/Basic handling. Unexpected probe failures never guess another transport or fall back to local state.
 
 [[src/main/remote-api.ts#RemoteDashboardApiError]] normalizes HTTP status for feature adapters. A `404` marks only that feature unsupported; OAuth login-required errors retain their original reauthentication signal.
 
@@ -58,9 +60,25 @@ Focused tests protect credential isolation, automatic routing, ticket freshness,
 
 Session recognition accepts only Hermes access or refresh cookie names and keeps cookie-backed requests inside the selected Electron partition.
 
+### Session token compatibility
+
+Session requests succeed against HTTP servers that accept only Bearer authentication or only the dedicated session header, preserving compatibility across gateway versions.
+
+### Reverse proxy authentication
+
+URLs containing proxy credentials retain Basic authorization while the dashboard receives its session token separately, preventing the compatibility header from breaking existing authenticated proxies.
+
 ### OAuth dashboard readiness
 
 OAuth status requires a signed-in cookie session, authenticates REST without token headers, and probes WebSocket with a disposable ticket.
+
+### Raw gateway classification
+
+When `/api/status` is absent, a reachable or key-protected `/health` endpoint identifies token mode, while unrelated health failures remain user-visible connection errors.
+
+### Atomic first-run connection
+
+First-run Remote setup persists OAuth only after browser sign-in and token mode only after health validation; cancellation or failure preserves the prior connection configuration.
 
 ### Fresh ticket per connection
 

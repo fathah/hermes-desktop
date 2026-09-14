@@ -458,7 +458,11 @@ describe("ensureDashboardRuntimeSession", () => {
     const client = {
       async request(method: string, params?: unknown): Promise<unknown> {
         calls.push({ method, params });
-        return { session_id: "live-resumed", resumed: "stored-1" };
+        return {
+          session_id: "live-resumed",
+          resumed: "stored-1",
+          info: { desktop_contract: 6 },
+        };
       },
     };
 
@@ -471,6 +475,7 @@ describe("ensureDashboardRuntimeSession", () => {
       }),
     ).resolves.toEqual({
       created: false,
+      info: { desktop_contract: 6 },
       runtimeSessionId: "live-resumed",
       storedSessionId: "stored-1",
     });

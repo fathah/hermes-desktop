@@ -107,6 +107,7 @@ export async function remoteOAuthSessionState(
 export async function probeRemoteAuthMode(
   baseUrl: string,
   fetchImpl: typeof fetch = fetch,
+  apiKey = "",
 ): Promise<{ authMode: "token" | "oauth"; version: string | null }> {
   const normalized = normalizeRemoteOAuthBaseUrl(baseUrl);
   const statusUrl = new URL("/api/status", normalized.origin).toString();
@@ -118,6 +119,35 @@ export async function probeRemoteAuthMode(
       method: "GET",
       signal: controller.signal,
     });
+    if (response.status === 404 || response.status === 405) {
+      const healthUrl = new URL("/health", normalized.origin).toString();
+      const health = await fetchImpl(healthUrl, {
+        method: "GET",
+        signal: controller.signal,
+        headers: apiKey.trim()
+          ? { Authorization: `Bearer ${apiKey.trim()}` }
+          : undefined,
+      });
+      // A protected health endpoint still proves this is a raw token gateway;
+      // the subsequent connection test reports whether the supplied key works.
+      if (health.ok || health.status === 401 || health.status === 403) {
+        let version: string | null = null;
+        if (health.ok) {
+          try {
+            const body = (await health.json()) as { version?: unknown };
+            version = typeof body.version === "string" ? body.version : null;
+          } catch {
+            // Raw gateways are allowed to return an empty/plain-text health body.
+          }
+        }
+        return { authMode: "token", version };
+      }
+      throw new RemoteOAuthError(
+        `Remote gateway health probe failed (${health.status}).`,
+        "oauth_request_failed",
+        health.status,
+      );
+    }
     if (!response.ok) {
       throw new RemoteOAuthError(
         `Remote gateway status probe failed (${response.status}).`,

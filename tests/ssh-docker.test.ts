@@ -35,9 +35,13 @@ const itPython = python3Path ? it : it.skip;
 
 function assertPythonCompiles(script: string): void {
   // compile() only parses — nothing in the script is executed.
-  execFileSync(python3Path as string, ["-c", "import sys; compile(sys.stdin.read(), '<script>', 'exec')"], {
-    input: script,
-  });
+  execFileSync(
+    python3Path as string,
+    ["-c", "import sys; compile(sys.stdin.read(), '<script>', 'exec')"],
+    {
+      input: script,
+    },
+  );
 }
 
 describe("isValidDockerContainerName", () => {
