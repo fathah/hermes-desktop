@@ -208,79 +208,83 @@ const AgentMarkdown = memo(function AgentMarkdown({
 }: {
   children: string;
 }): React.JSX.Element {
+  // Detect RTL content so Arabic, Persian, Hebrew etc. render right-aligned.
+  // dir="auto" lets the browser decide based on the first strong character.
   return (
-    <Markdown
-      remarkPlugins={[remarkGfm]}
-      components={{
-        a: ({ href, children }) => (
-          <a
-            href={href}
-            onClick={(e) => {
-              e.preventDefault();
-              if (!href) return;
-              try {
-                const url = new URL(href, "https://placeholder.invalid");
-                if (!["http:", "https:", "mailto:"].includes(url.protocol)) {
+    <div dir="auto">
+      <Markdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          a: ({ href, children }) => (
+            <a
+              href={href}
+              onClick={(e) => {
+                e.preventDefault();
+                if (!href) return;
+                try {
+                  const url = new URL(href, "https://placeholder.invalid");
+                  if (!["http:", "https:", "mailto:"].includes(url.protocol)) {
+                    return;
+                  }
+                  if (url.protocol === "http:" || url.protocol === "https:") {
+                    const event = new CustomEvent("web-preview:navigate", {
+                      detail: href,
+                    });
+                    document.dispatchEvent(event);
+                    return;
+                  }
+                } catch {
                   return;
                 }
-                if (url.protocol === "http:" || url.protocol === "https:") {
-                  const event = new CustomEvent("web-preview:navigate", {
-                    detail: href,
-                  });
-                  document.dispatchEvent(event);
-                  return;
-                }
-              } catch {
-                return;
-              }
-              window.hermesAPI.openExternal(href);
-            }}
-          >
-            {children}
-          </a>
-        ),
-        img: ({ src }) => {
-          if (typeof src !== "string" || src.length === 0) return null;
-          // ![alt](file.pdf) parses as a markdown image but isn't an image —
-          // route those to the download chip instead of letting MediaImage
-          // try to load a non-image MIME and fail. (Follow-up from #303.)
-          const token = describeImageSrc(src);
-          return token.isImage ? (
-            <MediaImage token={token} />
-          ) : (
-            <DownloadChip token={token} />
-          );
-        },
-        code: ({ className, children, node, ...props }) => {
-          const isInline =
-            !className &&
-            typeof children === "string" &&
-            !children.includes("\n");
-          if (isInline) {
-            return (
-              <code className={className} {...props}>
-                {children}
-              </code>
-            );
-          }
-          // Source offset of the opening fence is stable as the block streams,
-          // so it survives react-markdown's streaming remounts (unlike index
-          // keys) and uniquely identifies this block within the message.
-          const start = node?.position?.start;
-          const blockId =
-            start != null
-              ? `${start.offset ?? start.line}:${className ?? ""}`
-              : undefined;
-          return (
-            <CodeBlock className={className} blockId={blockId}>
+                window.hermesAPI.openExternal(href);
+              }}
+            >
               {children}
-            </CodeBlock>
-          );
-        },
-      }}
-    >
-      {children}
-    </Markdown>
+            </a>
+          ),
+          img: ({ src }) => {
+            if (typeof src !== "string" || src.length === 0) return null;
+            // ![alt](file.pdf) parses as a markdown image but isn't an image —
+            // route those to the download chip instead of letting MediaImage
+            // try to load a non-image MIME and fail. (Follow-up from #303.)
+            const token = describeImageSrc(src);
+            return token.isImage ? (
+              <MediaImage token={token} />
+            ) : (
+              <DownloadChip token={token} />
+            );
+          },
+          code: ({ className, children, node, ...props }) => {
+            const isInline =
+              !className &&
+              typeof children === "string" &&
+              !children.includes("\n");
+            if (isInline) {
+              return (
+                <code className={className} {...props}>
+                  {children}
+                </code>
+              );
+            }
+            // Source offset of the opening fence is stable as the block streams,
+            // so it survives react-markdown's streaming remounts (unlike index
+            // keys) and uniquely identifies this block within the message.
+            const start = node?.position?.start;
+            const blockId =
+              start != null
+                ? `${start.offset ?? start.line}:${className ?? ""}`
+                : undefined;
+            return (
+              <CodeBlock className={className} blockId={blockId}>
+                {children}
+              </CodeBlock>
+            );
+          },
+        }}
+      >
+        {children}
+      </Markdown>
+    </div>
   );
 });
 
