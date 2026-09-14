@@ -52,6 +52,7 @@ import { getProfilePort } from "./gateway-ports";
 import { promptSudoPassword, promptSecretValue } from "./gatewayPrompt";
 import { getSecret } from "./secrets";
 import { readModels } from "./models";
+import { normalizeModelEndpointUrl } from "../shared/model-endpoint";
 import { providerListSafe } from "./secrets";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { type Attachment, escapeXmlAttr } from "../shared/attachments";
@@ -2774,7 +2775,9 @@ function sendMessageViaCli(
     let modelApiMode: string | null = null;
     try {
       const modelEntry = readModels().find(
-        (m) => m.baseUrl === mc.baseUrl && m.model === mc.model,
+        (m) =>
+          normalizeModelEndpointUrl(m.baseUrl) ===
+            normalizeModelEndpointUrl(mc.baseUrl) && m.model === mc.model,
       );
       if (modelEntry) modelApiMode = modelEntry.apiMode || null;
     } catch {
@@ -2818,15 +2821,22 @@ function sendMessageViaCli(
     if (!resolvedKey) {
       // Try custom provider auto-generated key from models.json
       try {
-        const models = readModels();
-        const matching = models.find((m) => m.baseUrl === mc.baseUrl);
-        if (matching) {
-          // Key off the provider label (stable across all of a named custom
-          // provider's models) when present, else the model's own name.
-          const envKey2 = customProviderEnvKey(
-            matching.providerLabel || matching.name,
-          );
-          resolvedKey = profileEnv[envKey2] || env[envKey2] || "";
+        const endpoint = normalizeModelEndpointUrl(mc.baseUrl);
+        for (const matching of readModels()) {
+          if (
+            matching.provider !== "custom" ||
+            normalizeModelEndpointUrl(matching.baseUrl) !== endpoint
+          )
+            continue;
+          const label = matching.providerLabel || matching.name;
+          if (!label) continue;
+          const envKey2 = customProviderEnvKey(label);
+          resolvedKey =
+            profileEnv[envKey2] ||
+            env[envKey2] ||
+            providerSecrets[envKey2] ||
+            "";
+          if (resolvedKey) break;
         }
       } catch {
         /* ignore */

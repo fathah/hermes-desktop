@@ -25,9 +25,12 @@ import {
 } from "./secrets";
 import { canonicalProviderBaseUrl } from "./provider-registry";
 import {
+  customProviderEnvKey,
   expectedEnvKeyForUrl,
   OPENAI_COMPAT_PROVIDERS,
 } from "../shared/url-key-map";
+import { readModelsRaw } from "./models";
+import { normalizeModelEndpointUrl } from "../shared/model-endpoint";
 
 // ── Connection Config (local / remote / ssh) ─────────────
 
@@ -1069,10 +1072,8 @@ export function getModelContextLengthOverride(
  * does. Returns false for providers the runtime does NOT route through the
  * custom path, so their specific-key checks still apply.
  *
- * (The runtime also consults a per-model `CUSTOM_PROVIDER_<name>_KEY` ahead of
- * the generic keys; that lookup needs models.json and is intentionally omitted
- * here to keep config.ts free of a models.ts import — the generic chain covers
- * the reported cases.)
+ * Named custom providers use the same endpoint identity and per-label keys
+ * as the runtime, with the model name retained for older saved rows.
  */
 export function customEndpointKeyResolvable(
   provider: string,
@@ -1088,11 +1089,31 @@ export function customEndpointKeyResolvable(
     "CUSTOM_API_KEY",
     "OPENAI_API_KEY",
   ]);
+
+  // Provider-owned models may store a per-label key like CUSTOM_PROVIDER_<NAME>_KEY.
+  // Include those so the config-health audit does not flag a configured provider
+  // whose key lives under its own env var.
+  try {
+    const modelRows = readModelsRaw();
+    const endpoint = normalizeModelEndpointUrl(baseUrl);
+    for (const row of modelRows) {
+      const label = row.providerLabel || row.name;
+      if (
+        row.provider === "custom" &&
+        label &&
+        normalizeModelEndpointUrl(row.baseUrl) === endpoint
+      ) {
+        candidates.add(customProviderEnvKey(label));
+      }
+    }
+  } catch {
+    // models.json unreadable — the fallback chain above still applies
+  }
+
   for (const k of candidates) {
     if ((env[k] ?? "").trim()) return true;
   }
-  // Vault-aware: a `command` provider with any of the fallback keys
-  // configured in the vault satisfies the requirement too — don't
+  // A matching key configured in the vault satisfies the requirement too — don't
   // return false and trigger a cascade of "MODEL_KEY_MISSING" / "set up
   // provider" warnings for a vault-only user. NOTE: ./secrets is already
   // statically imported at the top of this file, so this lazy require does

@@ -229,6 +229,81 @@ describe("runConfigHealthCheck", () => {
   });
 });
 
+describe("named custom provider readiness", () => {
+  // @lat: [[provider-setup#Provider setup#LLM-provider keys are configured-only, via modals#Named custom providers#Credential readiness]]
+  it.each([
+    ["https://API.GROQ.COM:443/Api/", "https://api.groq.com/Api", true],
+    ["https://api.groq.com/Api", "https://api.groq.com/api", false],
+    ["https://other.example/Api", "https://api.groq.com/Api", false],
+  ])(
+    "matches saved endpoint %s against %s without crossing path or host identities",
+    async (saved, active, ready) => {
+      writeConfig(
+        `model:\n  provider: custom\n  default: test-model\n  base_url: ${active}\n`,
+      );
+      writeEnv("CUSTOM_PROVIDER_TEST_LABEL_KEY=test-secret\n");
+      writeFileSync(
+        join(TEST_DIR, "models.json"),
+        JSON.stringify([
+          {
+            id: "test",
+            name: "Model",
+            providerLabel: "Test Label",
+            provider: "custom",
+            model: "test-model",
+            baseUrl: saved,
+          },
+        ]),
+      );
+      const { runConfigHealthCheck } = await freshHealth(TEST_DIR);
+      const report = runConfigHealthCheck();
+      expect(
+        report.issues.some((issue) => issue.code === "MODEL_KEY_MISSING"),
+      ).toBe(!ready);
+    },
+  );
+
+  it("uses only the requested profile's credentials", async () => {
+    writeConfig(
+      "model:\n  provider: custom\n  default: test-model\n  base_url: https://api.groq.com/v1\n",
+    );
+    writeEnv("CUSTOM_PROVIDER_TEST_LABEL_KEY=default-secret\n");
+    writeFileSync(
+      join(TEST_DIR, "models.json"),
+      JSON.stringify([
+        {
+          id: "test",
+          name: "Model",
+          providerLabel: "Test Label",
+          provider: "custom",
+          model: "test-model",
+          baseUrl: "https://api.groq.com/v1",
+        },
+      ]),
+    );
+    const named = join(TEST_DIR, "profiles", "work");
+    mkdirSync(named, { recursive: true });
+    writeFileSync(
+      join(named, "config.yaml"),
+      readFileSync(join(TEST_DIR, "config.yaml")),
+    );
+    writeFileSync(join(named, ".env"), "");
+    const { runConfigHealthCheck } = await freshHealth(TEST_DIR);
+    expect(
+      runConfigHealthCheck("work").issues.some(
+        (issue) => issue.code === "MODEL_KEY_MISSING",
+      ),
+    ).toBe(true);
+    const { setEnvValue } = await import("../src/main/config");
+    setEnvValue("CUSTOM_PROVIDER_TEST_LABEL_KEY", "work-secret", "work");
+    expect(
+      runConfigHealthCheck("work").issues.some(
+        (issue) => issue.code === "MODEL_KEY_MISSING",
+      ),
+    ).toBe(false);
+  });
+});
+
 describe("autoFixIssue", () => {
   it("migrates non-canonical API_SERVER_KEY into .env", async () => {
     writeConfig(["api_server:", "  token: sk-migrate-me", ""].join("\n"));
