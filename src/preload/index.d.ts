@@ -476,6 +476,10 @@ interface HermesAPI {
     mimeType: string,
     profile?: string,
   ) => Promise<string>;
+  synthesizeSpeech: (
+    text: string,
+    profile?: string,
+  ) => Promise<{ audio: Uint8Array; mimeType: string }>;
   getApiServerKeyStatus: (
     profile?: string,
   ) => Promise<{ hasKey: boolean; providerId?: string; checkedAt?: number }>;

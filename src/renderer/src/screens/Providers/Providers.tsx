@@ -20,6 +20,10 @@ import ProviderKeysSection from "../../components/ProviderKeysSection";
 import RegistryBrowserModal from "../../components/RegistryBrowserModal";
 import AuxiliaryTasksSection from "../../components/AuxiliaryTasksSection";
 import { useDiscoveredModels } from "../../hooks/useDiscoveredModels";
+import {
+  DEFAULT_MINIMAX_SPEECH_MODEL,
+  MINIMAX_SPEECH_MODELS,
+} from "../../../../shared/minimax-speech";
 import { KeyRound, Workflow, User } from "../../assets/icons";
 import {
   ChevronDown,
@@ -150,6 +154,12 @@ function Providers({
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set());
   // Which key row is expanded into an editable input ("Add key" / edit).
   const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [minimaxSpeechModel, setMinimaxSpeechModel] = useState(
+    DEFAULT_MINIMAX_SPEECH_MODEL,
+  );
+  const [minimaxSpeechRegion, setMinimaxSpeechRegion] = useState<
+    "global" | "cn"
+  >("global");
 
   // Model config
   const [modelProvider, setModelProvider] = useState("auto");
@@ -257,10 +267,12 @@ function Providers({
   const persistedCustomUrl = useRef(false);
 
   const loadConfig = useCallback(async (): Promise<void> => {
-    const [envData, mc, pool] = await Promise.all([
+    const [envData, mc, pool, speechModel, speechRegion] = await Promise.all([
       window.hermesAPI.getEnv(profile),
       window.hermesAPI.getModelConfig(profile),
       window.hermesAPI.getCredentialPool(),
+      window.hermesAPI.getConfig("tts.minimax.model", profile),
+      window.hermesAPI.getConfig("tts.minimax.region", profile),
     ]);
     setEnv(envData);
     setModelProvider(displayProviderFromConfig(mc.provider, mc.baseUrl));
@@ -269,6 +281,16 @@ function Providers({
     persistedCustomUrl.current =
       mc.provider === "custom" && Boolean(mc.baseUrl?.trim());
     setCredPool(pool);
+    if (
+      MINIMAX_SPEECH_MODELS.includes(
+        speechModel as (typeof MINIMAX_SPEECH_MODELS)[number],
+      )
+    ) {
+      setMinimaxSpeechModel(
+        speechModel as (typeof MINIMAX_SPEECH_MODELS)[number],
+      );
+    }
+    setMinimaxSpeechRegion(speechRegion === "cn" ? "cn" : "global");
 
     requestAnimationFrame(() => {
       modelLoaded.current = true;
@@ -1055,6 +1077,86 @@ function Providers({
                     );
                   })}
                 </div>
+                {section.title === "constants.sectionVoiceStt" && (
+                  <div className="settings-key-list">
+                    <div className="settings-key-row">
+                      <div className="settings-key-info">
+                        <span className="settings-key-name">
+                          {t("constants.minimaxSpeechModel")}
+                        </span>
+                        <span className="settings-key-desc">
+                          {t("constants.minimaxSpeechModelHint")}
+                        </span>
+                      </div>
+                      <div className="settings-key-action">
+                        <select
+                          className="input"
+                          value={minimaxSpeechModel}
+                          onChange={(event) => {
+                            const model = event.target
+                              .value as (typeof MINIMAX_SPEECH_MODELS)[number];
+                            setMinimaxSpeechModel(model);
+                            void window.hermesAPI.setConfig(
+                              "tts.minimax.model",
+                              model,
+                              profile,
+                            );
+                            void window.hermesAPI.setConfig(
+                              "tts.provider",
+                              "minimax",
+                              profile,
+                            );
+                          }}
+                        >
+                          {MINIMAX_SPEECH_MODELS.map((model) => (
+                            <option key={model} value={model}>
+                              {model}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="settings-key-row">
+                      <div className="settings-key-info">
+                        <span className="settings-key-name">
+                          {t("constants.minimaxSpeechRegion")}
+                        </span>
+                        <span className="settings-key-desc">
+                          {t("constants.minimaxSpeechRegionHint")}
+                        </span>
+                      </div>
+                      <div className="settings-key-action">
+                        <select
+                          className="input"
+                          value={minimaxSpeechRegion}
+                          onChange={(event) => {
+                            const region = event.target.value as
+                              | "global"
+                              | "cn";
+                            setMinimaxSpeechRegion(region);
+                            void window.hermesAPI.setConfig(
+                              "tts.minimax.region",
+                              region,
+                              profile,
+                            );
+                            void window.hermesAPI.setConfig(
+                              "tts.provider",
+                              "minimax",
+                              profile,
+                            );
+                          }}
+                        >
+                          <option value="global">
+                            {t("constants.minimaxSpeechGlobal")}
+                          </option>
+                          <option value="cn">
+                            {t("constants.minimaxSpeechChina")}
+                          </option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

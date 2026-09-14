@@ -134,6 +134,7 @@ import {
   recordAgentCommandInventory,
   recordAgentRuntimeInfo,
 } from "../hermes";
+import { synthesizeMiniMaxSpeech } from "../minimax-speech";
 import {
   freshDashboardWebSocketUrl,
   getDashboardStatus,
@@ -1663,6 +1664,12 @@ export function registerIpcHandlers(context: IpcContext): void {
       mimeType: string,
       profile?: string,
     ): Promise<string> => transcribeAudio(audio, mimeType, profile),
+  );
+
+  ipcMain.handle(
+    "synthesize-speech",
+    async (_event, text: string, profile?: string) =>
+      synthesizeMiniMaxSpeech(text, profile),
   );
 
   ipcMain.handle(
