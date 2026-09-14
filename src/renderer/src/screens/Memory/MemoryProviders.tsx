@@ -16,6 +16,7 @@ function escapeHtml(value: string): string {
 }
 
 const PROVIDER_URLS: Record<string, string> = {
+  recall: "https://github.com/Jnocode/recall-memory-hermes",
   honcho: "https://app.honcho.dev",
   hindsight: "https://ui.hindsight.vectorize.io",
   mem0: "https://app.mem0.ai",
