@@ -102,6 +102,12 @@ export function remoteRequestJson<T>(
         method: options.method ?? "GET",
         headers: {
           "Content-Type": "application/json",
+          // URL credentials let Node authenticate a reverse proxy with Basic
+          // auth; preserve that header and use the dedicated dashboard token.
+          // Otherwise support gateways that accept only Bearer authentication.
+          ...(!parsed.username && !parsed.password
+            ? { Authorization: `Bearer ${token}` }
+            : {}),
           "X-Hermes-Session-Token": token,
           ...(body ? { "Content-Length": Buffer.byteLength(body) } : {}),
         },
@@ -285,9 +291,10 @@ async function remoteSessionListPage(
   limit: number,
   offset: number,
 ): Promise<unknown> {
+  const profile = config.profile?.trim() || "all";
   const profileEndpoint =
     `/api/profiles/sessions?limit=${limit}&offset=${offset}` +
-    "&min_messages=0&archived=exclude&order=recent&profile=all";
+    `&min_messages=0&archived=exclude&order=recent&profile=${encodeURIComponent(profile)}`;
 
   try {
     return await remoteRequestJson(config, profileEndpoint);

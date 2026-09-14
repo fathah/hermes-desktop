@@ -283,29 +283,35 @@ export const MessageRow = memo(function MessageRow({
           </div>
         ) : (
           msg.content &&
-          (msg.role === "agent" && segments
-            ? segments.map((segment) =>
-                segment.type === "text" ? (
-                  segment.value.trim() ? (
-                    // Keyed on the segment's character offset rather than its
-                    // array index — a MEDIA: token appearing mid-stream shifts
-                    // every subsequent index, which would otherwise re-mount
-                    // each downstream MediaSegmentView and re-fire its
-                    // `mediaFileExists` probe.
-                    <AgentMarkdown key={`t-${segment.start}`}>
-                      {segment.value}
-                    </AgentMarkdown>
-                  ) : null
-                ) : (
-                  <MediaSegmentView
-                    key={`m-${segment.start}`}
-                    token={segment.token}
-                    raw={segment.raw}
-                    source={segment.source}
-                  />
-                ),
-              )
-            : msg.content)
+          (msg.role === "agent" && segments ? (
+            segments.map((segment) =>
+              segment.type === "text" ? (
+                segment.value.trim() ? (
+                  // Keyed on the segment's character offset rather than its
+                  // array index — a MEDIA: token appearing mid-stream shifts
+                  // every subsequent index, which would otherwise re-mount
+                  // each downstream MediaSegmentView and re-fire its
+                  // `mediaFileExists` probe.
+                  <AgentMarkdown key={`t-${segment.start}`}>
+                    {segment.value}
+                  </AgentMarkdown>
+                ) : null
+              ) : (
+                <MediaSegmentView
+                  key={`m-${segment.start}`}
+                  token={segment.token}
+                  raw={segment.raw}
+                  source={segment.source}
+                />
+              ),
+            )
+          ) : msg.role === "user" ? (
+            <div className="chat-user-markdown">
+              <AgentMarkdown>{msg.content}</AgentMarkdown>
+            </div>
+          ) : (
+            msg.content
+          ))
         )}
         {msg.error && (
           <div className="chat-error-message" role="alert">

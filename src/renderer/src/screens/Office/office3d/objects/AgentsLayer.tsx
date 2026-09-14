@@ -6,6 +6,7 @@ import { RIGGED_EMPLOYEE_URL, RIGGED_MAN_URL } from "./RiggedCharacter";
 import { REST_SEATS, type Workstation, type Seat } from "../layout";
 import { WALK_SPEED } from "../core/constants";
 import { toWorld, worldToCanvas } from "../core/geometry";
+import { agentRenderStateChanged } from "../core/presence";
 import { routeTarget } from "../core/routing";
 import {
   applyCrowdSeparation,
@@ -110,9 +111,10 @@ function makeRenderAgent(agent: OfficeAgent): RenderAgent {
 }
 
 /**
- * Holds the live agent simulation. Each agent walks to its desk (gateway up)
- * or to a rest-room beanbag (gateway off) and sits; idle agents occasionally
- * take a walking trip to the bank or car showroom and back (see trips.ts).
+ * Holds the live agent simulation. Working agents walk to their desks while
+ * idle agents rest on beanbags; idle agents occasionally take a walking trip
+ * to the bank or car showroom and back (see trips.ts). Gateway connectivity is
+ * a separate nameplate/chat signal and does not redefine Kanban activity.
  * Positions are mutated in-place on the refs each frame so avatars animate
  * without React re-renders. The simulation always runs for every agent;
  * `visiblePlace` only filters which avatars are shown, so interior views
@@ -177,8 +179,7 @@ export const AgentsLayer = memo(function AgentsLayer({
     return map;
   }, [workstations]);
 
-  // Assign each agent a rest-room beanbag (round-robin) for when its gateway
-  // is off.
+  // Assign each idle agent a rest-room beanbag (round-robin).
   const restSeatByAgent = useMemo(() => {
     const map = new Map<string, Seat>();
     if (REST_SEATS.length > 0) {
@@ -197,22 +198,14 @@ export const AgentsLayer = memo(function AgentsLayer({
   // useFrame always sees a consistent ref.
   useLayoutEffect(() => {
     const prev = lookupRef.current;
-    // Guard: if every agent already exists with the same status and position,
-    // nothing meaningful changed — keep the current simulation objects so
-    // agents don't teleport or reset their pose on a parent re-render.
+    // Guard: if every agent already carries the same render-relevant metadata,
+    // keep the current simulation objects so agents don't teleport or reset
+    // their pose on a parent re-render.
     let unchanged = agents.length === prev.size;
     if (unchanged) {
       for (const agent of agents) {
         const existing = prev.get(agent.id);
-        const existingPos =
-          existing && "position" in existing
-            ? (existing as unknown as OfficeAgent).position
-            : undefined;
-        if (
-          !existing ||
-          existing.status !== agent.status ||
-          existingPos !== agent.position
-        ) {
+        if (agentRenderStateChanged(existing, agent)) {
           unchanged = false;
           break;
         }
@@ -303,8 +296,7 @@ export const AgentsLayer = memo(function AgentsLayer({
       // eslint-disable-next-line -- simulation state is intentionally mutated in-place each frame
       agent.frame += step * 60;
 
-      // Working agents (gateway up) sit at their desk; everyone else rests in
-      // the rest room.
+      // Kanban-working agents sit at their desk; idle agents rest in the room.
       const working = agent.status === "working";
       const goalKey: "desk" | "rest" = working ? "desk" : "rest";
       const goal = working
@@ -437,7 +429,7 @@ export const AgentsLayer = memo(function AgentsLayer({
       if (ctrl.mode === "trip" && ctrl.trip) {
         const trip = ctrl.trip;
         const { route } = trip;
-        // Gateway came up mid-trip: turn around and walk the route home
+        // Work arrived mid-trip: turn around and walk the route home
         // (never teleport or clip through walls). Commanded missions are
         // exempt — being sent on an errand while working is the whole point.
         if (working && !trip.mission && trip.phase !== "back") {
@@ -559,7 +551,7 @@ export const AgentsLayer = memo(function AgentsLayer({
         continue;
       }
 
-      // Gateway flipped (profile started/stopped) — head to the new seat.
+      // Activity flipped between working/idle — head to the new seat.
       if (ctrl.goalKey !== goalKey) {
         ctrl.goalKey = goalKey;
         ctrl.mode = "toSeat";

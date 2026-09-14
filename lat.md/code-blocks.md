@@ -19,3 +19,5 @@ Prism fragments each glyph into nested token spans; in Electron renderers with i
 The gate is [[src/renderer/src/components/AgentMarkdown.tsx#isBoxDiagram]]: at least half of the block's non-empty lines must contain a character in U+2500–U+259F (Box Drawing + Block Elements). Density — not mere presence — is the discriminator, so one `│` in a string literal or comment does not demote a whole source file to plain text.
 
 Two precedence rules: `diff` blocks always keep the colored `DiffView` (it never uses Prism, so it has no fragmentation risk), and the header label keeps the fence's declared language — only an unlabeled box diagram is labeled `text`.
+
+[[src/renderer/src/components/AgentMarkdown.test.tsx]] verifies the plain-tree, incidental-glyph, diff, and language-label cases after the lazy Prism import is actually ready; its bounded async wait accommodates a cold highlighter import without weakening the assertions.

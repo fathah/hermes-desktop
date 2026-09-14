@@ -30,6 +30,7 @@ import {
 // same lookup without pulling in this whole file (and triggering a
 // circular import via `model-discovery → config → ...`).
 import { PROVIDER_BASE_URLS } from "./provider-registry";
+import { normalizeModelEndpointUrl } from "../shared/model-endpoint";
 
 /** Providers whose `/models` we never call — either they don't expose it,
  *  use a different protocol, or rely on OAuth credentials we can't
@@ -263,7 +264,7 @@ const LOCAL_NO_KEY_PROVIDERS = new Set([
 ]);
 
 function cacheKey(provider: string, baseUrl: string): string {
-  return `${provider.toLowerCase()}|${baseUrl.replace(/\/+$/, "").toLowerCase()}`;
+  return `${provider.toLowerCase()}|${normalizeModelEndpointUrl(baseUrl)}`;
 }
 
 function fromCache(provider: string, baseUrl: string): string[] | null {

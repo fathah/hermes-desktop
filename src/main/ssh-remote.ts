@@ -22,6 +22,7 @@ import type { HistoryItem, SessionSummary, SearchResult } from "./sessions";
 import type { CachedSession } from "./session-cache";
 import type { Attachment } from "../shared/attachments";
 import { isImageMime, MAX_IMAGE_BYTES } from "../shared/attachments";
+import { normalizeModelEndpointUrl } from "../shared/model-endpoint";
 import type { ToolsetInfo } from "./tools";
 import {
   extractLeadingVisionImageFallback,
@@ -974,6 +975,82 @@ export async function sshReadEnv(
   return result;
 }
 
+/**
+ * Boolean-only OAuth credential probe for SSH hosts that cannot serve the
+ * dashboard API. The Python process reads remote auth.json stores and emits no
+ * credential material. Named profiles inherit the default store just like the
+ * local hasOAuthCredentials helper.
+ */
+export async function sshGetOAuthProviderStatuses(
+  config: SshConfig,
+  providers: readonly string[],
+  profile?: string,
+): Promise<Record<string, boolean>> {
+  const requested = (profile || "default").trim() || "default";
+  if (
+    requested !== "default" &&
+    !/^[a-z0-9_][a-z0-9_-]{0,63}$/.test(requested)
+  ) {
+    throw new Error("Invalid SSH profile name.");
+  }
+
+  const script = String.raw`
+import json
+import pathlib
+import sys
+
+payload = json.loads(sys.stdin.read() or "{}")
+providers = [item for item in payload.get("providers", []) if isinstance(item, str)]
+profile = str(payload.get("profile") or "default")
+root = pathlib.Path.home() / ".hermes"
+paths = [root / "auth.json"]
+if profile != "default":
+    paths.insert(0, root / "profiles" / profile / "auth.json")
+
+stores = []
+for path in paths:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        stores.append(value if isinstance(value, dict) else {})
+    except Exception:
+        stores.append({})
+
+def usable(entry):
+    if not isinstance(entry, dict):
+        return False
+    return any(str(entry.get(key) or "").strip() for key in (
+        "access_token", "refresh_token", "api_key"
+    ))
+
+result = {}
+for provider in providers:
+    found = False
+    for store in stores:
+        direct = store.get("providers", {})
+        if isinstance(direct, dict) and usable(direct.get(provider)):
+            found = True
+            break
+        pool = store.get("credential_pool", {})
+        entries = pool.get(provider, []) if isinstance(pool, dict) else []
+        if isinstance(entries, list) and any(usable(entry) for entry in entries):
+            found = True
+            break
+    result[provider] = found
+
+print(json.dumps(result))
+`;
+
+  const out = await sshPython(
+    config,
+    script,
+    JSON.stringify({ providers, profile: requested }),
+  );
+  const parsed = JSON.parse(out.trim() || "{}") as Record<string, unknown>;
+  return Object.fromEntries(
+    providers.map((provider) => [provider, parsed[provider] === true]),
+  );
+}
+
 // Pure line-rewrite for sshSetEnvValue, exported for tests. Rewrites the
 // FIRST matching line (commented-out counts — it becomes live) and DROPS any
 // later duplicates. Both sshReadEnv and the remote gateway's dotenv are
@@ -1249,17 +1326,36 @@ export function sshGetHermesHome(_config: SshConfig, profile?: string): string {
 export async function sshGetModelConfig(
   config: SshConfig,
   profile?: string,
-): Promise<{ provider: string; model: string; baseUrl: string }> {
+): Promise<{
+  provider: string;
+  model: string;
+  baseUrl: string;
+  contextLength?: number;
+}> {
   // Use dotted paths so the lookup is scoped to the `model:` block. The
   // previous flat keys `provider` / `default` / `base_url` would each
   // match the first occurrence at any indent — typically picking up
   // `personalities.default` or `auxiliary.vision.provider` and reporting
   // them as the model fields (#240).
+  // Read once: each sshReadFile is a real SSH process, so fetching four
+  // sibling fields independently adds avoidable latency to every model read.
+  const content = await sshReadFile(config, remoteConfigPath(profile));
+  const read = (key: string): string =>
+    (content && locateInYaml(content, key)?.value) || "";
+  const rawContextLength = read("model.context_length").trim();
+  const parsedContextLength = rawContextLength
+    ? Number(rawContextLength)
+    : Number.NaN;
+  const contextLength =
+    Number.isFinite(parsedContextLength) && parsedContextLength > 0
+      ? Math.floor(parsedContextLength)
+      : undefined;
+
   return {
-    provider:
-      (await sshGetConfigValue(config, "model.provider", profile)) || "auto",
-    model: (await sshGetConfigValue(config, "model.default", profile)) || "",
-    baseUrl: (await sshGetConfigValue(config, "model.base_url", profile)) || "",
+    provider: read("model.provider") || "auto",
+    model: read("model.default"),
+    baseUrl: read("model.base_url"),
+    ...(contextLength !== undefined ? { contextLength } : {}),
   };
 }
 
@@ -3244,9 +3340,9 @@ export async function sshListCachedSessions(
   config: SshConfig,
   limit = 50,
   offset = 0,
+  profile?: string,
 ): Promise<CachedSession[]> {
-  void offset;
-  const sessions = await sshListSessions(config, limit, 0);
+  const sessions = await sshListSessions(config, limit, offset, profile);
   return sessions.map((s) => ({
     id: s.id,
     title: s.title || s.id,
@@ -3447,7 +3543,11 @@ export async function sshAddModel(
 ): Promise<SavedModel> {
   const models = await sshListModels(config);
   const existing = models.find(
-    (m) => m.model === model && m.provider === provider,
+    (m) =>
+      m.model === model &&
+      m.provider === provider &&
+      normalizeModelEndpointUrl(m.baseUrl) ===
+        normalizeModelEndpointUrl(baseUrl),
   );
   if (existing) return existing;
   const entry: SavedModel = {

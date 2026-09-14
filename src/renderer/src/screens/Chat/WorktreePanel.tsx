@@ -3,9 +3,14 @@ import {
   Folder,
   ChevronRight,
   ChevronDown,
+  File,
+  FileArchive,
+  FileCode,
+  FileImage,
+  FileSpreadsheet,
+  FileText,
   SquareTerminal,
 } from "lucide-react";
-import { getIconForFile, getSVGStringFromFileType } from "@wesbos/code-icons";
 import { FileViewer } from "./FileViewer";
 import { useI18n } from "../../components/useI18n";
 
@@ -30,19 +35,114 @@ interface TreeItemProps {
   onFileClick?: (filePath: string) => void;
 }
 
+export type WorktreeFileIconKind =
+  | "archive"
+  | "code"
+  | "file"
+  | "image"
+  | "spreadsheet"
+  | "text";
+
+const CODE_EXTENSIONS = new Set([
+  "bash",
+  "c",
+  "cpp",
+  "cs",
+  "css",
+  "go",
+  "gql",
+  "graphql",
+  "h",
+  "hpp",
+  "html",
+  "java",
+  "js",
+  "json",
+  "jsx",
+  "less",
+  "mjs",
+  "php",
+  "ps1",
+  "py",
+  "rb",
+  "rs",
+  "sass",
+  "scss",
+  "sh",
+  "sql",
+  "svelte",
+  "toml",
+  "ts",
+  "tsx",
+  "vue",
+  "xml",
+  "yaml",
+  "yml",
+  "zsh",
+]);
+const IMAGE_EXTENSIONS = new Set([
+  "avif",
+  "bmp",
+  "gif",
+  "ico",
+  "jpeg",
+  "jpg",
+  "png",
+  "svg",
+  "webp",
+]);
+const ARCHIVE_EXTENSIONS = new Set([
+  "7z",
+  "bz2",
+  "gz",
+  "rar",
+  "tar",
+  "tgz",
+  "zip",
+]);
+const SPREADSHEET_EXTENSIONS = new Set(["csv", "tsv", "xls", "xlsx"]);
+const TEXT_EXTENSIONS = new Set(["log", "md", "mdx", "rtf", "txt"]);
+
+export function worktreeFileIconKind(filename: string): WorktreeFileIconKind {
+  const normalized = filename.toLowerCase();
+  const extension = normalized.includes(".")
+    ? normalized.slice(normalized.lastIndexOf(".") + 1)
+    : "";
+
+  if (IMAGE_EXTENSIONS.has(extension)) return "image";
+  if (ARCHIVE_EXTENSIONS.has(extension)) return "archive";
+  if (SPREADSHEET_EXTENSIONS.has(extension)) return "spreadsheet";
+  if (
+    TEXT_EXTENSIONS.has(extension) ||
+    /^(readme|license|changelog)/.test(normalized)
+  ) {
+    return "text";
+  }
+  if (CODE_EXTENSIONS.has(extension) || normalized.startsWith(".")) {
+    return "code";
+  }
+  return "file";
+}
+
 function FileIcon({ filename }: { filename: string }): React.JSX.Element {
-  const iconType = getIconForFile(filename);
-  const iconData = iconType ? getSVGStringFromFileType(iconType) : null;
-  const svgString =
-    iconData && typeof iconData === "object" && "svg" in iconData
-      ? iconData.svg
-      : "";
+  const kind = worktreeFileIconKind(filename);
+  const Icon =
+    kind === "code"
+      ? FileCode
+      : kind === "image"
+        ? FileImage
+        : kind === "archive"
+          ? FileArchive
+          : kind === "spreadsheet"
+            ? FileSpreadsheet
+            : kind === "text"
+              ? FileText
+              : File;
 
   return (
-    <div
-      className="worktree-file-icon-wrapper"
-      dangerouslySetInnerHTML={{ __html: svgString }}
-    />
+    <div className="worktree-file-icon-wrapper" data-file-icon={kind}>
+      <Icon size={16} aria-hidden="true" />
+    </div>
   );
 }
 
@@ -222,7 +322,7 @@ export const WorktreePanel = memo(function WorktreePanel({
     return () => {
       cancelled = true;
     };
-  }, [folderPath]);
+  }, [folderPath, t]);
 
   // Get the folder name from the path
   const folderName =

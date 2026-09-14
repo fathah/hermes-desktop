@@ -117,6 +117,7 @@ describe("OAuth provider model discovery", () => {
     expect(result.models).toContain("gemini-3-pro-preview");
   });
 
+  // @lat: [[provider-setup#Provider setup#MiniMax OAuth discovery fallback]]
   it("includes the current MiniMax models when the Python call fails", async () => {
     behavior.err = new Error("python: command not found");
     const result = await discoverProviderModels(
@@ -126,8 +127,11 @@ describe("OAuth provider model discovery", () => {
       undefined,
     );
     expect(result.status).toBe("ok");
-    expect(result.models).toContain("MiniMax-M3");
-    expect(result.models).toContain("MiniMax-M2.7");
+    expect(result.models).toEqual([
+      "MiniMax-M3",
+      "MiniMax-M2.7",
+      "MiniMax-M2.7-highspeed",
+    ]);
   });
 
   it("caches the result so a second call skips the Python spawn", async () => {

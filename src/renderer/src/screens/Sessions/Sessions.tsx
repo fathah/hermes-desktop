@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo, memo } from "react";
 import { Plus, Search, X, ChatBubble, Trash, Pencil } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
+import { confirmSessionRename } from "./confirmSessionRename";
 import { OrbLoader } from "../../components/OrbLoader";
 
 interface CachedSession {
@@ -22,11 +23,73 @@ interface SearchResult {
   snippet: string;
 }
 
+export type SessionTypeFilter = "chats" | "automation" | "all";
+type SessionCategory = Exclude<SessionTypeFilter, "all">;
+
+const SESSION_TYPE_FILTER_KEY = "hermes.sessions.typeFilter";
+const SESSION_SOURCE_FILTER_KEY = "hermes.sessions.sourceFilter";
+const AUTOMATION_SOURCES = new Set([
+  "automation",
+  "background",
+  "cron",
+  "cronjob",
+  "curator",
+  "schedule",
+  "scheduled",
+  "scheduler",
+]);
+
+/** Extensible source-metadata mapping; titles are deliberately never used. */
+export function sessionCategoryForSource(source: string): SessionCategory {
+  const normalized = source.trim().toLowerCase().replace(/[-_]/g, " ");
+  const tokens = normalized.split(/[\s:/.]+/).filter(Boolean);
+  return tokens.some((token) => AUTOMATION_SOURCES.has(token))
+    ? "automation"
+    : "chats";
+}
+
+export function matchesSessionFilters(
+  session: Pick<CachedSession, "source">,
+  type: SessionTypeFilter,
+  sources: ReadonlySet<string>,
+): boolean {
+  if (type !== "all" && sessionCategoryForSource(session.source) !== type) {
+    return false;
+  }
+  return sources.size === 0 || sources.has(session.source);
+}
+
+function storedSessionTypeFilter(): SessionTypeFilter {
+  try {
+    const value = localStorage.getItem(SESSION_TYPE_FILTER_KEY);
+    return value === "automation" || value === "all" ? value : "chats";
+  } catch {
+    return "chats";
+  }
+}
+
+function storedSessionSourceFilter(): Set<string> {
+  try {
+    const value = JSON.parse(
+      localStorage.getItem(SESSION_SOURCE_FILTER_KEY) || "[]",
+    );
+    return new Set(
+      Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === "string")
+        : [],
+    );
+  } catch {
+    return new Set();
+  }
+}
+
 interface SessionsProps {
   onResumeSession: (sessionId: string) => void;
   onNewChat: () => void;
   currentSessionId: string | null;
   visible: boolean;
+  connectionId: string;
+  profile: string;
 }
 
 function formatTime(ts: number): string {
@@ -134,6 +197,7 @@ const SessionCard = memo(function SessionCard({
   onRenameConfirm,
   onRenameCancel,
   renameInputRef,
+  renameSaving,
   selectionMode = false,
   selected = false,
   onToggleSelected,
@@ -154,6 +218,7 @@ const SessionCard = memo(function SessionCard({
   onRenameConfirm?: () => void;
   onRenameCancel?: () => void;
   renameInputRef?: React.RefObject<HTMLInputElement | null>;
+  renameSaving?: boolean;
   selectionMode?: boolean;
   selected?: boolean;
   onToggleSelected?: (id: string) => void;
@@ -203,6 +268,7 @@ const SessionCard = memo(function SessionCard({
         {isRenaming ? (
           <input
             ref={renameInputRef}
+            disabled={renameSaving}
             className="sessions-card-rename-input"
             type="text"
             value={renameValue}
@@ -293,6 +359,8 @@ function Sessions({
   onNewChat,
   currentSessionId,
   visible,
+  connectionId,
+  profile,
 }: SessionsProps): React.JSX.Element {
   const { t } = useI18n();
   const [sessions, setSessions] = useState<CachedSession[]>([]);
@@ -300,6 +368,12 @@ function Sessions({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [sessionTypeFilter, setSessionTypeFilter] = useState<SessionTypeFilter>(
+    storedSessionTypeFilter,
+  );
+  const [selectedSources, setSelectedSources] = useState<Set<string>>(
+    storedSessionSourceFilter,
+  );
   const [pendingDeleteSessionId, setPendingDeleteSessionId] = useState<
     string | null
   >(null);
@@ -319,6 +393,31 @@ function Sessions({
   const loadRequestId = useRef(0);
   const searchRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const [renameSaving, setRenameSaving] = useState(false);
+  const renameContext = `${connectionId}\0${profile}`;
+  const renameContextRef = useRef(renameContext);
+  useEffect(() => {
+    renameContextRef.current = renameContext;
+  }, [renameContext]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SESSION_TYPE_FILTER_KEY, sessionTypeFilter);
+    } catch {
+      /* ignore unavailable storage */
+    }
+  }, [sessionTypeFilter]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        SESSION_SOURCE_FILTER_KEY,
+        JSON.stringify(Array.from(selectedSources).sort()),
+      );
+    } catch {
+      /* ignore unavailable storage */
+    }
+  }, [selectedSources]);
 
   // Rename state
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
@@ -332,27 +431,46 @@ function Sessions({
   // loading state, so it can run on a timer or on focus with no spinner flash.
   const refreshSessions = useCallback(async (): Promise<void> => {
     const requestId = ++loadRequestId.current;
-    const synced = await window.hermesAPI.syncSessionCache();
-    if (loadRequestId.current !== requestId) return;
-    setSessions((prev) => {
-      if (synced.length === 0 && prev.length > 0) {
-        return prev;
+    try {
+      const synced = await window.hermesAPI.syncSessionCache(
+        connectionId,
+        profile,
+      );
+      if (loadRequestId.current !== requestId) return;
+      if (synced.length === 0) {
+        // Local sync reconciles the complete visible set, including an empty
+        // set after the last session is archived. Keep the transient-empty
+        // guard for network-backed lists, whose failure can look like [].
+        const config = await window.hermesAPI.getConnectionConfig(connectionId);
+        if (config.mode !== "local") return;
       }
-      return synced.slice(0, 50);
-    });
-  }, []);
+      if (loadRequestId.current !== requestId) return;
+      setSessions(synced.slice(0, 50));
+    } catch (error) {
+      // Preserve the last visible list; the next focus/timer tick can retry.
+      console.error("Failed to refresh sessions", error);
+    }
+  }, [connectionId, profile]);
 
   const loadSessions = useCallback(async (): Promise<void> => {
     const requestId = ++loadRequestId.current;
     setLoading(true);
     try {
-      const synced = await window.hermesAPI.syncSessionCache();
+      const synced = await window.hermesAPI.syncSessionCache(
+        connectionId,
+        profile,
+      );
       if (loadRequestId.current !== requestId) return;
       setSessions(synced.slice(0, 50));
     } catch (error) {
       console.error("Failed to load sessions", error);
       try {
-        const cached = await window.hermesAPI.listCachedSessions(50);
+        const cached = await window.hermesAPI.listCachedSessions(
+          50,
+          0,
+          connectionId,
+          profile,
+        );
         if (loadRequestId.current === requestId) {
           setSessions(cached);
         }
@@ -364,7 +482,7 @@ function Sessions({
         setLoading(false);
       }
     }
-  }, []);
+  }, [connectionId, profile]);
 
   useEffect(() => {
     loadSessions();
@@ -376,6 +494,7 @@ function Sessions({
 
   const startRename = useCallback(
     (sessionId: string, currentTitle: string): void => {
+      if (renameSaving) return;
       setEditingSessionId(sessionId);
       setEditingTitle(currentTitle || "");
       // Focus the input on the next tick after render
@@ -384,7 +503,7 @@ function Sessions({
         renameInputRef.current?.select();
       }, 0);
     },
-    [],
+    [renameSaving],
   );
 
   const cancelRename = useCallback((): void => {
@@ -394,54 +513,55 @@ function Sessions({
 
   const confirmRename = useCallback(
     async (sessionId: string, newTitle: string): Promise<void> => {
-      const trimmed = newTitle.trim();
-      if (!trimmed) {
-        cancelRename();
-        return;
-      }
-      // Capture old titles so we can roll back on failure.
-      let oldSessionTitle = "";
-      let oldSearchResultTitle = "";
-      // Optimistic update
-      setSessions((prev) => {
-        oldSessionTitle = prev.find((s) => s.id === sessionId)?.title ?? "";
-        return prev.map((s) =>
-          s.id === sessionId ? { ...s, title: trimmed } : s,
-        );
+      const oldSessionTitle =
+        sessions.find((s) => s.id === sessionId)?.title ?? "";
+      const oldSearchResultTitle =
+        searchResults.find((r) => r.sessionId === sessionId)?.title ?? "";
+      await confirmSessionRename({
+        sessionId,
+        value: newTitle,
+        currentTitle: oldSessionTitle,
+        isCurrentContext: () => renameContextRef.current === renameContext,
+        setSaving: setRenameSaving,
+        isStillEditing: () => editingSessionIdRef.current === sessionId,
+        applyOptimistic: (title) => {
+          setSessions((prev) =>
+            prev.map((s) => (s.id === sessionId ? { ...s, title } : s)),
+          );
+          setSearchResults((prev) =>
+            prev.map((r) => (r.sessionId === sessionId ? { ...r, title } : r)),
+          );
+        },
+        rollback: () => {
+          setSessions((prev) =>
+            prev.map((s) =>
+              s.id === sessionId ? { ...s, title: oldSessionTitle } : s,
+            ),
+          );
+          setSearchResults((prev) =>
+            prev.map((r) =>
+              r.sessionId === sessionId
+                ? { ...r, title: oldSearchResultTitle }
+                : r,
+            ),
+          );
+        },
+        clearEditing: cancelRename,
+        inputRef: renameInputRef,
+        fallbackErrorMessage: t("sessions.renameFailed"),
+        persist: (id, title) =>
+          window.hermesAPI.updateSessionTitle(id, title, connectionId, profile),
       });
-      setSearchResults((prev) => {
-        oldSearchResultTitle =
-          prev.find((r) => r.sessionId === sessionId)?.title ?? "";
-        return prev.map((r) =>
-          r.sessionId === sessionId ? { ...r, title: trimmed } : r,
-        );
-      });
-      try {
-        await window.hermesAPI.updateSessionTitle(sessionId, trimmed);
-      } catch (err) {
-        console.error("Failed to rename session", sessionId, err);
-        // Rollback optimistic update
-        setSessions((prev) =>
-          prev.map((s) =>
-            s.id === sessionId ? { ...s, title: oldSessionTitle } : s,
-          ),
-        );
-        setSearchResults((prev) =>
-          prev.map((r) =>
-            r.sessionId === sessionId
-              ? { ...r, title: oldSearchResultTitle }
-              : r,
-          ),
-        );
-      }
-      // Guard: only clear editing state if the user hasn't started editing
-      // a different session while this request was in flight.
-      if (editingSessionIdRef.current === sessionId) {
-        setEditingSessionId(null);
-        setEditingTitle("");
-      }
     },
-    [cancelRename],
+    [
+      cancelRename,
+      searchResults,
+      sessions,
+      t,
+      connectionId,
+      profile,
+      renameContext,
+    ],
   );
 
   const cancelDelete = useCallback((): void => {
@@ -460,7 +580,7 @@ function Sessions({
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
       setSearchResults((prev) => prev.filter((r) => r.sessionId !== sessionId));
       try {
-        await window.hermesAPI.deleteSession(sessionId);
+        await window.hermesAPI.deleteSession(sessionId, connectionId, profile);
       } catch (err) {
         console.error("Failed to delete session", sessionId, err);
       } finally {
@@ -469,7 +589,7 @@ function Sessions({
         setPendingDeleteSessionId(null);
       }
     },
-    [refreshSessions],
+    [connectionId, profile, refreshSessions],
   );
 
   const toggleSelectionMode = useCallback((): void => {
@@ -513,7 +633,7 @@ function Sessions({
       setSessions((prev) => prev.filter((s) => !idSet.has(s.id)));
       setSearchResults((prev) => prev.filter((r) => !idSet.has(r.sessionId)));
       try {
-        await window.hermesAPI.deleteSessions(ids);
+        await window.hermesAPI.deleteSessions(ids, connectionId, profile);
       } catch (err) {
         console.error("Failed to delete selected sessions", ids, err);
       } finally {
@@ -524,7 +644,7 @@ function Sessions({
         setIsSelectionMode(false);
       }
     },
-    [refreshSessions],
+    [connectionId, profile, refreshSessions],
   );
 
   useEffect(() => {
@@ -606,9 +726,16 @@ function Sessions({
     setIsSearching(true);
     searchTimer.current = setTimeout(async () => {
       try {
-        await window.hermesAPI.syncSessionCache().catch(() => []);
+        await window.hermesAPI
+          .syncSessionCache(connectionId, profile)
+          .catch(() => []);
         if (searchRequestId.current !== requestId) return;
-        const results = await window.hermesAPI.searchSessions(query);
+        const results = await window.hermesAPI.searchSessions(
+          query,
+          undefined,
+          connectionId,
+          profile,
+        );
         if (searchRequestId.current !== requestId) return;
         setSearchResults(results);
       } finally {
@@ -620,16 +747,42 @@ function Sessions({
     return () => {
       if (searchTimer.current) clearTimeout(searchTimer.current);
     };
-  }, [searchQuery]);
+  }, [connectionId, profile, searchQuery]);
 
   const isShowingSearch = searchQuery.trim().length > 0;
-  const grouped = groupSessions(sessions);
+  const sourceOptions = useMemo(
+    () =>
+      Array.from(
+        new Set([
+          ...sessions.map((session) => session.source),
+          ...searchResults.map((result) => result.source),
+        ]),
+      )
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b)),
+    [searchResults, sessions],
+  );
+  const filteredSessions = useMemo(
+    () =>
+      sessions.filter((session) =>
+        matchesSessionFilters(session, sessionTypeFilter, selectedSources),
+      ),
+    [selectedSources, sessionTypeFilter, sessions],
+  );
+  const filteredSearchResults = useMemo(
+    () =>
+      searchResults.filter((result) =>
+        matchesSessionFilters(result, sessionTypeFilter, selectedSources),
+      ),
+    [searchResults, selectedSources, sessionTypeFilter],
+  );
+  const grouped = groupSessions(filteredSessions);
   const visibleSessionIds = useMemo(() => {
     const ids = isShowingSearch
-      ? searchResults.map((result) => result.sessionId)
-      : sessions.map((session) => session.id);
+      ? filteredSearchResults.map((result) => result.sessionId)
+      : filteredSessions.map((session) => session.id);
     return Array.from(new Set(ids));
-  }, [isShowingSearch, searchResults, sessions]);
+  }, [filteredSearchResults, filteredSessions, isShowingSearch]);
   const visibleSessionIdKey = visibleSessionIds.join("\u0000");
   const selectedCount = selectedSessionIds.size;
   const allVisibleSelected =
@@ -703,6 +856,59 @@ function Sessions({
             </button>
           )}
         </div>
+        <div className="sessions-filters">
+          <div
+            className="sessions-type-filter"
+            role="group"
+            aria-label={t("sessions.typeFilter")}
+          >
+            {(["chats", "automation", "all"] as const).map((type) => (
+              <button
+                key={type}
+                type="button"
+                className={sessionTypeFilter === type ? "active" : ""}
+                aria-pressed={sessionTypeFilter === type}
+                onClick={() => setSessionTypeFilter(type)}
+              >
+                {t(`sessions.filter.${type}`)}
+              </button>
+            ))}
+          </div>
+          <details className="sessions-source-filter">
+            <summary>
+              {selectedSources.size === 0
+                ? t("sessions.allSources")
+                : t("sessions.sourcesSelected", {
+                    count: selectedSources.size,
+                  })}
+            </summary>
+            <div className="sessions-source-filter-menu">
+              <button
+                type="button"
+                onClick={() => setSelectedSources(new Set())}
+              >
+                {t("sessions.allSources")}
+              </button>
+              {sourceOptions.map((source) => (
+                <label key={source}>
+                  <input
+                    type="checkbox"
+                    checked={selectedSources.has(source)}
+                    onChange={() =>
+                      setSelectedSources((previous) => {
+                        const next = new Set(previous);
+                        if (next.has(source)) next.delete(source);
+                        else next.add(source);
+                        return next;
+                      })
+                    }
+                  />
+                  <span>{source}</span>
+                </label>
+              ))}
+            </div>
+          </details>
+        </div>
         {isSelectionMode && (
           <div className="sessions-selection-toolbar">
             <span className="sessions-selection-count">
@@ -742,7 +948,7 @@ function Sessions({
           <div className="sessions-loading">
             <OrbLoader state="searching" size={64} />
           </div>
-        ) : searchResults.length === 0 ? (
+        ) : filteredSearchResults.length === 0 ? (
           <div className="sessions-empty">
             <Search size={32} className="sessions-empty-icon" />
             <p className="sessions-empty-text">{t("sessions.noResults")}</p>
@@ -750,7 +956,7 @@ function Sessions({
           </div>
         ) : (
           <div className="sessions-list">
-            {searchResults.map((r, index) => {
+            {filteredSearchResults.map((r, index) => {
               const snippetTitle =
                 !r.title && r.snippet
                   ? cleanSearchSnippet(r.snippet, true)
@@ -809,6 +1015,7 @@ function Sessions({
                     {editingSessionId === r.sessionId ? (
                       <input
                         ref={renameInputRef}
+                        disabled={renameSaving}
                         className="sessions-card-rename-input"
                         type="text"
                         value={editingTitle}
@@ -900,6 +1107,12 @@ function Sessions({
           <p className="sessions-empty-text">{t("sessions.empty")}</p>
           <p className="sessions-empty-hint">{t("sessions.emptyHint")}</p>
         </div>
+      ) : filteredSessions.length === 0 ? (
+        <div className="sessions-empty">
+          <Search size={32} className="sessions-empty-icon" />
+          <p className="sessions-empty-text">{t("sessions.filterEmpty")}</p>
+          <p className="sessions-empty-hint">{t("sessions.filterEmptyHint")}</p>
+        </div>
       ) : (
         <div className="sessions-list">
           {grouped.map((group) => (
@@ -926,6 +1139,7 @@ function Sessions({
                   onRenameConfirm={() => confirmRename(s.id, editingTitle)}
                   onRenameCancel={cancelRename}
                   renameInputRef={renameInputRef}
+                  renameSaving={renameSaving}
                   selectionMode={isSelectionMode}
                   selected={selectedSessionIds.has(s.id)}
                   onToggleSelected={toggleSessionSelected}
