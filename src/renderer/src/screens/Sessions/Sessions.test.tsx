@@ -872,3 +872,197 @@ describe("Sessions tab — bulk delete selection (#490)", () => {
     expect(api.deleteSessions).not.toHaveBeenCalled();
   });
 });
+
+// @lat: [[ssh-session-delete#Visible deletion failure]]
+it("keeps a failed deletion visible even when the subsequent list refresh is offline", async () => {
+  vi.useRealTimers();
+  localStorage.clear();
+  const api = installHermesAPI([
+    {
+      id: "keep",
+      title: "Keep this chat",
+      startedAt: Date.now() / 1000,
+      source: "desktop",
+      messageCount: 1,
+      model: "test",
+    },
+  ]);
+  render(<Sessions {...baseProps} visible />);
+  await screen.findByText("Keep this chat");
+  api.deleteSession.mockRejectedValue(new Error("SSH offline"));
+  api.syncSessionCache.mockRejectedValue(new Error("SSH offline"));
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    fireEvent.click(screen.getByRole("button", { name: "sessions.delete" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "sessions.deleteConfirmAction" }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "sessions.deleteFailed",
+    );
+    expect(screen.getByText("Keep this chat")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "sessions.delete" }),
+    ).toBeEnabled();
+  } finally {
+    log.mockRestore();
+  }
+});
+
+// @lat: [[ssh-session-delete#Pending deletion and duplicate clicks]]
+it("keeps history until acknowledgement and ignores repeated delete confirmations", async () => {
+  vi.useRealTimers();
+  localStorage.clear();
+  const api = installHermesAPI([
+    {
+      id: "pending",
+      title: "Pending chat",
+      startedAt: Date.now() / 1000,
+      source: "desktop",
+      messageCount: 1,
+      model: "test",
+    },
+  ]);
+  let finish!: () => void;
+  api.deleteSession.mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  render(<Sessions {...baseProps} visible />);
+  await screen.findByText("Pending chat");
+  fireEvent.click(screen.getByRole("button", { name: "sessions.delete" }));
+  const confirm = screen.getByRole("button", {
+    name: "sessions.deleteConfirmAction",
+  });
+  fireEvent.click(confirm);
+  fireEvent.click(confirm);
+  expect(api.deleteSession).toHaveBeenCalledTimes(1);
+  expect(screen.getByText("Pending chat")).toBeVisible();
+  api.syncSessionCache.mockResolvedValue([]);
+  await act(async () => finish());
+  await waitFor(() => expect(screen.queryByText("Pending chat")).toBeNull());
+});
+
+// @lat: [[ssh-session-delete#Late response isolation]]
+it("does not apply a previous profile's deletion result to the newly selected profile", async () => {
+  vi.useRealTimers();
+  localStorage.clear();
+  const row = {
+    id: "same-id",
+    title: "Old profile chat",
+    startedAt: Date.now() / 1000,
+    source: "desktop",
+    messageCount: 1,
+    model: "test",
+  };
+  const api = installHermesAPI([row]);
+  let finish!: () => void;
+  api.deleteSession.mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const view = render(<Sessions {...baseProps} visible />);
+  await screen.findByText("Old profile chat");
+  fireEvent.click(screen.getByRole("button", { name: "sessions.delete" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "sessions.deleteConfirmAction" }),
+  );
+  api.syncSessionCache.mockResolvedValue([
+    { ...row, title: "New profile chat" },
+  ]);
+  view.rerender(<Sessions {...baseProps} profile="new-profile" visible />);
+  await screen.findByText("New profile chat");
+  await act(async () => finish());
+  expect(screen.getByText("New profile chat")).toBeVisible();
+  expect(api.deleteSession).toHaveBeenCalledWith(
+    "same-id",
+    "connection-one",
+    "work",
+  );
+});
+
+// @lat: [[ssh-session-delete#Visible batch failure]]
+it("keeps selected history and reports a failed batch deletion", async () => {
+  vi.useRealTimers();
+  localStorage.clear();
+  const api = installHermesAPI([
+    {
+      id: "keep-batch",
+      title: "Batch chat",
+      startedAt: Date.now() / 1000,
+      source: "desktop",
+      messageCount: 1,
+      model: "test",
+    },
+  ]);
+  api.deleteSessions.mockRejectedValue(new Error("locked database"));
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    render(<Sessions {...baseProps} visible />);
+    await screen.findByText("Batch chat");
+    fireEvent.click(
+      screen.getByRole("button", { name: "sessions.selectMode" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "sessions.selectVisible" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "sessions.deleteSelected" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "sessions.deleteConfirmAction",
+      }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "sessions.deleteFailed",
+    );
+    expect(screen.getByText("Batch chat")).toBeVisible();
+  } finally {
+    log.mockRestore();
+  }
+});
+
+// @lat: [[ssh-session-delete#Deletion supersedes visible loading]]
+it("releases loading when deletion supersedes a visibility reload", async () => {
+  vi.useRealTimers();
+  localStorage.clear();
+  const api = installHermesAPI([
+    {
+      id: "pending",
+      title: "Pending chat",
+      startedAt: Date.now() / 1000,
+      source: "desktop",
+      messageCount: 1,
+      model: "test",
+    },
+  ]);
+  const view = render(<Sessions {...baseProps} visible />);
+  await screen.findByText("Pending chat");
+  fireEvent.click(screen.getByRole("button", { name: "sessions.delete" }));
+  view.rerender(<Sessions {...baseProps} visible={false} />);
+  let finish!: (items: []) => void;
+  api.syncSessionCache.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  view.rerender(<Sessions {...baseProps} visible />);
+  expect(view.container.querySelector(".sessions-loading")).not.toBeNull();
+  api.syncSessionCache.mockResolvedValue([]);
+  fireEvent.click(
+    screen.getByRole("button", { name: "sessions.deleteConfirmAction" }),
+  );
+  await waitFor(() => expect(api.deleteSession).toHaveBeenCalled());
+  await act(async () => {
+    finish([]);
+  });
+  await waitFor(() =>
+    expect(view.container.querySelector(".sessions-loading")).toBeNull(),
+  );
+});
