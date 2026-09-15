@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { AppLocale } from "../shared/i18n/types";
+import type { BotGroupAPI } from "../shared/bot-groups";
 import type { Attachment } from "../shared/attachments";
 import type { SessionModelOverride } from "../shared/model-override";
 import type { DesktopSessionContinuationItem } from "../shared/session-continuation";
@@ -129,6 +130,13 @@ const electronAPI = {
 };
 
 const hermesAPI = {
+  botGroups: ((connectionId, operation, params = {}) =>
+    ipcRenderer.invoke(
+      "bot-groups-request",
+      connectionId,
+      operation,
+      params,
+    )) as BotGroupAPI,
   // Installation
   checkInstall: (): Promise<{
     installed: boolean;

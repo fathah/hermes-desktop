@@ -11,6 +11,7 @@ import {
 } from "electron";
 import { extname } from "path";
 import { randomUUID } from "crypto";
+import { botGroupsRequest } from "../bot-groups";
 import { readdir, readFile, stat } from "fs/promises";
 import { getActiveProfileNameSync } from "../utils";
 import type { Attachment } from "../../shared/attachments";
@@ -730,6 +731,11 @@ function resolveLibraryModelEntry(
 }
 
 export function registerIpcHandlers(context: IpcContext): void {
+  ipcMain.handle(
+    "bot-groups-request",
+    (_event, connectionId: unknown, operation: string, params: unknown) =>
+      botGroupsRequest(connectionId, operation, params),
+  );
   const {
     activeRuns,
     getMainWindow,

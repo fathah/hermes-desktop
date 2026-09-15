@@ -1,0 +1,41 @@
+export default {
+  title: "Bot groups",
+  experimental: "Experimental · local installation only",
+  create: "New group",
+  refresh: "Refresh",
+  empty: "No groups yet.",
+  more: "More groups",
+  intro:
+    "Collaborate with 2–6 Agents. Hermes owns the shared context and execution.",
+  unavailable:
+    "Bot groups need the experimental bridge and a Hermes groups protocol v2 runtime.",
+  connecting: "Connecting…",
+  noDriver: "Group worker unavailable. Check the Hermes Dashboard.",
+  blocked: "Action required — review the pending request below.",
+  working: "Agents are working…",
+  ready: "Ready",
+  stop: "Stop group",
+  name: "Group name",
+  selectMembers: "Choose 2–6 Agent profiles",
+  cancel: "Cancel",
+  messages: "Group messages",
+  you: "You",
+  approval: "Approval required",
+  once: "Allow once",
+  deny: "Deny",
+  retry: "Retry task",
+  confirmRetry: "I checked the result — retry",
+  retryWarning:
+    "The outcome of this task is uncertain. Retrying may repeat external actions. Check the result before retrying.",
+  sendUnknown:
+    "Delivery was not confirmed. Send again without changing the message to retry the same request safely.",
+  composeHint:
+    "@ a member, or send to everyone. A new message redirects the current discussion.",
+  placeholder: "Message your Agents…",
+  send: "Send",
+  requestFailed: "The group request failed.",
+  turn_failed: "An Agent failed. Check the group status.",
+  turn_cancelled: "An Agent turn was cancelled.",
+  turn_deferred: "An Agent turn needs attention.",
+  recent: "Showing the latest 500 events. Full history remains in Hermes.",
+};

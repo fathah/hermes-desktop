@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import Chat from "../Chat/Chat";
+import BotGroups from "../BotGroups/BotGroups";
 import {
   dbItemsToChatMessages,
   type DbHistoryItem,
@@ -48,12 +49,14 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
+  Users,
 } from "../../assets/icons";
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 
 type View =
   | "chat"
+  | "botGroups"
   | "discover"
   | "agents"
   | "office"
@@ -66,6 +69,7 @@ type View =
   | "gateway";
 
 const PINNED_NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string }[] = [
+  { view: "botGroups", icon: Users, labelKey: "botGroups.title" },
   { view: "discover", icon: Compass, labelKey: "navigation.discover" },
   // "agents" (Profiles) is reached from the sidebar-footer ProfileSwitcher's
   // "Manage profiles" action rather than a top-level nav item.
@@ -102,6 +106,19 @@ function Layout({
   const { t } = useI18n();
   const { openSettings } = useSettingsModal();
   const [view, setView] = useState<View>("chat");
+  const [botGroupsEnabled, setBotGroupsEnabled] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void window.hermesAPI
+      .botGroups?.(connectionId, "capabilities")
+      .then((status) => {
+        if (alive) setBotGroupsEnabled(status.enabled);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [connectionId]);
   // Multiple conversations coexist (background sessions + multi-agent). Each is
   // a ChatRun; all are mounted, only the active one is shown. Profile switches
   // preserve existing conversations and activate a scratch run for the selected
@@ -727,7 +744,9 @@ function Layout({
                 {t("navigation.newChat")}
               </span>
             </button>
-            {PINNED_NAV_ITEMS.map(({ view: v, icon: Icon, labelKey }) => {
+            {PINNED_NAV_ITEMS.filter(
+              (item) => item.view !== "botGroups" || botGroupsEnabled,
+            ).map(({ view: v, icon: Icon, labelKey }) => {
               return (
                 <button
                   key={v}
@@ -743,7 +762,7 @@ function Layout({
             })}
           </nav>
 
-          <div className="sidebar-chat-section">
+          <div className="sidebar-chat-section" hidden={view === "botGroups"}>
             <div className="sidebar-nav-sessions">
               <div className="sidebar-chat-scroll" ref={sidebarChatScrollRef}>
                 <SidebarRecentSessions
@@ -925,6 +944,16 @@ function Layout({
                   visible={sessionsModalOpen}
                 />
               </div>
+            </div>
+          )}
+
+          {visitedViews.has("botGroups") && (
+            <div style={paneStyle("botGroups")}>
+              <BotGroups
+                key={connectionId}
+                connectionId={connectionId}
+                visible={view === "botGroups"}
+              />
             </div>
           )}
 

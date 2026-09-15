@@ -1,4 +1,6 @@
 import i18next, { type Resource } from "i18next";
+import botGroupsEn from "./locales/en/botGroups";
+import botGroupsZh from "./locales/zh-CN/botGroups";
 import {
   APP_LOCALES,
   DEFAULT_ACTIVE_LOCALE,
@@ -272,6 +274,7 @@ import diagnoseAr from "./locales/ar/diagnose";
 export const resources = {
   en: {
     translation: {
+      botGroups: botGroupsEn,
       common: commonEn,
       navigation: navigationEn,
       discover: discoverEn,
@@ -401,6 +404,7 @@ export const resources = {
   },
   "zh-CN": {
     translation: {
+      botGroups: botGroupsZh,
       common: commonZh,
       navigation: navigationZh,
       welcome: welcomeZh,
