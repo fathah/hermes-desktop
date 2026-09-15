@@ -116,6 +116,7 @@ interface UseDashboardChatTransportArgs {
 interface UseDashboardChatTransportResult {
   abort: () => void;
   enabled: boolean;
+  respondClarify: (requestId: string, answer: string) => Promise<boolean>;
   respondApproval: (
     requestId: string,
     choice: ApprovalChoice,
@@ -960,7 +961,12 @@ export function useDashboardChatTransport({
   const appliedModelRef = useRef<string | null>(null);
   const recreateRuntimeSessionRef = useRef(false);
   const lastRuntimeSessionWasCreatedRef = useRef(false);
-  const pendingClarifyRequestIdRef = useRef<string | null>(null);
+  const pendingClarifyRef = useRef<{
+    requestId: string;
+    sessionId: string | null;
+    responding: boolean;
+    activeTurn: ActiveTurn | null;
+  } | null>(null);
   const pendingApprovalsRef = useRef<PendingDashboardApproval[]>([]);
   const approvalNonceRef = useRef(0);
   const pendingRecoveredContinuationRef = useRef<
@@ -1014,6 +1020,35 @@ export function useDashboardChatTransport({
     [cancelScheduledFlush, setMessages],
   );
 
+  const expirePendingClarifyRef = useRef<(failActiveTurn?: boolean) => void>(
+    () => undefined,
+  );
+  expirePendingClarifyRef.current = (failActiveTurn = false): void => {
+    const pending = pendingClarifyRef.current;
+    pendingClarifyRef.current = null;
+    if (!pending) return;
+    if (
+      failActiveTurn &&
+      pending.responding &&
+      activeTurnRef.current === pending.activeTurn
+    ) {
+      if (activeTurnRef.current) activeTurnRef.current.status = "failed";
+      activeTurnRef.current = null;
+      setToolProgress(null);
+      setIsLoading(false);
+    }
+    setMessages((current) =>
+      current.map((message) =>
+        message.kind === "clarify" &&
+        message.responsePath === "dashboard" &&
+        message.requestId === pending.requestId &&
+        !message.resolved
+          ? { ...message, unavailable: true }
+          : message,
+      ),
+    );
+  };
+
   const expirePendingApprovalsRef = useRef<(failActiveTurn?: boolean) => void>(
     () => undefined,
   );
@@ -1052,7 +1087,10 @@ export function useDashboardChatTransport({
   useEffect(() => {
     // Clearing the transcript invalidates pending cards without copying a
     // potentially stale React snapshot back over coalesced stream deltas.
-    if (messagesRef.current.length === 0) pendingApprovalsRef.current = [];
+    if (messagesRef.current.length === 0) {
+      pendingApprovalsRef.current = [];
+      pendingClarifyRef.current = null;
+    }
   });
 
   useEffect(() => {
@@ -1064,7 +1102,7 @@ export function useDashboardChatTransport({
     appliedModelRef.current = null;
     recreateRuntimeSessionRef.current = false;
     lastRuntimeSessionWasCreatedRef.current = false;
-    pendingClarifyRequestIdRef.current = null;
+    expirePendingClarifyRef.current();
     lastSyncedCwdRef.current = null;
   }, [hermesSessionId]);
 
@@ -1084,7 +1122,7 @@ export function useDashboardChatTransport({
     appliedModelRef.current = null;
     recreateRuntimeSessionRef.current = false;
     lastRuntimeSessionWasCreatedRef.current = false;
-    pendingClarifyRequestIdRef.current = null;
+    expirePendingClarifyRef.current();
     pendingRecoveredContinuationRef.current = [];
     lastSyncedCwdRef.current = null;
   }, [connectionId, connectionMode, connectionRevision, profile]);
@@ -1222,6 +1260,9 @@ export function useDashboardChatTransport({
       }
 
       if (event.type === "message.complete") {
+        // A reply RPC can be acknowledged after the resumed turn finishes.
+        if (!pendingClarifyRef.current?.responding)
+          expirePendingClarifyRef.current();
         expirePendingApprovalsRef.current();
         if (failed) {
           appliedModelRef.current = null;
@@ -1287,7 +1328,25 @@ export function useDashboardChatTransport({
         const requestId =
           typeof payload.request_id === "string" ? payload.request_id : "";
         if (requestId) {
-          pendingClarifyRequestIdRef.current = requestId;
+          if (pendingClarifyRef.current?.requestId !== requestId) {
+            expirePendingClarifyRef.current();
+            const card = messagesRef.current.find(
+              (message) =>
+                message.kind === "clarify" && message.requestId === requestId,
+            );
+            if (
+              card?.kind === "clarify" &&
+              !card.resolved &&
+              !card.unavailable
+            ) {
+              pendingClarifyRef.current = {
+                requestId,
+                sessionId: runtimeSessionId,
+                responding: false,
+                activeTurn: activeTurnRef.current,
+              };
+            }
+          }
           activeTurnRef.current = null;
           setToolProgress(null);
           setIsLoading(false);
@@ -1366,6 +1425,7 @@ export function useDashboardChatTransport({
             onEvent: handleGatewayEvent,
             onClose: () => {
               if (clientRef.current === client) {
+                expirePendingClarifyRef.current(true);
                 expirePendingApprovalsRef.current(true);
                 clientRef.current = null;
               }
@@ -1649,21 +1709,79 @@ export function useDashboardChatTransport({
     [],
   );
 
+  const respondClarify = useCallback(
+    async (requestId: string, answer: string): Promise<boolean> => {
+      const pending = pendingClarifyRef.current;
+      const client = clientRef.current;
+      if (
+        !enabled ||
+        !pending ||
+        pending.requestId !== requestId ||
+        pending.responding ||
+        pending.sessionId !== runtimeSessionIdRef.current ||
+        !client?.connected
+      )
+        return false;
+      pending.responding = true;
+      activeTurnRef.current = pending.activeTurn;
+      setIsLoading(true);
+      try {
+        const result = await client.request<{ status?: string }>(
+          "clarify.respond",
+          { request_id: requestId, answer },
+        );
+        if (
+          !pendingClarifyRef.current ||
+          pending.sessionId !== runtimeSessionIdRef.current ||
+          clientRef.current !== client
+        )
+          return false;
+        if (result?.status !== "ok") {
+          if (pendingClarifyRef.current === pending) {
+            setIsLoading(false);
+            activeTurnRef.current = null;
+            expirePendingClarifyRef.current();
+          }
+          return false;
+        }
+        if (pendingClarifyRef.current === pending)
+          pendingClarifyRef.current = null;
+        setMessages((current) =>
+          current.map((message) =>
+            message.kind === "clarify" &&
+            message.responsePath === "dashboard" &&
+            message.requestId === requestId
+              ? { ...message, answer, resolved: true, unavailable: false }
+              : message,
+          ),
+        );
+        return true;
+      } catch {
+        if (pendingClarifyRef.current === pending) {
+          setIsLoading(false);
+          activeTurnRef.current = null;
+        }
+        return false;
+      } finally {
+        pending.responding = false;
+      }
+    },
+    [enabled, setMessages, activeTurnRef, setIsLoading],
+  );
+
   const sendMessage = useCallback(
     async (text: string, attachments?: Attachment[]): Promise<boolean> => {
       if (!enabled) return false;
-      const pendingClarifyRequestId = pendingClarifyRequestIdRef.current;
+      const pendingClarifyRequestId = pendingClarifyRef.current?.requestId;
       if (pendingClarifyRequestId) {
-        pendingClarifyRequestIdRef.current = null;
         try {
-          const client = await ensureClient();
-          await client.request("clarify.respond", {
-            request_id: pendingClarifyRequestId,
-            answer: text,
-          });
+          if (!(await respondClarify(pendingClarifyRequestId, text))) {
+            throw new Error(
+              "Could not deliver the clarification answer. Retry from the question card.",
+            );
+          }
           return true;
         } catch (err) {
-          pendingClarifyRequestIdRef.current = pendingClarifyRequestId;
           const message = err instanceof Error ? err.message : String(err);
           const activeTurn = activeTurnRef.current;
           if (activeTurn) activeTurn.status = "failed";
@@ -1842,6 +1960,7 @@ export function useDashboardChatTransport({
     },
     [
       activeTurnRef,
+      respondClarify,
       connectionMode,
       enabled,
       fallbackOnUnavailable,
@@ -1973,6 +2092,7 @@ export function useDashboardChatTransport({
   );
 
   const abort = useCallback(() => {
+    expirePendingClarifyRef.current();
     expirePendingApprovalsRef.current();
     const client = clientRef.current;
     const sessionId = runtimeSessionIdRef.current;
@@ -1986,6 +2106,7 @@ export function useDashboardChatTransport({
 
   useEffect(
     () => () => {
+      expirePendingClarifyRef.current();
       expirePendingApprovalsRef.current();
       clientRef.current?.close();
       clientRef.current = null;
@@ -1997,6 +2118,7 @@ export function useDashboardChatTransport({
     abort,
     enabled,
     respondApproval,
+    respondClarify,
     sendMessage,
     execSlash,
     getCommandCatalog,

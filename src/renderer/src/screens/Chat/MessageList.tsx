@@ -46,6 +46,7 @@ interface MessageListProps {
   onApprove: () => void;
   onDeny: () => void;
   /** Mark an inline clarify card resolved once the user answers/skips. */
+  onClarifyRespond?: (msg: ClarifyMessage, answer: string) => Promise<boolean>;
   onClarifyResolved: (requestId: string, answer: string) => void;
   onApprovalRespond: (
     msg: ApprovalMessage,
@@ -101,6 +102,7 @@ export const MessageList = memo(function MessageList({
   onApprove,
   onDeny,
   onClarifyResolved,
+  onClarifyRespond,
   onApprovalRespond,
   onApprovalResolved,
   agentAvatar,
@@ -393,6 +395,7 @@ export const MessageList = memo(function MessageList({
           key={msg.id}
           msg={msg as ClarifyMessage}
           onResolved={onClarifyResolved}
+          onRespond={onClarifyRespond}
         />,
       );
       continue;

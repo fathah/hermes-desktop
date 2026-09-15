@@ -25,6 +25,7 @@ const dashboardMock = vi.hoisted(() => ({
     connected: boolean;
     request: ReturnType<typeof vi.fn>;
   }>,
+  onClose: null as (() => void) | null,
   onEvent: null as ((event: DashboardRpcEvent) => void) | null,
   request: vi.fn(),
 }));
@@ -37,18 +38,26 @@ vi.mock("../dashboardGatewayClient", () => ({
     request = dashboardMock.request;
 
     constructor(
-      options: { onEvent?: (event: DashboardRpcEvent) => void } = {},
+      options: {
+        onEvent?: (event: DashboardRpcEvent) => void;
+        onClose?: () => void;
+      } = {},
     ) {
       dashboardMock.onEvent = options.onEvent ?? null;
+      dashboardMock.onClose = options.onClose ?? null;
       dashboardMock.instances.push(this);
     }
   },
 }));
 
 interface HarnessApi {
+  isLoading?: boolean;
   activeTurnRef?: MutableRefObject<ActiveTurn | null>;
   abort?: () => void;
   messages?: ChatMessage[];
+  respondClarify?: ReturnType<
+    typeof useDashboardChatTransport
+  >["respondClarify"];
   respondApproval?: ReturnType<
     typeof useDashboardChatTransport
   >["respondApproval"];
@@ -100,6 +109,7 @@ function Harness({
       turnId: "turn-bad",
     },
   ]);
+  const [isLoading, setIsLoading] = useState(false);
   const [model, setModel] = useState("bad-model");
   const [provider, setProvider] = useState("bad-provider");
   const [connectionMode, setConnectionMode] = useState<
@@ -120,7 +130,7 @@ function Harness({
     profile: undefined,
     provider,
     setHermesSessionId: vi.fn(),
-    setIsLoading: vi.fn(),
+    setIsLoading,
     setMessages,
     setToolProgress: vi.fn(),
     setUsage,
@@ -132,10 +142,12 @@ function Harness({
     // object. Object.assign mutates it in place (same reference the test
     // holds) without per-prop assignment, which the immutability rule rejects.
     Object.assign(api, {
+      isLoading,
       activeTurnRef,
       abort: transport.abort,
       messages,
       respondApproval: transport.respondApproval,
+      respondClarify: transport.respondClarify,
       send: transport.sendMessage,
       setConnectionMode,
       setMessages,
@@ -143,6 +155,7 @@ function Harness({
       setProvider,
     });
   }, [
+    isLoading,
     activeTurnRef,
     api,
     messages,
@@ -150,6 +163,7 @@ function Harness({
     setMessages,
     transport.sendMessage,
     transport.respondApproval,
+    transport.respondClarify,
     transport.abort,
   ]);
 
@@ -174,6 +188,228 @@ describe("useDashboardChatTransport recovery", () => {
           running: true,
         })),
       },
+    });
+  });
+
+  async function clarifyHarness(): Promise<HarnessApi> {
+    dashboardMock.request.mockImplementation(async (method) => {
+      if (method === "session.create")
+        return { session_id: "live", stored_session_id: "stored" };
+      if (method === "model.options")
+        return { model: "bad-model", provider: "bad-provider", providers: [] };
+      if (method === "clarify.respond") return { status: "ok" };
+      return {};
+    });
+    const api: HarnessApi = {};
+    render(<Harness api={api} />);
+    await act(async () => {
+      await api.send?.("hello");
+    });
+    await act(async () => {
+      dashboardMock.onEvent?.({
+        type: "clarify.request",
+        session_id: "live",
+        payload: {
+          request_id: "q1",
+          question: "Where?",
+          choices: ["staging", "production"],
+        },
+      });
+    });
+    return api;
+  }
+
+  // @lat: [[dashboard-clarify#Gateway answer delivery]]
+  it.each(["staging", "custom answer", ""])(
+    "delivers a dashboard clarification answer %j",
+    async (answer) => {
+      const api = await clarifyHarness();
+      expect(api.messages?.find((m) => m.kind === "clarify")).toMatchObject({
+        choices: ["staging", "production"],
+      });
+      await act(async () => {
+        expect(await api.respondClarify?.("q1", answer)).toBe(true);
+      });
+      expect(dashboardMock.request).toHaveBeenCalledWith("clarify.respond", {
+        request_id: "q1",
+        answer,
+      });
+      expect(api.messages?.find((m) => m.kind === "clarify")).toMatchObject({
+        resolved: true,
+        answer,
+      });
+    },
+  );
+
+  // @lat: [[dashboard-clarify#Consecutive questions]]
+  it("preserves the next question when the prior reply acknowledgement arrives late", async () => {
+    const api = await clarifyHarness();
+    let finish!: (value: { status: string }) => void;
+    dashboardMock.request.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    let reply!: Promise<boolean>;
+    await act(async () => {
+      reply = api.respondClarify!("q1", "staging");
+    });
+    await act(async () => {
+      dashboardMock.onEvent?.({
+        type: "clarify.request",
+        session_id: "live",
+        payload: {
+          request_id: "q2",
+          question: "Region?",
+          choices: ["EU", "US"],
+        },
+      });
+    });
+    await act(async () => {
+      finish({ status: "ok" });
+      expect(await reply).toBe(true);
+    });
+    expect(
+      api.messages?.find((m) => m.kind === "clarify" && m.requestId === "q1"),
+    ).toMatchObject({ resolved: true, unavailable: false });
+    await act(async () => {
+      expect(await api.respondClarify!("q2", "EU")).toBe(true);
+    });
+    expect(dashboardMock.request).toHaveBeenLastCalledWith("clarify.respond", {
+      request_id: "q2",
+      answer: "EU",
+    });
+  });
+
+  // @lat: [[dashboard-clarify#Disconnect during answer]]
+  it("releases the busy turn when the socket closes before clarify RPC rejects", async () => {
+    const api = await clarifyHarness();
+    let reject!: (reason: Error) => void;
+    dashboardMock.request.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, fail) => {
+          reject = fail;
+        }),
+    );
+    let answer!: Promise<boolean>;
+    act(() => {
+      answer = api.respondClarify!("q1", "yes");
+    });
+    expect(api.isLoading).toBe(true);
+    await act(async () => {
+      dashboardMock.onClose?.();
+      reject(new Error("socket closed"));
+      await answer;
+    });
+    expect(api.isLoading).toBe(false);
+    expect(api.activeTurnRef?.current).toBeNull();
+    expect(api.messages?.find((m) => m.kind === "clarify")).toMatchObject({
+      unavailable: true,
+    });
+    await act(async () => {
+      expect(await api.send?.("retry after disconnect")).toBe(true);
+    });
+  });
+
+  // @lat: [[dashboard-clarify#Composer fallback]]
+  it("uses the same delivery path when answering through the composer", async () => {
+    const api = await clarifyHarness();
+    await act(async () => {
+      await api.send?.("production");
+    });
+    expect(api.messages?.find((m) => m.kind === "clarify")).toMatchObject({
+      resolved: true,
+      answer: "production",
+    });
+    expect(
+      dashboardMock.request.mock.calls.filter(
+        ([method]) => method === "clarify.respond",
+      ),
+    ).toHaveLength(1);
+  });
+
+  // @lat: [[dashboard-clarify#Retry and duplicate answers]]
+  it("keeps a failed answer retryable and blocks concurrent card/composer replies", async () => {
+    const api = await clarifyHarness();
+    let reject!: (reason: Error) => void;
+    dashboardMock.request.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, fail) => {
+          reject = fail;
+        }),
+    );
+    let first!: Promise<boolean>;
+    await act(async () => {
+      first = api.respondClarify!("q1", "staging");
+      expect(await api.respondClarify!("q1", "production")).toBe(false);
+    });
+    await act(async () => {
+      reject(new Error("offline"));
+      expect(await first).toBe(false);
+    });
+    expect(api.messages?.find((m) => m.kind === "clarify")).not.toHaveProperty(
+      "resolved",
+      true,
+    );
+    await act(async () => {
+      expect(await api.respondClarify!("q1", "production")).toBe(true);
+    });
+  });
+
+  // @lat: [[dashboard-clarify#Expired answers]]
+  it("does not report an expired RPC as a successfully delivered answer", async () => {
+    const api = await clarifyHarness();
+    dashboardMock.request.mockResolvedValueOnce({ status: "expired" });
+    await act(async () => {
+      expect(await api.respondClarify!("q1", "staging")).toBe(false);
+    });
+    expect(api.messages?.find((m) => m.kind === "clarify")).toMatchObject({
+      unavailable: true,
+    });
+  });
+
+  // @lat: [[dashboard-clarify#Connection isolation]]
+  it("invalidates pending clarification cards when the connection changes", async () => {
+    const api = await clarifyHarness();
+    await act(async () => {
+      api.setConnectionMode?.("remote");
+    });
+    expect(api.messages?.find((m) => m.kind === "clarify")).toMatchObject({
+      unavailable: true,
+    });
+    await act(async () => {
+      expect(await api.respondClarify!("q1", "staging")).toBe(false);
+    });
+    expect(
+      dashboardMock.request.mock.calls.filter(
+        ([method]) => method === "clarify.respond",
+      ),
+    ).toHaveLength(0);
+  });
+
+  // @lat: [[dashboard-clarify#Completed turns and replay]]
+  it("does not reopen a completed turn's question when the request is replayed", async () => {
+    const api = await clarifyHarness();
+    await act(async () => {
+      dashboardMock.onEvent?.({
+        type: "message.complete",
+        session_id: "live",
+        payload: { text: "Done" },
+      });
+    });
+    await act(async () => {
+      dashboardMock.onEvent?.({
+        type: "clarify.request",
+        session_id: "live",
+        payload: { request_id: "q1", question: "Where?", choices: ["staging"] },
+      });
+    });
+    expect(api.messages?.find((m) => m.kind === "clarify")).toMatchObject({
+      unavailable: true,
+    });
+    await act(async () => {
+      expect(await api.respondClarify!("q1", "staging")).toBe(false);
     });
   });
 

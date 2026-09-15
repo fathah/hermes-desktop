@@ -45,6 +45,7 @@ export default {
   approve: "Approve",
   deny: "Deny",
   clarify: {
+    unavailable: "This question is no longer awaiting an answer.",
     defaultQuestion: "Hermes needs your input.",
     placeholder: "Type your answer…  (Ctrl+Enter to send)",
     send: "Send",

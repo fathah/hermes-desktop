@@ -303,3 +303,26 @@ describe("applyDashboardStreamEvent approval requests", () => {
     ]);
   });
 });
+
+// @lat: [[dashboard-clarify#Interactive gateway requests]]
+it("preserves gateway clarification choices as an interactive message", () => {
+  const state = applyDashboardStreamEvent(
+    { messages: [], reasoningSegmentClosed: false },
+    {
+      type: "clarify.request",
+      session_id: "live",
+      payload: {
+        request_id: "question-1",
+        question: "Which environment?",
+        choices: ["staging", "production"],
+      },
+    },
+  );
+  expect(state.messages[0]).toMatchObject({
+    kind: "clarify",
+    requestId: "question-1",
+    question: "Which environment?",
+    choices: ["staging", "production"],
+    responsePath: "dashboard",
+  });
+});

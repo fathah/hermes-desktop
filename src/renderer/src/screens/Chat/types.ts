@@ -75,6 +75,8 @@ export interface ClarifyMessage {
   kind: "clarify";
   role: "agent";
   requestId: string;
+  responsePath?: "dashboard" | "ipc";
+  unavailable?: boolean;
   question: string;
   choices: string[];
   answer?: string;

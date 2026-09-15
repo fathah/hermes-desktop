@@ -35,3 +35,5 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[office-world-actions]] — chat-commanded errands: the agent's LLM emits world-action blocks from the office chat, its avatar walks the trip route to the bank/showroom, and the rep modal auto-opens running the requested action on arrival.
 - [[mcp-servers]] — add / edit / remove / enable / test MCP servers from the Capabilities → MCP tab; the shared add+edit modal and the in-place atomic `updateMcpServer` upsert (config.yaml locally, gateway REST in Remote/SSH).
 - [[scheduled-jobs]] — schedule state normalization across local files, remote API responses, and named SSH profiles.
+
+- [[dashboard-clarify]] — Interactive WebSocket clarification cards and answer delivery tests.

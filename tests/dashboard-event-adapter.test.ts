@@ -154,7 +154,7 @@ describe("applyDashboardStreamEvent", () => {
     ]);
   });
 
-  it("renders clarify requests as assistant questions instead of tool rows", () => {
+  it("renders clarify requests as interactive cards instead of tool rows", () => {
     const messages = reduceEvents([
       {
         type: "tool.start",
@@ -184,12 +184,15 @@ describe("applyDashboardStreamEvent", () => {
 
     expect(messages.map((m) => ("kind" in m ? m.kind : m.role))).toEqual([
       "user",
-      "agent",
+      "clarify",
     ]);
     expect(messages[1]).toMatchObject({
       id: "clarify-ask-1",
-      content: "Which provider should I use?\n\n1. Use local\n2. Use cloud",
-      localOnly: true,
+      requestId: "ask-1",
+      kind: "clarify",
+      question: "Which provider should I use?",
+      choices: ["Use local", "Use cloud"],
+      responsePath: "dashboard",
     });
   });
 
