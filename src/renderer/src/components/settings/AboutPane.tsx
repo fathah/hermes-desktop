@@ -24,9 +24,14 @@ import { useSettings } from "./SettingsDataContext";
  * channels: the **Hermes Agent** (Python engine) and **Hermes Desktop** (this
  * Electron app). They ship independently, so each owns its own update action.
  */
-export default function AboutPane(): React.JSX.Element {
+export default function AboutPane({
+  showHealthStatus = false,
+}: {
+  showHealthStatus?: boolean;
+}): React.JSX.Element {
   const { t } = useI18n();
   const {
+    profile,
     hermesHome,
     hermesVersion,
     agentCapabilities,
@@ -62,7 +67,11 @@ export default function AboutPane(): React.JSX.Element {
 
   return (
     <div className="settings-modal-pane">
-      <ConfigHealth />
+      <ConfigHealth
+        key={profile || "default"}
+        profile={profile}
+        showStatus={showHealthStatus}
+      />
 
       {/* ── Hermes Agent (engine) ─────────────────────────────── */}
       <section className="settings-card">
