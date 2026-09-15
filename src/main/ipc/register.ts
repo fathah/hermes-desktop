@@ -107,6 +107,7 @@ import {
 } from "../hermesone-provision";
 import {
   syncAgents,
+  deleteProfileWithSync,
   getAgentSyncStatus,
   getLinkedAgentId,
 } from "../agent-sync";
@@ -273,12 +274,7 @@ import {
   readConfigFixLog,
   type IssueCode,
 } from "../config-health";
-import {
-  listProfiles,
-  createProfile,
-  deleteProfile,
-  setActiveProfile,
-} from "../profiles";
+import { listProfiles, createProfile, setActiveProfile } from "../profiles";
 import {
   setProfileColor,
   setProfileAvatar,
@@ -2567,7 +2563,14 @@ export function registerIpcHandlers(context: IpcContext): void {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh)
       return sshDeleteProfile(conn.ssh, name);
-    return deleteProfile(name);
+    if (conn.mode !== "local") {
+      return {
+        success: false,
+        error:
+          "Profile deletion is unavailable for this connection. Use the connected server's profile controls.",
+      };
+    }
+    return deleteProfileWithSync(name);
   });
   ipcMain.handle("set-active-profile", async (_event, name: string) => {
     // Persist the selection LOCALLY in every mode (incl. SSH) — the desktop

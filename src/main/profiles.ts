@@ -352,6 +352,13 @@ export function deleteProfile(name: string): {
         ...HIDDEN_SUBPROCESS_OPTIONS,
       },
     );
+    if (existsSync(profileHome(name))) {
+      return {
+        success: false,
+        error:
+          "The profile directory still exists after deletion. Stop processes using it and retry.",
+      };
+    }
     return { success: true };
   } catch (err) {
     return { success: false, error: commandErrorMessage(err) };

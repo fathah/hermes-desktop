@@ -9,6 +9,7 @@ import type { CloudWalletRaw } from "../shared/wallets";
 const mockState = vi.hoisted(() => ({
   account: null as { apiUrl: string; token: string } | null,
   linkedAgentId: null as string | null,
+  linkedApiUrl: "http://localhost:3002",
   syncAgentsCalls: 0,
   linkAfterSync: null as string | null,
 }));
@@ -35,6 +36,7 @@ vi.mock("./agent-sync", () => ({
   // Link owner recorded in sync state — matches the mock account ("u1") so
   // actions proceed; the legacy/foreign paths are covered in wallet-sync tests.
   getLinkedAgentAccountId: () => "u1",
+  getLinkedAgentApiUrl: () => mockState.linkedApiUrl,
   syncAgents: vi.fn(async () => {
     mockState.syncAgentsCalls++;
     mockState.linkedAgentId = mockState.linkAfterSync;
@@ -79,6 +81,7 @@ async function engine(): Promise<typeof import("./wallet-actions")> {
 beforeEach(() => {
   mockState.account = { apiUrl: "http://localhost:3002", token: "tok" };
   mockState.linkedAgentId = "agent-1";
+  mockState.linkedApiUrl = "http://localhost:3002";
   mockState.linkAfterSync = null;
   mockState.syncAgentsCalls = 0;
   vi.resetModules();
@@ -191,5 +194,20 @@ describe("provisionAgentWallet", () => {
     const result = await provisionAgentWallet("default");
     expect(result.status).toBe("error");
     expect(result.error).toContain("500");
+  });
+});
+
+describe("wallet actions backend ownership", () => {
+  it("blocks both wallet provisioning and portfolio reads for another backend", async () => {
+    mockState.linkedApiUrl = "http://localhost:9999";
+    const calls = stubFetch({});
+    const e = await engine();
+    expect(await e.provisionAgentWallet("alpha")).toEqual({
+      status: "foreign",
+    });
+    expect(await e.getWalletPortfolio("alpha", "wallet-1")).toEqual({
+      status: "foreign",
+    });
+    expect(calls).toEqual([]);
   });
 });
