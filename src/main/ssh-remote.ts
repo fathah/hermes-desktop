@@ -5,6 +5,7 @@
  */
 
 import { spawn } from "child_process";
+import { buildSshRemoteCommand } from "./ssh-command";
 import { homedir } from "os";
 import { join } from "path";
 import { existsSync } from "fs";
@@ -72,10 +73,14 @@ export function sshExec(
       return reject(new Error(`SSH private key file not found at: ${keyPath}`));
     }
 
-    const child = spawn("ssh", [...buildExecArgs(config), command], {
-      stdio: ["pipe", "pipe", "pipe"],
-      ...HIDDEN_SUBPROCESS_OPTIONS,
-    });
+    const child = spawn(
+      "ssh",
+      [...buildExecArgs(config), buildSshRemoteCommand(command)],
+      {
+        stdio: ["pipe", "pipe", "pipe"],
+        ...HIDDEN_SUBPROCESS_OPTIONS,
+      },
+    );
     let stdout = "";
     let stderr = "";
     const timeout = setTimeout(() => {
