@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { join } from "path";
-import { mkdirSync, rmSync, existsSync, writeFileSync } from "fs";
+import {
+  mkdirSync,
+  rmSync,
+  existsSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from "fs";
 
 // vi.hoisted runs before module imports, so we can't reference imported
 // helpers here — use the bare Node modules via require.
@@ -255,6 +262,15 @@ vi.mock("better-sqlite3", () => {
     private readonly store: Store;
 
     constructor(dbPath: string) {
+      // Lets a test stand up a state.db that exists on disk but cannot be
+      // opened — locked, or corrupt — which is how `getDb()` returns null
+      // while the file itself is still present.
+      if (
+        fs.existsSync(dbPath) &&
+        fs.readFileSync(dbPath, "utf-8") === "CORRUPT"
+      ) {
+        throw new Error("unable to open database file");
+      }
       this.store = getStore(dbPath);
     }
 
@@ -279,6 +295,7 @@ import {
   listCachedSessions,
   syncSessionCache,
   updateSessionTitle,
+  type CachedSession,
 } from "../src/main/session-cache";
 import { closeDbConnection } from "../src/main/db";
 
@@ -797,5 +814,160 @@ describe("updateSessionTitle", () => {
     expect(() => updateSessionTitle("s1", "   ")).toThrow(/valid/i);
     expect(() => updateSessionTitle("s1", "x".repeat(101))).toThrow(/100/);
     expect(listCachedSessions(10)[0]?.title).toBe("Exists");
+  });
+});
+
+// Real session ids as `src/main/hermes.ts` generates them: authenticated
+// desktop chats get `desk-<ms>-<uuidv4>`, and the gateway's fingerprint
+// fallback gets `api-<sha256-prefix>`. Neither is a bare UUID, so these
+// double as a guard against judging a cached row by the shape of its id —
+// this keys on where the cache came from, not on what the rows look like.
+const DESK_ID = "desk-1789288537424-93cea475-ccf9-412a-84a9-e22a929ac194";
+const API_ID = "api-2cf24dba5fb0a30e";
+const DB_PATH = join(TEST_HOME, "state.db");
+
+function writeLegacyCache(sessions: Array<Partial<CachedSession>>): void {
+  mkdirSync(join(TEST_HOME, "desktop"), { recursive: true });
+  writeFileSync(
+    CACHE_FILE,
+    // No `source` field — the shape every cache on disk has before this
+    // change shipped.
+    JSON.stringify({
+      sessions: sessions.map((s) => ({
+        id: "x",
+        title: "x",
+        startedAt: Math.floor(Date.now() / 1000),
+        source: "api_server",
+        messageCount: 1,
+        model: "gpt-5.5",
+        contextFolder: null,
+        ...s,
+      })),
+      lastSync: Math.floor(Date.now() / 1000),
+    }),
+    "utf-8",
+  );
+}
+
+describe("session cache provenance", () => {
+  it("keeps real desk- and api- prefixed sessions on the fast path", () => {
+    const now = Math.floor(Date.now() / 1000);
+    seedDb([
+      { id: DESK_ID, started_at: now, message_count: 2, title: "Desktop chat" },
+      { id: API_ID, started_at: now - 10, message_count: 3, title: "API chat" },
+    ]);
+    syncSessionCache();
+
+    // The DB-free read the sidebar paints from on launch.
+    expect(listCachedSessions(20).map((s) => s.id)).toEqual([DESK_ID, API_ID]);
+  });
+
+  it("still paints cached history on a startup where the DB cannot be opened", () => {
+    // "Offline startup": state.db is present but unreadable, so no sync can
+    // run. The user's history must still render — invalidation keys on the
+    // database being *gone*, not on a sync failing.
+    const now = Math.floor(Date.now() / 1000);
+    seedDb([
+      { id: DESK_ID, started_at: now, message_count: 2, title: "Desktop chat" },
+    ]);
+    syncSessionCache();
+    closeDbConnection();
+
+    writeFileSync(DB_PATH, "CORRUPT", "utf-8");
+
+    expect(syncSessionCache().map((s) => s.id)).toEqual([DESK_ID]);
+    expect(listCachedSessions(20).map((s) => s.id)).toEqual([DESK_ID]);
+  });
+
+  it("drops the cache once state.db no longer exists", () => {
+    // The case that never self-heals without provenance: with no database
+    // there is also no sync able to rebuild the visible set, so the rows
+    // survive every restart and reappear in the sidebar on each launch.
+    const now = Math.floor(Date.now() / 1000);
+    seedDb([
+      { id: DESK_ID, started_at: now, message_count: 2, title: "Old session" },
+    ]);
+    syncSessionCache();
+    expect(listCachedSessions(20)).toHaveLength(1);
+
+    closeDbConnection();
+    unlinkSync(DB_PATH);
+
+    expect(listCachedSessions(20)).toEqual([]);
+    expect(syncSessionCache()).toEqual([]);
+  });
+
+  it("drops the cache when state.db has been replaced by a different database", () => {
+    const now = Math.floor(Date.now() / 1000);
+    seedDb([
+      { id: DESK_ID, started_at: now, message_count: 2, title: "Old session" },
+    ]);
+    syncSessionCache();
+    expect(JSON.parse(readFileSync(CACHE_FILE, "utf-8")).source).toBeTruthy();
+
+    // Reinstall / profile reset / restored backup: same path, different file.
+    closeDbConnection();
+    unlinkSync(DB_PATH);
+    seedDb([
+      {
+        id: "desk-1789288999999-11111111-2222-3333-4444-555555555555",
+        started_at: now - 86400 * 30,
+        message_count: 4,
+        title: "New install session",
+      },
+    ]);
+
+    expect(listCachedSessions(20)).toEqual([]);
+    expect(syncSessionCache().map((s) => s.title)).toEqual([
+      "New install session",
+    ]);
+  });
+
+  it("paints a pre-provenance cache, then rebuilds it on the next sync", () => {
+    // Upgrading users keep their instant sidebar paint (an unstamped cache is
+    // not known to be wrong), and the next sync rebuilds the visible set from
+    // the database, which drops rows it no longer has and stamps the result.
+    const now = Math.floor(Date.now() / 1000);
+    seedDb([
+      {
+        id: DESK_ID,
+        started_at: now - 86400 * 30,
+        message_count: 2,
+        title: "Real",
+      },
+    ]);
+    writeLegacyCache([
+      { id: "ghost-session", title: "Ghost" },
+      { id: DESK_ID, title: "Real" },
+    ]);
+
+    expect(listCachedSessions(20).map((s) => s.id)).toEqual([
+      "ghost-session",
+      DESK_ID,
+    ]);
+
+    expect(syncSessionCache().map((s) => s.id)).toEqual([DESK_ID]);
+    expect(listCachedSessions(20).map((s) => s.id)).toEqual([DESK_ID]);
+  });
+
+  it("validates each profile's cache against its own database", () => {
+    // Provenance is resolved per profile, so a named profile whose state.db
+    // is gone must not be rescued by the default profile's live database.
+    const now = Math.floor(Date.now() / 1000);
+    seedDb(
+      [{ id: DESK_ID, started_at: now, message_count: 1, title: "Work chat" }],
+      "work",
+    );
+    syncSessionCache("work");
+    expect(listCachedSessions(20, 0, "work")).toHaveLength(1);
+
+    seedDb([{ id: API_ID, started_at: now, message_count: 1, title: "Mine" }]);
+    syncSessionCache();
+
+    closeDbConnection();
+    unlinkSync(join(TEST_HOME, "profiles", "work", "state.db"));
+
+    expect(listCachedSessions(20, 0, "work")).toEqual([]);
+    expect(listCachedSessions(20).map((s) => s.id)).toEqual([API_ID]);
   });
 });
