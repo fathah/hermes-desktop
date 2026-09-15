@@ -28,11 +28,25 @@ Local lists follow the Agent's native archive flag. Archiving hides a conversati
 
 [[src/main/db.ts#sessionVisibilityPredicate]] detects whether the selected profile's database has an `archived` column. [[src/main/sessions.ts#listSessions]] filters `archived = 0` before pagination, while legacy databases without that column remain readable.
 
-[[src/main/session-cache.ts#syncSessionCache]] reconciles the complete visible metadata set rather than using `started_at` as a change cursor: archive and restore do not change creation time. Cached titles are reused, and message bodies are read only to generate missing titles for newly visible rows. Successful sync replaces the cached membership, including an empty set; unavailable databases or failed reads retain the last good cache until retry. [[src/main/session-cache.ts#listCachedSessions]] remains DB-free, so an initial cached paint can be stale until sync finishes. Message history and search are unchanged.
+[[src/main/session-cache.ts#syncSessionCache]] reconciles the complete visible metadata set rather than using `started_at` as a change cursor: archive and restore do not change creation time. Cached titles are reused, and message bodies are read only to generate missing titles for newly visible rows. Successful sync replaces the cached membership, including an empty set; a database that cannot be opened or read retains the last good cache until retry, while a database that is absent entirely invalidates it — see [[sidebar-navigation#Session cache provenance]]. [[src/main/session-cache.ts#listCachedSessions]] remains DB-free, so an initial cached paint can be stale until sync finishes. Message history and search are unchanged.
 
 [[src/renderer/src/screens/Sessions/Sessions.tsx]] accepts an empty quiet-refresh result for the explicitly selected local connection, allowing the last archived row to disappear. Network-backed lists retain their transient-empty guard. Failed connection checks retain visible rows, and request identity prevents a delayed empty result from clearing a newer profile's list.
 
 [[tests/session-archive.test.ts]] executes real SQLite queries for cold and warm caches, archive/restore without timestamp changes, pagination, equal IDs across profiles, legacy schema upgrades, read failure and recovery, and retained history/project folders. [[src/renderer/src/screens/Sessions/Sessions.test.tsx]] covers the last local row disappearing and returning, failed refresh recovery, and stale responses after profile switches.
+
+## Session cache provenance
+
+The `sessions.json` cache records which `state.db` it was built from, so the DB-free initial paint can reject rows belonging to a database that is gone or has been replaced.
+
+The cache is a denormalised mirror of a profile's visible sessions, but a cached row carries nothing identifying its origin. When `state.db` is deleted or swapped — a reinstall, a profile reset, a restored backup, a `HERMES_HOME` pointed somewhere new — the rows describe sessions that can no longer be opened, and [[src/main/session-cache.ts#listCachedSessions]] has no way to tell them from live ones. With no database there is also no sync able to rebuild the visible set, so they survive every restart and reappear in the sidebar on launch.
+
+[[src/main/session-cache.ts#writeCache]] stamps each write with a `source`: the profile, its `state.db` path, and that file's inode and birth time. Size and mtime are deliberately excluded — they change on every write during normal use and would invalidate the cache constantly, while inode and birth time change only when the file is replaced.
+
+[[src/main/session-cache.ts#readCache]] verifies that stamp with a single `stat` and no database open, so validation holds for every consumer: the fast path, [[src/main/session-cache.ts#syncSessionCache]]'s success path, and both of its fallbacks, which return the existing cache when the database cannot be read. Guarding one path alone — or guarding in the renderer — leaves the others free to paint the same rejected rows. The stamp is resolved per profile, matching `cacheFilePath`, so one profile's cache is never validated against another's database.
+
+Invalidation keys on the database being _absent_, not on a sync failing. A `state.db` that exists but cannot be opened right now (locked, or a startup with no gateway reachable) leaves the cache intact and still renders the user's history. A cache written before provenance was recorded is not known to be wrong, so its rows still paint; the next sync rebuilds the visible set from the database and stamps the result.
+
+Provenance is a property of where a row came from, not of what it looks like. Session ids are `desk-<ms>-<uuid>` for authenticated desktop chats and `api-<hash>` for the gateway's fingerprint fallback, so judging a cached row by the shape of its id or the text of its title hides real history. [[tests/session-cache-sync.test.ts]] covers both invalidation cases, per-profile scoping, an unreadable-database startup, and the prefixed id formats.
 
 ## Project grouping
 
