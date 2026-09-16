@@ -36,7 +36,12 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Install fish for SSH command regression tests
+        run: sudo apt-get update && sudo apt-get install -y fish
+
       - name: Test
+        env:
+          HERMES_TEST_FISH: "1"
         run: npm test
 
       - name: Lint
