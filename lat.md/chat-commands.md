@@ -118,6 +118,10 @@ Dashboard regression tests simulate expired requests and lost acknowledgments wi
 
 WebSocket transport tests verify opaque renderer IDs map to gateway IDs, and missing IDs, disconnects, or lost prompt acknowledgments stop the turn without replaying it.
 
+### Terminal approval replay
+
+Renderer transport tests replay answered and expired approvals before a fresh request. Terminal cards never re-enter the pending FIFO, and successful acknowledgements mark cards resolved before another event can arrive.
+
 ### Runs approval fail-closed
 
 Runs transport tests verify approval events stop the original run with its captured credentials, never POST an approval, and never replay through chat completions.
