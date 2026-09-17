@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Globe,
   KeyRound,
@@ -520,9 +520,21 @@ export function ProviderKeysSection({
   // (`providers.json`) unioned with any legacy providers still only present as
   // `models.json` rows. `customProviders` (below) further folds in orphan
   // recovery from `env`.
-  const [storedProviders, setStoredProviders] = useState<
-    { name: string; baseUrl: string }[]
-  >([]);
+  type ProviderIdentity = { name: string; baseUrl: string };
+  const [stored, setStored] = useState<{
+    profile?: string;
+    providers: ProviderIdentity[];
+  }>({ profile, providers: [] });
+  const storedProviders = useMemo(
+    () => (stored.profile === profile ? stored.providers : []),
+    [stored, profile],
+  );
+  const providerLoad = useRef<{
+    profile?: string;
+    request: number;
+    records: ProviderIdentity[];
+    models: ProviderIdentity[];
+  } | null>(null);
 
   // The generic "Custom" env key is handled by the dedicated custom flow, not
   // as a normal key card — drop it from the key-based lists. Well-known
@@ -570,32 +582,46 @@ export function ProviderKeysSection({
   // known compat hosts like groq/hermesone own dedicated key cards and are
   // excluded). Deduped by the derived env-key anchor.
   const loadStored = useCallback(async () => {
+    const scope = providerLoad.current;
+    if (!scope || scope.profile !== profile) return;
+    const request = ++scope.request;
+    const [records, models] = await Promise.allSettled([
+      window.hermesAPI.listCustomProviders(profile),
+      window.hermesAPI.listModels(),
+    ]);
+    // A profile change, unmount, or newer refresh invalidates this result.
+    if (providerLoad.current !== scope || scope.request !== request) return;
+
+    // Preserve each source independently on failure. A successful empty read
+    // must clear that source, so deleted identities are never resurrected by
+    // falling back to a previous merged list.
+    if (records.status === "fulfilled") scope.records = records.value;
+    if (models.status === "fulfilled") {
+      scope.models = (models.value as LibModel[])
+        .filter(
+          (m) =>
+            m.provider === "custom" &&
+            m.baseUrl &&
+            expectedEnvKeyForUrl(m.baseUrl) === CUSTOM_API_KEY_ENV,
+        )
+        .map((m) => ({
+          name: m.providerLabel || hostOf(m.baseUrl),
+          baseUrl: m.baseUrl,
+        }));
+    }
     const seen = new Set<string>();
-    const list: { name: string; baseUrl: string }[] = [];
-    const push = (name: string, baseUrl: string): void => {
-      if (!name) return;
-      const anchor = customProviderEnvKey(name);
-      if (seen.has(anchor)) return;
+    const list: ProviderIdentity[] = [];
+    for (const provider of [...scope.records, ...scope.models]) {
+      if (!provider.name) continue;
+      const anchor = customProviderEnvKey(provider.name);
+      if (seen.has(anchor)) continue;
       seen.add(anchor);
-      list.push({ name, baseUrl });
-    };
-
-    try {
-      const records = await window.hermesAPI.listCustomProviders(profile);
-      for (const r of records) push(r.name, r.baseUrl);
-    } catch {
-      /* store unavailable — fall back to the models-derived list below */
+      list.push(provider);
     }
-
-    const all = (await window.hermesAPI.listModels()) as LibModel[];
-    for (const m of all) {
-      if (m.provider !== "custom" || !m.baseUrl) continue;
-      if (expectedEnvKeyForUrl(m.baseUrl) !== CUSTOM_API_KEY_ENV) continue;
-      push(m.providerLabel || hostOf(m.baseUrl), m.baseUrl);
-    }
-    setStoredProviders(list);
+    setStored({ profile, providers: list });
   }, [profile]);
   useEffect(() => {
+    providerLoad.current = { profile, request: 0, records: [], models: [] };
     void loadStored();
     const offModels = window.hermesAPI.onModelLibraryChanged(
       () => void loadStored(),
@@ -604,10 +630,11 @@ export function ProviderKeysSection({
       () => void loadStored(),
     );
     return () => {
+      providerLoad.current = null;
       offModels();
       offProviders();
     };
-  }, [loadStored]);
+  }, [loadStored, profile]);
 
   // Final card list: stored providers plus "orphan recovery" — any
   // `CUSTOM_PROVIDER_*_KEY` env var with a value but no matching record/model
