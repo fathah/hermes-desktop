@@ -156,3 +156,11 @@ A path through scalar text or an inline collection returns null instead of inter
 ### Nested siblings
 
 Deep lookups skip unrelated sibling subtrees and comments, support consistent nondefault indentation, and cannot resolve a leaf outside the selected parent.
+
+## Native SSH session deletion
+
+Legacy SSH sessions can be deleted without a dashboard. The selected connection and profile determine the database, and unselected child sessions are preserved.
+
+[[src/main/ipc/register.ts#withSshDashboardSessions]] uses [[src/main/ssh-remote.ts#sshDeleteSession]] and [[src/main/ssh-remote.ts#sshDeleteSessions]] as the legacy/auto fallbacks. [[src/main/ssh-session-delete.ts#SSH_SESSION_DELETE_SCRIPT]] receives JSON via stdin, validates the profile, and uses parameterized SQL in one `BEGIN IMMEDIATE` transaction. It removes selected messages and optional desktop metadata, detaches children, and rolls the whole batch back on failure. The database is opened in existing-file mode; a missing database is not created. SSH errors propagate to the renderer. The SSH session listing reads state.db directly, so no local cache or user files are touched. Tests: [[ssh-session-delete]].
+
+[[src/renderer/src/screens/Sessions/Sessions.tsx#Sessions]] keeps rows until deletion is acknowledged, reports failures, and refreshes after the attempt. In-flight results are discarded after changing connection/profile, updating connection settings, or unmounting. Confirmation remains explicit and concurrent delete submissions are blocked.

@@ -36,4 +36,5 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[mcp-servers]] — add / edit / remove / enable / test MCP servers from the Capabilities → MCP tab; the shared add+edit modal and the in-place atomic `updateMcpServer` upsert (config.yaml locally, gateway REST in Remote/SSH).
 - [[scheduled-jobs]] — schedule state normalization across local files, remote API responses, and named SSH profiles.
 
+- [[ssh-session-delete]] — Native SSH session deletion, transaction integrity and UI recovery tests.
 - [[dashboard-clarify]] — Interactive WebSocket clarification cards and answer delivery tests.

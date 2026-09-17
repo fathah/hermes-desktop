@@ -388,6 +388,22 @@ function Sessions({
     string[] | null
   >(null);
   const [deletingBulk, setDeletingBulk] = useState(false);
+  const [deleteError, setDeleteError] = useState(false);
+  const deleteOperation = useRef({ epoch: 0, busy: false });
+  useEffect(() => {
+    const operation = deleteOperation.current;
+    setDeleteError(false);
+    setDeletingSessionId(null);
+    setDeletingBulk(false);
+    setPendingDeleteSessionId(null);
+    setPendingBulkDeleteIds(null);
+    setSelectedSessionIds(new Set());
+    setIsSelectionMode(false);
+    return () => {
+      ++operation.epoch;
+      operation.busy = false;
+    };
+  }, [connectionId, profile]);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchRequestId = useRef(0);
   const loadRequestId = useRef(0);
@@ -449,6 +465,10 @@ function Sessions({
     } catch (error) {
       // Preserve the last visible list; the next focus/timer tick can retry.
       console.error("Failed to refresh sessions", error);
+    } finally {
+      // A quiet refresh can supersede a visible load; the latest request
+      // owns its spinner as well as its result, including on failure.
+      if (loadRequestId.current === requestId) setLoading(false);
     }
   }, [connectionId, profile]);
 
@@ -569,27 +589,60 @@ function Sessions({
     setPendingDeleteSessionId(null);
   }, [deletingSessionId]);
 
-  const confirmDelete = useCallback(
-    async (sessionId: string): Promise<void> => {
-      // Optimistic UI update: drop the row from both the main list and
-      // any active search results so the user sees instant feedback even
-      // if the SQLite write or cache rewrite has any latency.  The
-      // subsequent refresh re-syncs from state.db so we recover if the
-      // backend deletion failed.
-      setDeletingSessionId(sessionId);
-      setSessions((prev) => prev.filter((s) => s.id !== sessionId));
-      setSearchResults((prev) => prev.filter((r) => r.sessionId !== sessionId));
+  const performDelete = useCallback(
+    async (ids: string[], bulk: boolean): Promise<void> => {
+      const operation = deleteOperation.current;
+      if (operation.busy) return;
+      operation.busy = true;
+      const epoch = ++operation.epoch;
+      setDeleteError(false);
+      if (bulk) setDeletingBulk(true);
+      else setDeletingSessionId(ids[0]);
       try {
-        await window.hermesAPI.deleteSession(sessionId, connectionId, profile);
-      } catch (err) {
-        console.error("Failed to delete session", sessionId, err);
+        if (bulk)
+          await window.hermesAPI.deleteSessions(ids, connectionId, profile);
+        else
+          await window.hermesAPI.deleteSession(ids[0], connectionId, profile);
+        if (operation.epoch !== epoch) return;
+        // Keep rows until deletion is confirmed. A failed SSH request followed
+        // by a failed refresh must never make undeleted history disappear.
+        ++loadRequestId.current;
+        ++searchRequestId.current;
+        setIsSearching(false);
+        const selected = new Set(ids);
+        setSessions((prev) =>
+          prev.filter((session) => !selected.has(session.id)),
+        );
+        setSearchResults((prev) =>
+          prev.filter((result) => !selected.has(result.sessionId)),
+        );
+      } catch (error) {
+        if (operation.epoch !== epoch) return;
+        console.error("Failed to delete sessions", error);
+        setDeleteError(true);
       } finally {
-        await refreshSessions();
-        setDeletingSessionId(null);
-        setPendingDeleteSessionId(null);
+        if (operation.epoch === epoch) {
+          await refreshSessions();
+          if (operation.epoch === epoch) {
+            operation.busy = false;
+            setDeletingSessionId(null);
+            setDeletingBulk(false);
+            setPendingDeleteSessionId(null);
+            setPendingBulkDeleteIds(null);
+            if (bulk) {
+              setSelectedSessionIds(new Set());
+              setIsSelectionMode(false);
+            }
+          }
+        }
       }
     },
     [connectionId, profile, refreshSessions],
+  );
+
+  const confirmDelete = useCallback(
+    (sessionId: string): Promise<void> => performDelete([sessionId], false),
+    [performDelete],
   );
 
   const toggleSelectionMode = useCallback((): void => {
@@ -627,24 +680,9 @@ function Sessions({
         setPendingBulkDeleteIds(null);
         return;
       }
-
-      const idSet = new Set(ids);
-      setDeletingBulk(true);
-      setSessions((prev) => prev.filter((s) => !idSet.has(s.id)));
-      setSearchResults((prev) => prev.filter((r) => !idSet.has(r.sessionId)));
-      try {
-        await window.hermesAPI.deleteSessions(ids, connectionId, profile);
-      } catch (err) {
-        console.error("Failed to delete selected sessions", ids, err);
-      } finally {
-        await refreshSessions();
-        setDeletingBulk(false);
-        setPendingBulkDeleteIds(null);
-        setSelectedSessionIds(new Set());
-        setIsSelectionMode(false);
-      }
+      await performDelete(ids, true);
     },
-    [connectionId, profile, refreshSessions],
+    [performDelete],
   );
 
   useEffect(() => {
@@ -682,6 +720,13 @@ function Sessions({
 
   useEffect(() => {
     const unsubscribe = window.hermesAPI.onConnectionConfigChanged(() => {
+      ++deleteOperation.current.epoch;
+      deleteOperation.current.busy = false;
+      setDeleteError(false);
+      setDeletingSessionId(null);
+      setDeletingBulk(false);
+      setPendingDeleteSessionId(null);
+      setPendingBulkDeleteIds(null);
       setSessions([]);
       setSearchResults([]);
       setSearchQuery("");
@@ -813,6 +858,7 @@ function Sessions({
 
   return (
     <div className="sessions-container">
+      {deleteError && <p role="alert">{t("sessions.deleteFailed")}</p>}
       {/* Header with integrated search */}
       <div className="sessions-header">
         <div className="sessions-header-top">

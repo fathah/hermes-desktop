@@ -5,6 +5,7 @@
  */
 
 import { spawn } from "child_process";
+import { SSH_SESSION_DELETE_SCRIPT } from "./ssh-session-delete";
 import { homedir } from "os";
 import { join } from "path";
 import { existsSync } from "fs";
@@ -22,7 +23,12 @@ import {
   type SkillSearchResult,
 } from "./skills";
 import type { MemoryInfo } from "./memory";
-import type { HistoryItem, SessionSummary, SearchResult } from "./sessions";
+import type {
+  HistoryItem,
+  SessionSummary,
+  SearchResult,
+  DeleteSessionsResult,
+} from "./sessions";
 import type { CachedSession } from "./session-cache";
 import type { Attachment } from "../shared/attachments";
 import { isImageMime, MAX_IMAGE_BYTES } from "../shared/attachments";
@@ -1375,6 +1381,36 @@ export async function sshSetModelConfig(
 }
 
 // ── Sessions ─────────────────────────────────────────────────────────────────
+
+export async function sshDeleteSessions(
+  config: SshConfig,
+  sessionIds: string[],
+  profile?: string,
+): Promise<DeleteSessionsResult> {
+  const output = await sshPython(
+    config,
+    SSH_SESSION_DELETE_SCRIPT,
+    pythonJsonInput({ sessionIds, profile }),
+  );
+  const result = JSON.parse(output.trim()) as DeleteSessionsResult;
+  if (
+    !Number.isInteger(result.requested) ||
+    !Number.isInteger(result.deleted) ||
+    result.deleted < 0 ||
+    result.deleted > result.requested
+  ) {
+    throw new Error("Invalid SSH session deletion response");
+  }
+  return result;
+}
+
+export async function sshDeleteSession(
+  config: SshConfig,
+  sessionId: string,
+  profile?: string,
+): Promise<void> {
+  await sshDeleteSessions(config, [sessionId], profile);
+}
 
 export async function sshListSessions(
   config: SshConfig,

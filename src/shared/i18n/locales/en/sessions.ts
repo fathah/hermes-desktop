@@ -24,6 +24,8 @@ export default {
   emptyHint: "Start chatting to create your first session",
   messages: "msg",
   messageSingular: "msg",
+  deleteFailed:
+    "Could not delete the selected conversations. Check the connection and try again.",
   delete: "Delete conversation",
   rename: "Rename conversation",
   renameFailed: "Couldn't rename conversation",
