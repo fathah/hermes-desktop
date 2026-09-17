@@ -207,3 +207,9 @@ Settings boolean preferences use one accessible controlled switch with consisten
 Fresh chat session ids are provisional until a turn produces output or completes successfully, so provider errors do not create visible recent-session rows.
 
 The main-process transports still send a generated `X-Hermes-Session-Id` on fresh requests to avoid gateway fingerprint collisions, but [[src/main/hermes.ts#sendMessageViaApi]] and the runs transport announce that id to the renderer only after visible output, tool/reasoning activity, or successful completion. Resumed sessions are announced immediately because the renderer already knows they are existing conversations. This keeps [[src/renderer/src/screens/Chat/hooks/useChatIPC.ts#useChatIPC]] from binding a failed first turn to a new sidebar entry.
+
+## Configuration health details
+
+The warning banner opens the existing About health report for its profile. Explicit details navigation remains visible while loading, after a clean audit, or when an audit fails.
+
+[[src/renderer/src/components/ConfigHealthBanner.tsx#ConfigHealthBanner]] calls the settings callback with `diagnose`, never the click event. [[src/renderer/src/components/settings/SettingsModal.tsx#resolveSection]] aliases `diagnose` to About and rejects non-string section values. [[src/renderer/src/components/settings/AboutPane.tsx]] passes the settings profile into [[src/renderer/src/screens/Settings/ConfigHealth.tsx#ConfigHealth]]. Normal About navigation retains its quiet healthy state. The details view exposes audit retry, serializes audit/fix operations, and invalidates outstanding work on profile changes or unmount. Coverage: [[config-health-navigation]].

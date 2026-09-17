@@ -16,7 +16,7 @@ interface ConfigHealthBannerProps {
   /** Active profile (forwarded to the audit IPC). */
   profile?: string;
   /** Open Settings → Diagnose section. */
-  onOpenDiagnose?: () => void;
+  onOpenDiagnose?: (section?: string) => void;
 }
 
 interface Report {
@@ -209,7 +209,7 @@ export function ConfigHealthBanner({
             <button
               className="config-health-banner-link"
               type="button"
-              onClick={onOpenDiagnose}
+              onClick={() => onOpenDiagnose("diagnose")}
             >
               {t("diagnose.banner.showDetails")}
             </button>
