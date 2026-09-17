@@ -5645,6 +5645,7 @@ body:has(.shell-vibrant),
   border: 1px solid var(--border-bright);
   padding: 6px 10px;
   text-align: left;
+  overflow-wrap: anywhere;
 }
 
 .chat-bubble-agent th {

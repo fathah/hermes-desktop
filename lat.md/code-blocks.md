@@ -21,3 +21,9 @@ The gate is [[src/renderer/src/components/AgentMarkdown.tsx#isBoxDiagram]]: at l
 Two precedence rules: `diff` blocks always keep the colored `DiffView` (it never uses Prism, so it has no fragmentation risk), and the header label keeps the fence's declared language — only an unlabeled box diagram is labeled `text`.
 
 [[src/renderer/src/components/AgentMarkdown.test.tsx]] verifies the plain-tree, incidental-glyph, diff, and language-label cases after the lazy Prism import is actually ready; its bounded async wait accommodates a cold highlighter import without weakening the assertions.
+
+## Table cells wrap long unbreakable text
+
+Agent markdown table cells set `overflow-wrap: anywhere` so a long token with no spaces (a Windows path, a URL, a hash) wraps inside its column instead of forcing the table wider than the chat bubble.
+
+Cells already inherit `overflow-wrap: break-word` from `.chat-bubble`, but `break-word` does not contribute soft-wrap opportunities to min-content sizing, so `width: 100%` table auto-layout still sizes the column to the full unbroken string and the table overflows the bubble (or, on narrow windows, clips the edges of the cell). `anywhere` does contribute to min-content, so the column can shrink and the text wraps. `table-layout: fixed` is deliberately not used: it would force equal column widths on every table. [[tests/chat-table-wrap-css.test.ts]] pins the `.chat-bubble-agent th, td` rule in `src/renderer/src/assets/main.css`.
