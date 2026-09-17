@@ -73,7 +73,15 @@ function generateTitle(message: string): string {
     title = (title + " " + word).trim();
   }
 
-  return title || text.slice(0, 45) + "...";
+  if (title) return title;
+
+  // Keep the existing UTF-16 budget without splitting an emoji or other
+  // supplementary character into an unpaired surrogate in the cached title.
+  const end =
+    /[\uD800-\uDBFF]/.test(text[44]) && /[\uDC00-\uDFFF]/.test(text[45])
+      ? 44
+      : 45;
+  return text.slice(0, end) + "...";
 }
 
 function readCache(profile?: unknown): CacheData {

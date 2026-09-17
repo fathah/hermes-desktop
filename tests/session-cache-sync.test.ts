@@ -356,6 +356,25 @@ afterEach(() => {
 });
 
 describe("syncSessionCache", () => {
+  // @lat: [[session-title-generation#Automatic session title generation#Unicode truncation]]
+  it.each([
+    ["😀".repeat(20), "😀".repeat(20)],
+    ["a".repeat(60), "a".repeat(45) + "..."],
+    ["中".repeat(43) + "😀" + "文".repeat(20), "中".repeat(43) + "😀..."],
+    ["😀".repeat(30), "😀".repeat(22) + "..."],
+    ["😀".repeat(60), "😀".repeat(22) + "..."],
+    ["中".repeat(44) + "😀" + "文".repeat(20), "中".repeat(44) + "..."],
+  ])(
+    "preserves Unicode characters in generated titles",
+    (message, expected) => {
+      seedDb([
+        { id: "unicode-title", started_at: 1, firstUserMessage: message },
+      ]);
+      expect(syncSessionCache()[0].title).toBe(expected);
+      expect(listCachedSessions()[0].title).toBe(expected);
+    },
+  );
+
   it("returns an empty list when no DB exists yet", () => {
     expect(syncSessionCache()).toEqual([]);
   });
