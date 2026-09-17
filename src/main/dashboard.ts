@@ -754,6 +754,7 @@ export function stopDashboard(profile?: string): boolean {
 
 export function stopAllDashboards(): void {
   for (const key of [...dashboards.keys()]) {
-    stopDashboard(key === "default" ? undefined : key);
+    // Keep default explicit: undefined resolves to the currently active profile.
+    stopDashboard(key);
   }
 }
