@@ -354,7 +354,18 @@ const SessionCard = memo(function SessionCard({
 // device) surface without the user navigating away and back. (refs #322)
 export const SESSIONS_REFRESH_MS = 30_000;
 
-function Sessions({
+// A pending confirmation or request belongs to one immutable browsing scope.
+// Remount the stateful view when that identity changes, including A → B → A.
+function Sessions(props: SessionsProps): React.JSX.Element {
+  return (
+    <ScopedSessions
+      key={JSON.stringify([props.connectionId, props.profile])}
+      {...props}
+    />
+  );
+}
+
+function ScopedSessions({
   onResumeSession,
   onNewChat,
   currentSessionId,

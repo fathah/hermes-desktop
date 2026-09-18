@@ -61,6 +61,12 @@ Direct Remote requests build a profile-scoped session configuration. SSH dashboa
 
 Local [[src/main/session-cache.ts#syncSessionCache]], [[src/main/session-cache.ts#listCachedSessions]], [[src/main/sessions.ts#listSessions]], [[src/main/sessions.ts#searchSessions]], title mutation, deletion cleanup, and batched context-folder reads resolve `state.db` and `sessions.json` from the explicit profile. Omitted IDs retain the active connection/profile fallback for legacy callers.
 
+### Session browser scope isolation
+
+The Sessions view owns transient state within one connection and profile. Switching either identity resets confirmations, selected rows, rename drafts and search state; late requests from the old view cannot update the new list.
+
+[[src/renderer/src/screens/Sessions/Sessions.tsx#Sessions]] keys the stateful browser by the complete scope. Persisted display filters remain shared preferences. Ordinary rerenders within one scope preserve pending actions.
+
 ### Connection-explicit dashboard transport
 
 Dashboard startup and WebSocket refresh resolve the chat's stable connection ID instead of consulting whichever record is currently selected.
