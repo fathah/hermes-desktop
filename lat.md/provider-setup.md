@@ -44,6 +44,12 @@ That modal (`model-select-modal`) is styled **light-based** (no strokes): the co
 
 The provider list (`pickerProviders`) is sourced from the **configured providers**, NOT from which providers happen to have saved models: keyed FieldDef providers, authenticated OAuth plans, plus named custom providers whose `customProviderEnvKey(label)` is set. So a newly configured provider with no models yet still appears.
 
+### Discovery request lifecycle
+
+Model discovery results belong to the current provider, endpoint, credential, and profile. Changing that request clears previous models and pricing metadata before the replacement request completes.
+
+[[src/renderer/src/hooks/useDiscoveredModels.ts#useDiscoveredModels]] invalidates pending responses when disabled or unmounted, so closing the picker cannot repopulate its idle state. It retains the debounce and can fetch again after reopening. [[src/renderer/src/hooks/useDiscoveredModels.test.ts]] verifies request changes, late responses, and restart behavior.
+
 ### Authenticated OAuth providers are selectable
 
 OAuth plans with usable `auth.json` credentials appear in the active-model picker even though they have no API-key environment variable.
