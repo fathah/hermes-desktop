@@ -98,6 +98,12 @@ The config modal collects **Name**, **Base URL**, and an API key. On save (modal
 
 Configured custom-provider cards are the **union** of three sources, deduped by env-key anchor (in [[src/renderer/src/components/ProviderKeysSection.tsx#ProviderKeysSection]]): (1) the authoritative `providers.json` records via `listCustomProviders`; (2) back-compat — `provider: "custom"` models in `models.json` whose host resolves to `CUSTOM_API_KEY` (known compat hosts like groq/hermesone are excluded — they own dedicated key cards), grouped by `providerLabel`; (3) **orphan recovery** — any `CUSTOM_PROVIDER_*_KEY` env var with a value but no record/model, surfaced with an empty base URL so the user can complete or remove it. The active-model picker in [[src/renderer/src/screens/Providers/Providers.tsx]] unions (1) with the models-derived labels too, so a keyed custom provider is selectable before a model is saved; it prefers the authoritative `providers.json` base URL over a saved model's URL, so editing an existing provider's endpoint reroutes newly picked models instead of pinning them to the stale URL (a saved model's URL is used only for legacy/orphan records whose stored base URL is blank). **Remove provider** deletes its models, drops its `providers.json` record (`removeCustomProvider`), and clears its `CUSTOM_PROVIDER_*` key. [[src/main/hermes.ts]] resolves each matching model’s `customProviderEnvKey(providerLabel || name)` from profile environment values or enumerated vault secrets. Endpoint comparison normalizes scheme/host case, default ports, and trailing slashes while preserving path and query case.
 
+#### Endpoint identity in model management
+
+Provider model lists and removal preserve case-sensitive URL paths and query values, preventing a provider from claiming another endpoint's unlabeled legacy models.
+
+[[src/renderer/src/components/ProviderKeysSection.tsx#ProviderModelsManager]] and provider removal use [[src/shared/model-endpoint.ts#normalizeModelEndpointUrl]] for fallback endpoint matching. Host case, default ports, and trailing slashes remain equivalent; explicit provider labels retain precedence. [[src/renderer/src/components/ProviderEndpointIdentity.test.tsx]] verifies rendered model membership and deletion calls across these boundaries.
+
 #### Credential readiness
 
 Config health and pre-send checks recognize per-label custom-provider keys only for matching endpoint identities and the selected profile, preventing false missing-key warnings without crossing host or path boundaries.

@@ -23,6 +23,7 @@ import {
 } from "../../../shared/url-key-map";
 import { useI18n } from "./useI18n";
 import BrandLogo from "./common/BrandLogo";
+import { normalizeModelEndpointUrl } from "../../../shared/model-endpoint";
 
 // A route describes how a model saved "under" a provider is persisted:
 // `{ provider, baseUrl }`. Native providers keep their slug; OpenAI-compatible
@@ -45,11 +46,6 @@ interface LibModel {
   contextLength?: number;
   createdAt: number;
 }
-
-// Normalize a base URL for equality (trailing slash + case are irrelevant when
-// deciding whether a saved `custom` model belongs to a given endpoint).
-const normUrl = (u: string): string =>
-  (u || "").trim().replace(/\/+$/, "").toLowerCase();
 
 // Host of a base URL, used as a fallback custom-provider title (raw URL if
 // unparseable).
@@ -173,9 +169,14 @@ function ProviderModelsManager({
       if (providerLabel)
         return (
           m.providerLabel === providerLabel ||
-          (!m.providerLabel && normUrl(m.baseUrl) === normUrl(route.baseUrl))
+          (!m.providerLabel &&
+            normalizeModelEndpointUrl(m.baseUrl) ===
+              normalizeModelEndpointUrl(route.baseUrl))
         );
-      return normUrl(m.baseUrl) === normUrl(route.baseUrl);
+      return (
+        normalizeModelEndpointUrl(m.baseUrl) ===
+        normalizeModelEndpointUrl(route.baseUrl)
+      );
     },
     [route, providerLabel],
   );
@@ -207,7 +208,7 @@ function ProviderModelsManager({
     apiKey: apiKey || undefined,
     enabled: true,
   });
-  const listId = `provider-models-${envKey || normUrl(route.baseUrl) || "custom"}`;
+  const listId = `provider-models-${envKey || normalizeModelEndpointUrl(route.baseUrl) || "custom"}`;
 
   async function add(): Promise<void> {
     const model = modelId.trim();
@@ -660,13 +661,13 @@ export function ProviderKeysSection({
     baseUrl: string,
   ): Promise<void> {
     const all = (await window.hermesAPI.listModels()) as LibModel[];
-    const target = normUrl(baseUrl);
+    const target = normalizeModelEndpointUrl(baseUrl);
     for (const m of all) {
       if (m.provider !== "custom") continue;
       const match = name
         ? m.providerLabel === name ||
-          (!m.providerLabel && normUrl(m.baseUrl) === target)
-        : normUrl(m.baseUrl) === target;
+          (!m.providerLabel && normalizeModelEndpointUrl(m.baseUrl) === target)
+        : normalizeModelEndpointUrl(m.baseUrl) === target;
       if (match) await window.hermesAPI.removeModel(m.id);
     }
     if (name) {
@@ -966,7 +967,9 @@ export function ProviderKeysSection({
           const ready = !!name.trim() && !!baseUrl.trim();
           const isExisting = customProviders.some(
             (cp) =>
-              cp.name === name && normUrl(cp.baseUrl) === normUrl(baseUrl),
+              cp.name === name &&
+              normalizeModelEndpointUrl(cp.baseUrl) ===
+                normalizeModelEndpointUrl(baseUrl),
           );
           const keyType = !visibleKeys.has(keyEnv) ? "password" : "text";
           // Persist the provider's identity (name + base URL) to providers.json
