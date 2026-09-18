@@ -147,6 +147,7 @@ interface PendingDashboardApproval {
   gatewayRequestId: string | null;
   requestId: string;
   responding: boolean;
+  completed?: boolean;
   sessionId: string;
 }
 
@@ -1049,15 +1050,27 @@ export function useDashboardChatTransport({
     );
   };
 
-  const expirePendingApprovalsRef = useRef<(failActiveTurn?: boolean) => void>(
-    () => undefined,
-  );
-  expirePendingApprovalsRef.current = (failActiveTurn = false): void => {
+  const expirePendingApprovalsRef = useRef<
+    (failActiveTurn?: boolean, preserveResponding?: boolean) => void
+  >(() => undefined);
+  expirePendingApprovalsRef.current = (
+    failActiveTurn = false,
+    preserveResponding = false,
+  ): void => {
     if (pendingApprovalsRef.current.length === 0) return;
-    const pendingIds = new Set(
-      pendingApprovalsRef.current.map(({ requestId }) => requestId),
+    const pendingIds = new Set<string>();
+    pendingApprovalsRef.current = pendingApprovalsRef.current.filter(
+      (pending) => {
+        // Turn completion can precede the response RPC acknowledgement. Keep
+        // only decisions already in flight; unanswered requests still expire.
+        if (preserveResponding && pending.responding) {
+          pending.completed = true;
+          return true;
+        }
+        pendingIds.add(pending.requestId);
+        return false;
+      },
     );
-    pendingApprovalsRef.current = [];
     setMessages((current) => {
       const unavailable = current.map((message) =>
         message.kind === "approval" &&
@@ -1263,7 +1276,7 @@ export function useDashboardChatTransport({
         // A reply RPC can be acknowledged after the resumed turn finishes.
         if (!pendingClarifyRef.current?.responding)
           expirePendingClarifyRef.current();
-        expirePendingApprovalsRef.current();
+        expirePendingApprovalsRef.current(false, true);
         if (failed) {
           appliedModelRef.current = null;
           recreateRuntimeSessionRef.current = true;
@@ -1803,6 +1816,11 @@ export function useDashboardChatTransport({
           return true;
         }
       }
+      // A late reply from the completed turn must not affect a new prompt
+      // using the same runtime session, especially on an unresolved ACK.
+      if (pendingApprovalsRef.current.some((pending) => pending.completed)) {
+        expirePendingApprovalsRef.current();
+      }
       const dashboardText = dashboardPromptTextForAttachments(
         text,
         attachments,
@@ -2025,6 +2043,10 @@ export function useDashboardChatTransport({
         pendingApprovalsRef.current = pendingApprovalsRef.current.slice(1);
         return true;
       } catch {
+        if (pending.completed && pendingApprovalsRef.current[0] === pending) {
+          // A completed turn cannot accept a retry after an unconfirmed reply.
+          expirePendingApprovalsRef.current();
+        }
         return false;
       } finally {
         if (pendingApprovalsRef.current[0] === pending) {
