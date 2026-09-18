@@ -607,7 +607,22 @@ export function dashboardModelMatches(
 
   // Named custom providers can be reported by Hermes Agent as custom:<slug>
   // while Hermes One's older model config still treats them as custom rows.
-  return provider === "custom" && liveProvider.startsWith("custom:");
+  if (provider === "custom" && liveProvider.startsWith("custom:")) return true;
+
+  // The reverse direction: a named providers: entry (e.g. "omlx") comes
+  // back normalized to the bare custom namespace; accept only the row the
+  // server marks current, not merely one that lists the same model.
+  if (liveProvider === "custom" || liveProvider.startsWith("custom:")) {
+    const namedRow = (live?.providers ?? []).find(
+      (row) =>
+        row.is_current &&
+        ((row.slug || "").toLowerCase() === provider ||
+          (row.slug || "").toLowerCase() === `custom:${provider}`),
+    );
+    if (namedRow) return true;
+  }
+
+  return false;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
