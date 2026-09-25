@@ -1,6 +1,7 @@
 export default {
   title: "模型",
-  searchPlaceholder: "搜尋模型...",
+  freeBadge: "（免費）",
+  searchPlaceholder: "搜尋模型…",
   empty: "還沒有模型",
   noMatch: "沒有符合的模型",
   deleteConfirm: "刪除？",
@@ -9,10 +10,10 @@ export default {
   namePlaceholder: "例如：Claude Sonnet 4",
   modelIdPlaceholder: "例如：anthropic/claude-sonnet-4-20250514",
   baseUrlPlaceholder: "http://localhost:1234/v1",
-  subtitle: "管理你的模型庫。這些模型會出現在聊天頁面的模型選擇器中。",
+  subtitle: "管理模型庫。",
   addModel: "新增模型",
   emptyHint:
-    "在這裡新增模型後，就能在聊天頁面的模型選擇器中使用。你在設定頁設定的模型也會自動加入這裡。",
+    "在這裡新增模型後，就能在聊天頁面的模型選擇器中使用。設定頁設定的模型也會自動加入這裡。",
   editModel: "編輯模型",
   update: "更新",
   deleteModelTitle: "刪除模型",
@@ -20,7 +21,20 @@ export default {
   no: "否",
   nameRequired: "名稱和模型 ID 為必填欄位",
   customProviderHint: "僅在自訂或本機供應商時需要填寫",
+  contextWindowLabel: "脈絡視窗（token 數）",
+  contextWindowPlaceholder: "例如：65536",
+  contextWindowHint:
+    "供應商未回報時覆寫脈絡大小。這能修正脈絡用量指示，並讓自動壓縮在適當時機觸發。留空則自動偵測。",
   apiKeyLabel: "API Key",
   apiKeyHint:
     "儲存為環境變數。會依 URL 符合對應的環境變數名稱，否則使用 CUSTOM_API_KEY。",
+  allProviders: "全部",
+  browseRegistry: "瀏覽模型",
+  registryTitle: "模型登錄檔",
+  registrySearchPlaceholder: "搜尋供應商和模型…",
+  registryAddButton: "新增",
+  registryAddedLabel: "已新增",
+  registryCustomBadge: "透過 Base URL",
+  registryAdded: "{{name}} 已新增到模型",
+  registryLoadError: "無法載入模型登錄檔",
 } as const;
