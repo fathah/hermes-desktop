@@ -83,6 +83,18 @@ describe("expectedEnvKeyForModel — URL fallback for custom/auto providers", ()
     );
   });
 
+  it("only maps requesty.ai hosts to the Requesty key", () => {
+    expect(
+      expectedEnvKeyForModel("custom", "https://router.requesty.ai/v1"),
+    ).toBe("REQUESTY_API_KEY");
+    expect(
+      expectedEnvKeyForModel(
+        "custom",
+        "https://requesty.ai.attacker.example/v1",
+      ),
+    ).toBeNull();
+  });
+
   it("returns null for unknown provider with unknown URL", () => {
     expect(
       expectedEnvKeyForModel("custom", "http://localhost:1234/v1"),

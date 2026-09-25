@@ -37,7 +37,12 @@ export const URL_KEY_MAP: ReadonlyArray<UrlKeyMapping> = [
   { pattern: /api\.cerebras\.ai/i, envKey: "CEREBRAS_API_KEY" },
   { pattern: /atlascloud\.ai/i, envKey: "ATLASCLOUD_API_KEY" },
   { pattern: /api\.novita\.ai/i, envKey: "NOVITA_API_KEY" },
-  { pattern: /requesty\.ai/i, envKey: "REQUESTY_API_KEY" },
+  // Anchored to the URL host so a lookalike such as requesty.ai.example.com
+  // or a path containing "requesty.ai" never receives the Requesty key.
+  {
+    pattern: /^(?:https?:\/\/)?(?:[a-z0-9-]+\.)*requesty\.ai(?=[:/?#]|$)/i,
+    envKey: "REQUESTY_API_KEY",
+  },
   { pattern: /api\.mistral\.ai/i, envKey: "MISTRAL_API_KEY" },
   { pattern: /api\.perplexity\.ai/i, envKey: "PERPLEXITY_API_KEY" },
   { pattern: /api\.xiaomimimo\.com/i, envKey: "XIAOMI_API_KEY" },

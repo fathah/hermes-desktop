@@ -405,7 +405,10 @@ const URL_TO_ENV_KEY: Array<[RegExp, string]> = [
   [/api\.cerebras\.ai/i, "CEREBRAS_API_KEY"],
   [/atlascloud\.ai/i, "ATLASCLOUD_API_KEY"],
   [/api\.novita\.ai/i, "NOVITA_API_KEY"],
-  [/requesty\.ai/i, "REQUESTY_API_KEY"],
+  [
+    /^(?:https?:\/\/)?(?:[a-z0-9-]+\.)*requesty\.ai(?=[:/?#]|$)/i,
+    "REQUESTY_API_KEY",
+  ],
   [/api\.mistral\.ai/i, "MISTRAL_API_KEY"],
   [/api\.perplexity\.ai/i, "PERPLEXITY_API_KEY"],
   [/api\.xiaomimimo\.com/i, "XIAOMI_API_KEY"],

@@ -64,6 +64,24 @@ describe("URL_KEY_MAP", () => {
     );
   });
 
+  it("only gives the Requesty key to requesty.ai and its subdomains", () => {
+    expect(expectedEnvKeyForUrl("https://requesty.ai/v1")).toBe(
+      "REQUESTY_API_KEY",
+    );
+    expect(expectedEnvKeyForUrl("https://router.requesty.ai:443/v1")).toBe(
+      "REQUESTY_API_KEY",
+    );
+    for (const url of [
+      "https://requesty.ai.attacker.example/v1",
+      "https://notrequesty.ai/v1",
+      "https://attacker.example/requesty.ai/v1",
+      "https://attacker.example/v1?host=router.requesty.ai",
+      "https://router.requesty.ai@attacker.example/v1",
+    ]) {
+      expect(expectedEnvKeyForUrl(url)).toBe(CUSTOM_API_KEY_ENV);
+    }
+  });
+
   it("treats empty / null / undefined URL as CUSTOM_API_KEY", () => {
     expect(expectedEnvKeyForUrl("")).toBe(CUSTOM_API_KEY_ENV);
     expect(expectedEnvKeyForUrl(null)).toBe(CUSTOM_API_KEY_ENV);
