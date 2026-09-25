@@ -37,6 +37,7 @@ export const URL_KEY_MAP: ReadonlyArray<UrlKeyMapping> = [
   { pattern: /api\.cerebras\.ai/i, envKey: "CEREBRAS_API_KEY" },
   { pattern: /atlascloud\.ai/i, envKey: "ATLASCLOUD_API_KEY" },
   { pattern: /api\.novita\.ai/i, envKey: "NOVITA_API_KEY" },
+  { pattern: /requesty\.ai/i, envKey: "REQUESTY_API_KEY" },
   { pattern: /api\.mistral\.ai/i, envKey: "MISTRAL_API_KEY" },
   { pattern: /api\.perplexity\.ai/i, envKey: "PERPLEXITY_API_KEY" },
   { pattern: /api\.xiaomimimo\.com/i, envKey: "XIAOMI_API_KEY" },
@@ -129,5 +130,6 @@ export const OPENAI_COMPAT_PROVIDERS: ReadonlySet<string> = new Set([
   "cerebras",
   "atlascloud",
   "novita",
+  "requesty",
   "mistral",
 ]);

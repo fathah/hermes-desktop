@@ -41,6 +41,7 @@ export default {
   fireworks: "Fireworks",
   cerebras: "Cerebras",
   atlascloud: "AtlasCloud",
+  requesty: "Requesty",
   mistral: "Mistral",
   // Theme
   themeSystem: "النظام",
@@ -98,6 +99,8 @@ export default {
   cerebrasHint: "استدلال فائق السرعة على أجهزة Cerebras",
   atlascloudApiKey: "مفتاح AtlasCloud API",
   atlascloudHint: "نماذج Claude و GPT والمفتوحة عبر AtlasCloud",
+  requestyApiKey: "مفتاح Requesty API",
+  requestyHint: "بوابة نماذج متعددة متوافقة مع OpenAI",
   mistralApiKey: "مفتاح Mistral API",
   mistralHint: "نماذج Mistral و Codestral",
   perplexityApiKey: "مفتاح Perplexity API",

@@ -42,6 +42,7 @@ export default {
   cerebras: "Cerebras",
   atlascloud: "AtlasCloud",
   novita: "NovitaAI",
+  requesty: "Requesty",
   mistral: "Mistral",
   // Theme
   themeSystem: "System",
@@ -103,6 +104,8 @@ export default {
   atlascloudHint: "Claude, GPT & open models via AtlasCloud",
   novitaApiKey: "Novita API Key",
   novitaHint: "Models hosted by Novita",
+  requestyApiKey: "Requesty API Key",
+  requestyHint: "OpenAI-compatible multi-model gateway",
   mistralApiKey: "Mistral API Key",
   mistralHint: "Mistral and Codestral models",
   perplexityApiKey: "Perplexity API Key",

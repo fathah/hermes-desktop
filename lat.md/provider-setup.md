@@ -242,3 +242,9 @@ Resetting to the main model persists `auto` routing without stale task-level cre
 ### YAML field boundaries
 
 Routing updates and credential removal address direct task children only, preserving nested options, comments, empty task maps, and CRLF line endings.
+
+## Requesty provider preset
+
+Requesty is available as a remote OpenAI-compatible preset, with a dedicated API-key field. It is an LLM gateway that serves many vendors behind one key.
+
+The desktop stores the model as `custom` at `https://router.requesty.ai/v1` because Hermes Agent has no native `requesty` provider id. Setup, the configured-provider picker, installer readiness, and runtime key lookup use `REQUESTY_API_KEY`, which matches the key the agent host-derives from `router.requesty.ai`. Model ids use the `vendor/model` form, for example `openai/gpt-4o-mini`. Regional endpoints such as `https://router.eu.requesty.ai/v1` map to the same key.

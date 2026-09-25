@@ -90,6 +90,7 @@ export const PROVIDERS = {
     hermesone: "Hermes One",
     atlascloud: "AtlasCloud",
     novita: "NovitaAI",
+    requesty: "Requesty",
     openrouter: "constants.openrouterName",
     aimlapi: "constants.aimlapiName",
     anthropic: "constants.anthropicName",
@@ -388,6 +389,7 @@ export const OPENAI_COMPATIBLE_BASE_URLS: Record<string, string> = {
   cerebras: "https://api.cerebras.ai/v1",
   atlascloud: "https://api.atlascloud.ai/v1",
   novita: "https://api.novita.ai/openai/v1",
+  requesty: "https://router.requesty.ai/v1",
   perplexity: "https://api.perplexity.ai",
   lmstudio: "http://localhost:1234/v1",
   atomicchat: "http://localhost:1337/v1",
@@ -506,6 +508,13 @@ export const LOCAL_PRESETS: LocalPreset[] = [
     baseUrl: "https://api.novita.ai/openai/v1",
     group: "remote",
     envKey: "NOVITA_API_KEY",
+  },
+  {
+    id: "requesty",
+    name: "constants.requesty",
+    baseUrl: "https://router.requesty.ai/v1",
+    group: "remote",
+    envKey: "REQUESTY_API_KEY",
   },
   {
     id: "mistral",
@@ -880,6 +889,12 @@ export const SETTINGS_SECTIONS: SectionDef[] = [
         label: "constants.novitaApiKey",
         type: "password",
         hint: "constants.novitaHint",
+      },
+      {
+        key: "REQUESTY_API_KEY",
+        label: "constants.requestyApiKey",
+        type: "password",
+        hint: "constants.requestyHint",
       },
       {
         key: "MISTRAL_API_KEY",
