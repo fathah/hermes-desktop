@@ -267,7 +267,16 @@ describe("remote OAuth session boundary", () => {
     expect(
       cookiesHaveRemoteOAuthSession([{ name: "tenant_hermes_session_at" }]),
     ).toBe(true);
+    expect(
+      cookiesHaveRemoteOAuthSession([{ name: "__Host-hermes_session_at" }]),
+    ).toBe(true);
+    expect(
+      cookiesHaveRemoteOAuthSession([{ name: "__Secure-hermes_session_rt" }]),
+    ).toBe(true);
     expect(cookiesHaveRemoteOAuthSession([{ name: "unrelated" }])).toBe(false);
+    expect(cookiesHaveRemoteOAuthSession([{ name: "__Host-unrelated" }])).toBe(
+      false,
+    );
   });
 
   it("uses a dedicated persistent Electron partition", async () => {
