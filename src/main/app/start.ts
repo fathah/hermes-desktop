@@ -259,6 +259,12 @@ function createWindow(): void {
     showChatContextMenu(mainWindow, params);
   });
 
+  // Clear the mainWindow reference when the window is closed to allow GC and
+  // prevent the process from lingering after close.
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
+
   if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
     mainWindow.loadURL(process.env["ELECTRON_RENDERER_URL"]);
   } else {
