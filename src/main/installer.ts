@@ -1035,7 +1035,7 @@ export async function runInstall(
             );
             resolve();
           } else {
-            const errorMessage = buildInstallErrorMessage(code);
+            const errorMessage = buildInstallErrorMessage(code ?? 1);
             reject(new Error(errorMessage));
           }
         }
