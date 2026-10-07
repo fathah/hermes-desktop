@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "child_process";
+import { spawn, execSync, type ChildProcess } from "child_process";
 import { randomBytes } from "crypto";
 import { closeSync, existsSync, mkdirSync, openSync } from "fs";
 import http from "http";
@@ -744,12 +744,37 @@ export function stopDashboard(profile?: string): boolean {
   const managed = dashboards.get(key);
   if (!managed) return true;
   dashboards.delete(key);
+
+  const proc = managed.proc;
+  const IS_WINDOWS = process.platform === "win32";
+
   try {
-    managed.proc.kill();
+    if (IS_WINDOWS && proc.pid) {
+      // Windows: Use taskkill to ensure the process is terminated.
+      // kill() on Windows may not terminate child processes, causing orphans.
+      try {
+        execSync(`taskkill /PID ${proc.pid} /F`, { stdio: "ignore" });
+      } catch {
+        // taskkill failed, fall back to kill()
+        proc.kill();
+      }
+    } else {
+      // Unix: Try SIGTERM first, then SIGKILL if process doesn't exit.
+      proc.kill("SIGTERM");
+      const killTimer = setTimeout(() => {
+        try {
+          proc.kill("SIGKILL");
+        } catch {
+          // Process may already be dead.
+        }
+      }, 2000);
+
+      proc.once("exit", () => clearTimeout(killTimer));
+    }
+    return true;
   } catch {
     return false;
   }
-  return true;
 }
 
 export function stopAllDashboards(): void {
