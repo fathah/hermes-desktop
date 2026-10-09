@@ -2,6 +2,8 @@ import { execFile } from "child_process";
 import { existsSync, readFileSync } from "fs";
 import { profilePaths, safeWriteFile } from "./utils";
 import { getApiUrl, getRemoteAuthHeader, isRemoteMode } from "./hermes";
+import { getConnectionConfig } from "./config";
+import { remoteDashboardRequestJson } from "./remote-api";
 import { getApiServerKey } from "./config";
 import { getEnhancedPath, HERMES_PYTHON, hermesCliArgs } from "./installer";
 
@@ -609,6 +611,33 @@ async function mcpApi<T>(
   init: RequestInit = {},
   profile?: string,
 ): Promise<T> {
+  const conn = getConnectionConfig();
+  if (conn.mode === "remote") {
+    // Direct Remote: a bare fetch carries no OAuth cookie (401 Unauthorized).
+    const method = (init.method || "GET").toUpperCase() as
+      | "GET"
+      | "POST"
+      | "PUT"
+      | "PATCH"
+      | "DELETE";
+    const body =
+      typeof init.body === "string" && init.body
+        ? JSON.parse(init.body)
+        : undefined;
+    try {
+      const data = await remoteDashboardRequestJson<T>(
+        conn,
+        path,
+        { method, body },
+        profile,
+      );
+      return (data ?? {}) as T;
+    } catch (err) {
+      const statusCode = (err as { statusCode?: number }).statusCode;
+      if (statusCode) Object.assign(err as object, { status: statusCode });
+      throw err;
+    }
+  }
   const headers: Record<string, string> = {
     ...getRemoteAuthHeader(),
     ...((init.headers as Record<string, string>) || {}),
