@@ -245,6 +245,14 @@ import {
   remoteUninstallSkill,
 } from "../remote-skills";
 import {
+  REMOTE_MEMORY_READ_ONLY_ERROR,
+  remoteActiveMemoryProvider,
+  remoteDiscoverMemoryProviders,
+  remoteReadMemory,
+  remoteReadSoul,
+  remoteWriteSoul,
+} from "../remote-memory";
+import {
   remoteAddModel,
   remoteGetModelConfig,
   remoteListModels,
@@ -1124,6 +1132,9 @@ export function registerIpcHandlers(context: IpcContext): void {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh)
       return sshGetConfigValue(conn.ssh, key, profile);
+    if (conn.mode === "remote" && key === "memory.provider") {
+      return remoteActiveMemoryProvider(profile);
+    }
     return getConfigValue(key, profile);
   });
 
@@ -1134,6 +1145,10 @@ export function registerIpcHandlers(context: IpcContext): void {
       if (conn.mode === "ssh" && conn.ssh) {
         await sshSetConfigValue(conn.ssh, key, value, profile);
         return true;
+      }
+      if (conn.mode === "remote" && key.startsWith("memory.")) {
+        // Would write the LOCAL config.yaml while the screen shows the server.
+        throw new Error(REMOTE_MEMORY_READ_ONLY_ERROR);
       }
       setConfigValue(key, value, profile);
       return true;
@@ -2692,6 +2707,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh)
       return sshReadMemory(conn.ssh, profile);
+    if (conn.mode === "remote") return remoteReadMemory(profile);
     return readMemory(profile);
   });
   ipcMain.handle(
@@ -2700,6 +2716,9 @@ export function registerIpcHandlers(context: IpcContext): void {
       const conn = getConnectionConfig();
       if (conn.mode === "ssh" && conn.ssh)
         return sshAddMemoryEntry(conn.ssh, content, profile);
+      if (conn.mode === "remote") {
+        return { success: false, error: REMOTE_MEMORY_READ_ONLY_ERROR };
+      }
       return addMemoryEntry(content, profile);
     },
   );
@@ -2709,6 +2728,9 @@ export function registerIpcHandlers(context: IpcContext): void {
       const conn = getConnectionConfig();
       if (conn.mode === "ssh" && conn.ssh)
         return sshUpdateMemoryEntry(conn.ssh, index, content, profile);
+      if (conn.mode === "remote") {
+        return { success: false, error: REMOTE_MEMORY_READ_ONLY_ERROR };
+      }
       return updateMemoryEntry(index, content, profile);
     },
   );
@@ -2718,6 +2740,7 @@ export function registerIpcHandlers(context: IpcContext): void {
       const conn = getConnectionConfig();
       if (conn.mode === "ssh" && conn.ssh)
         return sshRemoveMemoryEntry(conn.ssh, index, profile);
+      if (conn.mode === "remote") return false;
       return removeMemoryEntry(index, profile);
     },
   );
@@ -2727,6 +2750,9 @@ export function registerIpcHandlers(context: IpcContext): void {
       const conn = getConnectionConfig();
       if (conn.mode === "ssh" && conn.ssh)
         return sshWriteUserProfile(conn.ssh, content, profile);
+      if (conn.mode === "remote") {
+        return { success: false, error: REMOTE_MEMORY_READ_ONLY_ERROR };
+      }
       return writeUserProfile(content, profile);
     },
   );
@@ -2735,17 +2761,22 @@ export function registerIpcHandlers(context: IpcContext): void {
   ipcMain.handle("read-soul", (_event, profile?: string) => {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh) return sshReadSoul(conn.ssh, profile);
+    if (conn.mode === "remote") return remoteReadSoul(profile);
     return readSoul(profile);
   });
   ipcMain.handle("write-soul", (_event, content: string, profile?: string) => {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh)
       return sshWriteSoul(conn.ssh, content, profile);
+    if (conn.mode === "remote") return remoteWriteSoul(content, profile);
     return writeSoul(content, profile);
   });
   ipcMain.handle("reset-soul", (_event, profile?: string) => {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh) return sshResetSoul(conn.ssh, profile);
+    // Reset would restore the LOCAL default template; leave the server's
+    // SOUL.md untouched and hand back what is actually there.
+    if (conn.mode === "remote") return remoteReadSoul(profile);
     return resetSoul(profile);
   });
 
@@ -3542,6 +3573,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh)
       return sshDiscoverMemoryProviders(conn.ssh, profile);
+    if (conn.mode === "remote") return remoteDiscoverMemoryProviders(profile);
     return discoverMemoryProviders(profile);
   });
 

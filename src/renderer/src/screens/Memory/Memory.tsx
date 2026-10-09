@@ -10,7 +10,13 @@ import { MemoryProfile } from "./MemoryProfile";
 import { MemoryProviders } from "./MemoryProviders";
 import type { MemoryData, MemoryProviderInfo, MemoryTab } from "./types";
 
-function Memory({ profile }: { profile?: string }): React.JSX.Element {
+function Memory({
+  profile,
+  readOnly = false,
+}: {
+  profile?: string;
+  readOnly?: boolean;
+}): React.JSX.Element {
   const { t } = useI18n();
   const [data, setData] = useState<MemoryData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -66,31 +72,44 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
 
       {error && <div className="memory-error">{error}</div>}
 
-      {tab === "entries" && (
-        <MemoryEntries
-          entries={data.memory.entries}
-          profile={profile}
-          onRefresh={loadData}
-        />
+      {readOnly && tab !== "soul" && (
+        <div className="memory-error" role="note">
+          Connected to a remote Hermes server: memory is shown read-only here.
+          Edit it on the server (or via chat).
+        </div>
       )}
 
-      {tab === "profile" && (
-        <MemoryProfile
-          content={data.user.content}
-          charLimit={data.user.charLimit}
-          profile={profile}
-          onRefresh={loadData}
-        />
-      )}
+      {/* A disabled fieldset natively disables every button/input inside it. */}
+      <fieldset
+        disabled={readOnly}
+        style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
+      >
+        {tab === "entries" && (
+          <MemoryEntries
+            entries={data.memory.entries}
+            profile={profile}
+            onRefresh={loadData}
+          />
+        )}
 
-      {tab === "providers" && (
-        <MemoryProviders
-          providers={providers}
-          activeProvider={memoryProvider}
-          profile={profile}
-          onRefresh={loadData}
-        />
-      )}
+        {tab === "profile" && (
+          <MemoryProfile
+            content={data.user.content}
+            charLimit={data.user.charLimit}
+            profile={profile}
+            onRefresh={loadData}
+          />
+        )}
+
+        {tab === "providers" && (
+          <MemoryProviders
+            providers={providers}
+            activeProvider={memoryProvider}
+            profile={profile}
+            onRefresh={loadData}
+          />
+        )}
+      </fieldset>
 
       {tab === "soul" && (
         <div className="memory-soul-tab">
