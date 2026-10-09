@@ -74,8 +74,9 @@ function Memory({
 
       {readOnly && tab !== "soul" && (
         <div className="memory-error" role="note">
-          Connected to a remote Hermes server: memory is shown read-only here.
-          Edit it on the server (or via chat).
+          {data.contentUnavailable
+            ? "Connected to a remote Hermes server: its API does not expose the contents of MEMORY.md / USER.md, so only sizes and providers are shown. View or edit them on the server."
+            : "Connected to a remote Hermes server: memory is shown read-only here. Edit it on the server (or via chat)."}
         </div>
       )}
 

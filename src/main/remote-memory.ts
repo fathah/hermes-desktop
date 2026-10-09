@@ -50,14 +50,30 @@ async function readRemoteText(
 }
 
 export async function remoteReadMemory(profile?: string): Promise<MemoryInfo> {
+  const limits = parseMemoryLimitsConfig("");
   const home = await serverHome();
   const name = profileName(profile);
   const root = name === "default" ? home : `${home}/profiles/${name}`;
-  const [mem, user] = await Promise.all([
-    readRemoteText(`${root}/memories/MEMORY.md`),
-    readRemoteText(`${root}/memories/USER.md`),
-  ]);
-  const limits = parseMemoryLimitsConfig("");
+  let mem = { content: "", exists: false };
+  let user = { content: "", exists: false };
+  let contentUnavailable = false;
+  let sizes: { memory?: number; user?: number } = {};
+  try {
+    [mem, user] = await Promise.all([
+      readRemoteText(`${root}/memories/MEMORY.md`),
+      readRemoteText(`${root}/memories/USER.md`),
+    ]);
+  } catch (err) {
+    // A hosted/locked dashboard refuses file reads outside its managed root
+    // (403 "outside the managed read boundary") and ~/.hermes/memories is not
+    // inside it. Don't fail the screen: fall back to what /api/memory does
+    // expose (file sizes) and say that the contents are not available.
+    if ((err as { statusCode?: number }).statusCode !== 403) throw err;
+    contentUnavailable = true;
+    sizes = (await memoryStatus(profile)).builtin_files ?? {};
+    mem = { content: "", exists: (sizes.memory ?? 0) > 0 };
+    user = { content: "", exists: (sizes.user ?? 0) > 0 };
+  }
   const entries = mem.content.trim()
     ? mem.content
         .split(ENTRY_DELIMITER)
@@ -69,22 +85,25 @@ export async function remoteReadMemory(profile?: string): Promise<MemoryInfo> {
       exists: mem.exists,
       lastModified: null,
       entries,
-      charCount: mem.content.length,
+      // Sizes are bytes, an upper bound for characters; only used for the bar.
+      charCount: contentUnavailable ? (sizes.memory ?? 0) : mem.content.length,
       charLimit: limits.memoryCharLimit,
     },
     user: {
       content: user.content,
       exists: user.exists,
       lastModified: null,
-      charCount: user.content.length,
+      charCount: contentUnavailable ? (sizes.user ?? 0) : user.content.length,
       charLimit: limits.userCharLimit,
     },
     stats: { totalSessions: 0, totalMessages: 0 },
+    ...(contentUnavailable ? { contentUnavailable: true } : {}),
   };
 }
 
 interface RemoteMemoryStatus {
   active?: string;
+  builtin_files?: { memory?: number; user?: number };
   providers?: Array<{
     name: string;
     description?: string;

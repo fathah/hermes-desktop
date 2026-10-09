@@ -28,6 +28,8 @@ export interface MemoryInfo {
     charLimit: number;
   };
   stats: { totalSessions: number; totalMessages: number };
+  /** Remote only: the server API does not expose the file contents. */
+  contentUnavailable?: boolean;
 }
 
 function memoryPath(profile?: string): string {

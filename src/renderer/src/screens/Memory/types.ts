@@ -20,6 +20,7 @@ export interface MemoryData {
     charLimit: number;
   };
   stats: { totalSessions: number; totalMessages: number };
+  contentUnavailable?: boolean;
 }
 
 export interface MemoryProviderInfo {

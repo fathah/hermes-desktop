@@ -58,12 +58,36 @@ describe("remote memory", () => {
     );
   });
 
-  it("does not hide non-404 failures as an empty memory", async () => {
+  it("does not hide auth/other failures as an empty memory", async () => {
     request.mockImplementation(async (_c: unknown, path: string) => {
       if (path === "/api/status") return { hermes_home: "/h" };
-      throw Object.assign(new Error("403"), { statusCode: 403 });
+      throw Object.assign(new Error("401"), { statusCode: 401 });
     });
-    await expect(remoteReadMemory()).rejects.toThrow("403");
+    await expect(remoteReadMemory()).rejects.toThrow("401");
+  });
+
+  it("falls back to sizes and flags contentUnavailable on the managed-read-boundary 403", async () => {
+    request.mockImplementation(async (_c: unknown, path: string) => {
+      if (path === "/api/status") return { hermes_home: "/h" };
+      if (path === "/api/memory") {
+        return {
+          active: "",
+          providers: [],
+          builtin_files: { memory: 120, user: 0 },
+        };
+      }
+      throw Object.assign(new Error("403 outside the managed read boundary"), {
+        statusCode: 403,
+      });
+    });
+    const info = await remoteReadMemory();
+    expect(info.contentUnavailable).toBe(true);
+    expect(info.memory).toMatchObject({
+      exists: true,
+      charCount: 120,
+      entries: [],
+    });
+    expect(info.user).toMatchObject({ exists: false, charCount: 0 });
   });
 
   it("maps provider status and the active provider", async () => {
