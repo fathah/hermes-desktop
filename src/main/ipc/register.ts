@@ -257,6 +257,12 @@ import {
   remoteGetOAuthProviderStatuses,
 } from "../remote-provider-statuses";
 import {
+  remoteGatewayStatus,
+  remoteRestartGateway,
+  remoteStartGateway,
+  remoteStopGateway,
+} from "../remote-gateway";
+import {
   listModels,
   addModel,
   removeModel,
@@ -2094,14 +2100,14 @@ export function registerIpcHandlers(context: IpcContext): void {
       return { success: true, running: true };
     }
     if (conn.mode === "remote") {
-      // The remote server runs its own gateway; nothing to start locally.
-      // Without this guard we'd fall through to `startGateway()` and
-      // spawn a non-existent local hermes-agent (issue #266).
+      // The remote server runs its own gateway; ask the dashboard to start it.
+      // Never fall through to `startGateway()` — that would spawn a
+      // non-existent local hermes-agent (issue #266).
+      const result = await remoteStartGateway();
       return {
-        success: false,
+        success: result.success,
         running: false,
-        error:
-          "Remote mode points at an already-running Hermes server. Start or restart the gateway on that remote host.",
+        ...(result.error ? { error: result.error } : {}),
       };
     }
     return startGatewayDetailed();
@@ -2113,7 +2119,8 @@ export function registerIpcHandlers(context: IpcContext): void {
       return true;
     }
     if (conn.mode === "remote") {
-      // No local gateway to stop in pure remote mode.
+      const result = await remoteStopGateway();
+      if (!result.success) throw new Error(result.error);
       return true;
     }
     // No profile argument → stops the active profile's gateway, leaving any
@@ -2129,13 +2136,14 @@ export function registerIpcHandlers(context: IpcContext): void {
       return sshGatewayStatus(conn.ssh);
     }
     if (conn.mode === "remote") {
-      return false;
+      return (await remoteRestartGateway(profile)).success;
     }
     return restartGateway(profile);
   });
   ipcMain.handle("gateway-status", () => {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh) return sshGatewayStatus(conn.ssh);
+    if (conn.mode === "remote") return remoteGatewayStatus();
     return isGatewayRunning();
   });
 

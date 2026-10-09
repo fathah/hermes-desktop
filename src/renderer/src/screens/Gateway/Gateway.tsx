@@ -27,7 +27,13 @@ import type {
 type DraftValues = Record<string, Record<string, string>>;
 type PlatformMessage = Record<string, MessagingPlatformTestResponse | null>;
 
-function Gateway({ profile }: { profile?: string }): React.JSX.Element {
+function Gateway({
+  profile,
+  remoteMode = false,
+}: {
+  profile?: string;
+  remoteMode?: boolean;
+}): React.JSX.Element {
   const { t } = useI18n();
   const [gatewayRunning, setGatewayRunning] = useState(false);
   const [gatewayBusy, setGatewayBusy] = useState(false);
@@ -84,6 +90,12 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
   }, [loadConfig]);
 
   useEffect(() => {
+    // The API server key lives in the LOCAL .env; it says nothing about a
+    // remote server, so don't show (or regenerate) it in remote mode.
+    if (remoteMode) {
+      setApiKeyStatus(null);
+      return;
+    }
     let cancelled = false;
     window.hermesAPI
       .getApiServerKeyStatus(profile)
@@ -96,7 +108,7 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [profile]);
+  }, [profile, remoteMode]);
 
   const platforms = useMemo(() => catalog?.platforms ?? [], [catalog]);
   const filteredPlatforms = useMemo(() => {
