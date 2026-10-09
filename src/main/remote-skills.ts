@@ -1,4 +1,5 @@
 import { getApiUrl, getRemoteAuthHeader } from "./hermes";
+import { remoteAuthFetch } from "./remote-oauth";
 import type { InstalledSkill, SkillCliResult } from "./skills";
 
 // Remote (HTTP) mode routing for the Skills screen. The skills IPC handlers
@@ -48,7 +49,7 @@ async function skillsApi<T>(
   if (init.body && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";
   }
-  const response = await fetch(url.toString(), { ...init, headers });
+  const response = await remoteAuthFetch(url.toString(), { ...init, headers });
   if (!response.ok) {
     let detail = response.statusText;
     try {

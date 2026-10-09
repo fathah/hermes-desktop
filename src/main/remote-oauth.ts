@@ -427,3 +427,30 @@ export function openRemoteOAuthLogin(
       );
   });
 }
+
+/**
+ * Drop-in `fetch` for direct Remote dashboard calls. A bare `fetch` from the
+ * main process carries no OAuth cookie, so an OAuth dashboard answers 401.
+ * When the connection is Remote + OAuth (or auto with a signed-in session) the
+ * request runs in the persistent OAuth cookie partition instead.
+ */
+export async function remoteAuthFetch(
+  url: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const { getConnectionConfig } = await import("./config");
+  const conn = getConnectionConfig();
+  if (conn.mode === "remote") {
+    const useOAuth =
+      conn.remoteAuthMode === "oauth" ||
+      (conn.remoteAuthMode === "auto" &&
+        (await remoteOAuthSessionState(conn.remoteUrl)).signedIn);
+    if (useOAuth) {
+      return getRemoteOAuthSession().fetch(url, {
+        ...init,
+        credentials: "include",
+      });
+    }
+  }
+  return fetch(url, init);
+}

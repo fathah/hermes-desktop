@@ -12,6 +12,7 @@ import {
   validateMessagingPlatformUpdate,
 } from "../shared/messaging-platforms";
 import { getApiUrl, getRemoteAuthHeader } from "./hermes";
+import { remoteAuthFetch } from "./remote-oauth";
 
 export function buildDesktopMessagingPlatforms(
   env: Record<string, string>,
@@ -187,7 +188,10 @@ async function remoteMessagingFetch(
   if (init.body && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";
   }
-  const res = await fetch(`${getApiUrl()}${path}`, { ...init, headers });
+  const res = await remoteAuthFetch(`${getApiUrl()}${path}`, {
+    ...init,
+    headers,
+  });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(
