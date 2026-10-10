@@ -253,6 +253,7 @@ import {
   remoteUpdateModel,
 } from "../remote-models";
 import {
+  isShownRedactedPreview,
   remoteAddCredentialPoolEntry,
   remoteGetCredentialPool,
   remoteGetEnv,
@@ -2039,6 +2040,20 @@ export function registerIpcHandlers(context: IpcContext): void {
       apiKey: string | undefined,
       profile?: string,
     ) => {
+      // In Remote mode the screen only ever holds REDACTED key previews. Sending
+      // one to the provider as a bearer token fails and reads as a bad key, so
+      // don't; the server holds the real credential.
+      if (
+        getConnectionConfig().mode === "remote" &&
+        isShownRedactedPreview(apiKey)
+      ) {
+        return {
+          models: [],
+          status: "unsupported" as const,
+          cached: false,
+          freeModels: [],
+        };
+      }
       return discoverProviderModels(provider, baseUrl, apiKey, profile);
     },
   );

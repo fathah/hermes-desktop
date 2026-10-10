@@ -29,10 +29,30 @@ type PoolEntry = {
   token_preview?: string;
 };
 
-// Last redacted previews handed to the renderer, per profile. The Providers
-// screen blur-saves every field it shows; writing an untouched preview back is
-// pointless (the server rejects it), so those are skipped client-side.
+// Last redacted previews handed to the renderer, per connection + profile. The
+// Providers screen blur-saves every field it shows; writing an untouched preview
+// back is pointless (the server rejects it), so those are skipped client-side.
+// Keyed by server too: switching servers must not reuse another server's state.
 const shownPreviews = new Map<string, Map<string, string>>();
+
+function targetKey(profile?: string): string {
+  return `${getConnectionConfig().remoteUrl}\u0000${profile || "default"}`;
+}
+
+/**
+ * True for a value this module itself handed out as a redacted preview. Such a
+ * value is display-only and must never be used as a credential (e.g. sent to a
+ * provider as a bearer token).
+ */
+export function isShownRedactedPreview(value: string | undefined): boolean {
+  if (!value) return false;
+  for (const previews of shownPreviews.values()) {
+    for (const preview of previews.values()) {
+      if (preview === value) return true;
+    }
+  }
+  return false;
+}
 
 function profileQuery(path: string, profile?: string): string {
   return profile && profile !== "default"
@@ -55,7 +75,7 @@ export async function remoteGetEnv(
     env[key] = preview;
     previews.set(key, preview);
   }
-  shownPreviews.set(profile || "default", previews);
+  shownPreviews.set(targetKey(profile), previews);
   return env;
 }
 
@@ -65,7 +85,7 @@ export async function remoteSetEnv(
   profile?: string,
 ): Promise<boolean> {
   const conn = getConnectionConfig();
-  const previews = shownPreviews.get(profile || "default");
+  const previews = shownPreviews.get(targetKey(profile));
   if (value && previews?.get(key) === value) return true; // untouched preview
   if (!value) {
     try {
@@ -112,16 +132,40 @@ function toLocalEntry(entry: PoolEntry): RemoteCredentialEntry {
   };
 }
 
+// Ids of the pool entries last shown to the renderer, per connection + profile
+// + provider. A removal is expressed by the renderer as "the list without X";
+// only this record says which entry the user actually removed.
+const shownPools = new Map<string, string[]>();
+
+function poolKey(provider: string, profile?: string): string {
+  return `${targetKey(profile)}\u0000${provider}`;
+}
+
+function rememberPool(
+  provider: string,
+  entries: RemoteCredentialEntry[],
+  profile?: string,
+): void {
+  shownPools.set(
+    poolKey(provider, profile),
+    entries.map((e) => e.id).filter((id): id is string => Boolean(id)),
+  );
+}
+
 export async function remoteGetCredentialPool(
   profile?: string,
 ): Promise<Record<string, RemoteCredentialEntry[]>> {
   const pool = await listPool(profile);
-  return Object.fromEntries(
+  const mapped = Object.fromEntries(
     Object.entries(pool).map(([provider, entries]) => [
       provider,
       entries.map(toLocalEntry),
     ]),
   );
+  for (const [provider, entries] of Object.entries(mapped)) {
+    rememberPool(provider, entries, profile);
+  }
+  return mapped;
 }
 
 export async function remoteAddCredentialPoolEntry(
@@ -138,42 +182,60 @@ export async function remoteAddCredentialPoolEntry(
       body: { provider, api_key: apiKey, label: label || undefined },
     },
   );
-  return (await remoteGetCredentialPool(profile))[provider] ?? [];
+  const entries = (await remoteGetCredentialPool(profile))[provider] ?? [];
+  rememberPool(provider, entries, profile);
+  return entries;
 }
 
 /**
  * The renderer removes a key by sending the provider's remaining entries. The
- * server has no "replace" — it deletes by 1-based index — so delete whichever
- * server entries are no longer in the list, highest index first so earlier
- * indexes stay valid. Entries are matched by id; nothing is ever added here.
+ * server has no "replace" — it deletes by 1-based index. The removed entry is
+ * the one the renderer was SHOWN but no longer sends; it is then looked up by
+ * id in a fresh server list, so an entry that another client changed in the
+ * meantime is never deleted by mistake — if the chosen credential is gone, the
+ * call is refused instead. Nothing is ever added here.
  */
 export async function remoteSetCredentialPool(
   provider: string,
   entries: RemoteCredentialEntry[],
   profile?: string,
 ): Promise<boolean> {
-  const keep = new Set(entries.map((e) => e.id).filter(Boolean));
-  const current = (await listPool(profile))[provider] ?? [];
-  const removals = current
-    .filter((e) => e.id && !keep.has(e.id))
-    .map((e) => e.index)
-    .sort((a, b) => b - a);
+  const shown = shownPools.get(poolKey(provider, profile));
+  if (!shown) {
+    throw new Error("Credential list was not loaded; reload and retry.");
+  }
+  const sent = new Set(entries.map((e) => e.id).filter(Boolean));
+  const removedIds = shown.filter((id) => !sent.has(id));
+  if (removedIds.length === 0) return true;
   // The screen removes one key at a time. A bigger diff means the renderer's
   // list is stale or malformed — refuse rather than delete server secrets.
-  if (removals.length > 1) {
+  if (removedIds.length > 1) {
     throw new Error(
       "Refusing to remove multiple remote credentials at once; reload and retry.",
     );
   }
-  for (const index of removals) {
-    await remoteDashboardRequestJson(
-      getConnectionConfig(),
-      profileQuery(
-        `/api/credentials/pool/${encodeURIComponent(provider)}/${index}`,
-        profile,
-      ),
-      { method: "DELETE" },
+  const target = ((await listPool(profile))[provider] ?? []).find(
+    (e) => e.id === removedIds[0],
+  );
+  if (!target) {
+    throw new Error(
+      "That credential no longer exists on the server; reload and retry.",
     );
   }
+  await remoteDashboardRequestJson(
+    getConnectionConfig(),
+    profileQuery(
+      `/api/credentials/pool/${encodeURIComponent(provider)}/${target.index}`,
+      profile,
+    ),
+    { method: "DELETE" },
+  );
+  rememberPool(provider, entries, profile);
   return true;
+}
+
+/** Test seam: forget everything shown to the renderer. */
+export function resetRemoteProvidersState(): void {
+  shownPreviews.clear();
+  shownPools.clear();
 }

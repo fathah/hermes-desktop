@@ -8,6 +8,8 @@ vi.mock("./config", () => ({
 vi.mock("./remote-api", () => ({ remoteDashboardRequestJson: request }));
 
 import {
+  resetRemoteProvidersState,
+  isShownRedactedPreview,
   remoteAddCredentialPoolEntry,
   remoteGetCredentialPool,
   remoteGetEnv,
@@ -30,6 +32,7 @@ const POOL = {
 describe("remote providers env", () => {
   beforeEach(() => {
     request.mockReset();
+    resetRemoteProvidersState();
   });
 
   it("returns only set keys, as redacted previews", async () => {
@@ -48,6 +51,17 @@ describe("remote providers env", () => {
     request.mockClear();
     await remoteSetEnv("OPENAI_API_KEY", "sk-…abcd");
     expect(request).not.toHaveBeenCalled();
+  });
+
+  it("recognises a redacted preview it handed out, so it is never used as a key", async () => {
+    request.mockResolvedValue({
+      OPENAI_API_KEY: { is_set: true, redacted_value: "sk-…abcd" },
+    });
+    expect(isShownRedactedPreview("sk-…abcd")).toBe(false);
+    await remoteGetEnv();
+    expect(isShownRedactedPreview("sk-…abcd")).toBe(true);
+    expect(isShownRedactedPreview("sk-real-looking-key")).toBe(false);
+    expect(isShownRedactedPreview(undefined)).toBe(false);
   });
 
   it("PUTs a new value and DELETEs an empty one", async () => {
@@ -74,6 +88,7 @@ describe("remote providers env", () => {
 describe("remote credential pool", () => {
   beforeEach(() => {
     request.mockReset();
+    resetRemoteProvidersState();
   });
 
   it("maps server entries to the local shape with the redacted preview", async () => {
@@ -97,18 +112,65 @@ describe("remote credential pool", () => {
     expect(entries).toHaveLength(2);
   });
 
-  it("deletes the one entry that disappeared, by 1-based index", async () => {
+  it("deletes the entry the user removed, found by id in a fresh server list", async () => {
+    request.mockResolvedValueOnce(POOL); // what the screen was shown
+    await remoteGetCredentialPool();
+    request.mockClear();
     request.mockResolvedValueOnce(POOL).mockResolvedValueOnce({ ok: true });
     await remoteSetCredentialPool("openai", [{ id: "a1" }]);
     expect(request.mock.calls[1][1]).toBe("/api/credentials/pool/openai/2");
     expect(request.mock.calls[1][2]).toEqual({ method: "DELETE" });
   });
 
+  it("refuses when the credential the user removed was replaced on the server meanwhile", async () => {
+    request.mockResolvedValueOnce(POOL);
+    await remoteGetCredentialPool(); // screen shows [a1, b2]
+    request.mockClear();
+    // Another client replaced b2 with c3: the fresh list is [a1, c3].
+    request.mockResolvedValueOnce({
+      providers: [
+        {
+          provider: "openai",
+          entries: [
+            { index: 1, id: "a1" },
+            { index: 2, id: "c3" },
+          ],
+        },
+      ],
+    });
+    await expect(
+      remoteSetCredentialPool("openai", [{ id: "a1" }]),
+    ).rejects.toThrow(/no longer exists/);
+    // Only the list was read; nothing was deleted.
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses to delete before the list was ever loaded", async () => {
+    await expect(
+      remoteSetCredentialPool("anthropic", [{ id: "x" }]),
+    ).rejects.toThrow(/not loaded/);
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it("refuses to delete more than one credential in a single call", async () => {
     request.mockResolvedValueOnce(POOL);
+    await remoteGetCredentialPool();
+    request.mockClear();
     await expect(remoteSetCredentialPool("openai", [])).rejects.toThrow(
       /multiple/,
     );
-    expect(request).toHaveBeenCalledTimes(1);
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("keeps each profile's pool separate and sends the profile to the server", async () => {
+    request.mockResolvedValue(POOL);
+    await remoteGetCredentialPool("work");
+    expect(request.mock.calls[0][1]).toBe("/api/credentials/pool?profile=work");
+    request.mockClear();
+    // 'default' was never loaded, so removal there is refused even though
+    // 'work' showed the same ids.
+    await expect(
+      remoteSetCredentialPool("openai", [{ id: "a1" }]),
+    ).rejects.toThrow(/not loaded/);
   });
 });

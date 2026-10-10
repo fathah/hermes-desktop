@@ -965,6 +965,7 @@ function Layout({
           {visitedViews.has("providers") && (
             <div style={paneStyle("providers")}>
               <Providers
+                key={connectionId}
                 profile={activeProfile}
                 visible={view === "providers"}
               />
