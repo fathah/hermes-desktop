@@ -17,11 +17,17 @@ export function CapacityCards({ data }: CapacityCardsProps): React.JSX.Element {
           <Database size={16} />
           <span>{t("memory.agentMemory")}</span>
         </div>
-        <CapacityBar
-          used={data.memory.charCount}
-          limit={data.memory.charLimit}
-          label=""
-        />
+        {data.limitsUnknown ? (
+          <div className="memory-capacity-unknown">
+            {t("memory.chars", { count: data.memory.charCount })}
+          </div>
+        ) : (
+          <CapacityBar
+            used={data.memory.charCount}
+            limit={data.memory.charLimit}
+            label=""
+          />
+        )}
         <div className="memory-capacity-card-footer">
           {data.memory.entries.length} {t("memory.memories")}
         </div>
@@ -31,14 +37,22 @@ export function CapacityCards({ data }: CapacityCardsProps): React.JSX.Element {
           <User size={16} />
           <span>{t("memory.userProfile")}</span>
         </div>
-        <CapacityBar
-          used={data.user.charCount}
-          limit={data.user.charLimit}
-          label=""
-        />
-        <div className="memory-capacity-card-footer">
-          {data.stats.totalSessions} {t("memory.sessions")}
-        </div>
+        {data.limitsUnknown ? (
+          <div className="memory-capacity-unknown">
+            {t("memory.chars", { count: data.user.charCount })}
+          </div>
+        ) : (
+          <CapacityBar
+            used={data.user.charCount}
+            limit={data.user.charLimit}
+            label=""
+          />
+        )}
+        {!data.statsUnknown && (
+          <div className="memory-capacity-card-footer">
+            {data.stats.totalSessions} {t("memory.sessions")}
+          </div>
+        )}
       </div>
     </div>
   );

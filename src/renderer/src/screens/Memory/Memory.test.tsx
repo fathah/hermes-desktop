@@ -72,4 +72,30 @@ describe("Memory screen read-only (remote) mode", () => {
     expect(addButton.closest("fieldset")?.disabled).toBe(false);
     expect(screen.queryByRole("note")).toBeNull();
   });
+
+  it("shows the error and a retry instead of spinning forever when the read fails", async () => {
+    Object.defineProperty(window, "hermesAPI", {
+      configurable: true,
+      value: {
+        readMemory: vi.fn().mockRejectedValue(new Error("Sign-in expired")),
+        getConfig: vi.fn().mockResolvedValue(null),
+        discoverMemoryProviders: vi.fn().mockResolvedValue([]),
+      },
+    });
+    render(<Memory readOnly />);
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Sign-in expired",
+    );
+    expect(screen.queryByText("memory.addMemory")).toBeNull();
+  });
+
+  it("does not present default limits or a zero session count as the server's values", async () => {
+    mockApi(memoryData({ limitsUnknown: true, statsUnknown: true }));
+    render(<Memory readOnly />);
+    await screen.findByText("memory.addMemory");
+    // No capacity bar with an invented limit, and no "0 sessions" footer.
+    expect(document.querySelector(".memory-capacity-unknown")).not.toBeNull();
+    expect(screen.queryByText("0 memory.sessions")).toBeNull();
+    expect(screen.queryByText(/memory\.sessions/)).toBeNull();
+  });
 });

@@ -30,6 +30,10 @@ export interface MemoryInfo {
   stats: { totalSessions: number; totalMessages: number };
   /** Remote only: the server API does not expose the file contents. */
   contentUnavailable?: boolean;
+  /** Remote only: the char limits above are defaults, not the server's. */
+  limitsUnknown?: boolean;
+  /** Remote only: the session/message counts are not available. */
+  statsUnknown?: boolean;
 }
 
 function memoryPath(profile?: string): string {

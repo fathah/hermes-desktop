@@ -1,4 +1,4 @@
-import { getConnectionConfig } from "./config";
+import { getConnectionConfig, type ConnectionConfig } from "./config";
 import { remoteDashboardRequestJson } from "./remote-api";
 import { parseMemoryLimitsConfig } from "./memory-limits";
 import type { MemoryInfo } from "./memory";
@@ -19,25 +19,23 @@ function profileName(profile?: string): string {
   return profile?.trim() || "default";
 }
 
-async function serverHome(): Promise<string> {
+async function serverHome(conn: ConnectionConfig): Promise<string> {
   const status = await remoteDashboardRequestJson<{
     hermes_home?: string;
     home?: string;
-  }>(getConnectionConfig(), "/api/status");
+  }>(conn, "/api/status");
   return status?.hermes_home || status?.home || "";
 }
 
 async function readRemoteText(
+  conn: ConnectionConfig,
   path: string,
 ): Promise<{ content: string; exists: boolean }> {
   try {
     const res = await remoteDashboardRequestJson<{
       text?: string;
       binary?: boolean;
-    }>(
-      getConnectionConfig(),
-      `/api/fs/read-text?path=${encodeURIComponent(path)}`,
-    );
+    }>(conn, `/api/fs/read-text?path=${encodeURIComponent(path)}`);
     return { content: res?.binary ? "" : (res?.text ?? ""), exists: true };
   } catch (err) {
     // A missing file is a normal state (no memory written yet); anything else
@@ -50,8 +48,11 @@ async function readRemoteText(
 }
 
 export async function remoteReadMemory(profile?: string): Promise<MemoryInfo> {
+  // One connection for the whole read: the home path belongs to THIS server, so
+  // every follow-up request must go to it even if the user switches meanwhile.
+  const conn = getConnectionConfig();
   const limits = parseMemoryLimitsConfig("");
-  const home = await serverHome();
+  const home = await serverHome(conn);
   const name = profileName(profile);
   const root = name === "default" ? home : `${home}/profiles/${name}`;
   let mem = { content: "", exists: false };
@@ -60,8 +61,8 @@ export async function remoteReadMemory(profile?: string): Promise<MemoryInfo> {
   let sizes: { memory?: number; user?: number } = {};
   try {
     [mem, user] = await Promise.all([
-      readRemoteText(`${root}/memories/MEMORY.md`),
-      readRemoteText(`${root}/memories/USER.md`),
+      readRemoteText(conn, `${root}/memories/MEMORY.md`),
+      readRemoteText(conn, `${root}/memories/USER.md`),
     ]);
   } catch (err) {
     // A hosted/locked dashboard refuses file reads outside its managed root
@@ -70,7 +71,7 @@ export async function remoteReadMemory(profile?: string): Promise<MemoryInfo> {
     // expose (file sizes) and say that the contents are not available.
     if ((err as { statusCode?: number }).statusCode !== 403) throw err;
     contentUnavailable = true;
-    sizes = (await memoryStatus(profile)).builtin_files ?? {};
+    sizes = (await memoryStatus(profile, conn)).builtin_files ?? {};
     mem = { content: "", exists: (sizes.memory ?? 0) > 0 };
     user = { content: "", exists: (sizes.user ?? 0) > 0 };
   }
@@ -97,6 +98,11 @@ export async function remoteReadMemory(profile?: string): Promise<MemoryInfo> {
       charLimit: limits.userCharLimit,
     },
     stats: { totalSessions: 0, totalMessages: 0 },
+    // The server API exposes neither the configured limits nor the session
+    // counts, so these are not measured values: say so instead of showing the
+    // defaults as if they were the server's.
+    limitsUnknown: true,
+    statsUnknown: true,
     ...(contentUnavailable ? { contentUnavailable: true } : {}),
   };
 }
@@ -111,16 +117,16 @@ interface RemoteMemoryStatus {
   }>;
 }
 
-async function memoryStatus(profile?: string): Promise<RemoteMemoryStatus> {
+async function memoryStatus(
+  profile?: string,
+  conn: ConnectionConfig = getConnectionConfig(),
+): Promise<RemoteMemoryStatus> {
   const name = profileName(profile);
   const path =
     name === "default"
       ? "/api/memory"
       : `/api/memory?profile=${encodeURIComponent(name)}`;
-  return remoteDashboardRequestJson<RemoteMemoryStatus>(
-    getConnectionConfig(),
-    path,
-  );
+  return remoteDashboardRequestJson<RemoteMemoryStatus>(conn, path);
 }
 
 export async function remoteActiveMemoryProvider(

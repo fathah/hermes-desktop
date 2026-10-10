@@ -21,26 +21,54 @@ function Memory({
   const [data, setData] = useState<MemoryData | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<MemoryTab>("entries");
-  const [error] = useState("");
+  const [error, setError] = useState("");
   const [memoryProvider, setMemoryProvider] = useState<string | null>(null);
   const [providers, setProviders] = useState<MemoryProviderInfo[]>([]);
 
   const loadData = useCallback(async () => {
-    const [d, provider, provs] = await Promise.all([
-      window.hermesAPI.readMemory(profile),
-      window.hermesAPI.getConfig("memory.provider", profile),
-      window.hermesAPI.discoverMemoryProviders(profile),
-    ]);
-    setData(d as MemoryData);
-    setMemoryProvider(provider);
-    setProviders(provs);
-    setLoading(false);
+    setError("");
+    try {
+      const [d, provider, provs] = await Promise.all([
+        window.hermesAPI.readMemory(profile),
+        window.hermesAPI.getConfig("memory.provider", profile),
+        window.hermesAPI.discoverMemoryProviders(profile),
+      ]);
+      setData(d as MemoryData);
+      setMemoryProvider(provider);
+      setProviders(provs);
+    } catch (err) {
+      // A remote read can reject (offline server, sign-in expired). Say so and
+      // leave the refresh button usable instead of spinning forever.
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
   }, [profile]);
 
   useEffect(() => {
     setLoading(true);
     loadData();
   }, [loadData]);
+
+  if (!loading && !data) {
+    return (
+      <div className="settings-container">
+        <h1 className="settings-header">{t("memory.title")}</h1>
+        <div className="memory-error" role="alert">
+          {error}
+        </div>
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => {
+            setLoading(true);
+            void loadData();
+          }}
+        >
+          <Refresh size={13} />
+        </button>
+      </div>
+    );
+  }
 
   if (loading || !data) {
     return (
@@ -114,7 +142,7 @@ function Memory({
 
       {tab === "soul" && (
         <div className="memory-soul-tab">
-          <Soul profile={profile} />
+          <Soul profile={profile} allowReset={!readOnly} />
         </div>
       )}
     </div>

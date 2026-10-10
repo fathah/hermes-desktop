@@ -1,9 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const request = vi.hoisted(() => vi.fn());
+const connRef = vi.hoisted(() => ({
+  current: { mode: "remote", remoteUrl: "http://r:9119" } as Record<
+    string,
+    unknown
+  >,
+}));
 
 vi.mock("./config", () => ({
-  getConnectionConfig: () => ({ mode: "remote", remoteUrl: "http://r:9119" }),
+  getConnectionConfig: () => connRef.current,
 }));
 vi.mock("./remote-api", () => ({ remoteDashboardRequestJson: request }));
 
@@ -30,6 +36,7 @@ function files(map: Record<string, string | null>): void {
 describe("remote memory", () => {
   beforeEach(() => {
     request.mockReset();
+    connRef.current = { mode: "remote", remoteUrl: "http://r:9119" };
   });
 
   it("reads MEMORY.md and USER.md read-only and splits entries on the § delimiter", async () => {
@@ -128,5 +135,31 @@ describe("remote memory", () => {
       method: "PUT",
       body: { content: "new" },
     });
+  });
+
+  it("sends every request of one read to the connection it started on", async () => {
+    const a = { mode: "remote", remoteUrl: "http://server-a:9119" };
+    const b = { mode: "remote", remoteUrl: "http://server-b:9119" };
+    connRef.current = a;
+    request.mockImplementation(async (conn: unknown, path: string) => {
+      // The user switches to server B while the home lookup is in flight.
+      if (path === "/api/status") {
+        connRef.current = b;
+        return { hermes_home: "/home-a" };
+      }
+      return { text: "x", binary: false };
+    });
+    await remoteReadMemory();
+    expect(request.mock.calls.map((c) => c[0])).toEqual([a, a, a]);
+    expect(request.mock.calls[1][1]).toContain(
+      encodeURIComponent("/home-a/memories/MEMORY.md"),
+    );
+  });
+
+  it("flags the char limits and session counts as unknown rather than inventing them", async () => {
+    files({});
+    const info = await remoteReadMemory();
+    expect(info.limitsUnknown).toBe(true);
+    expect(info.statsUnknown).toBe(true);
   });
 });
