@@ -44,9 +44,14 @@ async function spawnGatewayAction(
   }
 }
 
-export const remoteStartGateway = (profile?: string) =>
-  spawnGatewayAction("start", profile);
-export const remoteStopGateway = (profile?: string) =>
-  spawnGatewayAction("stop", profile);
-export const remoteRestartGateway = (profile?: string) =>
-  spawnGatewayAction("restart", profile);
+type GatewayActionResult = { success: boolean; error?: string };
+
+export const remoteStartGateway = (
+  profile?: string,
+): Promise<GatewayActionResult> => spawnGatewayAction("start", profile);
+export const remoteStopGateway = (
+  profile?: string,
+): Promise<GatewayActionResult> => spawnGatewayAction("stop", profile);
+export const remoteRestartGateway = (
+  profile?: string,
+): Promise<GatewayActionResult> => spawnGatewayAction("restart", profile);
