@@ -141,7 +141,7 @@ describe("remote memory", () => {
     const a = { mode: "remote", remoteUrl: "http://server-a:9119" };
     const b = { mode: "remote", remoteUrl: "http://server-b:9119" };
     connRef.current = a;
-    request.mockImplementation(async (conn: unknown, path: string) => {
+    request.mockImplementation(async (_conn: unknown, path: string) => {
       // The user switches to server B while the home lookup is in flight.
       if (path === "/api/status") {
         connRef.current = b;
