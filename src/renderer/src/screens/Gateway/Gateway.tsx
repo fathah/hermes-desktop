@@ -56,6 +56,19 @@ function Gateway({
     null,
   );
 
+  // A pending "check again in 5 s" must not outlive the screen (or the profile
+  // it was started for): it would write that profile's status into a page that
+  // has moved on.
+  useEffect(
+    () => () => {
+      if (gatewayStatusTimeoutRef.current) {
+        clearTimeout(gatewayStatusTimeoutRef.current);
+        gatewayStatusTimeoutRef.current = null;
+      }
+    },
+    [],
+  );
+
   const loadConfig = useCallback(async (): Promise<void> => {
     setLoadError(null);
     try {

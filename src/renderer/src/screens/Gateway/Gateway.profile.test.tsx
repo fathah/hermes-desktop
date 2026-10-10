@@ -83,4 +83,24 @@ describe("Gateway screen with a selected profile / failing platform list", () =>
     await settle();
     expect(window.hermesAPI.stopGateway).toHaveBeenCalledWith("work");
   });
+
+  it("drops the pending 5 s status check when the screen goes away (profile switch remounts it)", async () => {
+    installApi({ gatewayStatus: vi.fn().mockResolvedValue(false) });
+    const { unmount } = render(<Gateway profile="work" />);
+    await settle();
+    fireEvent.click(screen.getByText("common.start"));
+    await settle();
+    const callsBefore = (
+      window.hermesAPI.gatewayStatus as ReturnType<typeof vi.fn>
+    ).mock.calls.length;
+    unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6000);
+    });
+    // Nothing queried the old profile's status after the unmount.
+    expect(
+      (window.hermesAPI.gatewayStatus as ReturnType<typeof vi.fn>).mock.calls
+        .length,
+    ).toBe(callsBefore);
+  });
 });

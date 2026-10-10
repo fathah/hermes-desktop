@@ -1027,7 +1027,7 @@ function Layout({
           {visitedViews.has("gateway") && (
             <div style={paneStyle("gateway")}>
               <Gateway
-                key={connectionId}
+                key={`${connectionId}::${activeProfile}`}
                 profile={activeProfile}
                 remoteMode={remoteMode}
               />
