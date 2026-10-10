@@ -12,24 +12,31 @@ import { describe, it, expect, vi, afterEach } from "vitest";
  *      on `isRemoteMode()`.
  */
 
-const { TEST_HOME, connModeRef, sshTunnelUrlRef, sshLocalPortRef, spawnSpy } =
-  vi.hoisted(() => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const path = require("path");
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const os = require("os");
-    return {
-      TEST_HOME: path.join(os.tmpdir(), `hermes-remote-test-${Date.now()}`),
-      connModeRef: { mode: "local" as "local" | "remote" | "ssh" },
-      sshTunnelUrlRef: { value: "http://localhost:18642" as string | null },
-      sshLocalPortRef: { value: 18642 as number | undefined },
-      spawnSpy: vi.fn(() => ({
-        unref: () => {},
-        pid: 12345,
-        on: () => {},
-      })),
-    };
-  });
+const {
+  TEST_HOME,
+  connModeRef,
+  connAuthRef,
+  sshTunnelUrlRef,
+  sshLocalPortRef,
+  spawnSpy,
+} = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const path = require("path");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const os = require("os");
+  return {
+    TEST_HOME: path.join(os.tmpdir(), `hermes-remote-test-${Date.now()}`),
+    connModeRef: { mode: "local" as "local" | "remote" | "ssh" },
+    connAuthRef: { mode: undefined as string | undefined, apiKey: "" },
+    sshTunnelUrlRef: { value: "http://localhost:18642" as string | null },
+    sshLocalPortRef: { value: 18642 as number | undefined },
+    spawnSpy: vi.fn(() => ({
+      unref: () => {},
+      pid: 12345,
+      on: () => {},
+    })),
+  };
+});
 
 const dashboardRequestMock = vi.hoisted(() => vi.fn());
 
@@ -52,7 +59,8 @@ vi.mock("../src/main/config", () => ({
   getConnectionConfig: () => ({
     mode: connModeRef.mode,
     remoteUrl: "http://example.com",
-    apiKey: "",
+    apiKey: connAuthRef.apiKey,
+    remoteAuthMode: connAuthRef.mode,
     ssh: {
       host: "",
       port: 22,
@@ -112,6 +120,8 @@ import http from "http";
 afterEach(() => {
   vi.unstubAllGlobals();
   connModeRef.mode = "local";
+  connAuthRef.mode = undefined;
+  connAuthRef.apiKey = "";
   sshTunnelUrlRef.value = "http://localhost:18642";
   sshLocalPortRef.value = 18642;
 });
@@ -342,6 +352,53 @@ describe("Cron SSH fallback", () => {
     );
   });
 
+  it("keeps a keyless gateway working: no token means a plain request, not a failed list", async () => {
+    connModeRef.mode = "remote";
+    sshTunnelUrlRef.value = "http://example.com";
+    dashboardRequestMock.mockReset();
+    dashboardRequestMock.mockImplementation(async () => {
+      throw new Error("Remote Hermes dashboard token is not configured.");
+    });
+    const fetchSpy = vi.fn(async (target: string) => {
+      if (target === "http://example.com/api/cron/jobs") {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [
+            { id: "k1", name: "Keyless", schedule: "* * * * *" },
+          ],
+        } as Response;
+      }
+      throw new Error(`unexpected fetch target: ${target}`);
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const { listCronJobs } = await import("../src/main/cronjobs");
+    expect((await listCronJobs()).map((j) => j.id)).toEqual(["k1"]);
+  });
+
+  it("does not report a job action as done when the OAuth reply was a sign-in page", async () => {
+    connModeRef.mode = "remote";
+    connAuthRef.mode = "oauth";
+    sshTunnelUrlRef.value = "http://example.com";
+    dashboardRequestMock.mockReset();
+    // requestRemoteOAuthJson rejects an HTML body but keeps the HTTP status (200).
+    dashboardRequestMock.mockImplementation(async () => {
+      throw Object.assign(new Error("Remote OAuth returned HTML"), {
+        statusCode: 200,
+      });
+    });
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const { pauseCronJob } = await import("../src/main/cronjobs");
+    const res = await pauseCronJob("j1");
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/HTML/);
+    // And an OAuth remote never falls back to an unauthenticated request.
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it("falls back to gateway /api/jobs when the dashboard cron route is unsupported", async () => {
     connModeRef.mode = "remote";
     sshTunnelUrlRef.value = "http://example.com";
@@ -417,6 +474,58 @@ describe("cronJobsFromResponseBody", () => {
       { id: "b" },
     ]);
     expect(cronJobsFromResponseBody(null)).toEqual([]);
+  });
+});
+
+describe("testRemoteConnection candidate probing", () => {
+  function stubHttp(
+    reply: (target: string) => { status: number; type: string },
+  ): { seen: string[]; restore: () => void } {
+    const seen: string[] = [];
+    const spy = vi
+      .spyOn(http, "request")
+      .mockImplementation((target: unknown, ...rest: unknown[]) => {
+        const url = String(target);
+        seen.push(url);
+        const cb = rest[rest.length - 1] as (res: unknown) => void;
+        const r = reply(url);
+        cb({
+          statusCode: r.status,
+          headers: { "content-type": r.type },
+          resume: () => {},
+        });
+        return {
+          on: () => {},
+          end: () => {},
+          destroy: () => {},
+        } as unknown as ReturnType<typeof http.request>;
+      });
+    return { seen, restore: () => spy.mockRestore() };
+  }
+
+  it("accepts a NEW dashboard URL whose /health is the SPA but whose /api/status is JSON", async () => {
+    connModeRef.mode = "remote"; // saved connection points elsewhere
+    const probe = stubHttp((url) =>
+      url.endsWith("/health")
+        ? { status: 200, type: "text/html; charset=utf-8" }
+        : { status: 200, type: "application/json" },
+    );
+    await expect(
+      testRemoteConnection("http://new-dashboard:9119"),
+    ).resolves.toBe(true);
+    expect(probe.seen).toEqual([
+      "http://new-dashboard:9119/health",
+      "http://new-dashboard:9119/api/status",
+    ]);
+    probe.restore();
+  });
+
+  it("still rejects a URL that answers HTML on both paths", async () => {
+    const probe = stubHttp(() => ({ status: 200, type: "text/html" }));
+    await expect(testRemoteConnection("http://spa-only:9119")).resolves.toBe(
+      false,
+    );
+    probe.restore();
   });
 });
 

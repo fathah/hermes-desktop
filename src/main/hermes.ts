@@ -3791,6 +3791,9 @@ export function testRemoteConnection(
   const resolvedApiKey = resolveRemoteApiKey(url, apiKey);
   if (resolvedApiKey) headers.Authorization = `Bearer ${resolvedApiKey}`;
 
+  // Both the gateway /health and the dashboard /api/status answer JSON. The
+  // dashboard SPA answers every unknown path with HTML 200, so an HTML reply is
+  // never a healthy Hermes endpoint, whichever path was asked.
   const probe = (path: string): Promise<boolean> =>
     new Promise((resolve) => {
       const target = `${normalized}${path}`;
@@ -3799,15 +3802,9 @@ export function testRemoteConnection(
         target,
         { method: "GET", timeout: 5000, headers },
         (res) => {
-          if (path === "/health") {
-            const contentType = String(res.headers?.["content-type"] || "");
-            const looksLikeHtml = contentType
-              .toLowerCase()
-              .includes("text/html");
-            resolve(res.statusCode === 200 && !looksLikeHtml);
-          } else {
-            resolve(res.statusCode === 200);
-          }
+          const contentType = String(res.headers?.["content-type"] || "");
+          const looksLikeHtml = contentType.toLowerCase().includes("text/html");
+          resolve(res.statusCode === 200 && !looksLikeHtml);
           res.resume();
         },
       );
@@ -3819,12 +3816,17 @@ export function testRemoteConnection(
       req.end();
     });
 
-  // Dashboard/OAuth remotes: /api/status is the real liveness probe. Fall back
-  // to gateway /health for auto-mode users still pointed at an api_server URL.
-  if (configuredOAuth || prefersDashboard) {
-    return probe("/api/status").then((ok) => (ok ? true : probe("/health")));
-  }
-  return probe("/health");
+  // Try both: the saved connection says which to prefer, but a candidate URL
+  // (Welcome / Settings test a NEW url before it is saved) may be either a
+  // dashboard or a gateway, so the other probe is always the fallback.
+  const order =
+    configuredOAuth || prefersDashboard
+      ? ["/api/status", "/health"]
+      : ["/health", "/api/status"];
+  return order.reduce<Promise<boolean>>(
+    (acc, path) => acc.then((ok) => (ok ? true : probe(path))),
+    Promise.resolve(false),
+  );
 }
 
 async function waitForApiServerStopped(

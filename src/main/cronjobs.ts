@@ -271,6 +271,11 @@ async function dashboardCronFetch(
 ): Promise<Response> {
   const conn = getConnectionConfig();
   if (conn.mode !== "remote") return remoteFetch(path, init);
+  // A raw gateway without an API key has no session to send. Keep the plain
+  // request for it (as before) rather than failing in the token helper, which
+  // refuses to run without a token.
+  const hasDashboardAuth =
+    conn.remoteAuthMode === "oauth" || Boolean(conn.apiKey?.trim());
 
   const method = (init.method || "GET").toUpperCase() as
     | "GET"
@@ -296,7 +301,14 @@ async function dashboardCronFetch(
       err instanceof RemoteOAuthError
         ? err.statusCode
         : (err as { statusCode?: number }).statusCode;
-    if (!status) throw err;
+    // Only real HTTP failures become a Response. An error without a status, or
+    // one carrying a SUCCESS status (an OAuth redirect to a sign-in page answers
+    // 200 with HTML), must not turn into an "ok" response and report a job
+    // action that never happened as done.
+    if (!status || status < 400) {
+      if (!hasDashboardAuth) return remoteFetch(path, init);
+      throw err;
+    }
     return new Response(JSON.stringify({ error: (err as Error).message }), {
       status,
       headers: { "Content-Type": "application/json" },
