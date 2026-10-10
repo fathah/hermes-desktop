@@ -234,6 +234,28 @@ export async function remoteSetCredentialPool(
   return true;
 }
 
+/**
+ * Model discovery in Remote mode. A key the screen holds is only ever a REDACTED
+ * preview; sending it to the provider as a bearer token fails and reads as a bad
+ * key, so it is dropped. Discovery still runs without it because some providers
+ * (OAuth/catalog ones such as Nous) don't use the key. When a key-based provider
+ * has nothing to list without the real key, report "unsupported" instead of
+ * "no key"/"error" for a key that is in fact set.
+ */
+export async function discoverModelsRemote<
+  R extends { models: unknown[]; status: string },
+>(
+  apiKey: string | undefined,
+  discover: (key: string | undefined) => Promise<R>,
+): Promise<R> {
+  if (!isShownRedactedPreview(apiKey)) return discover(apiKey);
+  const result = await discover(undefined);
+  return result.models.length === 0 &&
+    (result.status === "no-key" || result.status === "error")
+    ? { ...result, status: "unsupported" }
+    : result;
+}
+
 /** Test seam: forget everything shown to the renderer. */
 export function resetRemoteProvidersState(): void {
   shownPreviews.clear();

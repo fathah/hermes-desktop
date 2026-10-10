@@ -8,6 +8,7 @@ vi.mock("./config", () => ({
 vi.mock("./remote-api", () => ({ remoteDashboardRequestJson: request }));
 
 import {
+  discoverModelsRemote,
   resetRemoteProvidersState,
   isShownRedactedPreview,
   remoteAddCredentialPoolEntry,
@@ -172,5 +173,42 @@ describe("remote credential pool", () => {
     await expect(
       remoteSetCredentialPool("openai", [{ id: "a1" }]),
     ).rejects.toThrow(/not loaded/);
+  });
+
+  it("never sends a shown preview to the provider, but still runs key-independent discovery", async () => {
+    request.mockResolvedValue({
+      NOUS_API_KEY: { is_set: true, redacted_value: "nous-…9z" },
+    });
+    await remoteGetEnv();
+    // A catalog/OAuth provider lists models without any key: keep them.
+    const nous = vi
+      .fn()
+      .mockResolvedValue({ models: ["a", "b"], status: "ok" });
+    expect(await discoverModelsRemote("nous-…9z", nous)).toEqual({
+      models: ["a", "b"],
+      status: "ok",
+    });
+    expect(nous).toHaveBeenCalledWith(undefined);
+  });
+
+  it("reports unsupported, not a failed key check, for a key-based provider without the real key", async () => {
+    request.mockResolvedValue({
+      OPENAI_API_KEY: { is_set: true, redacted_value: "sk-…abcd" },
+    });
+    await remoteGetEnv();
+    const openai = vi
+      .fn()
+      .mockResolvedValue({ models: [], status: "no-key", cached: false });
+    expect(await discoverModelsRemote("sk-…abcd", openai)).toMatchObject({
+      models: [],
+      status: "unsupported",
+    });
+    expect(openai).toHaveBeenCalledWith(undefined);
+  });
+
+  it("leaves a real (typed) key untouched", async () => {
+    const discover = vi.fn().mockResolvedValue({ models: ["m"], status: "ok" });
+    await discoverModelsRemote("sk-typed-by-user", discover);
+    expect(discover).toHaveBeenCalledWith("sk-typed-by-user");
   });
 });
