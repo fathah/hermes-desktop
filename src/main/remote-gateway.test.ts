@@ -58,4 +58,18 @@ describe("remote gateway lifecycle", () => {
       error: "409: served by multiplexer",
     });
   });
+
+  it("scopes status, start, stop and restart to the same profile", async () => {
+    request.mockResolvedValue({ ok: true, pid: 1, gateway_running: true });
+    await remoteGatewayStatus("work");
+    await remoteStartGateway("work");
+    await remoteStopGateway("work");
+    await remoteRestartGateway("work");
+    expect(request.mock.calls.map((c) => c[1])).toEqual([
+      "/api/status?profile=work",
+      "/api/gateway/start?profile=work",
+      "/api/gateway/stop?profile=work",
+      "/api/gateway/restart?profile=work",
+    ]);
+  });
 });

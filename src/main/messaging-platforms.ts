@@ -11,7 +11,8 @@ import {
   testMessagingPlatformStatus,
   validateMessagingPlatformUpdate,
 } from "../shared/messaging-platforms";
-import { getApiUrl, getRemoteAuthHeader } from "./hermes";
+import { getConnectionConfig } from "./config";
+import { remoteDashboardRequestJson } from "./remote-api";
 
 export function buildDesktopMessagingPlatforms(
   env: Record<string, string>,
@@ -146,53 +147,43 @@ export function testDesktopMessagingPlatform(
   return testMessagingPlatformStatus(platform);
 }
 
+// Remote messaging goes through the authenticated dashboard boundary: a bare
+// fetch carries no OAuth cookie, so the Gateway page could not load its
+// platform list for OAuth users.
+function remoteMessagingJson<T>(
+  path: string,
+  method: "GET" | "PUT" | "POST" = "GET",
+  body?: unknown,
+): Promise<T> {
+  return remoteDashboardRequestJson<T>(getConnectionConfig(), path, {
+    method,
+    body,
+  });
+}
+
 export async function fetchRemoteMessagingPlatforms(): Promise<MessagingPlatformsResponse> {
-  const res = await remoteMessagingFetch("/api/messaging/platforms");
-  const data = (await res.json()) as MessagingPlatformsResponse;
+  const data = await remoteMessagingJson<MessagingPlatformsResponse>(
+    "/api/messaging/platforms",
+  );
   return { ...data, editable: true, source: "remote-api" };
 }
 
-export async function updateRemoteMessagingPlatform(
+export function updateRemoteMessagingPlatform(
   platformId: string,
   update: MessagingPlatformUpdate,
 ): Promise<{ ok: boolean; platform: string }> {
-  const res = await remoteMessagingFetch(
+  return remoteMessagingJson(
     `/api/messaging/platforms/${encodeURIComponent(platformId)}`,
-    {
-      method: "PUT",
-      body: JSON.stringify(update),
-    },
+    "PUT",
+    update,
   );
-  return (await res.json()) as { ok: boolean; platform: string };
 }
 
-export async function testRemoteMessagingPlatform(
+export function testRemoteMessagingPlatform(
   platformId: string,
 ): Promise<MessagingPlatformTestResponse> {
-  const res = await remoteMessagingFetch(
+  return remoteMessagingJson(
     `/api/messaging/platforms/${encodeURIComponent(platformId)}/test`,
-    { method: "POST" },
+    "POST",
   );
-  return (await res.json()) as MessagingPlatformTestResponse;
-}
-
-async function remoteMessagingFetch(
-  path: string,
-  init: RequestInit = {},
-): Promise<Response> {
-  const headers: Record<string, string> = {
-    ...getRemoteAuthHeader(),
-    ...((init.headers as Record<string, string>) || {}),
-  };
-  if (init.body && !headers["Content-Type"]) {
-    headers["Content-Type"] = "application/json";
-  }
-  const res = await fetch(`${getApiUrl()}${path}`, { ...init, headers });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(
-      text || `Messaging platform API failed with HTTP ${res.status}`,
-    );
-  }
-  return res;
 }

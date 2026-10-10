@@ -2093,7 +2093,7 @@ export function registerIpcHandlers(context: IpcContext): void {
   );
 
   // Gateway
-  ipcMain.handle("start-gateway", async () => {
+  ipcMain.handle("start-gateway", async (_event, profile?: string) => {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh) {
       await sshStartGateway(conn.ssh);
@@ -2103,7 +2103,7 @@ export function registerIpcHandlers(context: IpcContext): void {
       // The remote server runs its own gateway; ask the dashboard to start it.
       // Never fall through to `startGateway()` — that would spawn a
       // non-existent local hermes-agent (issue #266).
-      const result = await remoteStartGateway();
+      const result = await remoteStartGateway(profile);
       return {
         success: result.success,
         running: false,
@@ -2112,14 +2112,14 @@ export function registerIpcHandlers(context: IpcContext): void {
     }
     return startGatewayDetailed();
   });
-  ipcMain.handle("stop-gateway", async () => {
+  ipcMain.handle("stop-gateway", async (_event, profile?: string) => {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh) {
       await sshStopGateway(conn.ssh);
       return true;
     }
     if (conn.mode === "remote") {
-      const result = await remoteStopGateway();
+      const result = await remoteStopGateway(profile);
       if (!result.success) throw new Error(result.error);
       return true;
     }
@@ -2140,10 +2140,10 @@ export function registerIpcHandlers(context: IpcContext): void {
     }
     return restartGateway(profile);
   });
-  ipcMain.handle("gateway-status", () => {
+  ipcMain.handle("gateway-status", (_event, profile?: string) => {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh) return sshGatewayStatus(conn.ssh);
-    if (conn.mode === "remote") return remoteGatewayStatus();
+    if (conn.mode === "remote") return remoteGatewayStatus(profile);
     return isGatewayRunning();
   });
 

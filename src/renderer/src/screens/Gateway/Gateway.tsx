@@ -59,20 +59,38 @@ function Gateway({
   const loadConfig = useCallback(async (): Promise<void> => {
     setLoadError(null);
     try {
-      const [gwStatus, platforms] = await Promise.all([
-        window.hermesAPI.gatewayStatus(),
+      // Independent requests: a failing platform list must not discard a
+      // successful status (the page would stay "stopped" with no controls).
+      const [statusResult, platformsResult] = await Promise.allSettled([
+        window.hermesAPI.gatewayStatus(profile),
         window.hermesAPI.getMessagingPlatforms(profile),
       ]);
-      setGatewayRunning(gwStatus);
-      // Clear stale start-failure banners once the gateway is confirmed up,
-      // but keep an explicit restart failure visible: a failed recovery can
-      // leave the old gateway running while still needing user attention.
-      if (gwStatus) {
-        setGatewayError((current) =>
-          current === t("gateway.restartFailed") ? current : null,
+      if (statusResult.status === "fulfilled") {
+        const gwStatus = statusResult.value;
+        setGatewayRunning(gwStatus);
+        // Clear stale start-failure banners once the gateway is confirmed up,
+        // but keep an explicit restart failure visible: a failed recovery can
+        // leave the old gateway running while still needing user attention.
+        if (gwStatus) {
+          setGatewayError((current) =>
+            current === t("gateway.restartFailed") ? current : null,
+          );
+        }
+      }
+      if (platformsResult.status === "fulfilled") {
+        setCatalog(platformsResult.value);
+      }
+      const failure =
+        platformsResult.status === "rejected"
+          ? platformsResult.reason
+          : statusResult.status === "rejected"
+            ? statusResult.reason
+            : null;
+      if (failure) {
+        setLoadError(
+          failure instanceof Error ? failure.message : String(failure),
         );
       }
-      setCatalog(platforms);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err));
     }
@@ -140,7 +158,7 @@ function Gateway({
     setGatewayError(null);
     if (gatewayRunning) {
       try {
-        await window.hermesAPI.stopGateway();
+        await window.hermesAPI.stopGateway(profile);
         setGatewayRunning(false);
       } catch (err) {
         setGatewayError(
@@ -151,7 +169,7 @@ function Gateway({
       }
     } else {
       try {
-        const result = await window.hermesAPI.startGateway();
+        const result = await window.hermesAPI.startGateway(profile);
         setGatewayRunning(result.running);
         if (!result.success) {
           setGatewayError(
@@ -164,7 +182,7 @@ function Gateway({
         gatewayStatusTimeoutRef.current = setTimeout(() => {
           // Refresh status + platform catalog once the adapters have had a
           // moment to come up; surface an error if it exited immediately.
-          void window.hermesAPI.gatewayStatus().then((status) => {
+          void window.hermesAPI.gatewayStatus(profile).then((status) => {
             setGatewayRunning(status);
             if (status) {
               void loadConfig();
@@ -204,7 +222,7 @@ function Gateway({
         setGatewayError(t("gateway.restartFailed"));
       } else {
         gatewayStatusTimeoutRef.current = setTimeout(async () => {
-          const status = await window.hermesAPI.gatewayStatus();
+          const status = await window.hermesAPI.gatewayStatus(profile);
           setGatewayRunning(status);
           if (status) {
             void loadConfig();
