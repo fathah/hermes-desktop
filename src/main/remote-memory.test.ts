@@ -15,7 +15,7 @@ import {
   remoteWriteSoul,
 } from "./remote-memory";
 
-function files(map: Record<string, string | null>) {
+function files(map: Record<string, string | null>): void {
   request.mockImplementation(async (_conn: unknown, path: string) => {
     if (path === "/api/status") return { hermes_home: "/root/.hermes" };
     const file = decodeURIComponent(path.split("path=")[1] ?? "");
