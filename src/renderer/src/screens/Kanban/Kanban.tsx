@@ -17,6 +17,9 @@ import { OrbLoader } from "../../components/OrbLoader";
 interface KanbanProps {
   profile?: string;
   visible?: boolean;
+  /** Remote: the workspace lives on the SERVER, so a folder picked on this
+   *  machine is meaningless there — the path is typed instead. */
+  remoteMode?: boolean;
 }
 
 interface KanbanTask {
@@ -225,7 +228,11 @@ function ageLabel(createdAt: number | null): string {
   return `${Math.floor(seconds / 86400)}d`;
 }
 
-function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
+function Kanban({
+  profile,
+  visible,
+  remoteMode = false,
+}: KanbanProps): React.JSX.Element {
   const { t } = useI18n();
   const [boards, setBoards] = useState<KanbanBoard[]>([]);
   const [tasks, setTasks] = useState<KanbanTask[]>([]);
@@ -1154,16 +1161,22 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
                       type="text"
                       value={newWorkspaceDir}
                       onChange={(e) => setNewWorkspaceDir(e.target.value)}
-                      placeholder={t("kanban.workspaceNoFolder")}
-                      readOnly
+                      placeholder={
+                        remoteMode
+                          ? t("kanban.workspaceServerPath")
+                          : t("kanban.workspaceNoFolder")
+                      }
+                      readOnly={!remoteMode}
                     />
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={handlePickWorkspaceFolder}
-                    >
-                      {t("kanban.browse")}
-                    </button>
+                    {!remoteMode && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={handlePickWorkspaceFolder}
+                      >
+                        {t("kanban.browse")}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

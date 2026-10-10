@@ -16,10 +16,23 @@ import type {
 // ?board=. `POST /boards/{slug}/switch` is deliberately NOT used: it persists
 // the server-wide "current board" that the CLI and slash commands read, which a
 // desktop view switch must not change behind the user's back.
+//
+// The selection belongs to ONE server + profile pair. It is stored under that
+// key, so switching to another server (or profile) starts from that target's
+// own current board, and a slow response for the old target can only ever
+// write to the old target's entry.
 
 const BASE = "/api/plugins/kanban";
 
-let selectedBoard: string | null = null;
+const selectedBoards = new Map<string, string>();
+
+function targetKey(profile?: string): string {
+  return `${getConnectionConfig().remoteUrl}\u0000${profile || "default"}`;
+}
+
+function selectedFor(profile?: string): string | null {
+  return selectedBoards.get(targetKey(profile)) ?? null;
+}
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -47,7 +60,8 @@ async function api<T>(
   } = {},
 ): Promise<T> {
   const query = { ...(options.query ?? {}) };
-  if (options.board !== false && selectedBoard) query.board = selectedBoard;
+  const selected = selectedFor(options.profile);
+  if (options.board !== false && selected) query.board = selected;
   return remoteDashboardRequestJson<T>(
     getConnectionConfig(),
     withQuery(`${BASE}${path}`, query),
@@ -94,6 +108,7 @@ export function remoteListBoards(
   includeArchived: boolean,
   profile?: string,
 ): Promise<KanbanResult<KanbanBoard[]>> {
+  const selected = selectedFor(profile);
   return run(async () => {
     const res = await api<{ boards?: KanbanBoard[]; current?: string }>(
       "GET",
@@ -104,7 +119,7 @@ export function remoteListBoards(
         board: false,
       },
     );
-    const current = selectedBoard || res.current;
+    const current = selected || res.current;
     return (res.boards ?? []).map((b) => ({
       ...b,
       is_current: b.slug === current,
@@ -116,7 +131,8 @@ export function remoteCurrentBoard(
   profile?: string,
 ): Promise<KanbanResult<string>> {
   return run(async () => {
-    if (selectedBoard) return selectedBoard;
+    const selected = selectedFor(profile);
+    if (selected) return selected;
     const res = await api<{ current?: string }>("GET", "/boards", {
       profile,
       board: false,
@@ -129,6 +145,9 @@ export function remoteSwitchBoard(
   slug: string,
   profile?: string,
 ): Promise<KanbanResult<void>> {
+  // Fixed before any await: a reply that arrives after the user moved to another
+  // server or profile must not select a board there.
+  const key = targetKey(profile);
   return runVoid(async () => {
     // Validate against the server's list so a stale slug can't be selected.
     const res = await api<{ boards?: Array<{ slug: string }> }>(
@@ -139,7 +158,7 @@ export function remoteSwitchBoard(
     if (!(res.boards ?? []).some((b) => b.slug === slug)) {
       throw new Error(`Unknown board: ${slug}`);
     }
-    selectedBoard = slug;
+    selectedBoards.set(key, slug);
   });
 }
 
@@ -149,13 +168,14 @@ export function remoteCreateBoard(
   switchAfter: boolean,
   profile?: string,
 ): Promise<KanbanResult<void>> {
+  const key = targetKey(profile);
   return runVoid(async () => {
     await api("POST", "/boards", {
       body: { slug, name: name || undefined, switch: false },
       profile,
       board: false,
     });
-    if (switchAfter) selectedBoard = slug;
+    if (switchAfter) selectedBoards.set(key, slug);
   });
 }
 
@@ -164,13 +184,14 @@ export function remoteRemoveBoard(
   hardDelete: boolean,
   profile?: string,
 ): Promise<KanbanResult<void>> {
+  const key = targetKey(profile);
   return runVoid(async () => {
     await api("DELETE", `/boards/${encodeURIComponent(slug)}`, {
       query: { delete: hardDelete || undefined },
       profile,
       board: false,
     });
-    if (selectedBoard === slug) selectedBoard = null;
+    if (selectedBoards.get(key) === slug) selectedBoards.delete(key);
   });
 }
 
@@ -379,5 +400,5 @@ export function remoteDispatchOnce(
 
 /** Test seam: forget the locally selected board. */
 export function resetRemoteKanbanState(): void {
-  selectedBoard = null;
+  selectedBoards.clear();
 }

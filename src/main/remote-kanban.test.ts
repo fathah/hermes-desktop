@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const request = vi.hoisted(() => vi.fn());
+const conn = vi.hoisted(() => ({ url: "http://r:9119" }));
 
 vi.mock("./config", () => ({
-  getConnectionConfig: () => ({ mode: "remote", remoteUrl: "http://r:9119" }),
+  getConnectionConfig: () => ({ mode: "remote", remoteUrl: conn.url }),
 }));
 vi.mock("./remote-api", () => ({ remoteDashboardRequestJson: request }));
 
@@ -26,6 +27,7 @@ const call = (n: number): any[] => request.mock.calls[n]; // eslint-disable-line
 describe("remote kanban", () => {
   beforeEach(() => {
     request.mockReset();
+    conn.url = "http://r:9119";
     resetRemoteKanbanState();
   });
 
@@ -148,5 +150,53 @@ describe("remote kanban", () => {
     });
     const res = await remoteListTasks({});
     expect(res.error).toMatch(/kanban dashboard plugin/);
+  });
+
+  it("scopes the selected board to the server and profile it was chosen on", async () => {
+    request.mockResolvedValue({
+      boards: [{ slug: "default" }, { slug: "ops" }],
+      current: "default",
+    });
+    await remoteSwitchBoard("ops"); // on server A, default profile
+    conn.url = "http://server-b:9119";
+    // Server B has its own current board; A's "ops" must not leak into it.
+    expect((await remoteCurrentBoard()).data).toBe("default");
+    request.mockClear();
+    request.mockResolvedValue({ columns: [] });
+    await remoteListTasks({});
+    expect(call(0)[1]).toBe("/api/plugins/kanban/board");
+    // Back on A the selection is still there.
+    conn.url = "http://r:9119";
+    request.mockClear();
+    request.mockResolvedValue({ columns: [] });
+    await remoteListTasks({});
+    expect(call(0)[1]).toBe("/api/plugins/kanban/board?board=ops");
+    // Another profile on the same server starts clean too.
+    request.mockClear();
+    request.mockResolvedValue({ columns: [] });
+    await remoteListTasks({ profile: "work" });
+    expect(call(0)[1]).toBe("/api/plugins/kanban/board");
+  });
+
+  it("a switch that resolves after moving to another server selects the board only on its own server", async () => {
+    let release: (v: unknown) => void = () => {};
+    request.mockImplementationOnce(
+      () => new Promise((resolve) => (release = resolve)),
+    );
+    const pending = remoteSwitchBoard("ops"); // issued while on server A
+    conn.url = "http://server-b:9119"; // user moves to B before the reply
+    release({ boards: [{ slug: "ops" }], current: "default" });
+    await pending;
+    // B is unaffected...
+    request.mockClear();
+    request.mockResolvedValue({ columns: [] });
+    await remoteListTasks({});
+    expect(call(0)[1]).toBe("/api/plugins/kanban/board");
+    // ...and the selection landed on A.
+    conn.url = "http://r:9119";
+    request.mockClear();
+    request.mockResolvedValue({ columns: [] });
+    await remoteListTasks({});
+    expect(call(0)[1]).toBe("/api/plugins/kanban/board?board=ops");
   });
 });
