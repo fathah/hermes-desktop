@@ -270,20 +270,21 @@ export const remoteAssignTask = (
   taskId: string,
   assignee: string | null,
   profile?: string,
-) => patchTask(taskId, { assignee: assignee ?? "" }, profile);
+): Promise<KanbanResult<void>> =>
+  patchTask(taskId, { assignee: assignee ?? "" }, profile);
 
 export const remoteCompleteTask = (
   taskId: string,
   result?: string,
   profile?: string,
-) =>
+): Promise<KanbanResult<void>> =>
   patchTask(taskId, { status: "done", result: result || undefined }, profile);
 
 export const remoteBlockTask = (
   taskId: string,
   reason?: string,
   profile?: string,
-) =>
+): Promise<KanbanResult<void>> =>
   patchTask(
     taskId,
     { status: "blocked", block_reason: reason || undefined },
@@ -293,18 +294,24 @@ export const remoteBlockTask = (
 // "ready" from blocked/scheduled re-opens via unblock; from todo it promotes.
 // The server refuses (409, naming the open parents) when dependencies aren't
 // done — the same guard `hermes kanban promote` applies, never forced.
-export const remoteUnblockTask = (taskId: string, profile?: string) =>
+export const remoteUnblockTask = (
+  taskId: string,
+  profile?: string,
+): Promise<KanbanResult<void>> =>
   patchTask(taskId, { status: "ready" }, profile);
-export const remotePromoteTask = remoteUnblockTask;
+export const remotePromoteTask: typeof remoteUnblockTask = remoteUnblockTask;
 
-export const remoteArchiveTask = (taskId: string, profile?: string) =>
+export const remoteArchiveTask = (
+  taskId: string,
+  profile?: string,
+): Promise<KanbanResult<void>> =>
   patchTask(taskId, { status: "archived" }, profile);
 
 export const remoteScheduleTask = (
   taskId: string,
   reason?: string,
   profile?: string,
-) =>
+): Promise<KanbanResult<void>> =>
   patchTask(
     taskId,
     { status: "scheduled", block_reason: reason || undefined },

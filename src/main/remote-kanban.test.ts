@@ -21,7 +21,7 @@ import {
   resetRemoteKanbanState,
 } from "./remote-kanban";
 
-const call = (n: number) => request.mock.calls[n];
+const call = (n: number): any[] => request.mock.calls[n]; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 describe("remote kanban", () => {
   beforeEach(() => {
