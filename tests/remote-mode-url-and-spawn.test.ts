@@ -267,6 +267,81 @@ describe("Cron SSH fallback", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it("returns an empty list (not a throw) when the dashboard rejects the session", async () => {
+    connModeRef.mode = "remote";
+    sshTunnelUrlRef.value = "http://example.com";
+    dashboardRequestMock.mockReset();
+    dashboardRequestMock.mockImplementation(async () => {
+      throw Object.assign(new Error("unauthenticated"), { statusCode: 401 });
+    });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubGlobal("fetch", vi.fn());
+
+    const { listCronJobs } = await import("../src/main/cronjobs");
+    expect(await listCronJobs()).toEqual([]);
+    expect(errorSpy).toHaveBeenCalledWith(
+      "[CRON] remote list failed:",
+      "unauthenticated",
+    );
+    errorSpy.mockRestore();
+  });
+
+  it("sends cron mutations to the dashboard with a parsed JSON body and /trigger for run", async () => {
+    connModeRef.mode = "remote";
+    sshTunnelUrlRef.value = "http://example.com";
+    dashboardRequestMock.mockReset();
+    dashboardRequestMock.mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", vi.fn());
+
+    const { createCronJob, pauseCronJob, triggerCronJob, removeCronJob } =
+      await import("../src/main/cronjobs");
+    expect(
+      (await createCronJob("every 30m", "ping", "nas-watch", "local")).success,
+    ).toBe(true);
+    expect((await pauseCronJob("j1")).success).toBe(true);
+    expect((await triggerCronJob("j1")).success).toBe(true);
+    expect((await removeCronJob("j1")).success).toBe(true);
+
+    const calls = dashboardRequestMock.mock.calls.map((c) => [
+      c[1],
+      c[2].method,
+      c[2].body,
+    ]);
+    expect(calls).toEqual([
+      [
+        "/api/cron/jobs",
+        "POST",
+        {
+          name: "nas-watch",
+          schedule: "every 30m",
+          prompt: "ping",
+          deliver: "local",
+        },
+      ],
+      ["/api/cron/jobs/j1/pause", "POST", undefined],
+      ["/api/cron/jobs/j1/trigger", "POST", undefined],
+      ["/api/cron/jobs/j1", "DELETE", undefined],
+    ]);
+  });
+
+  it("maps /trigger to the gateway /run when only the legacy route exists", async () => {
+    connModeRef.mode = "remote";
+    sshTunnelUrlRef.value = "http://example.com";
+    dashboardRequestMock.mockReset();
+    dashboardRequestMock.mockImplementation(async () => {
+      throw Object.assign(new Error("Not Found"), { statusCode: 404 });
+    });
+    const fetchSpy = vi.fn(async () => ({ ok: true, status: 200 }) as Response);
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const { triggerCronJob } = await import("../src/main/cronjobs");
+    expect((await triggerCronJob("j1")).success).toBe(true);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "http://example.com/api/jobs/j1/run",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
   it("falls back to gateway /api/jobs when the dashboard cron route is unsupported", async () => {
     connModeRef.mode = "remote";
     sshTunnelUrlRef.value = "http://example.com";
