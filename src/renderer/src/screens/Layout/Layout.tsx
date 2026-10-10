@@ -931,6 +931,8 @@ function Layout({
           {visitedViews.has("discover") && (
             <div style={paneStyle("discover")}>
               <Discover
+                key={connectionId}
+                browseOnly={remoteMode}
                 profile={activeProfile}
                 visible={view === "discover"}
                 focusKind={discoverFocus ?? undefined}
