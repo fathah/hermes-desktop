@@ -46,6 +46,10 @@ function Memory({
   }, [profile]);
 
   useEffect(() => {
+    // A different profile: drop the previous one's data NOW. If this load fails,
+    // the old entries would otherwise stay on screen under the new profile name
+    // and an edit or delete would hit the wrong profile's memory.
+    setData(null);
     setLoading(true);
     loadData();
   }, [loadData]);

@@ -98,4 +98,24 @@ describe("Memory screen read-only (remote) mode", () => {
     expect(screen.queryByText("0 memory.sessions")).toBeNull();
     expect(screen.queryByText(/memory\.sessions/)).toBeNull();
   });
+
+  it("does not keep the previous profile's entries on screen when the next profile fails to load", async () => {
+    Object.defineProperty(window, "hermesAPI", {
+      configurable: true,
+      value: {
+        readMemory: vi.fn().mockImplementation(async (profile?: string) => {
+          if (profile === "work") throw new Error("offline");
+          return memoryData();
+        }),
+        getConfig: vi.fn().mockResolvedValue(null),
+        discoverMemoryProviders: vi.fn().mockResolvedValue([]),
+      },
+    });
+    const { rerender } = render(<Memory profile="default" />);
+    expect(await screen.findByText("memory.addMemory")).toBeTruthy();
+    rerender(<Memory profile="work" />);
+    expect((await screen.findByRole("alert")).textContent).toContain("offline");
+    // The default profile's entry controls are gone, not left editable.
+    expect(screen.queryByText("memory.addMemory")).toBeNull();
+  });
 });
