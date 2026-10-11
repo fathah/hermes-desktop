@@ -8,10 +8,12 @@ import {
 import {
   getAgentCapabilityEvidence,
   getCachedAgentCapabilityEvidence,
+  isGatewayHealthy,
   isGatewayRunning,
   testRemoteConnection,
 } from "./hermes";
 import { getHermesVersion } from "./installer";
+import { getActiveProfileNameSync } from "./utils";
 import { probeRemoteAuthMode, remoteOAuthSessionState } from "./remote-oauth";
 import { sshGatewayStatus, sshGetHermesVersion } from "./ssh-remote";
 
@@ -32,7 +34,15 @@ async function probeConnection(
   const { config } = connection;
 
   if (config.mode === "local") {
-    const health = isGatewayRunning(profile) ? "online" : "offline";
+    // getProfilePort() may persist a new port for named profiles. Status
+    // reads must not reconfigure an already-running named gateway.
+    const isDefaultProfile =
+      (profile ?? getActiveProfileNameSync()) === "default";
+    const health =
+      isGatewayRunning(profile) &&
+      (!isDefaultProfile || (await isGatewayHealthy(profile, config)))
+        ? "online"
+        : "offline";
     return {
       health,
       latencyMs: elapsed(startedAt),

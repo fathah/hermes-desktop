@@ -124,6 +124,7 @@ import {
   startGateway,
   startGatewayDetailed,
   stopGateway,
+  assertLocalGatewayKeyMutationAllowed,
   isGatewayRunning,
   testRemoteConnection,
   restartGateway,
@@ -1100,6 +1101,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         await sshSetEnvValue(conn.ssh, key, value, profile);
         return true;
       }
+      assertLocalGatewayKeyMutationAllowed(key, profile);
       setEnvValue(key, value, profile);
       // Restart gateway so it picks up the new API key.
       // The earlier condition had a precedence bug —
@@ -1135,6 +1137,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         await sshSetConfigValue(conn.ssh, key, value, profile);
         return true;
       }
+      assertLocalGatewayKeyMutationAllowed(key, profile);
       setConfigValue(key, value, profile);
       return true;
     },
@@ -1338,6 +1341,9 @@ export function registerIpcHandlers(context: IpcContext): void {
   ipcMain.handle(
     "generate-api-server-key",
     async (_event, profile?: string) => {
+      // This action also writes the default home's key for named profiles.
+      // Refuse before either write when a service owns the live gateway.
+      assertLocalGatewayKeyMutationAllowed("API_SERVER_KEY", "default");
       const { randomUUID } = await import("crypto");
       const key = `desk-${randomUUID()}`;
       // Write to both the active profile .env and the default .env so the
@@ -2118,7 +2124,11 @@ export function registerIpcHandlers(context: IpcContext): void {
     }
     // No profile argument → stops the active profile's gateway, leaving any
     // other profiles' gateways running.
-    stopGateway(undefined, true);
+    if (!stopGateway(undefined, true)) {
+      throw new Error(
+        "This gateway is managed outside Hermes One. Stop it with the Hermes CLI or its service manager.",
+      );
+    }
     return true;
   });
   ipcMain.handle("restart-gateway", async (_event, profile?: string) => {
