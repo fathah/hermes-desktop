@@ -11,6 +11,9 @@ const state = vi.hoisted(() => ({
   children: [] as ChildProcess[],
   ignoresTerm: false,
   responseDelay: 0,
+  exitsOnStart: false,
+  webSocketFailure: false,
+  compatibilityWarning: false,
 }));
 vi.mock("../src/main/config", () => ({
   getConnectionConfig: () => ({ mode: "local" }),
@@ -32,7 +35,14 @@ vi.mock("../src/main/utils", async (original) => ({
   getActiveProfileNameSync: () => state.active,
 }));
 vi.mock("../src/main/hermes-agent-compat", () => ({
-  ensureLocalDashboardCompatibility: () => ({ ok: true }),
+  ensureLocalDashboardCompatibility: () =>
+    state.compatibilityWarning
+      ? {
+          ok: false,
+          detail: "Fixture compatibility",
+          error: "fixture patch failed",
+        }
+      : { ok: true },
 }));
 vi.mock("../src/main/ssh-tunnel", () => ({}));
 vi.mock("../src/main/ssh-remote", () => ({}));
@@ -49,10 +59,15 @@ vi.mock("child_process", async (original) => {
           "-e",
           `
       const http = require('http');
+      if (${state.exitsOnStart}) process.exit(17);
       if (${state.ignoresTerm}) process.on('SIGTERM', () => {});
       const server = http.createServer((req, res) => setTimeout(() => res.end('{}'), ${state.responseDelay}));
       server.on('upgrade', (req, socket) => {
         socket.on('error', () => {});
+        if (${state.webSocketFailure}) {
+          socket.end('HTTP/1.1 503 Service Unavailable\\r\\nContent-Length: 13\\r\\n\\r\\nfixture-error');
+          return;
+        }
         socket.write('HTTP/1.1 101 Switching Protocols\\r\\nConnection: Upgrade\\r\\nUpgrade: websocket\\r\\n\\r\\n');
       });
       server.listen(${port}, '127.0.0.1');
@@ -77,6 +92,9 @@ beforeEach(() => {
   state.active = "default";
   state.ignoresTerm = false;
   state.responseDelay = 0;
+  state.exitsOnStart = false;
+  state.webSocketFailure = false;
+  state.compatibilityWarning = false;
 });
 afterEach(async () => {
   state.active = "default";
@@ -216,6 +234,43 @@ it("gives duplicate starts the same stopped outcome when an existing child is sy
   expect((await second).running).toBe(false);
   expect(await stopped).toBe(true);
   expect(state.children).toHaveLength(1);
+});
+
+// @lat: [[dashboard-shutdown#Startup crash diagnostics]]
+it("preserves a crashed child's failure and log path for duplicate startup callers", async () => {
+  state.exitsOnStart = true;
+  const [first, second] = await Promise.all([
+    startDashboard("crashing"),
+    startDashboard("crashing"),
+  ]);
+  expect(first).toMatchObject({
+    running: false,
+    error: expect.stringContaining("exited during startup (17)"),
+    logPath: expect.stringContaining(state.home),
+  });
+  expect(second).toEqual(first);
+  expect(state.children).toHaveLength(1);
+});
+
+// @lat: [[dashboard-shutdown#Failed probe diagnostics]]
+it("retains a failed WebSocket probe's error, compatibility detail and log after cleanup", async () => {
+  state.webSocketFailure = true;
+  state.compatibilityWarning = true;
+  const result = await startDashboard("failed-probe");
+  expect(result).toMatchObject({
+    running: false,
+    error: expect.stringContaining(
+      "WebSocket is unavailable (503: fixture-error)",
+    ),
+    logPath: expect.stringContaining(state.home),
+  });
+  expect(result.error).toContain(
+    "compatibility: Fixture compatibility: fixture patch failed",
+  );
+  expect(
+    state.children[0].exitCode !== null ||
+      state.children[0].signalCode !== null,
+  ).toBe(true);
 });
 
 // @lat: [[dashboard-shutdown#Quit launch admission]]

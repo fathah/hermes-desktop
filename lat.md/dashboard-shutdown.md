@@ -86,3 +86,11 @@ Stopping a launch before port selection completes prevents its child from spawni
 ## Shared ready-launch cancellation
 
 Duplicate starts share one normalized outcome when an existing child is stopped before either caller resolves; no caller reports the stopped child as running. Covered by [[tests/dashboard-shutdown.test.ts]].
+
+## Startup crash diagnostics
+
+A child that exits during startup reports its exit reason and log path to every pending caller. Natural failure stays distinct from an explicit stop or app quit.
+
+## Failed probe diagnostics
+
+A failed WebSocket readiness probe keeps its error, compatibility detail and log path after terminating the owned child, so cleanup does not erase troubleshooting information.

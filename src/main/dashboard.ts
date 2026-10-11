@@ -70,7 +70,11 @@ const stopping = new Map<ChildProcess, Promise<boolean>>();
 const stoppingProfiles = new Map<string, Promise<boolean>>();
 const starting = new Map<
   string,
-  { promise: Promise<DashboardStatus>; controller: AbortController }
+  {
+    promise: Promise<DashboardStatus>;
+    controller: AbortController;
+    cancellation: { requested: boolean };
+  }
 >();
 let shutdownStarted = false;
 
@@ -693,10 +697,14 @@ export async function startDashboard(
   const pending = starting.get(key);
   if (pending) return pending.promise;
   const controller = new AbortController();
+  const cancellation = { requested: false };
   const launch = startLocalDashboard(resolvedProfile, key, controller).then(
-    (result) => (controller.signal.aborted ? stoppedStartupStatus() : result),
+    (result) =>
+      shutdownStarted || cancellation.requested
+        ? stoppedStartupStatus()
+        : result,
   );
-  const entry = { promise: launch, controller };
+  const entry = { promise: launch, controller, cancellation };
   starting.set(key, entry);
   try {
     return await launch;
@@ -789,9 +797,11 @@ async function startLocalDashboard(
   };
 
   dashboards.set(key, { proc, connection });
-  proc.once("exit", () => {
+  proc.once("exit", (code, signal) => {
     if (dashboards.get(key)?.proc === proc) dashboards.delete(key);
-    controller.abort();
+    controller.abort(
+      new Error(`Hermes dashboard exited during startup (${signal || code}).`),
+    );
   });
 
   try {
@@ -818,8 +828,17 @@ async function startLocalDashboard(
     };
   }
 
-  if (shutdownStarted || controller.signal.aborted)
-    return stoppedStartupStatus();
+  if (shutdownStarted) return shutdownStatus();
+  if (controller.signal.aborted)
+    return {
+      supported: true,
+      running: false,
+      logPath,
+      error:
+        controller.signal.reason instanceof Error
+          ? controller.signal.reason.message
+          : "Hermes dashboard exited during startup.",
+    };
   return { supported: true, running: true, connection, logPath };
 }
 
@@ -827,6 +846,7 @@ export async function stopDashboard(profile?: string): Promise<boolean> {
   const key = profileKey(profile);
   const launch = starting.get(key);
   starting.delete(key);
+  if (launch) launch.cancellation.requested = true;
   launch?.controller.abort();
   const managed = dashboards.get(key);
   if (!managed) return stoppingProfiles.get(key) ?? true;
