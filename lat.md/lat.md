@@ -38,4 +38,6 @@ This directory defines the high-level concepts, business logic, and architecture
 
 - [[dashboard-clarify]] — Interactive WebSocket clarification cards and answer delivery tests.
 
+- [[dashboard-shutdown]] — Local dashboard ownership and profile-independent app shutdown.
+
 - [[approval-completion]] — In-flight approval replies remain valid across early turn completion, with failure and lifecycle isolation.
