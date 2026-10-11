@@ -103,8 +103,9 @@ const NAV_GROUP_ORDER: { id: NavGroup; labelKey: string }[] = [
 
 /** Map a `/settings <name>` argument (and legacy anchor names) to a nav id. */
 function resolveSection(name?: string): SettingsSection {
-  const key = (name || "").trim().toLowerCase();
-  if (key === "hermesagent") return "about";
+  const key = typeof name === "string" ? name.trim().toLowerCase() : "";
+  // Configuration health lives at the top of About & Updates.
+  if (key === "hermesagent" || key === "diagnose") return "about";
   // Network merged into Connection — keep the old `/settings network` working.
   if (key === "network") return "connection";
   const match = SETTINGS_NAV.find((s) => s.id === key);
@@ -207,7 +208,14 @@ export default function SettingsModal({
             {section === "privacy" && <PrivacyPane />}
             {section === "connection" && <ConnectionPane />}
             {section === "data" && <DataPane />}
-            {section === "about" && <AboutPane />}
+            {section === "about" && (
+              <AboutPane
+                showHealthStatus={
+                  typeof initialSection === "string" &&
+                  initialSection.trim().toLowerCase() === "diagnose"
+                }
+              />
+            )}
             {section === "community" && <CommunityPane />}
             {section === "logs" && <LogsPane />}
           </SettingsDataContext.Provider>

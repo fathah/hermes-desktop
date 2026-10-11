@@ -11,7 +11,9 @@ import {
   testMessagingPlatformStatus,
   validateMessagingPlatformUpdate,
 } from "../shared/messaging-platforms";
-import { getApiUrl, getRemoteAuthHeader } from "./hermes";
+import { getConnectionConfig } from "./config";
+import { remoteDashboardRequestJson } from "./remote-api";
+import { normaliseRemoteUrl } from "./hermes";
 
 export function buildDesktopMessagingPlatforms(
   env: Record<string, string>,
@@ -146,53 +148,87 @@ export function testDesktopMessagingPlatform(
   return testMessagingPlatformStatus(platform);
 }
 
-export async function fetchRemoteMessagingPlatforms(): Promise<MessagingPlatformsResponse> {
-  const res = await remoteMessagingFetch("/api/messaging/platforms");
-  const data = (await res.json()) as MessagingPlatformsResponse;
+// Remote messaging goes through the authenticated dashboard boundary: a bare
+// fetch carries no OAuth cookie, so the Gateway page could not load its
+// platform list for OAuth users.
+async function remoteMessagingJson<T>(
+  path: string,
+  method: "GET" | "PUT" | "POST" = "GET",
+  body?: unknown,
+  profile?: string,
+): Promise<T> {
+  const connection = getConnectionConfig();
+  const anonymousRequest = async (): Promise<T> => {
+    const url = new URL(`${normaliseRemoteUrl(connection.remoteUrl)}${path}`);
+    if (profile) url.searchParams.set("profile", profile);
+    const response = await fetch(url.toString(), {
+      method,
+      headers: body === undefined ? {} : { "Content-Type": "application/json" },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    const data = await response.json();
+    if (!response.ok)
+      throw new Error(data.error || data.detail || `HTTP ${response.status}`);
+    return data as T;
+  };
+  if (connection.remoteAuthMode === "token" && !connection.apiKey?.trim()) {
+    return anonymousRequest();
+  }
+  try {
+    return await remoteDashboardRequestJson<T>(
+      connection,
+      path,
+      { method, body },
+      profile,
+    );
+  } catch (error) {
+    // Auto mode may resolve to a keyless token server. Only this exact boundary
+    // failure allows anonymous compatibility; OAuth and probe failures stay errors.
+    if (
+      !connection.apiKey?.trim() &&
+      connection.remoteAuthMode !== "oauth" &&
+      error instanceof Error &&
+      error.message === "Remote Hermes dashboard token is not configured."
+    ) {
+      return anonymousRequest();
+    }
+    throw error;
+  }
+}
+
+export async function fetchRemoteMessagingPlatforms(
+  profile?: string,
+): Promise<MessagingPlatformsResponse> {
+  const data = await remoteMessagingJson<MessagingPlatformsResponse>(
+    "/api/messaging/platforms",
+    "GET",
+    undefined,
+    profile,
+  );
   return { ...data, editable: true, source: "remote-api" };
 }
 
-export async function updateRemoteMessagingPlatform(
+export function updateRemoteMessagingPlatform(
   platformId: string,
   update: MessagingPlatformUpdate,
+  profile?: string,
 ): Promise<{ ok: boolean; platform: string }> {
-  const res = await remoteMessagingFetch(
+  return remoteMessagingJson(
     `/api/messaging/platforms/${encodeURIComponent(platformId)}`,
-    {
-      method: "PUT",
-      body: JSON.stringify(update),
-    },
+    "PUT",
+    update,
+    profile,
   );
-  return (await res.json()) as { ok: boolean; platform: string };
 }
 
-export async function testRemoteMessagingPlatform(
+export function testRemoteMessagingPlatform(
   platformId: string,
+  profile?: string,
 ): Promise<MessagingPlatformTestResponse> {
-  const res = await remoteMessagingFetch(
+  return remoteMessagingJson(
     `/api/messaging/platforms/${encodeURIComponent(platformId)}/test`,
-    { method: "POST" },
+    "POST",
+    undefined,
+    profile,
   );
-  return (await res.json()) as MessagingPlatformTestResponse;
-}
-
-async function remoteMessagingFetch(
-  path: string,
-  init: RequestInit = {},
-): Promise<Response> {
-  const headers: Record<string, string> = {
-    ...getRemoteAuthHeader(),
-    ...((init.headers as Record<string, string>) || {}),
-  };
-  if (init.body && !headers["Content-Type"]) {
-    headers["Content-Type"] = "application/json";
-  }
-  const res = await fetch(`${getApiUrl()}${path}`, { ...init, headers });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(
-      text || `Messaging platform API failed with HTTP ${res.status}`,
-    );
-  }
-  return res;
 }

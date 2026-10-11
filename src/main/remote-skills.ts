@@ -1,4 +1,6 @@
 import { getApiUrl, getRemoteAuthHeader } from "./hermes";
+import { remoteAuthFetch } from "./remote-oauth";
+import { getConnectionConfig } from "./config";
 import type { InstalledSkill, SkillCliResult } from "./skills";
 
 // Remote (HTTP) mode routing for the Skills screen. The skills IPC handlers
@@ -29,7 +31,8 @@ async function skillsApi<T>(
   profile?: string,
   query?: Record<string, string>,
 ): Promise<T> {
-  const url = new URL(`${getApiUrl()}${path}`);
+  const connection = getConnectionConfig();
+  const url = new URL(`${getApiUrl(undefined, connection)}${path}`);
   // All query params go through searchParams so encoding stays consistent —
   // mixing pre-encoded params in `path` with searchParams.set() would
   // re-serialize the former (%20 → +) only when a named profile is present.
@@ -42,13 +45,17 @@ async function skillsApi<T>(
     url.searchParams.set("profile", profile);
   }
   const headers: Record<string, string> = {
-    ...getRemoteAuthHeader(),
+    ...getRemoteAuthHeader(connection),
     ...((init.headers as Record<string, string>) || {}),
   };
   if (init.body && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";
   }
-  const response = await fetch(url.toString(), { ...init, headers });
+  const response = await remoteAuthFetch(
+    url.toString(),
+    { ...init, headers },
+    connection,
+  );
   if (!response.ok) {
     let detail = response.statusText;
     try {
