@@ -56,6 +56,20 @@ describe("expectedEnvKeyForModel — provider-name lookup", () => {
 });
 
 describe("expectedEnvKeyForModel — URL fallback for custom/auto providers", () => {
+  it.each([
+    [
+      "https://user:pass@api.cheaperinference.com:443/v1",
+      "CHEAPERINFERENCE_API_KEY",
+    ],
+    ["https://API.CHEAPERINFERENCE.COM:443/v1", "CHEAPERINFERENCE_API_KEY"],
+    ["https://api.cheaperinference.com:443@evil.example/v1", null],
+    ["https://user:pass@api.cheaperinference.com.attacker.example/v1", null],
+  ])(
+    "uses the parsed Cheaper Inference hostname for installer readiness %s",
+    (url, expected) => {
+      expect(expectedEnvKeyForModel("custom", url)).toBe(expected);
+    },
+  );
   it("recognizes a known endpoint when provider is 'custom'", () => {
     expect(
       expectedEnvKeyForModel("custom", "https://api.deepseek.com/v1"),
