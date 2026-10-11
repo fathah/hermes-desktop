@@ -1,8 +1,15 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Refresh } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
 import { OrbLoader } from "../../components/OrbLoader";
 import Soul from "../Soul/Soul";
+import { useProfileEditorTarget } from "../../hooks/useProfileEditorTarget";
+import {
+  beginProfileMemoryMutation,
+  profileMemoryRevision,
+  waitForProfileMemoryMutations,
+} from "../../hooks/useProfileEditorLifetime";
+import type { ProfileEditorTarget } from "../../../../shared/profile-editor-target";
 import { CapacityCards } from "./CapacityCards";
 import { MemoryTabs } from "./MemoryTabs";
 import { MemoryEntries } from "./MemoryEntries";
@@ -10,33 +17,181 @@ import { MemoryProfile } from "./MemoryProfile";
 import { MemoryProviders } from "./MemoryProviders";
 import type { MemoryData, MemoryProviderInfo, MemoryTab } from "./types";
 
-function Memory({ profile }: { profile?: string }): React.JSX.Element {
+function Memory({
+  profile,
+  readOnly = false,
+}: {
+  profile?: string;
+  readOnly?: boolean;
+}): React.JSX.Element {
+  const scope = useProfileEditorTarget(profile);
+  if (!scope.target)
+    return scope.error ? (
+      <div role="alert">{scope.error}</div>
+    ) : (
+      <OrbLoader state="searching" size={64} />
+    );
+  return (
+    <MemoryEditor
+      key={`${scope.target.scopeToken}:${scope.revision}:${readOnly}`}
+      target={scope.target}
+      isCurrent={scope.isCurrent}
+      readOnly={readOnly || scope.target.mode === "remote"}
+    />
+  );
+}
+
+function MemoryEditor({
+  target,
+  isCurrent,
+  readOnly,
+}: {
+  target: ProfileEditorTarget;
+  isCurrent: (target: ProfileEditorTarget) => boolean;
+  readOnly: boolean;
+}): React.JSX.Element {
+  const profile = target.profile;
   const { t } = useI18n();
   const [data, setData] = useState<MemoryData | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<MemoryTab>("entries");
-  const [error] = useState("");
+  const [error, setError] = useState("");
   const [memoryProvider, setMemoryProvider] = useState<string | null>(null);
   const [providers, setProviders] = useState<MemoryProviderInfo[]>([]);
+  const [dataRevision, setDataRevision] = useState(0);
+  const [writing, setWriting] = useState(false);
+  const pendingWrites = useRef(0);
+  const refreshAfterWrite = useRef(false);
+  const loadingRef = useRef(loading);
+  const snapshotValid = useRef(false);
+  const snapshotRevision = useRef(-1);
+  loadingRef.current = loading;
 
+  const mounted = useRef(true);
+  const generation = useRef(0);
+  const live = useCallback(
+    () => mounted.current && isCurrent(target),
+    [target, isCurrent],
+  );
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      generation.current += 1;
+    };
+  }, []);
   const loadData = useCallback(async () => {
-    const [d, provider, provs] = await Promise.all([
-      window.hermesAPI.readMemory(profile),
-      window.hermesAPI.getConfig("memory.provider", profile),
-      window.hermesAPI.discoverMemoryProviders(profile),
-    ]);
-    setData(d as MemoryData);
-    setMemoryProvider(provider);
-    setProviders(provs);
-    setLoading(false);
-  }, [profile]);
+    if (!live()) return;
+    if (pendingWrites.current) {
+      refreshAfterWrite.current = true;
+      return;
+    }
+    const request = ++generation.current;
+    snapshotValid.current = false;
+    loadingRef.current = true;
+    setLoading(true);
+    setError("");
+    try {
+      const revision = await waitForProfileMemoryMutations(target);
+      if (!live() || request !== generation.current) return;
+      if (profileMemoryRevision(target) !== revision) {
+        void loadData();
+        return;
+      }
+      const [d, provider, provs] = await Promise.all([
+        window.hermesAPI.readMemory(profile, target),
+        window.hermesAPI.getConfig("memory.provider", profile, target),
+        window.hermesAPI.discoverMemoryProviders(profile, target),
+      ]);
+      if (!live() || request !== generation.current) return;
+      if (profileMemoryRevision(target) !== revision) {
+        void loadData();
+        return;
+      }
+      snapshotRevision.current = revision;
+      snapshotValid.current = true;
+      setData(d as MemoryData);
+      setMemoryProvider(provider);
+      setProviders(provs);
+      // Entry positions and the other tabs' initial state belong to this read.
+      // Reset them together; Soul has an independent lifetime and autosave.
+      setDataRevision((revision) => revision + 1);
+    } catch (err) {
+      // A remote read can reject (offline server, sign-in expired). Say so and
+      // leave the refresh button usable instead of spinning forever.
+      if (live() && request === generation.current)
+        setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (live() && request === generation.current) {
+        loadingRef.current = false;
+        setLoading(false);
+      }
+    }
+  }, [profile, target, live]);
+
+  const beginMutation = (): (() => void) | null => {
+    if (
+      !live() ||
+      !snapshotValid.current ||
+      loadingRef.current ||
+      pendingWrites.current
+    )
+      return null;
+    const finishScope = beginProfileMemoryMutation(
+      target,
+      snapshotRevision.current,
+    );
+    if (!finishScope) {
+      void loadData();
+      return null;
+    }
+    pendingWrites.current += 1;
+    setWriting(true);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      finishScope();
+      pendingWrites.current -= 1;
+      if (!live()) return;
+      setWriting(false);
+      if (refreshAfterWrite.current) {
+        refreshAfterWrite.current = false;
+        void loadData();
+      } else snapshotRevision.current = profileMemoryRevision(target);
+    };
+  };
 
   useEffect(() => {
+    // A different profile: drop the previous one's data NOW. If this load fails,
+    // the old entries would otherwise stay on screen under the new profile name
+    // and an edit or delete would hit the wrong profile's memory.
+    setData(null);
     setLoading(true);
     loadData();
   }, [loadData]);
 
-  if (loading || !data) {
+  if (!loading && !data) {
+    return (
+      <div className="settings-container">
+        <h1 className="settings-header">{t("memory.title")}</h1>
+        <div className="memory-error" role="alert">
+          {error}
+        </div>
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => {
+            setLoading(true);
+            void loadData();
+          }}
+        >
+          <Refresh size={13} />
+        </button>
+      </div>
+    );
+  }
+
+  if (!data) {
     return (
       <div className="settings-container">
         <h1 className="settings-header">{t("memory.title")}</h1>
@@ -56,45 +211,77 @@ function Memory({ profile }: { profile?: string }): React.JSX.Element {
           </h1>
           <p className="memory-subtitle">{t("memory.subtitle")}</p>
         </div>
-        <button className="btn btn-secondary btn-sm" onClick={loadData}>
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={loadData}
+          disabled={loading || writing}
+        >
           <Refresh size={13} />
         </button>
       </div>
 
       <CapacityCards data={data} />
-      <MemoryTabs activeTab={tab} onTabChange={setTab} />
+      <MemoryTabs activeTab={tab} onTabChange={setTab} disabled={writing} />
 
-      {error && <div className="memory-error">{error}</div>}
-
-      {tab === "entries" && (
-        <MemoryEntries
-          entries={data.memory.entries}
-          profile={profile}
-          onRefresh={loadData}
-        />
+      {error && (
+        <div className="memory-error" role="alert">
+          {error}
+        </div>
       )}
 
-      {tab === "profile" && (
-        <MemoryProfile
-          content={data.user.content}
-          charLimit={data.user.charLimit}
-          profile={profile}
-          onRefresh={loadData}
-        />
+      {readOnly && tab !== "soul" && (
+        <div className="memory-error" role="note">
+          {data.contentUnavailable
+            ? "Connected to a remote Hermes server: its API does not expose the contents of MEMORY.md / USER.md, so only profile configuration and providers are shown. View or edit them on the server."
+            : "Connected to a remote Hermes server: memory is shown read-only here. Edit it on the server (or via chat)."}
+        </div>
       )}
 
-      {tab === "providers" && (
-        <MemoryProviders
-          providers={providers}
-          activeProvider={memoryProvider}
-          profile={profile}
-          onRefresh={loadData}
-        />
-      )}
+      {/* A disabled fieldset natively disables every button/input inside it. */}
+      <fieldset
+        key={dataRevision}
+        disabled={readOnly || loading || writing || !!error}
+        style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
+      >
+        {tab === "entries" && !data.contentUnavailable && (
+          <MemoryEntries
+            entries={data.memory.entries}
+            profile={profile}
+            target={target}
+            isCurrent={isCurrent}
+            onRefresh={loadData}
+            onMutationStart={beginMutation}
+          />
+        )}
+
+        {tab === "profile" && !data.contentUnavailable && (
+          <MemoryProfile
+            content={data.user.content}
+            charLimit={data.user.charLimit}
+            profile={profile}
+            target={target}
+            isCurrent={isCurrent}
+            onRefresh={loadData}
+            onMutationStart={beginMutation}
+          />
+        )}
+
+        {tab === "providers" && (
+          <MemoryProviders
+            providers={providers}
+            activeProvider={memoryProvider}
+            profile={profile}
+            target={target}
+            isCurrent={isCurrent}
+            onRefresh={loadData}
+            onMutationStart={beginMutation}
+          />
+        )}
+      </fieldset>
 
       {tab === "soul" && (
         <div className="memory-soul-tab">
-          <Soul profile={profile} />
+          <Soul profile={profile} allowReset={!readOnly} />
         </div>
       )}
     </div>

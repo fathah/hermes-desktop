@@ -1,3 +1,4 @@
+import { buildInstallErrorMessage } from "./installer-errors";
 import { spawn, execFile, execFileSync } from "child_process";
 import {
   existsSync,
@@ -1039,11 +1040,8 @@ export async function runInstall(
             );
             resolve();
           } else {
-            reject(
-              new Error(
-                `Installation failed (exit code ${code}). You can try installing via terminal instead.`,
-              ),
-            );
+            const errorMessage = buildInstallErrorMessage(code);
+            reject(new Error(errorMessage));
           }
         }
       });
@@ -1201,11 +1199,7 @@ async function runInstallWindows(emit: (t: string) => void): Promise<void> {
         );
         resolve();
       } else {
-        reject(
-          new Error(
-            `Installation failed (exit code ${code}). Open PowerShell and try: irm https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.ps1 | iex`,
-          ),
-        );
+        reject(new Error(buildInstallErrorMessage(code)));
       }
     });
 

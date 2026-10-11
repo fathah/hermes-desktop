@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import ProfileModal from "./ProfileModal";
 import {
   ProfileModalContext,
@@ -22,6 +22,15 @@ export function ProfileModalProvider({
 }): React.JSX.Element {
   const [open, setOpen] = useState<OpenState | null>(null);
   const [visible, setVisible] = useState(false);
+  // The global opener must not retain an editor belonging to a previous server.
+  useEffect(
+    () =>
+      window.hermesAPI.onConnectionConfigChanged(() => {
+        setVisible(false);
+        setOpen(null);
+      }),
+    [],
+  );
 
   const openProfile = useCallback((name: string, opts?: OpenProfileOptions) => {
     setOpen({ name, opts });

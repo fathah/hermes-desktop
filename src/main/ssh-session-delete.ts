@@ -1,3 +1,5 @@
+import { SSH_SESSION_CONVERSATION_HELPERS } from "./session-conversation";
+
 /** Native SSH fallback, mirroring sessions.ts deletion without requiring a dashboard. */
 export const SSH_SESSION_DELETE_SCRIPT = String.raw`
 import json
@@ -6,6 +8,8 @@ import re
 import sqlite3
 import sys
 from pathlib import Path
+
+${SSH_SESSION_CONVERSATION_HELPERS}
 
 payload = json.load(sys.stdin)
 profile = payload.get("profile") or "default"
@@ -37,6 +41,7 @@ try:
                 conn.execute('DELETE FROM "' + table + '" WHERE session_id = ?', (session_id,))
         # Never cascade to unselected child sessions.
         if "parent_session_id" in columns:
+            preserve_hidden_session_children(conn, columns, session_id)
             conn.execute("UPDATE sessions SET parent_session_id = NULL WHERE parent_session_id = ?", (session_id,))
         conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
         result["deleted"] += conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,)).rowcount

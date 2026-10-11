@@ -5,11 +5,13 @@ import type { MemoryTab } from "./types";
 interface MemoryTabsProps {
   activeTab: MemoryTab;
   onTabChange: (tab: MemoryTab) => void;
+  disabled?: boolean;
 }
 
 export function MemoryTabs({
   activeTab,
   onTabChange,
+  disabled = false,
 }: MemoryTabsProps): React.JSX.Element {
   const { t } = useI18n();
 
@@ -29,6 +31,7 @@ export function MemoryTabs({
             key={tab.id}
             className={`memory-tab ${activeTab === tab.id ? "active" : ""}`}
             onClick={() => onTabChange(tab.id)}
+            disabled={disabled}
           >
             <Icon size={14} />
             {tab.label}

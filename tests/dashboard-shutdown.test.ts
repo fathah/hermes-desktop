@@ -9,6 +9,11 @@ const state = vi.hoisted(() => ({
   active: "default",
   home: "",
   children: [] as ChildProcess[],
+  ignoresTerm: false,
+  responseDelay: 0,
+  exitsOnStart: false,
+  webSocketFailure: false,
+  compatibilityWarning: false,
 }));
 vi.mock("../src/main/config", () => ({
   getConnectionConfig: () => ({ mode: "local" }),
@@ -30,7 +35,14 @@ vi.mock("../src/main/utils", async (original) => ({
   getActiveProfileNameSync: () => state.active,
 }));
 vi.mock("../src/main/hermes-agent-compat", () => ({
-  ensureLocalDashboardCompatibility: () => ({ ok: true }),
+  ensureLocalDashboardCompatibility: () =>
+    state.compatibilityWarning
+      ? {
+          ok: false,
+          detail: "Fixture compatibility",
+          error: "fixture patch failed",
+        }
+      : { ok: true },
 }));
 vi.mock("../src/main/ssh-tunnel", () => ({}));
 vi.mock("../src/main/ssh-remote", () => ({}));
@@ -47,9 +59,15 @@ vi.mock("child_process", async (original) => {
           "-e",
           `
       const http = require('http');
-      const server = http.createServer((req, res) => res.end('{}'));
+      if (${state.exitsOnStart}) process.exit(17);
+      if (${state.ignoresTerm}) process.on('SIGTERM', () => {});
+      const server = http.createServer((req, res) => setTimeout(() => res.end('{}'), ${state.responseDelay}));
       server.on('upgrade', (req, socket) => {
         socket.on('error', () => {});
+        if (${state.webSocketFailure}) {
+          socket.end('HTTP/1.1 503 Service Unavailable\\r\\nContent-Length: 13\\r\\n\\r\\nfixture-error');
+          return;
+        }
         socket.write('HTTP/1.1 101 Switching Protocols\\r\\nConnection: Upgrade\\r\\nUpgrade: websocket\\r\\n\\r\\n');
       });
       server.listen(${port}, '127.0.0.1');
@@ -63,6 +81,7 @@ vi.mock("child_process", async (original) => {
   };
 });
 import {
+  beginDashboardShutdown,
   startDashboard,
   stopAllDashboards,
   stopDashboard,
@@ -71,10 +90,15 @@ import {
 beforeEach(() => {
   state.home = mkdtempSync(join(tmpdir(), "hermes-shutdown-"));
   state.active = "default";
+  state.ignoresTerm = false;
+  state.responseDelay = 0;
+  state.exitsOnStart = false;
+  state.webSocketFailure = false;
+  state.compatibilityWarning = false;
 });
 afterEach(async () => {
   state.active = "default";
-  stopAllDashboards();
+  await stopAllDashboards();
   await Promise.all(
     state.children.splice(0).map(
       (child) =>
@@ -94,13 +118,25 @@ async function start(profile?: string): Promise<ChildProcess> {
   return state.children.at(-1)!;
 }
 
+// @lat: [[dashboard-shutdown#Same-profile launch ownership]]
+it("shares a pending same-profile launch so both callers own one child", async () => {
+  const [first, second] = await Promise.all([
+    startDashboard("shared"),
+    startDashboard("shared"),
+  ]);
+  expect(first.running).toBe(true);
+  expect(second.running).toBe(true);
+  expect(first.connection?.pid).toBe(second.connection?.pid);
+  expect(state.children).toHaveLength(1);
+});
+
 // @lat: [[dashboard-shutdown#All managed profiles]]
 it("stops default and named dashboard processes after changing the active profile", async () => {
   const primary = await start();
   state.active = "work";
   const work = await start();
   const other = await start("other");
-  stopAllDashboards();
+  await stopAllDashboards();
   await vi.waitFor(
     () => {
       for (const child of [primary, work, other]) {
@@ -116,17 +152,146 @@ it("keeps single-profile stop semantics and makes repeated shutdown harmless", a
   const primary = await start("default");
   state.active = "work";
   const work = await start();
-  expect(stopDashboard()).toBe(true);
+  expect(await stopDashboard()).toBe(true);
   await vi.waitFor(() =>
     expect(work.exitCode !== null || work.signalCode !== null).toBe(true),
   );
   expect(primary.killed).toBe(false);
-  expect(stopDashboard("default")).toBe(true);
+  expect(await stopDashboard("default")).toBe(true);
   await vi.waitFor(() =>
     expect(primary.exitCode !== null || primary.signalCode !== null).toBe(true),
   );
-  expect(() => {
-    stopAllDashboards();
-    stopAllDashboards();
-  }).not.toThrow();
+  await expect(stopAllDashboards()).resolves.toBeUndefined();
+  await expect(stopAllDashboards()).resolves.toBeUndefined();
 });
+
+// @lat: [[dashboard-shutdown#Confirmed forced termination]]
+it.skipIf(process.platform === "win32")(
+  "awaits SIGKILL for a real dashboard that ignores SIGTERM, including an already admitted stop",
+  async () => {
+    state.ignoresTerm = true;
+    const child = await start("stubborn");
+    const stopped = stopDashboard("stubborn");
+    let repeatedComplete = false;
+    const repeated = stopDashboard("stubborn").then((success) => {
+      repeatedComplete = true;
+      return success;
+    });
+    let shutdownComplete = false;
+    const shutdown = stopAllDashboards().then(() => {
+      shutdownComplete = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(shutdownComplete).toBe(false);
+    expect(repeatedComplete).toBe(false);
+    expect(child.killed).toBe(true);
+    expect(child.exitCode).toBeNull();
+    expect(child.signalCode).toBeNull();
+    expect(await stopped).toBe(true);
+    expect(await repeated).toBe(true);
+    await shutdown;
+    expect(child.signalCode).toBe("SIGKILL");
+  },
+  5000,
+);
+
+// @lat: [[dashboard-shutdown#Ordinary startup cancellation]]
+it("restarts promptly after stopping an admitted startup and cannot reuse its readiness promise", async () => {
+  state.responseDelay = 2000;
+  const stoppedStart = startDashboard("restart");
+  await vi.waitFor(() => expect(state.children).toHaveLength(1));
+  const old = state.children[0];
+  const stopped = stopDashboard("restart");
+  state.responseDelay = 0;
+  const replacement = startDashboard("restart");
+  const current = await replacement;
+  expect(current.running).toBe(true);
+  expect(current.connection?.pid).not.toBe(old.pid);
+  expect(await stopped).toBe(true);
+  expect((await stoppedStart).running).toBe(false);
+  expect(state.children).toHaveLength(2);
+  expect(old.exitCode !== null || old.signalCode !== null).toBe(true);
+  expect(state.children[1].killed).toBe(false);
+});
+
+// @lat: [[dashboard-shutdown#Pre-port ordinary stop]]
+it("invalidates a pre-port start before spawning and permits a same-profile replacement", async () => {
+  const stoppedStart = startDashboard("pre-port-restart");
+  expect(await stopDashboard("pre-port-restart")).toBe(true);
+  const replacement = await startDashboard("pre-port-restart");
+  expect(replacement.running).toBe(true);
+  expect((await stoppedStart).running).toBe(false);
+  expect(state.children).toHaveLength(1);
+});
+
+// @lat: [[dashboard-shutdown#Shared ready-launch cancellation]]
+it("gives duplicate starts the same stopped outcome when an existing child is synchronously stopped", async () => {
+  await start("ready-shared");
+  const first = startDashboard("ready-shared");
+  const second = startDashboard("ready-shared");
+  const stopped = stopDashboard("ready-shared");
+  expect((await first).running).toBe(false);
+  expect((await second).running).toBe(false);
+  expect(await stopped).toBe(true);
+  expect(state.children).toHaveLength(1);
+});
+
+// @lat: [[dashboard-shutdown#Startup crash diagnostics]]
+it("preserves a crashed child's failure and log path for duplicate startup callers", async () => {
+  state.exitsOnStart = true;
+  const [first, second] = await Promise.all([
+    startDashboard("crashing"),
+    startDashboard("crashing"),
+  ]);
+  expect(first).toMatchObject({
+    running: false,
+    error: expect.stringContaining("exited during startup (17)"),
+    logPath: expect.stringContaining(state.home),
+  });
+  expect(second).toEqual(first);
+  expect(state.children).toHaveLength(1);
+});
+
+// @lat: [[dashboard-shutdown#Failed probe diagnostics]]
+it("retains a failed WebSocket probe's error, compatibility detail and log after cleanup", async () => {
+  state.webSocketFailure = true;
+  state.compatibilityWarning = true;
+  const result = await startDashboard("failed-probe");
+  expect(result).toMatchObject({
+    running: false,
+    error: expect.stringContaining(
+      "WebSocket is unavailable (503: fixture-error)",
+    ),
+    logPath: expect.stringContaining(state.home),
+  });
+  expect(result.error).toContain(
+    "compatibility: Fixture compatibility: fixture patch failed",
+  );
+  expect(
+    state.children[0].exitCode !== null ||
+      state.children[0].signalCode !== null,
+  ).toBe(true);
+});
+
+// @lat: [[dashboard-shutdown#Quit launch admission]]
+it("blocks new and pre-port launches during quit and drains a started child's readiness", async () => {
+  state.ignoresTerm = true;
+  const running = await start("running");
+  state.responseDelay = 2000;
+  const entering = startDashboard("entering");
+  await vi.waitFor(() => expect(state.children).toHaveLength(2));
+  const beforePort = startDashboard("before-port");
+  beginDashboardShutdown();
+  const shutdown = stopAllDashboards();
+  await expect(startDashboard("during-quit")).resolves.toMatchObject({
+    running: false,
+    error: expect.stringContaining("shutting down"),
+  });
+  await expect(beforePort).resolves.toMatchObject({ running: false });
+  await expect(entering).resolves.toMatchObject({ running: false });
+  await shutdown;
+  expect(state.children).toHaveLength(2);
+  for (const child of state.children)
+    expect(child.exitCode !== null || child.signalCode !== null).toBe(true);
+  expect(running.exitCode !== null || running.signalCode !== null).toBe(true);
+}, 8000);
