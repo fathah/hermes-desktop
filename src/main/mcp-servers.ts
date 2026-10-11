@@ -636,9 +636,19 @@ async function mcpApi<T>(
       );
       return (data ?? {}) as T;
     } catch (err) {
-      const statusCode = (err as { statusCode?: number }).statusCode;
-      if (statusCode) Object.assign(err as object, { status: statusCode });
-      throw err;
+      if (
+        conn.remoteAuthMode === "auto" &&
+        !conn.apiKey.trim() &&
+        err instanceof Error &&
+        err.message === "Remote Hermes dashboard token is not configured."
+      ) {
+        // The shared boundary resolved auto to token mode before rejecting
+        // the absent key. Preserve anonymous access only for that outcome.
+      } else {
+        const statusCode = (err as { statusCode?: number }).statusCode;
+        if (statusCode) Object.assign(err as object, { status: statusCode });
+        throw err;
+      }
     }
   }
   const headers: Record<string, string> = {

@@ -87,4 +87,19 @@ describe("remote MCP requests", () => {
     );
     expect(request).not.toHaveBeenCalled();
   });
+
+  it("retains anonymous access when auto authentication resolves to a keyless token dashboard", async () => {
+    connection.current.remoteAuthMode = "auto";
+    request.mockRejectedValue(
+      new Error("Remote Hermes dashboard token is not configured."),
+    );
+    const bare = vi.fn().mockResolvedValue(new Response('{"servers":[]}'));
+    vi.stubGlobal("fetch", bare);
+
+    await expect(listMcpServers("work")).resolves.toEqual([]);
+    expect(bare).toHaveBeenCalledWith(
+      "http://r:9119/api/mcp/servers?profile=work",
+      expect.anything(),
+    );
+  });
 });

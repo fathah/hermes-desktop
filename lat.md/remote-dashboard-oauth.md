@@ -60,7 +60,7 @@ Remote Skills uses cookie-aware fetch, while MCP uses the authenticated manageme
 
 [[src/renderer/src/screens/Layout/Layout.tsx#Layout]] mounts Skills separately for each connection and profile, discarding the previous target's list and selection before install or uninstall controls become usable.
 
-Explicit token dashboards without a key retain anonymous, profile-scoped MCP access. OAuth connections always use the authenticated management boundary and cannot fall back to anonymous requests.
+Explicit token dashboards without a key retain anonymous, profile-scoped MCP access, as does auto mode after the management boundary identifies a keyless token dashboard. OAuth failures never fall back to anonymous requests.
 
 ## Test specifications
 
