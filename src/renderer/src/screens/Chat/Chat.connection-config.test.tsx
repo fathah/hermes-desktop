@@ -63,7 +63,7 @@ vi.mock("./dashboardGatewayClient", () => ({
 import Chat from "./Chat";
 
 let nextFixture = 0;
-async function fixture(): Promise<{
+async function fixture(transport: "dashboard" | "auto" = "dashboard"): Promise<{
   api: Record<string, ReturnType<typeof vi.fn>>;
   emit: (changes?: Partial<PublicConnectionConfig>) => void;
   rotateKey: (notificationId?: string) => void;
@@ -79,7 +79,7 @@ async function fixture(): Promise<{
     remoteUrl: `https://chat-config-${++nextFixture}.test`,
     apiKey: "aaaaaaaa",
     remoteAuthMode: "token" as const,
-    remoteChatTransport: "dashboard" as const,
+    remoteChatTransport: transport,
     sshChatTransport: "auto" as const,
     ssh: {
       host: "",
@@ -1060,3 +1060,73 @@ it("settles an originating turn during initial Dashboard startup and ignores the
   );
   expect(f.api.sendMessage).not.toHaveBeenCalled();
 });
+
+// @lat: [[shared-pets#Recovery regressions#Legacy handoff preserves its turn]]
+it.each(["missing dashboard", "unsupported file API"] as const)(
+  "actual Legacy IPC retains its turn after %s handoff and a connection edit",
+  async (fallback) => {
+    const f = await fixture("auto");
+    if (fallback === "missing dashboard")
+      f.api.startDashboard.mockResolvedValue({ running: false });
+    else {
+      const ordinary = gateway.request.getMockImplementation()!;
+      gateway.request.mockImplementation((method, params) =>
+        method === "file.attach"
+          ? Promise.reject(new Error("method not found"))
+          : ordinary(method, params),
+      );
+    }
+    f.api.getSessionMessages = vi.fn().mockResolvedValue([]);
+    renderChat();
+    // Wait for captured Remote Auto authority before submitting, including a
+    // Dashboard-absent target whose catalog cannot establish a socket.
+    await waitFor(() => expect(f.api.startDashboard).toHaveBeenCalled());
+    const box = screen.getByPlaceholderText("chat.typeMessage");
+    fireEvent.change(box, { target: { value: "Legacy owning prompt" } });
+    if (fallback === "unsupported file API") {
+      fireEvent.change(document.querySelector('input[type="file"]')!, {
+        target: {
+          files: [
+            new File(["legacy file"], "legacy.txt", { type: "text/plain" }),
+          ],
+        },
+      });
+      await screen.findByRole("button", { name: "Remove legacy.txt" });
+    }
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "chat.send" }),
+      ).not.toBeDisabled(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "chat.send" }));
+    await waitFor(() => expect(f.api.sendMessage).toHaveBeenCalledTimes(1));
+    if (fallback === "unsupported file API")
+      expect(gateway.request).toHaveBeenCalledWith(
+        "file.attach",
+        expect.anything(),
+      );
+    expect(gateway.request).not.toHaveBeenCalledWith(
+      "prompt.submit",
+      expect.anything(),
+    );
+    const chunk = f.api.onChatChunk.mock.calls.at(-1)![0];
+    const done = f.api.onChatDone.mock.calls.at(-1)![0];
+    await act(async () => chunk("run", "Legacy stream first"));
+    await screen.findByText("Legacy stream first");
+    await act(async () => f.rotateKey());
+    await act(async () => chunk("run", " still owned"));
+    await screen.findByText("Legacy stream first still owned");
+    expect(document.querySelector(".chat-stop-btn")).not.toBeNull();
+    expect(
+      screen.queryByText(
+        "Dashboard connection changed during this turn. Retry on the current chat.",
+      ),
+    ).toBeNull();
+    await act(async () => done("run", "saved"));
+    await waitFor(() =>
+      expect(document.querySelector(".chat-stop-btn")).toBeNull(),
+    );
+    expect(screen.getByText("Legacy stream first still owned")).toBeTruthy();
+    expect(f.api.sendMessage).toHaveBeenCalledTimes(1);
+  },
+);

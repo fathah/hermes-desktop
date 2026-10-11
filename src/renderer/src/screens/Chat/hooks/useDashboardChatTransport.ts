@@ -2088,6 +2088,15 @@ export function useDashboardChatTransport({
         return true;
       };
       retireSupersededSubmissionRef.current = retireSupersededSubmission;
+      const handoffToLegacy = (): false => {
+        // Only this invocation can release its Dashboard retirement authority.
+        // A late handoff must never disarm a newer Dashboard-owned turn.
+        if (
+          retireSupersededSubmissionRef.current === retireSupersededSubmission
+        )
+          retireSupersededSubmissionRef.current = null;
+        return false;
+      };
       const assertSubmission = (): void => {
         if (!ownsSubmission())
           throw new Error("Hermes dashboard submission was superseded");
@@ -2194,7 +2203,7 @@ export function useDashboardChatTransport({
         return true;
       };
       if (dashboardText === null) {
-        if (fallbackOnUnavailable) return false;
+        if (fallbackOnUnavailable) return handoffToLegacy();
         return failActiveTurn(
           "Dashboard chat supports image attachments only in this build. Use Auto or Legacy for mixed file attachments.",
         );
@@ -2216,7 +2225,7 @@ export function useDashboardChatTransport({
         }
         if (fallbackOnUnavailable) {
           console.warn("Falling back to legacy chat transport.", err);
-          return false;
+          return handoffToLegacy();
         }
         const message = err instanceof Error ? err.message : String(err);
         return failActiveTurn(message);
@@ -2286,7 +2295,7 @@ export function useDashboardChatTransport({
         assertSubmission();
         if (!syncedAttachments.handled) {
           if (!ownsSubmission()) return retireSupersededSubmission();
-          if (fallbackOnUnavailable) return false;
+          if (fallbackOnUnavailable) return handoffToLegacy();
           return failActiveTurn(
             "Hermes dashboard could not attach the selected file. Use Auto or Legacy to fall back to the legacy attachment path.",
           );
