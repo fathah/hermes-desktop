@@ -904,13 +904,53 @@ export function setConfigValue(
   }
 }
 
+// @lat: [[speech-playback#Single-document configuration boundary]]
+function splitSpeechYamlDocument(content: string): {
+  prefix: string;
+  body: string;
+  suffix: string;
+} | null {
+  let bodyStart = 0;
+  let bodyEnd = content.length;
+  let started = false;
+  let ended = false;
+  let sawContent = false;
+  let cursor = 0;
+  while (cursor < content.length) {
+    const end = content.indexOf("\n", cursor);
+    const next = end < 0 ? content.length : end + 1;
+    const line = content.slice(cursor, end < 0 ? next : end).replace(/\r$/, "");
+    const marker = line.match(/^(---|\.\.\.)(?:[ \t]+(?:#.*)?)?$/)?.[1];
+    if (marker === "---") {
+      if (started || ended || sawContent) return null;
+      started = true;
+      bodyStart = next;
+    } else if (marker === "...") {
+      if (ended) return null;
+      ended = true;
+      bodyEnd = cursor;
+    } else if (line.trim() && !line.trimStart().startsWith("#")) {
+      // Directives or inline document headers need a full YAML editor. No
+      // setting may be read/replaced across another document or its trailer.
+      if (ended || /^(?:%|---[ \t]|\.\.\.[ \t])/.test(line)) return null;
+      sawContent = true;
+    }
+    cursor = next;
+  }
+  return {
+    prefix: content.slice(0, bodyStart),
+    body: content.slice(bodyStart, bodyEnd),
+    suffix: content.slice(bodyEnd),
+  };
+}
+
 /** Insert only the known speech leaf into plain, nested YAML mappings. */
 function appendSpeechYamlValue(
   content: string,
   segments: readonly string[],
   value: string,
+  newline = content.includes("\r\n") ? "\r\n" : "\n",
 ): string | null {
-  const newline = content.includes("\r\n") ? "\r\n" : "\n";
   let cursor = 0;
   let parentIndent = -1;
   for (let level = 0; level < segments.length; level++) {
@@ -951,10 +991,16 @@ function appendSpeechYamlValue(
             !raw.endsWith(raw[0]))
         )
           return null;
+        // The shared line scanner may include a CRLF carriage return in the
+        // scalar span. Preserve it as part of the original line ending.
+        const valueEnd =
+          content[found.valueEnd - 1] === "\r"
+            ? found.valueEnd - 1
+            : found.valueEnd;
         return (
           content.slice(0, found.valueStart) +
           quoteYamlScalar(value) +
-          content.slice(found.valueEnd)
+          content.slice(valueEnd)
         );
       }
       // Flow mappings, aliases and scalar parents need a full YAML editor.
@@ -1013,16 +1059,28 @@ export function setMiniMaxSpeechConfigValue(
   const content = existsSync(configFile)
     ? readFileSync(configFile, "utf-8")
     : "";
+  const document = splitSpeechYamlDocument(content);
+  if (!document)
+    throw new Error(
+      "Cannot update this YAML document; use a single plain mapping.",
+    );
+  const newline = content.includes("\r\n") ? "\r\n" : "\n";
   const next = appendSpeechYamlValue(
-    content,
+    document.body,
     ["tts", "minimax", setting],
     value,
+    newline,
   );
   if (next === null)
     throw new Error(
       "Cannot update this YAML layout; use plain speech mappings.",
     );
-  const complete = appendSpeechYamlValue(next, ["tts", "provider"], "minimax");
+  const complete = appendSpeechYamlValue(
+    next,
+    ["tts", "provider"],
+    "minimax",
+    newline,
+  );
   if (complete === null)
     throw new Error(
       "Cannot update this YAML speech provider mapping; use a plain scalar.",
@@ -1036,7 +1094,12 @@ export function setMiniMaxSpeechConfigValue(
     throw new Error("Could not persist the selected speech setting.");
   }
   mkdirSync(dirname(configFile), { recursive: true });
-  safeWriteFile(configFile, complete);
+  const separator =
+    document.prefix && !document.prefix.endsWith("\n") ? newline : "";
+  safeWriteFile(
+    configFile,
+    document.prefix + separator + complete + document.suffix,
+  );
 }
 
 /**

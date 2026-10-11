@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { load } from "js-yaml";
+import { load, loadAll } from "js-yaml";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ProviderRequestTarget } from "../src/shared/provider-target";
 import type { SpeechConfigSetting } from "../src/shared/minimax-speech";
@@ -188,6 +188,160 @@ it.each([
         target,
       ),
     ).toThrow(/YAML|mapping/);
+    expect(readFileSync(path, "utf8")).toBe(yaml);
+  },
+);
+
+const documentCases = [
+  {
+    name: "plain closing marker",
+    yaml: "model:\n  default: work-model\n...\n",
+    trailer: "...\n",
+  },
+  {
+    name: "commented closing marker",
+    yaml: "# keep comment\nmodel:\n  default: work-model\n... # end\n# keep trailer\n",
+    trailer: "... # end\n# keep trailer\n",
+  },
+  {
+    name: "closing marker without newline",
+    yaml: "model:\n  default: work-model\n...",
+    trailer: "...",
+  },
+  {
+    name: "CRLF closing marker and trailer",
+    yaml: "model:\r\n  default: work-model\r\n... \t# end\r\n# keep trailer\r\n",
+    trailer: "... \t# end\r\n# keep trailer\r\n",
+  },
+  {
+    name: "explicit start and end",
+    yaml: "---\nmodel:\n  default: work-model\n...\n",
+    trailer: "...\n",
+  },
+  {
+    name: "commented leading start",
+    yaml: "# keep prefix\n--- # start\nmodel:\n  default: work-model\n...\n",
+    trailer: "...\n",
+  },
+  { name: "empty marker-only start", yaml: "---", trailer: "" },
+  {
+    name: "commented marker-only start",
+    yaml: "--- # keep start",
+    trailer: "",
+  },
+  { name: "empty marker-only end", yaml: "...", trailer: "..." },
+  {
+    name: "empty explicit CRLF document",
+    yaml: "---\r\n...\r\n",
+    trailer: "...\r\n",
+  },
+  { name: "empty unmarked document", yaml: "", trailer: "" },
+  {
+    name: "mapping without final newline",
+    yaml: "model:\n  default: work-model",
+    trailer: "",
+  },
+  {
+    name: "existing speech before end",
+    yaml: "---\ntts:\n  provider: openai\n  minimax:\n    model: speech-2.8-hd # keep model note\n    voice_id: narrator\n... # end",
+    trailer: "... # end",
+  },
+  {
+    name: "empty nested speech before end",
+    yaml: "tts:\n  minimax:\n...\n",
+    trailer: "...\n",
+  },
+  {
+    name: "indented literal markers",
+    yaml: "prompt: |\n  ...\n  ---\nmodel:\n  default: work-model\n...\n",
+    trailer: "...\n",
+  },
+];
+// @lat: [[speech-playback-tests#Single-document marker preservation]]
+it.each(documentCases)(
+  "saves real speech YAML within $name",
+  async ({ yaml, trailer }) => {
+    expect(() => load(yaml)).not.toThrow();
+    const original = load(yaml) as
+      | { prompt?: string; model?: unknown }
+      | undefined;
+    const path = join(home, "profiles", "work", "config.yaml");
+    writeFileSync(path, yaml);
+    const { speech, target } = await runtime();
+    expect(
+      speech.setSpeechConfig("model", "speech-2.6-turbo", "work", target),
+    ).toBe(true);
+    expect(speech.setSpeechConfig("region", "cn", "work", target)).toBe(true);
+    const serialized = readFileSync(path, "utf8");
+    const parsed = load(serialized) as {
+      tts: {
+        provider: string;
+        minimax: { model: string; region: string; voice_id?: string };
+      };
+      prompt?: string;
+      model?: unknown;
+    };
+    expect(parsed.tts).toMatchObject({
+      provider: "minimax",
+      minimax: { model: "speech-2.6-turbo", region: "cn" },
+    });
+    if (original?.model) expect(parsed.model).toEqual(original.model);
+    if (original?.prompt) expect(parsed.prompt).toBe(original.prompt);
+    if (yaml.includes("voice_id"))
+      expect(parsed.tts.minimax.voice_id).toBe("narrator");
+    if (trailer) expect(serialized.endsWith(trailer)).toBe(true);
+    if (yaml.includes("# keep prefix"))
+      expect(serialized.startsWith("# keep prefix\n--- # start\n")).toBe(true);
+    if (yaml.includes("# keep model note"))
+      expect(serialized).toContain("# keep model note");
+    if (yaml.includes("\r\n"))
+      expect(serialized.replaceAll("\r\n", "")).not.toContain("\n");
+    expect(readFileSync(join(home, "config.yaml"), "utf8")).toBe(
+      "model:\n  default: untouched\n",
+    );
+    vi.resetModules();
+    const reopened = await runtime();
+    expect(reopened.speech.getSpeechConfig("work", reopened.target)).toEqual({
+      model: "speech-2.6-turbo",
+      region: "cn",
+    });
+  },
+);
+
+// @lat: [[speech-playback-tests#Multiple-document speech write refusal]]
+it.each([
+  "model:\n  default: first\n---\ntts:\n  provider: openai\n",
+  "---\ntts:\n  minimax:\n    model: speech-2.8-hd\n...\n---\nmodel:\n  default: second\n",
+  "tts:\n  provider: openai\n...\nmodel:\n  default: second\n",
+  "---\n...\n---\n...\n",
+])(
+  "refuses real multi-document speech writes without altering %s",
+  async (yaml) => {
+    expect(loadAll(yaml)).toHaveLength(2);
+    const path = join(home, "profiles", "work", "config.yaml");
+    writeFileSync(path, yaml);
+    const { speech, target } = await runtime();
+    expect(() =>
+      speech.setSpeechConfig("model", "speech-2.6-turbo", "work", target),
+    ).toThrow(/YAML|document|mapping/);
+    expect(readFileSync(path, "utf8")).toBe(yaml);
+  },
+);
+
+// @lat: [[speech-playback-tests#Unsupported document header refusal]]
+it.each([
+  "%YAML 1.2\n---\nmodel:\n  default: work-model\n...\n",
+  "--- {tts: {provider: openai}}\n",
+])(
+  "refuses unsupported valid YAML headers without changing %s",
+  async (yaml) => {
+    expect(() => load(yaml)).not.toThrow();
+    const path = join(home, "profiles", "work", "config.yaml");
+    writeFileSync(path, yaml);
+    const { speech, target } = await runtime();
+    expect(() =>
+      speech.setSpeechConfig("model", "speech-2.6-turbo", "work", target),
+    ).toThrow(/YAML|document|mapping/);
     expect(readFileSync(path, "utf8")).toBe(yaml);
   },
 );
