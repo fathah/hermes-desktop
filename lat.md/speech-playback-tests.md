@@ -87,6 +87,8 @@ Scalar and flow YAML parents fail without acknowledging success or modifying the
 
 The actual Layout and Chat retain background transcripts while switching profile or screen, but pause audio, revoke its URL and cancel the hidden run's matching speech request.
 
+The fixture uses captured Local profile authority and preserves production usage helpers when stubbing the native transport hook, so merged footer and chat lifetimes remain part of this acceptance path.
+
 ## Hidden pending chat synthesis
 
 Profile and screen transitions cancel synthesis in the actual retained Chat, so a late vendor reply cannot allocate or play hidden audio.

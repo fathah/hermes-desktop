@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { SynthesizedSpeech } from "../../../../shared/minimax-speech";
+import { profileEditorFixture } from "../../test/profileEditorFixture";
 vi.mock("../../components/useI18n", () => ({
   useI18n: () => ({ t: (key: string) => key }),
 }));
@@ -85,7 +86,10 @@ vi.mock("../Chat/hooks/useReasoningEffort", () => ({
 vi.mock("../Chat/hooks/useLocalCommands", () => ({
   useLocalCommands: () => vi.fn(),
 }));
-vi.mock("../Chat/hooks/useDashboardChatTransport", () => ({
+vi.mock("../Chat/hooks/useDashboardChatTransport", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("../Chat/hooks/useDashboardChatTransport")
+  >()),
   useDashboardChatTransport: () => ({ enabled: false }),
   dashboardChatEnabledForConnection: () => false,
 }));
@@ -154,15 +158,18 @@ beforeEach(() => {
   URL.revokeObjectURL = vi.fn();
   localStorage.clear();
   const listeners = vi.fn().mockReturnValue(() => {});
+  const scope = profileEditorFixture();
   Object.defineProperty(window, "hermesAPI", {
     configurable: true,
     value: {
+      ...scope.api,
       listProfiles: vi
         .fn()
         .mockResolvedValue([
           { id: "default", isActive: true, isDefault: true },
         ]),
       getConnectionConfig: vi.fn().mockResolvedValue({ mode: "local" }),
+      getSessionUsage: vi.fn().mockResolvedValue(null),
       getProviderRequestTarget: vi.fn().mockResolvedValue({
         connectionId: "local",
         mode: "local",
@@ -175,7 +182,6 @@ beforeEach(() => {
       recordSessionLocation: vi.fn().mockResolvedValue(true),
       setSessionContextFolder: vi.fn().mockResolvedValue(true),
       setSessionModelOverride: vi.fn().mockResolvedValue(true),
-      onConnectionConfigChanged: listeners,
       onContextMenuCopyChat: listeners,
       onContextMenuSelectBubble: listeners,
       onUpdateAvailable: listeners,
