@@ -3,18 +3,29 @@ import { Plus, Trash } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
 import type { MemoryEntry } from "./types";
 
-interface MemoryEntriesProps {
+import {
+  useProfileEditorLifetime,
+  type ProfileEditorScope,
+} from "../../hooks/useProfileEditorLifetime";
+
+interface MemoryEntriesProps extends ProfileEditorScope {
   entries: MemoryEntry[];
   profile?: string;
   onRefresh: () => void;
+  onMutationStart?: () => (() => void) | null;
 }
 
 export function MemoryEntries({
   entries,
   profile,
   onRefresh,
+  target,
+  isCurrent,
+  onMutationStart,
 }: MemoryEntriesProps): React.JSX.Element {
   const { t } = useI18n();
+  const live = useProfileEditorLifetime({ target, isCurrent });
+  const writable = (): boolean => live() && target?.mode !== "remote";
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editContent, setEditContent] = useState("");
   const [showAdd, setShowAdd] = useState(false);
@@ -22,43 +33,78 @@ export function MemoryEntries({
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
   const [error, setError] = useState("");
 
+  async function mutate(
+    operation: () => Promise<{ success: boolean; error?: string }>,
+    failed: string,
+    done: () => void,
+  ): Promise<void> {
+    if (!writable()) return;
+    const finish = onMutationStart?.();
+    if (onMutationStart && !finish) return;
+    setError("");
+    try {
+      const result = await operation();
+      // A pane can unmount while its parent still owns this target. The parent's
+      // guarded reload must observe accepted writes even when this draft is gone.
+      if (result.success && (target && isCurrent ? isCurrent(target) : live()))
+        onRefresh();
+      if (!live()) return;
+      if (!result.success) {
+        setError(result.error || t(failed));
+        return;
+      }
+      done();
+    } catch (reason) {
+      if (live())
+        setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      finish?.();
+    }
+  }
+
   async function handleAddEntry(): Promise<void> {
     if (!newEntry.trim()) return;
-    setError("");
-    const result = await window.hermesAPI.addMemoryEntry(
-      newEntry.trim(),
-      profile,
+    await mutate(
+      () => window.hermesAPI.addMemoryEntry(newEntry.trim(), profile, target),
+      "memory.addFailed",
+      () => {
+        setNewEntry("");
+        setShowAdd(false);
+      },
     );
-    if (result.success) {
-      setNewEntry("");
-      setShowAdd(false);
-      onRefresh();
-    } else {
-      setError(result.error || t("memory.addFailed"));
-    }
   }
 
   async function handleSaveEdit(): Promise<void> {
     if (editingIndex === null) return;
-    setError("");
-    const result = await window.hermesAPI.updateMemoryEntry(
-      editingIndex,
-      editContent.trim(),
-      profile,
+    const index = editingIndex;
+    await mutate(
+      () =>
+        window.hermesAPI.updateMemoryEntry(
+          index,
+          editContent.trim(),
+          profile,
+          target,
+        ),
+      "memory.updateFailed",
+      () => {
+        setEditingIndex(null);
+        setEditContent("");
+      },
     );
-    if (result.success) {
-      setEditingIndex(null);
-      setEditContent("");
-      onRefresh();
-    } else {
-      setError(result.error || t("memory.updateFailed"));
-    }
   }
 
   async function handleDeleteEntry(index: number): Promise<void> {
-    await window.hermesAPI.removeMemoryEntry(index, profile);
-    setConfirmDelete(null);
-    onRefresh();
+    await mutate(
+      async () => ({
+        success: await window.hermesAPI.removeMemoryEntry(
+          index,
+          profile,
+          target,
+        ),
+      }),
+      "memory.updateFailed",
+      () => setConfirmDelete(null),
+    );
   }
 
   return (

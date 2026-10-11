@@ -3,19 +3,17 @@ import { getDbConnection, closeDbConnection } from "../src/main/db";
 import { activeStateDbPath } from "../src/main/utils";
 
 // Define hoisted mocks (Vitest allows variables prefixed with 'mock')
-const { mockClose, mockDatabaseConstructor, mockExistsSync } = vi.hoisted(
-  () => {
-    const mockClose = vi.fn();
-    const mockDatabaseConstructor = vi.fn().mockImplementation(() => {
-      return {
-        close: mockClose,
-        open: true,
-      };
-    });
-    const mockExistsSync = vi.fn();
-    return { mockClose, mockDatabaseConstructor, mockExistsSync };
-  },
-);
+const { mockClose, mockDatabaseConstructor, mockStatSync } = vi.hoisted(() => {
+  const mockClose = vi.fn();
+  const mockDatabaseConstructor = vi.fn().mockImplementation(() => {
+    return {
+      close: mockClose,
+      open: true,
+    };
+  });
+  const mockStatSync = vi.fn();
+  return { mockClose, mockDatabaseConstructor, mockStatSync };
+});
 
 vi.mock("better-sqlite3", () => {
   return {
@@ -28,7 +26,7 @@ vi.mock("better-sqlite3", () => {
   };
 });
 
-// Mock activeStateDbPath and existsSync
+// Mock the selected path and its physical file generation
 vi.mock("../src/main/utils", async (importOriginal) => {
   const original = await importOriginal<typeof import("../src/main/utils")>();
   return {
@@ -42,10 +40,10 @@ vi.mock("fs", async (importOriginal) => {
   const original = await importOriginal<typeof import("fs")>();
   return {
     ...original,
-    existsSync: (path: string) => mockExistsSync(path),
+    statSync: (path: string, options: unknown) => mockStatSync(path, options),
     default: {
       ...original,
-      existsSync: (path: string) => mockExistsSync(path),
+      statSync: (path: string, options: unknown) => mockStatSync(path, options),
     },
   };
 });
@@ -57,9 +55,14 @@ describe("Database connection caching", () => {
   beforeEach(() => {
     mockClose.mockReset();
     mockDatabaseConstructor.mockClear();
-    mockExistsSync.mockReset();
+    mockStatSync.mockReset();
     vi.mocked(activeStateDbPath).mockReset();
-    mockExistsSync.mockReturnValue(true); // default to true
+    mockStatSync.mockReturnValue({
+      dev: 1n,
+      ino: 1n,
+      birthtimeNs: 1n,
+      isFile: () => true,
+    });
   });
 
   afterEach(() => {
@@ -68,7 +71,9 @@ describe("Database connection caching", () => {
 
   it("returns null if database file does not exist", () => {
     vi.mocked(activeStateDbPath).mockReturnValue(dbPath1);
-    mockExistsSync.mockReturnValue(false);
+    mockStatSync.mockImplementation(() => {
+      throw new Error("ENOENT");
+    });
 
     const db = getDbConnection();
     expect(db).toBeNull();
@@ -77,7 +82,6 @@ describe("Database connection caching", () => {
 
   it("caches database connection for same path and readonly status", () => {
     vi.mocked(activeStateDbPath).mockReturnValue(dbPath1);
-    mockExistsSync.mockReturnValue(true);
 
     const db1 = getDbConnection(true);
     const db2 = getDbConnection(true);
@@ -96,8 +100,6 @@ describe("Database connection caching", () => {
   });
 
   it("re-creates connection if database path changes (e.g. profile switch)", () => {
-    mockExistsSync.mockReturnValue(true);
-
     vi.mocked(activeStateDbPath).mockReturnValue(dbPath1);
     const db1 = getDbConnection(true);
 
@@ -113,7 +115,6 @@ describe("Database connection caching", () => {
 
   it("re-creates connection if readonly status changes", () => {
     vi.mocked(activeStateDbPath).mockReturnValue(dbPath1);
-    mockExistsSync.mockReturnValue(true);
 
     const dbRead = getDbConnection(true);
     const dbWrite = getDbConnection(false);
@@ -127,7 +128,6 @@ describe("Database connection caching", () => {
 
   it("closes connection on closeDbConnection", () => {
     vi.mocked(activeStateDbPath).mockReturnValue(dbPath1);
-    mockExistsSync.mockReturnValue(true);
 
     const db = getDbConnection(true);
     expect(db).not.toBeNull();

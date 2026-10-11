@@ -2207,6 +2207,12 @@ body:has(.shell-vibrant),
 .status-strong {
   color: var(--text-secondary);
 }
+.status-usage {
+  font-variant-numeric: tabular-nums;
+}
+.status-usage-warn {
+  color: var(--warning, #d9822b);
+}
 .status-sep {
   color: var(--text-muted);
   opacity: 0.5;
@@ -5791,6 +5797,262 @@ body:has(.shell-vibrant),
 }
 
 /* Input area */
+/* In-chat subagent roster: delegated children report into the conversation
+   that spawned them, so they render above the composer instead of becoming a
+   separate sidebar session. */
+.subagent-section {
+  max-height: min(30dvh, 240px);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  flex-shrink: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-tertiary, rgba(255, 255, 255, 0.04));
+}
+
+.subagent-section-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.subagent-section-icon {
+  flex-shrink: 0;
+  color: var(--accent-text, #006acd);
+}
+
+.subagent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.subagent-item {
+  min-width: 0;
+}
+
+.subagent-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 2px;
+  background: none;
+  border: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.subagent-row:hover .subagent-goal {
+  color: var(--text-primary);
+}
+
+.subagent-row-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.subagent-goal {
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subagent-activity {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subagent-elapsed {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.subagent-chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.subagent-icon-queued,
+.subagent-icon-interrupted {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.subagent-icon-completed {
+  flex-shrink: 0;
+  color: var(--success, #22c55e);
+}
+
+.subagent-icon-failed {
+  flex-shrink: 0;
+  color: var(--error, #ef4444);
+}
+
+/* CSS-only ring spinner: costs no JS frame budget per row. */
+.subagent-spinner {
+  flex-shrink: 0;
+  width: 13px;
+  height: 13px;
+  border: 2px solid var(--border-bright, rgba(255, 255, 255, 0.1));
+  border-top-color: var(--accent-text, #006acd);
+  border-radius: 50%;
+  animation: subagent-spin 0.8s linear infinite;
+}
+
+@keyframes subagent-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.subagent-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 2px 8px 22px;
+}
+
+.subagent-stream {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.subagent-stream-entry {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.subagent-stream-tool {
+  color: var(--text-secondary);
+}
+
+.subagent-stream-thinking {
+  font-style: italic;
+}
+
+.subagent-stream-summary,
+.subagent-stream-error {
+  color: var(--text-secondary);
+}
+
+.subagent-stream-error {
+  color: var(--error, #ef4444);
+}
+
+.subagent-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.subagent-steer-input {
+  flex: 1;
+  min-width: 120px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-bright, rgba(255, 255, 255, 0.1));
+  border-radius: var(--radius-sm, 6px);
+}
+
+.subagent-steer-input:focus {
+  outline: none;
+  border-color: var(--border-focus, var(--accent));
+}
+
+.subagent-control-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: none;
+  border: 1px solid var(--border-bright, rgba(255, 255, 255, 0.1));
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+}
+
+.subagent-control-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.subagent-control-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.subagent-control-feedback {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.subagent-transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.subagent-transcript-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.subagent-transcript-note {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.subagent-transcript-body {
+  max-height: 30vh;
+  margin: 0;
+  overflow: auto;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .chat-input-area {
   position: relative;
   padding: 12px 24px 16px;

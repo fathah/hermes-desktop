@@ -20,6 +20,7 @@ import ProviderKeysSection from "../../components/ProviderKeysSection";
 import RegistryBrowserModal from "../../components/RegistryBrowserModal";
 import AuxiliaryTasksSection from "../../components/AuxiliaryTasksSection";
 import { useDiscoveredModels } from "../../hooks/useDiscoveredModels";
+import { useConnectionTargetRevision } from "../../hooks/useConnectionTargetRevision";
 import { KeyRound, Workflow, User } from "../../assets/icons";
 import {
   ChevronDown,
@@ -130,7 +131,7 @@ interface CredentialPoolEntry {
   key?: string;
 }
 
-function Providers({
+function ProvidersScreen({
   profile,
   visible,
 }: {
@@ -138,6 +139,18 @@ function Providers({
   visible?: boolean;
 }): React.JSX.Element {
   const { t } = useI18n();
+  const mounted = useRef(true);
+  const connectionChanged = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    const unsubscribe = window.hermesAPI.onConnectionConfigChanged(() => {
+      connectionChanged.current = true;
+    });
+    return () => {
+      mounted.current = false;
+      unsubscribe();
+    };
+  }, []);
   const [activeTab, setActiveTab] = useState<"providers" | "auxiliary">(
     "providers",
   );
@@ -180,9 +193,13 @@ function Providers({
   const [credPool, setCredPool] = useState<
     Record<string, Array<CredentialPoolEntry>>
   >({});
+  const [poolAvailable, setPoolAvailable] = useState<
+    "loading" | "local" | "ssh" | "remote"
+  >("loading");
   const [poolProvider, setPoolProvider] = useState("");
   const [poolNewKey, setPoolNewKey] = useState("");
   const [poolNewLabel, setPoolNewLabel] = useState("");
+  const [poolError, setPoolError] = useState("");
 
   // OAuth sign-in modal — holds the provider def being authenticated.
   const [oauthModal, setOauthModal] = useState<
@@ -257,11 +274,13 @@ function Providers({
   const persistedCustomUrl = useRef(false);
 
   const loadConfig = useCallback(async (): Promise<void> => {
-    const [envData, mc, pool] = await Promise.all([
+    const [envData, mc, pool, connection] = await Promise.all([
       window.hermesAPI.getEnv(profile),
       window.hermesAPI.getModelConfig(profile),
-      window.hermesAPI.getCredentialPool(),
+      window.hermesAPI.getCredentialPool(profile),
+      window.hermesAPI.getConnectionConfig(),
     ]);
+    if (!mounted.current || connectionChanged.current) return;
     setEnv(envData);
     setModelProvider(displayProviderFromConfig(mc.provider, mc.baseUrl));
     setModelName(mc.model);
@@ -269,9 +288,11 @@ function Providers({
     persistedCustomUrl.current =
       mc.provider === "custom" && Boolean(mc.baseUrl?.trim());
     setCredPool(pool);
+    setPoolAvailable(connection.mode);
 
     requestAnimationFrame(() => {
-      modelLoaded.current = true;
+      if (mounted.current && !connectionChanged.current)
+        modelLoaded.current = true;
     });
   }, [profile]);
 
@@ -285,6 +306,7 @@ function Providers({
     if (!visible) return;
     (async (): Promise<void> => {
       const mc = await window.hermesAPI.getModelConfig(profile);
+      if (!mounted.current || connectionChanged.current) return;
       modelLoaded.current = false;
       setModelProvider(displayProviderFromConfig(mc.provider, mc.baseUrl));
       setModelName(mc.model);
@@ -292,7 +314,8 @@ function Providers({
       persistedCustomUrl.current =
         mc.provider === "custom" && Boolean(mc.baseUrl?.trim());
       requestAnimationFrame(() => {
-        modelLoaded.current = true;
+        if (mounted.current && !connectionChanged.current)
+          modelLoaded.current = true;
       });
     })();
   }, [visible, profile]);
@@ -427,38 +450,70 @@ function Providers({
     return () => {
       for (const [key, timer] of timers) {
         clearTimeout(timer);
-        void window.hermesAPI.setEnv(key, envRef.current[key] || "", profile);
+        if (!connectionChanged.current) {
+          void window.hermesAPI
+            .setEnv(key, envRef.current[key] || "", profile)
+            .catch(() => {});
+        }
       }
       timers.clear();
     };
   }, [profile]);
 
   async function handleAddPoolKey(): Promise<void> {
-    if (!poolProvider || !poolNewKey.trim()) return;
+    if (
+      poolAvailable !== "local" ||
+      connectionChanged.current ||
+      !mounted.current ||
+      !poolProvider ||
+      !poolNewKey.trim()
+    )
+      return;
     // Use the main-process helper which constructs the canonical
     // engine schema — `{id, label, auth_type, priority, source,
     // access_token, base_url, request_count}` — so the entry is
     // actually readable by the gateway's credential resolver. The
     // previous code wrote `{key, label}` which the engine couldn't
     // parse (issue #367).
-    const updated = await window.hermesAPI.addCredentialPoolEntry(
-      poolProvider,
-      poolNewKey.trim(),
-      poolNewLabel.trim(),
-    );
-    setCredPool((prev) => ({ ...prev, [poolProvider]: updated }));
-    setPoolNewKey("");
-    setPoolNewLabel("");
+    setPoolError("");
+    try {
+      const updated = await window.hermesAPI.addCredentialPoolEntry(
+        poolProvider,
+        poolNewKey.trim(),
+        poolNewLabel.trim(),
+        profile,
+      );
+      if (!mounted.current || connectionChanged.current) return;
+      setCredPool((prev) => ({ ...prev, [poolProvider]: updated }));
+      setPoolNewKey("");
+      setPoolNewLabel("");
+    } catch (error) {
+      if (mounted.current && !connectionChanged.current)
+        setPoolError(error instanceof Error ? error.message : String(error));
+    }
   }
 
   async function handleRemovePoolKey(
     provider: string,
     index: number,
   ): Promise<void> {
+    if (
+      poolAvailable !== "local" ||
+      connectionChanged.current ||
+      !mounted.current
+    )
+      return;
     const entries = [...(credPool[provider] || [])];
     entries.splice(index, 1);
-    await window.hermesAPI.setCredentialPool(provider, entries);
-    setCredPool((prev) => ({ ...prev, [provider]: entries }));
+    setPoolError("");
+    try {
+      await window.hermesAPI.setCredentialPool(provider, entries, profile);
+      if (mounted.current && !connectionChanged.current)
+        setCredPool((prev) => ({ ...prev, [provider]: entries }));
+    } catch (error) {
+      if (mounted.current && !connectionChanged.current)
+        setPoolError(error instanceof Error ? error.message : String(error));
+    }
   }
 
   function toggleVisibility(key: string): void {
@@ -856,99 +911,113 @@ function Providers({
               <div className="settings-field-hint" style={{ marginBottom: 10 }}>
                 {t("settings.poolHint")}
               </div>
-              <div className="settings-pool-add">
-                <select
-                  className="input"
-                  value={poolProvider}
-                  onChange={(e) => setPoolProvider(e.target.value)}
-                  style={{ width: 140 }}
-                >
-                  <option value="">{t("common.provider")}</option>
-                  {PROVIDERS.options
-                    .filter((p) => p.value !== "auto")
-                    .map((p) => (
-                      <option key={p.value} value={p.value}>
-                        {t(p.label)}
-                      </option>
-                    ))}
-                </select>
-                <input
-                  className="input"
-                  type="password"
-                  value={poolNewKey}
-                  onChange={(e) => setPoolNewKey(e.target.value)}
-                  placeholder={t("settings.apiKeyPlaceholder")}
-                  style={{ flex: 1 }}
-                />
-                <input
-                  className="input"
-                  type="text"
-                  value={poolNewLabel}
-                  onChange={(e) => setPoolNewLabel(e.target.value)}
-                  placeholder={t("settings.labelPlaceholder", {
-                    optional: t("common.optional"),
-                  })}
-                  style={{ width: 120 }}
-                />
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={handleAddPoolKey}
-                  disabled={!poolProvider || !poolNewKey.trim()}
-                >
-                  {t("settings.add")}
-                </button>
-              </div>
-              {Object.entries(credPool).map(
-                ([provider, entries]) =>
-                  entries.length > 0 && (
-                    <div key={provider} className="settings-pool-group">
-                      <div className="settings-pool-provider">
-                        <BrandLogo provider={provider} size={16} />
-                        {PROVIDERS.options.find((p) => p.value === provider)
-                          ? t(
-                              PROVIDERS.options.find(
-                                (p) => p.value === provider,
-                              )!.label,
-                            )
-                          : provider}
-                      </div>
-                      {entries.map((entry, idx) => {
-                        // Display the secret from whichever field this
-                        // entry has — new entries use `access_token` per
-                        // the engine schema (#367); old entries may still
-                        // be in `key` (backward compat).
-                        const secret =
-                          entry.access_token ||
-                          entry.api_key ||
-                          entry.key ||
-                          "";
-                        return (
-                          <div
-                            key={entry.id || idx}
-                            className="settings-pool-entry"
-                          >
-                            <span className="settings-pool-label">
-                              {entry.label ||
-                                `${t("settings.keyLabel")} ${idx + 1}`}
-                            </span>
-                            <span className="settings-pool-key">
-                              {secret
-                                ? `${secret.slice(0, 8)}...${secret.slice(-4)}`
-                                : t("settings.empty")}
-                            </span>
-                            <button
-                              className="btn-ghost"
-                              style={{ color: "var(--error)", fontSize: 11 }}
-                              onClick={() => handleRemovePoolKey(provider, idx)}
-                            >
-                              {t("settings.remove")}
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ),
+              {poolError && <div role="alert">{poolError}</div>}
+              {poolAvailable === "ssh" && (
+                <div role="note" className="settings-field-hint">
+                  Credential pool operations are unavailable over SSH. Manage
+                  the pool on the Hermes server.
+                </div>
               )}
+              <fieldset
+                disabled={poolAvailable !== "local"}
+                style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
+              >
+                <div className="settings-pool-add">
+                  <select
+                    className="input"
+                    value={poolProvider}
+                    onChange={(e) => setPoolProvider(e.target.value)}
+                    style={{ width: 140 }}
+                  >
+                    <option value="">{t("common.provider")}</option>
+                    {PROVIDERS.options
+                      .filter((p) => p.value !== "auto")
+                      .map((p) => (
+                        <option key={p.value} value={p.value}>
+                          {t(p.label)}
+                        </option>
+                      ))}
+                  </select>
+                  <input
+                    className="input"
+                    type="password"
+                    value={poolNewKey}
+                    onChange={(e) => setPoolNewKey(e.target.value)}
+                    placeholder={t("settings.apiKeyPlaceholder")}
+                    style={{ flex: 1 }}
+                  />
+                  <input
+                    className="input"
+                    type="text"
+                    value={poolNewLabel}
+                    onChange={(e) => setPoolNewLabel(e.target.value)}
+                    placeholder={t("settings.labelPlaceholder", {
+                      optional: t("common.optional"),
+                    })}
+                    style={{ width: 120 }}
+                  />
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={handleAddPoolKey}
+                    disabled={!poolProvider || !poolNewKey.trim()}
+                  >
+                    {t("settings.add")}
+                  </button>
+                </div>
+                {Object.entries(credPool).map(
+                  ([provider, entries]) =>
+                    entries.length > 0 && (
+                      <div key={provider} className="settings-pool-group">
+                        <div className="settings-pool-provider">
+                          <BrandLogo provider={provider} size={16} />
+                          {PROVIDERS.options.find((p) => p.value === provider)
+                            ? t(
+                                PROVIDERS.options.find(
+                                  (p) => p.value === provider,
+                                )!.label,
+                              )
+                            : provider}
+                        </div>
+                        {entries.map((entry, idx) => {
+                          // Display the secret from whichever field this
+                          // entry has — new entries use `access_token` per
+                          // the engine schema (#367); old entries may still
+                          // be in `key` (backward compat).
+                          const secret =
+                            entry.access_token ||
+                            entry.api_key ||
+                            entry.key ||
+                            "";
+                          return (
+                            <div
+                              key={entry.id || idx}
+                              className="settings-pool-entry"
+                            >
+                              <span className="settings-pool-label">
+                                {entry.label ||
+                                  `${t("settings.keyLabel")} ${idx + 1}`}
+                              </span>
+                              <span className="settings-pool-key">
+                                {secret
+                                  ? `${secret.slice(0, 8)}...${secret.slice(-4)}`
+                                  : t("settings.empty")}
+                              </span>
+                              <button
+                                className="btn-ghost"
+                                style={{ color: "var(--error)", fontSize: 11 }}
+                                onClick={() =>
+                                  handleRemovePoolKey(provider, idx)
+                                }
+                              >
+                                {t("settings.remove")}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ),
+                )}
+              </fieldset>
             </div>
           </div>
 
@@ -1206,4 +1275,15 @@ function Providers({
   );
 }
 
-export default Providers;
+export default function Providers(props: {
+  profile?: string;
+  visible?: boolean;
+}): React.JSX.Element {
+  const revision = useConnectionTargetRevision();
+  return (
+    <ProvidersScreen
+      key={JSON.stringify([props.profile || "default", revision])}
+      {...props}
+    />
+  );
+}

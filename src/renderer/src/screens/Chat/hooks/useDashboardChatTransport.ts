@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { LOCAL_PRESETS } from "../../../constants";
 import {
   isBubbleMessage,
@@ -12,6 +12,15 @@ import {
 } from "../dashboardEventAdapter";
 import { DashboardGatewayClient } from "../dashboardGatewayClient";
 import { executeSlash, type SlashExecOutcome } from "../slashExec";
+import {
+  applySubagentEvent,
+  subagentScopeKey,
+  isSubagentEvent,
+  pruneFinishedSubagents,
+  type SubagentControls,
+  type SubagentSnapshotEntry,
+  type SubagentTail,
+} from "../subagents";
 import type { AgentCommandsCatalogResponse } from "../slash/types";
 import type { ActiveTurn, Attachment, ChatMessage, UsageState } from "../types";
 import type { DesktopSessionContinuationItem } from "../../../../../shared/session-continuation";
@@ -89,6 +98,8 @@ interface UseDashboardChatTransportArgs {
   activeTurnRef: React.MutableRefObject<ActiveTurn | null>;
   connectionId?: string;
   connectionRevision?: number;
+  /** Waits for pending private-authority classification without closing an equal client. */
+  getConnectionAuthority?: () => Promise<string | null>;
   contextFolder: string | null;
   connectionMode: DashboardConnectionMode;
   enabled: boolean;
@@ -140,6 +151,14 @@ interface UseDashboardChatTransportResult {
    * a `background.complete` event rendered into the transcript.
    */
   runBackground: (text: string) => Promise<{ taskId?: string; error?: string }>;
+  /**
+   * In-chat subagent roster for THIS conversation (`subagent.list`/`steer`/
+   * `interrupt`/`tail`), or null when the transport is disabled. Delegated
+   * children stay inside the chat that spawned them; they are never a separate
+   * conversation the user has to hunt down in the sidebar.
+   */
+  subagents: SubagentControls | null;
+  subagentScopeKey: string | null;
 }
 
 interface PendingDashboardApproval {
@@ -202,7 +221,7 @@ export function isDashboardSlashWorkerExitError(err: unknown): boolean {
 export async function submitDashboardPromptWithRecovery(
   client: DashboardPromptClient,
   params: {
-    onRecoveredSessionId?: (sessionId: string) => void;
+    onRecoveredSessionId?: (sessionId: string, info?: unknown) => void;
     canRecover?: () => boolean;
     sessionId: string;
     storedSessionId?: string | null;
@@ -243,7 +262,7 @@ export async function submitDashboardPromptWithRecovery(
       throw err;
     }
 
-    params.onRecoveredSessionId?.(recoveredSessionId);
+    params.onRecoveredSessionId?.(recoveredSessionId, resumed.info);
     await client.request("prompt.submit", {
       session_id: recoveredSessionId,
       text: params.text,
@@ -731,6 +750,31 @@ export function usageFromPayload(payload: unknown): Partial<UsageState> | null {
   };
 }
 
+function cumulativeUsagePayload(payload: unknown): boolean {
+  const record = asRecord(asRecord(payload).usage);
+  return "input" in record || "output" in record;
+}
+
+/** Native Hermes counters are runtime-session snapshots; OpenAI counts are turn deltas. */
+export function dashboardUsageDelta(
+  payload: unknown,
+  sessionId: string,
+  snapshots: Map<string, Partial<UsageState>>,
+): Partial<UsageState> | null {
+  const usage = usageFromPayload(payload);
+  if (!usage || !cumulativeUsagePayload(payload)) return usage;
+  const previous = snapshots.get(sessionId);
+  snapshots.set(sessionId, usage);
+  const delta = (current = 0, before = 0): number =>
+    current >= before ? current - before : current;
+  return {
+    ...usage,
+    promptTokens: delta(usage.promptTokens, previous?.promptTokens),
+    completionTokens: delta(usage.completionTokens, previous?.completionTokens),
+    totalTokens: delta(usage.totalTokens, previous?.totalTokens),
+  };
+}
+
 function messageChars(message: ChatMessage): number {
   if ("content" in message) return message.content?.length ?? 0;
   switch (message.kind) {
@@ -775,6 +819,20 @@ export function estimateContextTokens(
     }
   }
   return Math.max(Math.round((totalChars - lastAssistantBubbleChars) / 4), 0);
+}
+
+/**
+ * Rough size of a whole transcript as the NEXT turn's context (chars / 4).
+ * Unlike estimateContextTokens (which drops the latest reply because it is the
+ * turn's output), a finished/loaded conversation is all context for what comes
+ * next. Used to show an occupancy before the first live turn reports usage.
+ */
+export function estimateTranscriptTokens(
+  messages: ReadonlyArray<ChatMessage>,
+): number {
+  let totalChars = 0;
+  for (const message of messages) totalChars += messageChars(message);
+  return Math.round(totalChars / 4);
 }
 
 export function completionFailed(payload: unknown): boolean {
@@ -944,6 +1002,7 @@ export function useDashboardChatTransport({
   activeTurnRef,
   connectionId,
   connectionRevision,
+  getConnectionAuthority,
   contextFolder,
   connectionMode,
   enabled,
@@ -972,7 +1031,14 @@ export function useDashboardChatTransport({
   // immediately. Reset on connection change (see the effect below).
   const dashboardUnavailableRef = useRef(false);
   const runtimeSessionIdRef = useRef<string | null>(null);
+  const cumulativeUsageRef = useRef(new Map<string, Partial<UsageState>>());
   const storedSessionIdRef = useRef<string | null>(hermesSessionId);
+  const conversationGenerationRef = useRef(0);
+  const subagentResumeRef = useRef<{
+    generation: number;
+    promise: Promise<string>;
+    scope: string | null;
+  } | null>(null);
   const reasoningSegmentClosedRef = useRef(false);
   const appliedModelRef = useRef<string | null>(null);
   const recreateRuntimeSessionRef = useRef(false);
@@ -1123,6 +1189,8 @@ export function useDashboardChatTransport({
 
   useEffect(() => {
     if (hermesSessionId === storedSessionIdRef.current) return;
+    conversationGenerationRef.current += 1;
+    subagentResumeRef.current = null;
     expirePendingApprovalsRef.current();
     storedSessionIdRef.current = hermesSessionId;
     runtimeSessionIdRef.current = null;
@@ -1140,6 +1208,8 @@ export function useDashboardChatTransport({
 
   useEffect(() => {
     clientGenerationRef.current += 1;
+    cumulativeUsageRef.current.clear();
+    subagentResumeRef.current = null;
     dashboardUnavailableRef.current = false;
     expirePendingApprovalsRef.current(true);
     clientRef.current?.close();
@@ -1155,6 +1225,21 @@ export function useDashboardChatTransport({
     lastSyncedCwdRef.current = null;
   }, [connectionId, connectionMode, connectionRevision, profile]);
 
+  // Subagent state is keyed by the conversation the user is looking at: the
+  // durable session id once it exists, else the runtime id the events carry.
+  const subagentSessionKey = useCallback(
+    (): string | null =>
+      subagentScopeKey(
+        connectionId,
+        profile,
+        storedSessionIdRef.current ??
+          hermesSessionId ??
+          runtimeSessionIdRef.current,
+        connectionRevision,
+      ),
+    [connectionId, profile, connectionRevision, hermesSessionId],
+  );
+
   const handleGatewayEvent = useCallback(
     (event: DashboardStreamEvent): void => {
       const runtimeSessionId = runtimeSessionIdRef.current;
@@ -1167,6 +1252,25 @@ export function useDashboardChatTransport({
         return;
       }
       logDashboardEvent(event, "accepted", runtimeSessionId);
+
+      // A delegated child relays its activity into THIS conversation as
+      // `subagent.*` events. That is application state for the in-chat roster
+      // (what is running, and steering it), not transcript content, so it must
+      // never reach the message-stream adapter.
+      // @lat: [[subagents#Transport wiring]]
+      if (isSubagentEvent(event.type)) {
+        const key = subagentSessionKey();
+        if (!key) return;
+        applySubagentEvent(key, event);
+        return;
+      }
+
+      // A new turn retires the previous turn's finished rows; children that
+      // outlived the turn that spawned them stay visible.
+      if (event.type === "message.start") {
+        const key = subagentSessionKey();
+        if (key) pruneFinishedSubagents(key);
+      }
 
       if (event.type === "session.info") {
         const recordRuntimeInfo = window.hermesAPI.recordAgentRuntimeInfo;
@@ -1331,7 +1435,11 @@ export function useDashboardChatTransport({
         activeTurnRef.current = null;
         setToolProgress(null);
         setIsLoading(false);
-        const usage = usageFromPayload(event.payload);
+        const usage = dashboardUsageDelta(
+          event.payload,
+          runtimeSessionId || event.session_id || "pending",
+          cumulativeUsageRef.current,
+        );
         if (usage || !failed) {
           // The gauge only renders when `contextTokens` is set, so it must be
           // populated even when the provider omits usage — entirely
@@ -1353,6 +1461,13 @@ export function useDashboardChatTransport({
               usage?.contextTokens ||
               estimatedContextTokens ||
               prev?.contextTokens,
+            // Exact when the provider reported it; an estimate when we fell back
+            // to the transcript; otherwise whatever the previous turn had.
+            contextEstimated: usage?.contextTokens
+              ? false
+              : estimatedContextTokens
+                ? true
+                : prev?.contextEstimated,
             contextWindowTokens:
               usage?.contextWindowTokens || prev?.contextWindowTokens,
             cacheReadTokens: prev?.cacheReadTokens,
@@ -1411,6 +1526,7 @@ export function useDashboardChatTransport({
       messagesRef,
       scheduleDeltaFlush,
       profile,
+      subagentSessionKey,
       setIsLoading,
       setToolProgress,
       setUsage,
@@ -1430,6 +1546,29 @@ export function useDashboardChatTransport({
 
       const generation = clientGenerationRef.current;
       const pending = (async () => {
+        const authority = getConnectionAuthority
+          ? await getConnectionAuthority()
+          : null;
+        const assertAuthority = async (
+          isClosed?: () => boolean,
+        ): Promise<void> => {
+          const currentAuthority = getConnectionAuthority
+            ? await getConnectionAuthority()
+            : null;
+          if (
+            clientGenerationRef.current !== generation ||
+            isClosed?.() ||
+            (getConnectionAuthority &&
+              (!authority || currentAuthority !== authority))
+          ) {
+            const error = new Error(
+              "Hermes dashboard connection authority changed. Retry on the current chat.",
+            ) as Error & { dashboardWasReachable?: boolean };
+            error.dashboardWasReachable = true;
+            throw error;
+          }
+        };
+        if (getConnectionAuthority) await assertAuthority();
         // The dashboard `/api/ws` is the ONLY chat transport when a dashboard is
         // available (matching apps/desktop, which has no /v1 chat path). A WS
         // drop / "socket hang up" — e.g. a momentary SSH tunnel blip — is
@@ -1471,9 +1610,27 @@ export function useDashboardChatTransport({
               status.error || "Hermes dashboard transport is unavailable",
             );
           }
+          let clientClosed = false;
+          let eventTail = Promise.resolve();
           const client: DashboardGatewayClient = new DashboardGatewayClient({
-            onEvent: handleGatewayEvent,
+            onEvent: (event) => {
+              if (!getConnectionAuthority) {
+                handleGatewayEvent(event);
+                return;
+              }
+              eventTail = eventTail
+                .then(async () => {
+                  await assertAuthority(() => clientClosed);
+                  if (
+                    !clientClosed &&
+                    clientGenerationRef.current === generation
+                  )
+                    handleGatewayEvent(event);
+                })
+                .catch(() => undefined);
+            },
             onClose: () => {
+              clientClosed = true;
               if (clientRef.current === client) {
                 expirePendingClarifyRef.current(true);
                 expirePendingApprovalsRef.current(true);
@@ -1481,7 +1638,21 @@ export function useDashboardChatTransport({
               }
             },
           });
+          if (getConnectionAuthority) {
+            const nativeRequest = client.request.bind(client);
+            client.request = async <T>(
+              method: string,
+              params: Record<string, unknown> = {},
+            ): Promise<T> => {
+              await assertAuthority(() => clientClosed);
+              const result = await nativeRequest<T>(method, params);
+              await assertAuthority(() => clientClosed);
+              return result;
+            };
+          }
           try {
+            if (getConnectionAuthority)
+              await assertAuthority(() => clientClosed);
             const freshUrl = window.hermesAPI.freshDashboardWsUrl
               ? await window.hermesAPI.freshDashboardWsUrl(
                   profile,
@@ -1491,8 +1662,21 @@ export function useDashboardChatTransport({
             if (!freshUrl) {
               throw new Error("Hermes dashboard WebSocket URL is unavailable");
             }
+            if (getConnectionAuthority)
+              await assertAuthority(() => clientClosed);
             await client.connect(freshUrl);
+            if (getConnectionAuthority) {
+              await assertAuthority(() => clientClosed);
+              // connect() begins with close() to clean up a prior socket. Only
+              // intercept explicit teardown after this new socket is admitted.
+              const nativeClose = client.close.bind(client);
+              client.close = () => {
+                clientClosed = true;
+                nativeClose();
+              };
+            }
           } catch (err) {
+            clientClosed = true;
             lastConnectErr = err;
             client.close();
             if (clientGenerationRef.current !== generation) {
@@ -1532,6 +1716,7 @@ export function useDashboardChatTransport({
       }
     }, [
       handleGatewayEvent,
+      getConnectionAuthority,
       profile,
       connectionId,
       connectionMode,
@@ -1578,6 +1763,13 @@ export function useDashboardChatTransport({
         }
 
         targetSessionId = response.runtimeSessionId;
+        // A resumed live runtime may already have counters. Its response is
+        // captured before this prompt; do not count those historical tokens again.
+        if (cumulativeUsagePayload(response.info))
+          cumulativeUsageRef.current.set(
+            targetSessionId,
+            usageFromPayload(response.info) || {},
+          );
         runtimeSessionIdRef.current = targetSessionId;
         lastRuntimeSessionWasCreatedRef.current = response.created;
         justCreated = response.created;
@@ -2001,8 +2193,13 @@ export function useDashboardChatTransport({
           storedSessionId: storedSessionIdRef.current,
           text: submitText,
           profile,
-          onRecoveredSessionId: (recoveredSessionId) => {
+          onRecoveredSessionId: (recoveredSessionId, info) => {
             runtimeSessionIdRef.current = recoveredSessionId;
+            if (cumulativeUsagePayload(info))
+              cumulativeUsageRef.current.set(
+                recoveredSessionId,
+                usageFromPayload(info) || {},
+              );
           },
         });
         return true;
@@ -2176,6 +2373,8 @@ export function useDashboardChatTransport({
 
   useEffect(
     () => () => {
+      clientGenerationRef.current += 1;
+      subagentResumeRef.current = null;
       expirePendingClarifyRef.current();
       expirePendingApprovalsRef.current();
       clientRef.current?.close();
@@ -2183,6 +2382,121 @@ export function useDashboardChatTransport({
     },
     [],
   );
+
+  /**
+   * Subagent RPCs are always scoped to THIS conversation's runtime session —
+   * a child control must never address whichever session happens to be active.
+   */
+  const subagentRequest = useCallback(
+    async <T>(method: string, params: Record<string, unknown>): Promise<T> => {
+      if (!enabled) throw new Error("dashboard transport disabled");
+      const generation = clientGenerationRef.current;
+      const conversationGeneration = conversationGenerationRef.current;
+      const scope = subagentSessionKey();
+      const storedSessionId = storedSessionIdRef.current;
+      const assertCurrent = (): void => {
+        if (
+          generation !== clientGenerationRef.current ||
+          conversationGeneration !== conversationGenerationRef.current ||
+          scope !== subagentSessionKey() ||
+          storedSessionId !== storedSessionIdRef.current
+        )
+          throw new Error(
+            "The conversation changed. Retry on the current chat.",
+          );
+      };
+      const client = await ensureClient();
+      assertCurrent();
+      let runtimeSessionId = runtimeSessionIdRef.current;
+      if (!runtimeSessionId && storedSessionId) {
+        let pending = subagentResumeRef.current;
+        if (
+          !pending ||
+          pending.generation !== generation ||
+          pending.scope !== scope
+        ) {
+          const promise = (async (): Promise<string> => {
+            // Roster reads resume a saved chat without sending a message or
+            // creating a replacement session when its durable ID is missing.
+            const resumed = await client.request<SessionResponse>(
+              "session.resume",
+              {
+                session_id: storedSessionId,
+                cols: 96,
+                lazy: true,
+                ...(profile ? { profile } : {}),
+              },
+            );
+            assertCurrent();
+            if (clientRef.current !== client)
+              throw new Error(
+                "The dashboard connection changed. Retry on the current chat.",
+              );
+            if (!resumed?.session_id)
+              throw new Error("session.resume returned no runtime session id");
+            if (!runtimeSessionIdRef.current) {
+              if (cumulativeUsagePayload(resumed.info))
+                cumulativeUsageRef.current.set(
+                  resumed.session_id,
+                  usageFromPayload(resumed.info) || {},
+                );
+              runtimeSessionIdRef.current = resumed.session_id;
+            }
+            return runtimeSessionIdRef.current;
+          })();
+          pending = { generation, promise, scope };
+          subagentResumeRef.current = pending;
+        }
+        try {
+          runtimeSessionId = await pending.promise;
+        } finally {
+          if (subagentResumeRef.current === pending)
+            subagentResumeRef.current = null;
+        }
+      }
+      assertCurrent();
+      if (!runtimeSessionId) throw new Error("no active session");
+      return client.request<T>(method, {
+        session_id: runtimeSessionId,
+        ...params,
+      });
+    },
+    [enabled, ensureClient, profile, subagentSessionKey],
+  );
+
+  const subagents = useMemo<SubagentControls | null>(() => {
+    if (!enabled) return null;
+    return {
+      interrupt: (subagentId) =>
+        subagentRequest<{ found?: boolean }>("subagent.interrupt", {
+          subagent_id: subagentId,
+        }),
+      list: async () => {
+        // Only a genuinely new chat has neither a runtime nor a durable ID.
+        if (!runtimeSessionIdRef.current && !storedSessionIdRef.current)
+          return [];
+        const result = await subagentRequest<{
+          subagents?: SubagentSnapshotEntry[];
+        }>("subagent.list", {});
+        return Array.isArray(result?.subagents) ? result.subagents : [];
+      },
+      steer: (subagentId, text) =>
+        subagentRequest<{ status?: string }>("subagent.steer", {
+          subagent_id: subagentId,
+          text,
+        }),
+      tail: async (subagentId) => {
+        const result = await subagentRequest<SubagentTail>("subagent.tail", {
+          subagent_id: subagentId,
+        });
+        return {
+          available: result?.available === true,
+          text: typeof result?.text === "string" ? result.text : "",
+          truncated: result?.truncated === true,
+        };
+      },
+    };
+  }, [enabled, subagentRequest]);
 
   return {
     abort,
@@ -2193,5 +2507,7 @@ export function useDashboardChatTransport({
     execSlash,
     getCommandCatalog,
     runBackground,
+    subagents,
+    subagentScopeKey: subagentSessionKey(),
   };
 }

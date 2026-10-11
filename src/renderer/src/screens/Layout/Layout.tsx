@@ -21,7 +21,9 @@ import {
 import { ActiveSessionsBar } from "./ActiveSessionsBar";
 import { StatusBar } from "./StatusBar";
 import { useRemoteOnlyMode } from "./useRemoteOnlyMode";
+import type { SessionUsage } from "./sessionUsage";
 import Sessions from "../Sessions/Sessions";
+import { useProfileEditorTarget } from "../../hooks/useProfileEditorTarget";
 import Agents from "../Agents/Agents";
 import Discover from "../Discover/Discover";
 import ProfileSwitcher from "./ProfileSwitcher";
@@ -32,9 +34,9 @@ import Tools from "../Tools/Tools";
 import Gateway from "../Gateway/Gateway";
 import Office from "../Office/Office";
 import Providers from "../Providers/Providers";
+import RemoteProviders from "../Providers/RemoteProviders";
 import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
-import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import { useSettingsModal } from "../../components/settings/SettingsModalContext";
 import {
@@ -129,10 +131,22 @@ function Layout({
   // preserve existing conversations and activate a scratch run for the selected
   // agent so `activeProfile` stays aligned with the visible chat transport.
   const [activeProfile, setActiveProfile] = useState("default");
+  const { target: profileTarget, isCurrent: isProfileCurrent } =
+    useProfileEditorTarget("default", connectionId);
+  const profileChoiceRevision = useRef(0);
+  const profileSettings = useRef({
+    connectionId,
+    scopeToken: null as string | null,
+  });
+  const restoredProfileScope = useRef<string | null>(null);
   const [runs, setRuns] = useState<ChatRun[]>(() => [
     mintRun(connectionId, "default"),
   ]);
   const [activeRunId, setActiveRunId] = useState<string>(() => runs[0].runId);
+  const runsRef = useRef(runs);
+  runsRef.current = runs;
+  const activeRunRef = useRef(activeRunId);
+  activeRunRef.current = activeRunId;
   // While a resume's history is loading, show its spinner immediately.
   const [resumingSessionId, setResumingSessionId] = useState<string | null>(
     null,
@@ -152,8 +166,8 @@ function Layout({
     height: 0,
   });
 
-  const currentSessionId =
-    runs.find((r) => r.runId === activeRunId)?.sessionId ?? null;
+  const activeRun = runs.find((r) => r.runId === activeRunId);
+  const currentSessionId = activeRun?.sessionId ?? null;
 
   const loadingSessionIds = useMemo(
     () => deriveLoadingSessionIds(runs),
@@ -243,11 +257,13 @@ function Layout({
     Record<string, { color?: string | null; avatar?: string | null }>
   >({});
   useEffect(() => {
+    if (!profileTarget) return;
+    const captured = profileTarget;
     let cancelled = false;
     window.hermesAPI
-      .listProfiles()
+      .listProfiles(profileTarget || undefined)
       .then((list) => {
-        if (cancelled) return;
+        if (cancelled || !isProfileCurrent(captured)) return;
         const map: Record<string, { color?: string; avatar?: string | null }> =
           {};
         for (const p of list) map[p.id] = { color: p.color, avatar: p.avatar };
@@ -259,7 +275,7 @@ function Layout({
     return () => {
       cancelled = true;
     };
-  }, [activeProfile, view]);
+  }, [activeProfile, view, profileTarget, isProfileCurrent]);
   const getAppearance = useCallback(
     (profile: string) => profileAppearance[profile] ?? {},
     [profileAppearance],
@@ -278,6 +294,12 @@ function Layout({
   const handleRunTitle = useCallback((runId: string, title: string) => {
     setRuns((prev) => patchRun(prev, runId, { title }));
   }, []);
+  const handleRunUsage = useCallback(
+    (runId: string, usage: SessionUsage | null) => {
+      setRuns((prev) => patchRun(prev, runId, { usage }));
+    },
+    [],
+  );
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
       return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true";
@@ -346,34 +368,96 @@ function Layout({
     [goTo],
   );
 
-  // Restore the last-activated profile on launch. The main process persists it
-  // in ~/.hermes/active_profile (via `hermes profile use`), so the desktop
-  // should reopen on that profile rather than always resetting to "default".
   useEffect(() => {
+    const previous = profileSettings.current;
+    if (previous.connectionId === connectionId) {
+      // Notifications revoke request authority immediately, but display labels
+      // and unrelated connections do not change this main-issued settings token.
+      if (!profileTarget || previous.scopeToken === profileTarget.scopeToken)
+        return;
+      if (previous.scopeToken === null) {
+        previous.scopeToken = profileTarget.scopeToken;
+        return;
+      }
+    }
+    profileSettings.current = {
+      connectionId,
+      scopeToken: profileTarget?.scopeToken ?? null,
+    };
+    restoredProfileScope.current = null;
+    profileChoiceRevision.current += 1;
+    setActiveProfile("default");
+    setProfileAppearance({});
+    // The fallback shell and visible chat must describe the same target even
+    // when the subsequent profile restore fails.
+    const next = selectProfileRunTransition(
+      runsRef.current,
+      activeRunRef.current,
+      connectionId,
+      "default",
+    );
+    // A no-op snapshot must not replace a queued Chat usage/title update.
+    if (next.runs !== runsRef.current) setRuns(next.runs);
+    setActiveRunId(next.activeRunId);
+  }, [connectionId, profileTarget]);
+
+  // Restore the selected profile for each captured connection. Remote uses a
+  // desktop preference; Local/SSH retain their existing active-profile source.
+  useEffect(() => {
+    if (!profileTarget) return;
+    const captured = profileTarget;
+    const scope = JSON.stringify([connectionId, captured.scopeToken]);
+    if (restoredProfileScope.current === scope) return;
+    restoredProfileScope.current = scope;
+    const choice = profileChoiceRevision.current;
     let cancelled = false;
+    let settled = false;
     window.hermesAPI
-      .listProfiles()
+      .listProfiles(profileTarget || undefined)
       .then((profiles) => {
-        if (cancelled) return;
+        if (
+          cancelled ||
+          !isProfileCurrent(captured) ||
+          profileChoiceRevision.current !== choice
+        )
+          return;
+        settled = true;
         const active = profiles.find((p) => p.isActive);
-        if (active && active.id !== "default") {
+        if (active) {
           setActiveProfile(active.id);
-          // Re-home the initial pristine run onto the restored profile so the
-          // first chat runs under the right agent (no session/turn yet).
-          setRuns((prev) =>
-            prev.length === 1 && !prev[0].sessionId && !prev[0].loading
-              ? [{ ...prev[0], profile: active.id }]
-              : prev,
+          const next = selectProfileRunTransition(
+            runsRef.current,
+            activeRunRef.current,
+            connectionId,
+            active.id,
           );
+          // Keep concurrently reported run state when this restore is a no-op.
+          if (next.runs !== runsRef.current) setRuns(next.runs);
+          setActiveRunId(next.activeRunId);
         }
       })
       .catch(() => {
+        if (
+          cancelled ||
+          !isProfileCurrent(captured) ||
+          profileChoiceRevision.current !== choice
+        )
+          return;
+        settled = true;
         /* fall back to the default profile */
       });
     return () => {
       cancelled = true;
+      // An invalidated initial read can retry with fresh authority. A newer
+      // user choice owns this scope and must not be undone by its retry.
+      if (
+        !settled &&
+        profileChoiceRevision.current === choice &&
+        restoredProfileScope.current === scope
+      )
+        restoredProfileScope.current = null;
     };
-  }, []);
+  }, [connectionId, profileTarget, isProfileCurrent]);
 
   // Auto-update state
   const [updateState, setUpdateState] = useState<
@@ -503,6 +587,7 @@ function Layout({
       // chats remain on their original profile, but the visible chat must move
       // to a scratch run for the selected profile so the footer and transport
       // never point at different agents.
+      profileChoiceRevision.current += 1;
       setActiveProfile(name);
       const next = selectProfileRunTransition(
         runs,
@@ -520,6 +605,7 @@ function Layout({
   // and show it. This is the only path from the profile list that opens a chat.
   const handleChatWithProfile = useCallback(
     (name: string) => {
+      profileChoiceRevision.current += 1;
       setActiveProfile(name);
       const active = runs.find((r) => r.runId === activeRunId);
       if (active?.connectionId === connectionId && isScratchRun(active)) {
@@ -545,6 +631,7 @@ function Layout({
       const run = runs.find((r) => r.runId === runId);
       if (!run) return;
       setActiveRunId(runId);
+      profileChoiceRevision.current += 1;
       setActiveProfile(run.profile);
       goTo("chat");
     },
@@ -569,6 +656,7 @@ function Layout({
       if (runId === activeRunId) {
         const neighbour = remaining[Math.min(idx, remaining.length - 1)];
         setActiveRunId(neighbour.runId);
+        profileChoiceRevision.current += 1;
         setActiveProfile(neighbour.profile);
       }
     },
@@ -866,6 +954,7 @@ function Layout({
               </button>
             </div>
             <ProfileSwitcher
+              connectionId={connectionId}
               activeProfile={activeProfile}
               onSwitch={handleSelectProfile}
               onManage={() => goTo("agents")}
@@ -919,6 +1008,7 @@ function Layout({
                   onLoadingChange={handleRunLoading}
                   onSessionIdChange={handleRunSessionId}
                   onTitleChange={handleRunTitle}
+                  onUsageChange={handleRunUsage}
                   agentAppearance={getAppearance(run.profile)}
                 />
               </div>
@@ -976,15 +1066,13 @@ function Layout({
 
           {visitedViews.has("agents") && (
             <div style={paneStyle("agents")}>
-              {remoteMode ? (
-                <RemoteNotice feature="Profiles" />
-              ) : (
-                <Agents
-                  activeProfile={activeProfile}
-                  onSelectProfile={handleSelectProfile}
-                  onChatWith={handleChatWithProfile}
-                />
-              )}
+              <Agents
+                connectionId={connectionId}
+                key={connectionId}
+                activeProfile={activeProfile}
+                onSelectProfile={handleSelectProfile}
+                onChatWith={handleChatWithProfile}
+              />
             </div>
           )}
 
@@ -997,9 +1085,13 @@ function Layout({
           {visitedViews.has("providers") && (
             <div style={paneStyle("providers")}>
               {remoteMode ? (
-                <RemoteNotice feature="Providers" />
+                <RemoteProviders
+                  connectionId={connectionId}
+                  profile={activeProfile}
+                />
               ) : (
                 <Providers
+                  key={JSON.stringify([connectionId, activeProfile])}
                   profile={activeProfile}
                   visible={view === "providers"}
                 />
@@ -1021,11 +1113,11 @@ function Layout({
 
           {visitedViews.has("memory") && (
             <div style={paneStyle("memory")}>
-              {remoteMode ? (
-                <RemoteNotice feature="Memory" />
-              ) : (
-                <Memory profile={activeProfile} />
-              )}
+              <Memory
+                key={connectionId}
+                profile={activeProfile}
+                readOnly={remoteMode}
+              />
             </div>
           )}
 
@@ -1070,7 +1162,19 @@ function Layout({
           )}
         </main>
       </div>
-      <StatusBar activeProfile={activeProfile} />
+      <StatusBar
+        connectionId={
+          view === "chat"
+            ? (activeRun?.connectionId ?? connectionId)
+            : connectionId
+        }
+        activeProfile={
+          view === "chat"
+            ? (activeRun?.profile ?? activeProfile)
+            : activeProfile
+        }
+        sessionUsage={view === "chat" ? (activeRun?.usage ?? null) : null}
+      />
     </div>
   );
 }

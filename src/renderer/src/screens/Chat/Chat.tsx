@@ -24,6 +24,7 @@ import { useLocalCommands } from "./hooks/useLocalCommands";
 import {
   dashboardChatEnabledForConnection,
   useDashboardChatTransport,
+  estimateTranscriptTokens,
 } from "./hooks/useDashboardChatTransport";
 import { useI18n } from "../../components/useI18n";
 import { useChatPreferences } from "../../components/ChatPreferencesProvider";
@@ -41,8 +42,14 @@ import type {
   UsageState,
 } from "./types";
 import type { ContextUsage } from "./ContextGauge";
+import {
+  combineUsageTotals,
+  type SessionUsage,
+  type UsageCounters,
+} from "../Layout/sessionUsage";
 import { contextWindowForModel } from "./contextWindows";
 import { QueuedMessages } from "./QueuedMessages";
+import { SubagentSection } from "./SubagentSection";
 import { SLASH_COMMANDS, type SlashCommand } from "./slashCommands";
 import { reconcileSlashCatalog } from "./slash/commandCatalog";
 import {
@@ -118,6 +125,9 @@ interface ChatProps {
   onSessionIdChange?: (runId: string, sessionId: string | null) => void;
   /** Reports the first user message as a best-effort conversation title. */
   onTitleChange?: (runId: string, title: string) => void;
+  /** Reports token usage (context occupancy + session totals) so the shell's
+   *  status bar can show it for the active run. */
+  onUsageChange?: (runId: string, usage: SessionUsage | null) => void;
   /** Resolved avatar/colour of `profile`, so idle agent avatars in the
    *  transcript show the agent's profile picture instead of the loading gif. */
   agentAppearance?: { color?: string | null; avatar?: string | null };
@@ -136,6 +146,7 @@ function Chat({
   onLoadingChange,
   onSessionIdChange,
   onTitleChange,
+  onUsageChange,
   agentAppearance,
 }: ChatProps): React.JSX.Element {
   const { t } = useI18n();
@@ -281,6 +292,16 @@ function Chat({
   const dragCounter = useRef(0);
   const chatInputRef = useRef<ChatInputHandle>(null);
   const queueRef = useRef<QueuedMessage[]>([]);
+  const queueOwner = JSON.stringify([runId, connectionId, profile]);
+  const queueOwnerRef = useRef(queueOwner);
+  queueOwnerRef.current = queueOwner;
+  const queueMountedRef = useRef(true);
+  useEffect(() => {
+    queueMountedRef.current = true;
+    return () => {
+      queueMountedRef.current = false;
+    };
+  }, []);
   const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
   const activeTurnRef = useRef<ActiveTurn | null>(null);
   const dashboardChatEnabled = dashboardChatEnabledForConnection(
@@ -290,9 +311,64 @@ function Chat({
     chatTransportPreference,
   );
 
+  const connectionAuthorityRef = useRef<{
+    pending: Promise<string | null | undefined>;
+    supersede: () => void;
+  } | null>(null);
+  const setConnectionAuthority = useCallback(
+    (read: Promise<string | null>): void => {
+      let supersede!: () => void;
+      const obsolete = new Promise<undefined>((resolve) => {
+        supersede = () => resolve(undefined);
+      });
+      const previous = connectionAuthorityRef.current;
+      connectionAuthorityRef.current = {
+        pending: Promise.race([read, obsolete]),
+        supersede,
+      };
+      previous?.supersede();
+    },
+    [],
+  );
+  const [acceptedAuthority, setAcceptedAuthority] = useState<string | null>(
+    null,
+  );
+  const getConnectionAuthority = useCallback(async (): Promise<
+    string | null
+  > => {
+    for (;;) {
+      const pending = connectionAuthorityRef.current;
+      if (!pending) return null;
+      const revision = await pending.pending;
+      if (pending === connectionAuthorityRef.current) return revision ?? null;
+    }
+  }, []);
+  const authorizeSend = useCallback(async (): Promise<boolean> => {
+    const revision = await getConnectionAuthority();
+    return !!revision && revision === acceptedAuthority;
+  }, [acceptedAuthority, getConnectionAuthority]);
+
   useEffect(() => {
     let cancelled = false;
+    let readGeneration = 0;
+    let authorityRevision: string | null = null;
+    const readAuthorityRevision = async (): Promise<string | null> => {
+      if (!connectionId) return null;
+      try {
+        const target =
+          await window.hermesAPI.getProviderRequestTarget(connectionId);
+        return target?.connectionId === connectionId && target.revision
+          ? target.revision
+          : null;
+      } catch {
+        // An unknown or changing account must still invalidate old transport.
+        return null;
+      }
+    };
     const loadConnectionConfig = async (): Promise<void> => {
+      const generation = ++readGeneration;
+      const revisionRead = readAuthorityRevision();
+      setConnectionAuthority(revisionRead);
       try {
         const conn = await window.hermesAPI.getConnectionConfig(connectionId);
         let remoteAuthMode = conn.remoteAuthMode ?? "auto";
@@ -308,7 +384,10 @@ function Chat({
             // Keep stored transport choice when public status is unreachable.
           }
         }
-        if (!cancelled) {
+        const revision = await revisionRead;
+        if (!cancelled && generation === readGeneration) {
+          authorityRevision = revision;
+          setAcceptedAuthority(revision);
           setConnectionMode(conn.mode);
           setRemoteMode(conn.mode !== "local");
           setChatTransportPreference(
@@ -322,37 +401,65 @@ function Chat({
           );
         }
       } catch {
-        if (!cancelled) {
+        if (!cancelled && generation === readGeneration) {
           setConnectionMode("ssh");
           setRemoteMode(true);
           setChatTransportPreference("legacy");
         }
       } finally {
-        if (!cancelled) setConnectionModeLoaded(true);
+        if (!cancelled && generation === readGeneration)
+          setConnectionModeLoaded(true);
       }
     };
     void loadConnectionConfig();
     const unsubscribe = window.hermesAPI.onConnectionConfigChanged((conn) => {
-      if (conn.connectionId !== connectionId) return;
-      setConnectionRevision((revision) => revision + 1);
-      setConnectionModeLoaded(true);
-      setConnectionMode(conn.mode);
-      setRemoteMode(conn.mode !== "local");
-      setChatTransportPreference(
-        conn.mode === "local"
-          ? "auto"
-          : conn.mode === "ssh"
-            ? (conn.sshChatTransport ?? "auto")
-            : conn.remoteAuthMode === "oauth"
-              ? "dashboard"
-              : (conn.remoteChatTransport ?? "auto"),
-      );
+      const generation = ++readGeneration;
+      const revisionRead = readAuthorityRevision();
+      setConnectionAuthority(revisionRead);
+      void revisionRead.then(async (revision) => {
+        if (cancelled || generation !== readGeneration) return;
+        // Display names are outside the main-issued config/auth revision.
+        // Public fields alone cannot detect same-length keys or cookie changes.
+        if (revision && revision === authorityRevision) return;
+        // Registry notifications describe the selected connection; a retained
+        // tab must read its own public settings when a different target changed.
+        let ownConfig: typeof conn | null =
+          conn.connectionId === connectionId ? conn : null;
+        if (conn.connectionId !== connectionId) {
+          try {
+            ownConfig =
+              await window.hermesAPI.getConnectionConfig(connectionId);
+          } catch {
+            revision = null;
+            if (!cancelled && generation === readGeneration)
+              setConnectionAuthority(Promise.resolve(null));
+          }
+          if (cancelled || generation !== readGeneration) return;
+        }
+        authorityRevision = revision;
+        setAcceptedAuthority(revision);
+        setConnectionRevision((current) => current + 1);
+        setConnectionModeLoaded(true);
+        if (!ownConfig) return;
+        setConnectionMode(ownConfig.mode);
+        setRemoteMode(ownConfig.mode !== "local");
+        setChatTransportPreference(
+          ownConfig.mode === "local"
+            ? "auto"
+            : ownConfig.mode === "ssh"
+              ? (ownConfig.sshChatTransport ?? "auto")
+              : ownConfig.remoteAuthMode === "oauth"
+                ? "dashboard"
+                : (ownConfig.remoteChatTransport ?? "auto"),
+        );
+      });
     });
     return (): void => {
       cancelled = true;
+      setConnectionAuthority(Promise.resolve(null));
       unsubscribe();
     };
-  }, [connectionId]);
+  }, [connectionId, setConnectionAuthority]);
 
   const { containerRef, bottomRef } = useChatScroll(messages);
   const modelConfig = useModelConfig(profile);
@@ -662,6 +769,7 @@ function Chat({
 
   const dashboardTransport = useDashboardChatTransport({
     activeTurnRef,
+    getConnectionAuthority,
     connectionId,
     connectionRevision,
     contextFolder,
@@ -813,6 +921,7 @@ function Chat({
   );
 
   const actions = useChatActions({
+    authorizeSend,
     runId,
     connectionId,
     profile,
@@ -857,16 +966,27 @@ function Chat({
   // Drain queued messages one at a time when the agent finishes.
   useEffect(() => {
     if (isLoading) return;
-    const next = queueRef.current.shift();
+    const queue = queueRef.current;
+    const owner = queueOwnerRef.current;
+    const next = queue.shift();
     if (!next) return;
     setQueuedMessages([...queueRef.current]);
-    handleSendRef.current(next.text, next.attachments, true).catch(() => {
+    handleSendRef.current(next.text, next.attachments, true).catch((error) => {
       // Put the message back at the front so it isn't silently lost if
       // the send fails (e.g. IPC error before onChatError fires).
-      queueRef.current.unshift(next);
+      if (
+        !queueMountedRef.current ||
+        queueRef.current !== queue ||
+        queueOwnerRef.current !== owner
+      )
+        return;
+      queue.unshift(next);
       setQueuedMessages([...queueRef.current]);
+      addAgentMessage(
+        `error: ${error instanceof Error ? error.message : String(error)}`,
+      );
     });
-  }, [isLoading]);
+  }, [isLoading, addAgentMessage]);
 
   const handleRemoveQueued = useCallback((index: number) => {
     queueRef.current.splice(index, 1);
@@ -874,14 +994,14 @@ function Chat({
   }, []);
 
   const handleSubmitOrQueue = useCallback(
-    (text: string, attachments: Attachment[]) => {
+    async (text: string, attachments: Attachment[]): Promise<void> => {
       // Side questions (`/btw`) run on a concurrent background agent, so they
       // must never queue — fire them immediately even while the main turn is in
       // flight. This is the whole point of "ask without affecting context".
       const bgQuestion = parseBackgroundCommand(text);
       if (bgQuestion !== null) {
         if (bgQuestion)
-          void handleBackgroundRef.current(bgQuestion, attachments);
+          await handleBackgroundRef.current(bgQuestion, attachments);
         return;
       }
       // The central slash router owns queueing policy. Dispatch every slash
@@ -889,7 +1009,7 @@ function Chat({
       // the concurrent worker, and model-bound commands can format once before
       // they are queued.
       if (text.startsWith("/")) {
-        void handleSendRef.current(text, attachments, true);
+        await handleSendRef.current(text, attachments, true);
         return;
       }
       if (isLoading) {
@@ -897,7 +1017,7 @@ function Chat({
         setQueuedMessages([...queueRef.current]);
         return;
       }
-      void handleSendRef.current(text, attachments);
+      await handleSendRef.current(text, attachments);
     },
     [isLoading],
   );
@@ -999,20 +1119,158 @@ function Chat({
     [eventHasFiles],
   );
 
+  const usageScope = JSON.stringify([
+    connectionId,
+    profile,
+    connectionRevision,
+  ]);
+  const liveUsageScope = useRef(usageScope);
+  const scopedUsage = liveUsageScope.current === usageScope ? usage : null;
+  useEffect(() => {
+    liveUsageScope.current = usageScope;
+    setUsage(null);
+  }, [usageScope]);
+
   // Context-gauge data: the latest turn's prompt tokens vs the model's window.
   // Denominator priority: gateway-reported context_max (authoritative — knows
   // the actual model config) > provider /models catalogue > static heuristic.
-  const contextUsage: ContextUsage | null = usage?.contextTokens
+  // Before any live turn has reported usage (a conversation opened from
+  // history, or one still on its first turn) fall back to a transcript
+  // estimate so the occupancy is visible straight away.
+  const estimatedContext = useMemo(
+    () => (scopedUsage?.contextTokens ? 0 : estimateTranscriptTokens(messages)),
+    [scopedUsage?.contextTokens, messages],
+  );
+  const contextWindow =
+    scopedUsage?.contextWindowTokens ??
+    realContextWindow ??
+    contextWindowForModel(chatCurrentModel);
+  // The count is a guess when nothing live reported it, and also when the turn
+  // that set it fell back to the transcript estimate (scopedUsage.contextEstimated).
+  const contextEstimated = scopedUsage?.contextTokens
+    ? Boolean(scopedUsage.contextEstimated)
+    : estimatedContext > 0;
+  const contextUsage: ContextUsage | null = scopedUsage?.contextTokens
     ? {
-        used: usage.contextTokens,
-        window:
-          usage.contextWindowTokens ??
-          realContextWindow ??
-          contextWindowForModel(chatCurrentModel),
-        cacheReadTokens: usage.cacheReadTokens,
-        cacheWriteTokens: usage.cacheWriteTokens,
+        used: scopedUsage.contextTokens,
+        window: contextWindow,
+        cacheReadTokens: scopedUsage.cacheReadTokens,
+        cacheWriteTokens: scopedUsage.cacheWriteTokens,
+        estimated: contextEstimated,
       }
-    : null;
+    : estimatedContext > 0
+      ? { used: estimatedContext, window: contextWindow, estimated: true }
+      : null;
+
+  // A conversation opened from history has no live usage events, so read the
+  // totals the server has recorded for the session. They are kept SEPARATE from
+  // the live additions and combined below: seeding `usage` itself would be
+  // skipped whenever a live reply happened to finish first.
+  //
+  // Read while the turn is idle and capture the live baseline at admission.
+  // A completion invalidates an in-flight read and starts a fresh snapshot;
+  // response arrival alone says nothing about which turns its row includes.
+  const [savedUsage, setSavedUsage] = useState<{
+    owner: string;
+    totals: NonNullable<
+      Awaited<ReturnType<typeof window.hermesAPI.getSessionUsage>>
+    >;
+    liveBase: UsageCounters;
+  } | null>(null);
+  const usageOwner = JSON.stringify([usageScope, hermesSessionId]);
+  const livePrompt = scopedUsage?.promptTokens ?? 0;
+  const liveCompletion = scopedUsage?.completionTokens ?? 0;
+  const liveTotal = scopedUsage?.totalTokens ?? 0;
+  const liveCost = scopedUsage?.cost;
+  useEffect(() => {
+    if (!hermesSessionId || isLoading) return;
+    let cancelled = false;
+    const liveBase: UsageCounters = {
+      promptTokens: livePrompt,
+      completionTokens: liveCompletion,
+      totalTokens: liveTotal,
+      cost: liveCost,
+    };
+    window.hermesAPI
+      .getSessionUsage(hermesSessionId, connectionId, profile)
+      .then((totals) => {
+        if (cancelled || !totals) return;
+        setSavedUsage({
+          owner: usageOwner,
+          totals,
+          liveBase,
+        });
+      })
+      .catch(() => {
+        /* usage is informational; ignore */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    hermesSessionId,
+    connectionId,
+    profile,
+    connectionRevision,
+    usageOwner,
+    livePrompt,
+    liveCompletion,
+    liveTotal,
+    liveCost,
+    isLoading,
+  ]);
+
+  // Surface usage upward for the status bar. Depend on primitives (not the
+  // freshly-built contextUsage object) so this only fires when a number moves.
+  const scopedSavedUsage = savedUsage?.owner === usageOwner ? savedUsage : null;
+  const combined = combineUsageTotals(
+    scopedSavedUsage?.totals,
+    scopedSavedUsage?.liveBase,
+    scopedUsage,
+  );
+  const usagePrompt = combined.promptTokens;
+  const usageCompletion = combined.completionTokens;
+  const usageTotal = combined.totalTokens;
+  const usageCost = combined.cost;
+  const saved = scopedSavedUsage?.totals;
+  const usageCacheRead = scopedUsage?.cacheReadTokens ?? saved?.cacheReadTokens;
+  const usageCacheWrite =
+    scopedUsage?.cacheWriteTokens ?? saved?.cacheWriteTokens;
+  const usageContext = contextUsage?.used ?? 0;
+  const usageWindow = contextUsage?.window ?? 0;
+  const hasUsage =
+    scopedUsage !== null || scopedSavedUsage !== null || contextUsage !== null;
+  useEffect(() => {
+    if (!onUsageChange) return;
+    if (!hasUsage) {
+      onUsageChange(runId, null);
+      return;
+    }
+    onUsageChange(runId, {
+      contextTokens: usageContext,
+      contextWindow: usageWindow,
+      promptTokens: usagePrompt,
+      completionTokens: usageCompletion,
+      totalTokens: usageTotal,
+      cost: usageCost,
+      cacheReadTokens: usageCacheRead,
+      cacheWriteTokens: usageCacheWrite,
+      ...(contextEstimated ? { estimated: true } : {}),
+    });
+  }, [
+    contextEstimated,
+    runId,
+    onUsageChange,
+    hasUsage,
+    usageContext,
+    usageWindow,
+    usagePrompt,
+    usageCompletion,
+    usageTotal,
+    usageCost,
+    usageCacheRead,
+    usageCacheWrite,
+  ]);
 
   const handleInspectElement = useCallback(
     (payload: { selector: string; comment: string }) => {
@@ -1068,6 +1326,10 @@ function Chat({
       </div>
 
       <div className="chat-input-area">
+        <SubagentSection
+          controls={dashboardTransport.subagents}
+          sessionId={dashboardTransport.subagentScopeKey}
+        />
         <QueuedMessages
           messages={queuedMessages}
           onRemove={handleRemoveQueued}
@@ -1079,6 +1341,7 @@ function Chat({
           sessionId={hermesSessionId}
           remoteMode={remoteMode}
           profile={profile}
+          submissionScope={queueOwner}
           contextUsage={contextUsage}
           readiness={readiness}
           slashCommands={slashMenuCommands}

@@ -28,11 +28,91 @@ Local lists follow the Agent's native archive flag. Archiving hides a conversati
 
 [[src/main/db.ts#sessionVisibilityPredicate]] detects whether the selected profile's database has an `archived` column. [[src/main/sessions.ts#listSessions]] filters `archived = 0` before pagination, while legacy databases without that column remain readable.
 
-[[src/main/session-cache.ts#syncSessionCache]] reconciles the complete visible metadata set rather than using `started_at` as a change cursor: archive and restore do not change creation time. Cached titles are reused, and message bodies are read only to generate missing titles for newly visible rows. Successful sync replaces the cached membership, including an empty set; unavailable databases or failed reads retain the last good cache until retry. [[src/main/session-cache.ts#listCachedSessions]] remains DB-free, so an initial cached paint can be stale until sync finishes. Message history and search are unchanged.
+## Conversations, not child sessions
+
+The list shows conversations. A delegated child's session belongs to the turn that spawned it, and internal sources are not chats at all, so neither is a sidebar row.
+
+[[src/main/db.ts#conversationListPredicate]] and [[src/main/session-conversation.ts#conversationPredicate]] combine native archive and hidden visibility, durable `_delegate_from` exclusion, branch/reset child classification and the internal `kanban`, `tool`, `oneshot` sources. Local listing and cache sync apply the same rule before pagination. Legacy SSH listing uses the shared SQL clauses through [[src/main/session-conversation.ts#SSH_SESSION_LIST_SCRIPT]]. Missing optional columns remain readable; malformed `model_config` is treated as lacking markers.
+
+Filtering changes list membership only; delegated history stays in the database for explicit session access. It does not depend on a separate in-chat roster feature.
+
+### Native hidden visibility
+
+Local lists and cache sync respect the Agent's `hidden` flag, including hosted-room sessions and hidden branches. Real SQLite tests preserve visible chats, legacy schemas, profile isolation, pagination and hidden history through visibility changes.
+
+### SSH native hidden visibility
+
+The actual SSH Python listing applies `hidden = 0` before pagination when the column exists. Real SQLite fixtures retain ordinary and branch conversations, legacy databases without the column and hidden messages without affecting another profile.
+
+### Durable native provenance
+
+Native `_delegate_from` markers keep delegated sessions hidden even after parent links disappear. Marker precedence and invalid legacy JSON are verified with real SQLite.
+
+### Branch and reset conversations
+
+User-visible branch/reset children remain listable through `_branched_from`, `_reset_from` or the Agent's pre-marker parent lifecycle evidence; a parent link alone is not delegation evidence.
+
+### Local deletion and cache reconciliation
+
+Actual single/batch deletion preserves unselected child history and branch/reset rows, while list and cache reconciliation never promote previously hidden children into conversations.
+
+[[src/main/db.ts#preserveHiddenSessionChildren]] records the classification of hidden legacy children in a desktop-owned exclusion table before detaching them. This avoids rewriting Agent `model_config` or schema versions. Child deletion removes its exclusion through a foreign key; selected-profile isolation and messages are preserved.
+
+### SSH deletion and listing
+
+The production Python deletion and listing scripts share the native SQL rules. Disposable named-profile SQLite fixtures verify hidden-child retention, visible branches and unrelated-profile isolation.
+
+### Visibility rollback
+
+A failed parent deletion rolls back child detachment and the exclusion overlay in the same SQLite transaction, so a retry observes the original history and visibility.
+
+[[src/main/session-cache.ts#syncSessionCache]] reconciles the complete visible metadata set rather than using `started_at` as a change cursor: archive and restore do not change creation time. Cached titles are reused, and message bodies are read only to generate missing titles for newly visible rows. Successful sync replaces the cached membership, including an empty set. Read failures retain only a provenance-verified cache; missing, replaced or unstamped sources require a successful sync — see [[sidebar-navigation#Session cache provenance]]. [[src/main/session-cache.ts#listCachedSessions]] remains DB-free, so a verified cached paint can be stale until sync finishes. Message history and search are unchanged.
 
 [[src/renderer/src/screens/Sessions/Sessions.tsx]] accepts an empty quiet-refresh result for the explicitly selected local connection, allowing the last archived row to disappear. Network-backed lists retain their transient-empty guard. Failed connection checks retain visible rows, and request identity prevents a delayed empty result from clearing a newer profile's list.
 
 [[tests/session-archive.test.ts]] executes real SQLite queries for cold and warm caches, archive/restore without timestamp changes, pagination, equal IDs across profiles, legacy schema upgrades, read failure and recovery, and retained history/project folders. [[src/renderer/src/screens/Sessions/Sessions.test.tsx]] covers the last local row disappearing and returning, failed refresh recovery, and stale responses after profile switches.
+
+## Session cache provenance
+
+The `sessions.json` cache records which `state.db` it was built from, so the DB-free initial paint can reject rows belonging to a database that is gone or has been replaced.
+
+The cache is a denormalised mirror of a profile's visible sessions, but a cached row carries nothing identifying its origin. When `state.db` is deleted or swapped — a reinstall, a profile reset, a restored backup, a `HERMES_HOME` pointed somewhere new — the rows describe sessions that can no longer be opened, and [[src/main/session-cache.ts#listCachedSessions]] has no way to tell them from live ones. With no database there is also no sync able to rebuild the visible set, so they survive every restart and reappear in the sidebar on launch.
+
+Successful sync supplies [[src/main/session-cache.ts#writeCache]] with a `source`: the profile, its `state.db` path, and that file's device, inode and nanosecond birth time. Size and mtime are deliberately excluded because normal SQLite writes change them. [[src/main/db.ts#stateDbFileIdentity]] also prevents [[src/main/db.ts#getDbConnection]] from reusing an open handle after its file is replaced. Sync captures the source before reading and verifies it afterward; a replacement during the query cannot stamp old rows as the new database.
+
+The stamped session set uses [[src/main/db.ts#conversationListPredicate]], so file-generation checks and native hidden/delegated visibility apply together. Replacement and offline-cache tests run alongside actual local and SSH conversation/deletion fixtures.
+
+[[src/main/session-cache.ts#readCache]] verifies that stamp with a single `stat` and no database open, so validation holds for every consumer: the fast path, [[src/main/session-cache.ts#syncSessionCache]]'s success path, and both of its fallbacks, which return the existing cache when the database cannot be read. Guarding one path alone — or guarding in the renderer — leaves the others free to paint the same rejected rows. The stamp is resolved per profile, matching `cacheFilePath`, so one profile's cache is never validated against another's database.
+
+An unavailable database retains cached history only when its existing source stamp still matches the selected physical file generation. Missing or mismatched stamps never paint and never bypass a failed sync. An unstamped upgrade file is preserved on disk until successful database reads rebuild and stamp the authoritative session set; title text and ID shapes do not establish provenance.
+
+Provenance is a property of where a row came from, not of what it looks like. Session ids are `desk-<ms>-<uuid>` for authenticated desktop chats and `api-<hash>` for the gateway's fingerprint fallback, so judging a cached row by the shape of its id or the text of its title hides real history. [[tests/session-cache-sync.test.ts]] covers both invalidation cases, per-profile scoping, an unreadable-database startup, and the prefixed id formats.
+
+### Unverified legacy outage
+
+An unstamped cache cannot restore stale rows when the existing SQLite file is unreadable. Both cached paint and synchronization return empty without rewriting the legacy file.
+
+### First successful upgrade
+
+A successful real SQLite sync replaces unverified legacy rows with current history, including legitimate prefixed identifiers and Ping-pong titles, and records the source for later cached reads.
+
+### Proven offline generation
+
+A stamped cache remains available during database-open failure when its selected profile, path and physical file generation are unchanged; no session title or identifier heuristic is used.
+
+### Open connection replacement
+
+A database swapped at the same path invalidates the cache and cached SQLite handle, so the next sync reads the replacement rather than republishing the old connection's rows.
+
+[[tests/db.test.ts]] preserves the existing path, read-only mode and close checks with file-generation fixtures; the SQLite replacement regression above verifies the behavior against an actual database.
+
+### Mid-sync replacement
+
+Replacing state.db during an actual row query discards that query result, leaves the old stamp untouched, and allows the next successful sync to rebuild from the new file generation.
+
+### Profile generation isolation
+
+Identical session identifiers and cache copies cannot transfer provenance between profiles; each selected profile validates its own database path and generation.
 
 ## Project grouping
 

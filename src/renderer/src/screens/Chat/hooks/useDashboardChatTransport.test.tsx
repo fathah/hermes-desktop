@@ -10,7 +10,16 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
 import type { DashboardRpcEvent } from "../dashboardGatewayClient";
-import { useDashboardChatTransport } from "./useDashboardChatTransport";
+import {
+  getSubagents,
+  subagentScopeKey,
+  resetSubagents,
+  type SubagentControls,
+} from "../subagents";
+import {
+  dashboardUsageDelta,
+  useDashboardChatTransport,
+} from "./useDashboardChatTransport";
 import { useTranscriptState } from "./useTranscriptState";
 import type { ActiveTurn, ChatMessage, UsageState } from "../types";
 
@@ -66,6 +75,7 @@ interface HarnessApi {
   setMessages?: Dispatch<SetStateAction<ChatMessage[]>>;
   setModel?: Dispatch<SetStateAction<string>>;
   setProvider?: Dispatch<SetStateAction<string>>;
+  subagents?: SubagentControls | null;
 }
 
 const activeBadTurn: ActiveTurn = {
@@ -86,6 +96,8 @@ function Harness({
   api,
   connectionId,
   connectionRevision,
+  hermesSessionId = null,
+  profile,
   fallbackOnUnavailable = false,
   initialConnectionMode = "local",
   onDashboardUnavailable,
@@ -94,6 +106,8 @@ function Harness({
   api: HarnessApi;
   connectionId?: string;
   connectionRevision?: number;
+  hermesSessionId?: string | null;
+  profile?: string;
   fallbackOnUnavailable?: boolean;
   initialConnectionMode?: "local" | "remote" | "ssh";
   onDashboardUnavailable?: (reason: string) => void;
@@ -124,10 +138,10 @@ function Harness({
     connectionMode,
     enabled: true,
     fallbackOnUnavailable,
-    hermesSessionId: null,
+    hermesSessionId,
     messagesRef,
     model,
-    profile: undefined,
+    profile,
     provider,
     setHermesSessionId: vi.fn(),
     setIsLoading,
@@ -153,6 +167,7 @@ function Harness({
       setMessages,
       setModel,
       setProvider,
+      subagents: transport.subagents,
     });
   }, [
     isLoading,
@@ -162,6 +177,7 @@ function Harness({
     setConnectionMode,
     setMessages,
     transport.sendMessage,
+    transport.subagents,
     transport.respondApproval,
     transport.respondClarify,
     transport.abort,
@@ -1528,6 +1544,8 @@ describe("useDashboardChatTransport context gauge estimate (no usage payload)", 
 
     const usage = lastUsage(setUsage);
     expect(usage?.contextTokens).toBeGreaterThan(0);
+    // ...and it is flagged as a guess so the UI never presents it as exact.
+    expect(usage?.contextEstimated).toBe(true);
   });
 
   it("prefers exact payload usage over the estimate", async () => {
@@ -1552,6 +1570,7 @@ describe("useDashboardChatTransport context gauge estimate (no usage payload)", 
 
     const usage = lastUsage(setUsage);
     expect(usage?.contextTokens).toBe(45000);
+    expect(usage?.contextEstimated).toBe(false);
   });
 
   it("does not fabricate usage for a failed turn without usage", async () => {
@@ -1764,4 +1783,420 @@ describe("useDashboardChatTransport delta coalescing", () => {
       (afterFlush[afterFlush.length - 2] as { content?: string }).content,
     ).toBe("alphabeta");
   });
+});
+
+describe("useDashboardChatTransport subagent roster", () => {
+  beforeEach(() => {
+    dashboardMock.close.mockClear();
+    dashboardMock.connect.mockClear();
+    dashboardMock.instances.length = 0;
+    dashboardMock.onEvent = null;
+    dashboardMock.request.mockReset();
+    resetSubagents();
+    Object.defineProperty(window, "hermesAPI", {
+      configurable: true,
+      value: {
+        freshDashboardWsUrl: vi.fn(async () => "ws://fresh-dashboard"),
+        recordSessionContinuation: vi.fn(async () => true),
+        recordSessionLocalError: vi.fn(async () => true),
+        startDashboard: vi.fn(async () => ({
+          connection: { wsUrl: "ws://127.0.0.1:12345" },
+          running: true,
+        })),
+      },
+    });
+  });
+
+  afterEach(() => {
+    resetSubagents();
+    vi.clearAllMocks();
+  });
+
+  // @lat: [[subagents#Recovery regressions#Reopened conversation]]
+  it("resumes a saved conversation for roster and controls without sending or replacing it", async () => {
+    let finishResume!: (value: unknown) => void;
+    dashboardMock.request.mockImplementation(async (method: string) => {
+      if (method === "session.resume")
+        return new Promise((resolve) => {
+          finishResume = resolve;
+        });
+      if (method === "subagent.list")
+        return { subagents: [{ subagent_id: "existing", status: "running" }] };
+      return { available: true, text: "working", truncated: false };
+    });
+    const api: HarnessApi = {};
+    render(<Harness api={api} hermesSessionId="saved-parent" profile="work" />);
+    const roster = api.subagents!.list();
+    const tail = api.subagents!.tail("existing");
+    await waitFor(() =>
+      expect(dashboardMock.request).toHaveBeenCalledWith("session.resume", {
+        session_id: "saved-parent",
+        cols: 96,
+        lazy: true,
+        profile: "work",
+      }),
+    );
+    finishResume({ session_id: "resumed-parent" });
+    expect(await roster).toEqual([
+      { subagent_id: "existing", status: "running" },
+    ]);
+    expect(await tail).toEqual({
+      available: true,
+      text: "working",
+      truncated: false,
+    });
+    await api.subagents!.steer("existing", "continue");
+    expect(
+      dashboardMock.request.mock.calls.filter(
+        ([method]) => method === "session.resume",
+      ),
+    ).toHaveLength(1);
+    expect(dashboardMock.request).toHaveBeenCalledWith("subagent.steer", {
+      session_id: "resumed-parent",
+      subagent_id: "existing",
+      text: "continue",
+    });
+    expect(
+      dashboardMock.request.mock.calls.some(
+        ([method]) => method === "session.create" || method === "session.send",
+      ),
+    ).toBe(false);
+  });
+
+  // @lat: [[model-context#Tests#Passive roster resume retains native usage baseline]]
+  it("keeps the native usage baseline when a passive roster read resumes the saved chat", async () => {
+    dashboardMock.request.mockImplementation(async (method: string) => {
+      if (method === "session.resume")
+        return {
+          session_id: "resumed-parent",
+          info: { usage: { input: 1000, output: 200, total: 1200 } },
+        };
+      if (method === "subagent.list") return { subagents: [] };
+      if (method === "model.options")
+        return { model: "bad-model", provider: "bad-provider", providers: [] };
+      return {};
+    });
+    const setUsage = vi.fn() as SetUsageMock;
+    const api: HarnessApi = {};
+    render(
+      <Harness api={api} hermesSessionId="saved-parent" setUsage={setUsage} />,
+    );
+    await act(async () => {
+      await api.subagents!.list();
+    });
+    expect(setUsage).not.toHaveBeenCalled();
+    expect(
+      dashboardMock.request.mock.calls.some(
+        ([method]) => method === "session.send" || method === "session.create",
+      ),
+    ).toBe(false);
+    await act(async () => {
+      await api.send?.("next turn");
+      dashboardMock.onEvent?.({
+        type: "message.complete",
+        session_id: "resumed-parent",
+        payload: {
+          text: "completed",
+          usage: { input: 1300, output: 250, total: 1550 },
+        },
+      });
+    });
+    const update = setUsage.mock.calls.at(-1)?.[0];
+    expect(typeof update).toBe("function");
+    expect(typeof update === "function" ? update(null) : update).toMatchObject({
+      promptTokens: 300,
+      completionTokens: 50,
+      totalTokens: 350,
+    });
+    expect(
+      dashboardMock.request.mock.calls.filter(
+        ([method]) => method === "session.resume",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("answers empty for a new chat and does not replace a missing saved conversation", async () => {
+    const api: HarnessApi = {};
+    const view = render(<Harness api={api} />);
+    expect(await api.subagents!.list()).toEqual([]);
+    expect(window.hermesAPI.startDashboard).not.toHaveBeenCalled();
+    dashboardMock.request.mockRejectedValue(new Error("session not found"));
+    view.rerender(<Harness api={api} hermesSessionId="missing-parent" />);
+    await expect(api.subagents!.list()).rejects.toThrow("session not found");
+    expect(
+      dashboardMock.request.mock.calls.some(
+        ([method]) => method === "session.create",
+      ),
+    ).toBe(false);
+  });
+
+  // @lat: [[subagents#Recovery regressions#Resume target isolation]]
+  it("rejects a late saved-chat resume after the connection revision changes", async () => {
+    let finishResume!: (value: unknown) => void;
+    dashboardMock.request.mockImplementation(async (method: string) => {
+      if (method === "session.resume")
+        return new Promise((resolve) => {
+          finishResume = resolve;
+        });
+      return {};
+    });
+    const api: HarnessApi = {};
+    const view = render(
+      <Harness
+        api={api}
+        connectionId="server"
+        connectionRevision={1}
+        hermesSessionId="saved-parent"
+      />,
+    );
+    const pending = api
+      .subagents!.steer("existing", "old target")
+      .catch((error: unknown) => error);
+    await waitFor(() =>
+      expect(dashboardMock.request).toHaveBeenCalledWith(
+        "session.resume",
+        expect.anything(),
+      ),
+    );
+    view.rerender(
+      <Harness
+        api={api}
+        connectionId="server"
+        connectionRevision={2}
+        hermesSessionId="saved-parent"
+      />,
+    );
+    finishResume({ session_id: "old-runtime" });
+    expect(await pending).toEqual(
+      expect.objectContaining({
+        message: expect.stringContaining("conversation changed"),
+      }),
+    );
+    expect(
+      dashboardMock.request.mock.calls.some(
+        ([method]) => method === "subagent.steer",
+      ),
+    ).toBe(false);
+  });
+
+  // @lat: [[subagents#Recovery regressions#Conversation return fencing]]
+  it.each([false, true])(
+    "rejects a pending saved-chat control after leaving its conversation (unmount: %s)",
+    async (unmount) => {
+      let finishResume!: (value: unknown) => void;
+      dashboardMock.request.mockImplementation(async (method: string) => {
+        if (method === "session.resume")
+          return new Promise((resolve) => {
+            finishResume = resolve;
+          });
+        return {};
+      });
+      const api: HarnessApi = {};
+      const view = render(<Harness api={api} hermesSessionId="saved-A" />);
+      const pending = api
+        .subagents!.steer("existing", "old draft")
+        .catch((error: unknown) => error);
+      await waitFor(() =>
+        expect(dashboardMock.request).toHaveBeenCalledWith(
+          "session.resume",
+          expect.anything(),
+        ),
+      );
+      if (unmount) view.unmount();
+      else {
+        view.rerender(<Harness api={api} hermesSessionId="saved-B" />);
+        view.rerender(<Harness api={api} hermesSessionId="saved-A" />);
+      }
+      finishResume({ session_id: "old-runtime" });
+      expect(await pending).toEqual(
+        expect.objectContaining({
+          message: expect.stringContaining("conversation changed"),
+        }),
+      );
+      expect(
+        dashboardMock.request.mock.calls.some(
+          ([method]) => method === "subagent.steer",
+        ),
+      ).toBe(false);
+    },
+  );
+
+  it("keeps a delegated child's activity in the roster, not the transcript", async () => {
+    const requests: Array<{ method: string; params: unknown }> = [];
+    dashboardMock.request.mockImplementation(
+      async (method: string, params: unknown) => {
+        requests.push({ method, params });
+        if (method === "session.create") {
+          return { session_id: "live-sub", stored_session_id: "stored-sub" };
+        }
+        if (method === "subagent.list") {
+          return {
+            subagents: [
+              { goal: "Audit", status: "running", subagent_id: "sub-1" },
+            ],
+          };
+        }
+        return {};
+      },
+    );
+
+    const api: HarnessApi = {};
+    render(<Harness api={api} />);
+    await act(async () => {
+      await api.send?.("delegate the audit");
+    });
+    await waitFor(() => expect(api.subagents).toBeTruthy());
+
+    const transcriptBefore = JSON.stringify(api.messages);
+    await act(async () => {
+      dashboardMock.onEvent?.({
+        payload: { goal: "Audit the auth module", subagent_id: "sub-1" },
+        session_id: "live-sub",
+        type: "subagent.start",
+      });
+      dashboardMock.onEvent?.({
+        payload: { subagent_id: "sub-1", text: "reading src/auth.ts" },
+        session_id: "live-sub",
+        type: "subagent.progress",
+      });
+    });
+
+    // Child activity is roster state keyed by the conversation, so it reaches
+    // the in-chat section...
+    const rows = getSubagents(
+      subagentScopeKey(undefined, undefined, "stored-sub"),
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].goal).toBe("Audit the auth module");
+    expect(rows[0].stream.map((entry) => entry.text)).toEqual([
+      "reading src/auth.ts",
+    ]);
+    // ...and never the message stream.
+    expect(JSON.stringify(api.messages)).toBe(transcriptBefore);
+
+    const entries = await api.subagents!.list();
+    expect(entries).toHaveLength(1);
+    expect(requests).toContainEqual({
+      method: "subagent.list",
+      params: { session_id: "live-sub" },
+    });
+
+    await act(async () => {
+      await api.subagents!.steer("sub-1", "check the null case");
+    });
+    expect(requests).toContainEqual({
+      method: "subagent.steer",
+      params: {
+        session_id: "live-sub",
+        subagent_id: "sub-1",
+        text: "check the null case",
+      },
+    });
+  });
+
+  it("retires a finished child at the next turn boundary", async () => {
+    dashboardMock.request.mockImplementation(async (method: string) => {
+      if (method === "session.create") {
+        return { session_id: "live-sub", stored_session_id: "stored-sub" };
+      }
+      return {};
+    });
+
+    const api: HarnessApi = {};
+    render(<Harness api={api} />);
+    await act(async () => {
+      await api.send?.("delegate the audit");
+    });
+
+    await act(async () => {
+      dashboardMock.onEvent?.({
+        payload: { goal: "Audit", subagent_id: "sub-1" },
+        session_id: "live-sub",
+        type: "subagent.start",
+      });
+      dashboardMock.onEvent?.({
+        payload: { status: "completed", subagent_id: "sub-1", summary: "Done" },
+        session_id: "live-sub",
+        type: "subagent.complete",
+      });
+    });
+    expect(
+      getSubagents(subagentScopeKey(undefined, undefined, "stored-sub")),
+    ).toHaveLength(1);
+
+    await act(async () => {
+      dashboardMock.onEvent?.({
+        payload: {},
+        session_id: "live-sub",
+        type: "message.start",
+      });
+    });
+
+    expect(
+      getSubagents(subagentScopeKey(undefined, undefined, "stored-sub")),
+    ).toEqual([]);
+  });
+});
+
+// @lat: [[model-context#Tests#Native cumulative counters and legacy deltas]]
+it("deduplicates native runtime counters while preserving context, legacy deltas and reset boundaries", () => {
+  const snapshots = new Map<string, Partial<UsageState>>();
+  const first = dashboardUsageDelta(
+    { usage: { input: 100, output: 20, total: 120, context_used: 80 } },
+    "runtime-a",
+    snapshots,
+  );
+  expect(first).toMatchObject({
+    promptTokens: 100,
+    completionTokens: 20,
+    totalTokens: 120,
+    contextTokens: 80,
+  });
+  expect(
+    dashboardUsageDelta(
+      { usage: { input: 150, output: 30, total: 180, context_used: 110 } },
+      "runtime-a",
+      snapshots,
+    ),
+  ).toMatchObject({
+    promptTokens: 50,
+    completionTokens: 10,
+    totalTokens: 60,
+    contextTokens: 110,
+  });
+  expect(
+    dashboardUsageDelta(
+      { usage: { input: 150, output: 30, total: 180 } },
+      "runtime-a",
+      snapshots,
+    ),
+  ).toMatchObject({ promptTokens: 0, completionTokens: 0, totalTokens: 0 });
+  expect(
+    dashboardUsageDelta(
+      { usage: { input: 5, output: 2, total: 7 } },
+      "runtime-a",
+      snapshots,
+    ),
+  ).toMatchObject({ promptTokens: 5, completionTokens: 2, totalTokens: 7 });
+  expect(
+    dashboardUsageDelta(
+      { usage: { input: 5, output: 2, total: 7 } },
+      "runtime-b",
+      snapshots,
+    ),
+  ).toMatchObject({ promptTokens: 5, completionTokens: 2, totalTokens: 7 });
+  expect(
+    dashboardUsageDelta(
+      { usage: { prompt_tokens: 8, completion_tokens: 4, total_tokens: 12 } },
+      "runtime-a",
+      snapshots,
+    ),
+  ).toMatchObject({ promptTokens: 8, completionTokens: 4, totalTokens: 12 });
+  expect(
+    dashboardUsageDelta(
+      { usage: { prompt_tokens: 8, completion_tokens: 4, total_tokens: 12 } },
+      "runtime-a",
+      snapshots,
+    ),
+  ).toMatchObject({ promptTokens: 8, completionTokens: 4, totalTokens: 12 });
 });

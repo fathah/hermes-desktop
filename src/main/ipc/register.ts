@@ -1,3 +1,14 @@
+import type { ProfileEditorTarget } from "../../shared/profile-editor-target";
+import {
+  captureProfileEditorTarget,
+  resolveProfileEditorTarget,
+} from "../profile-editor-target";
+import {
+  providerTargetRevision,
+  beginProviderAuthChange,
+  finishProviderAuthChange,
+} from "../provider-request-target";
+import type { ProviderRequestTarget } from "../../shared/provider-target";
 import {
   app,
   shell,
@@ -13,7 +24,15 @@ import { extname } from "path";
 import { randomUUID } from "crypto";
 import { botGroupsRequest } from "../bot-groups";
 import { readdir, readFile, stat } from "fs/promises";
-import { getActiveProfileNameSync } from "../utils";
+import {
+  getActiveProfileNameSync,
+  isValidProfileName,
+  PROFILE_NAME_ERROR,
+} from "../utils";
+import {
+  getRemoteSelectedProfile,
+  setRemoteSelectedProfile,
+} from "../remote-profile-selection";
 import type { Attachment } from "../../shared/attachments";
 import type { SessionModelOverride } from "../../shared/model-override";
 import type { SessionLocation } from "../../shared/session-location";
@@ -236,16 +255,26 @@ import {
   remoteUpdateSessionTitle,
   type RemoteSessionConfig,
 } from "../remote-sessions";
+import { remoteGetSessionUsage } from "../remote-session-usage";
 import {
   remoteGetHermesHome,
   remoteGetHermesVersion,
 } from "../remote-metadata";
+import { remoteCreateProfile, remoteListProfiles } from "../remote-profiles";
 import {
   remoteGetSkillContent,
   remoteInstallSkill,
   remoteListInstalledSkills,
   remoteUninstallSkill,
 } from "../remote-skills";
+import {
+  REMOTE_MEMORY_READ_ONLY_ERROR,
+  remoteActiveMemoryProvider,
+  remoteDiscoverMemoryProviders,
+  remoteReadMemory,
+  remoteReadSoul,
+  remoteWriteSoul,
+} from "../remote-memory";
 import {
   remoteAddModel,
   remoteGetModelConfig,
@@ -254,6 +283,14 @@ import {
   remoteSetModelConfig,
   remoteUpdateModel,
 } from "../remote-models";
+import {
+  discoverModelsRemote,
+  remoteAddCredentialPoolEntry,
+  remoteGetCredentialPool,
+  remoteGetEnv,
+  remoteSetCredentialPool,
+  remoteSetEnv,
+} from "../remote-providers";
 import {
   emptyOAuthProviderStatuses,
   remoteGetOAuthProviderStatuses,
@@ -499,6 +536,19 @@ async function getSshDashboardSessionConfig(
 // skipped there; explicit params like `profile=all` are never overridden).
 function activeSshProfile(profile?: string): string {
   return profile?.trim() || getActiveProfileNameSync();
+}
+
+function providerConnection(target?: ProviderRequestTarget): ConnectionConfig {
+  const conn = getConnectionConfig(target?.connectionId);
+  if (
+    target &&
+    (conn.mode !== target.mode ||
+      (target.mode === "remote" && conn.remoteUrl !== target.remoteUrl) ||
+      target.revision !== providerTargetRevision(conn))
+  ) {
+    throw new Error("Provider connection changed; reload and retry.");
+  }
+  return { ...conn, ssh: { ...conn.ssh } };
 }
 
 function sessionConnection(connectionId?: unknown): ConnectionConfig {
@@ -1041,18 +1091,42 @@ export function registerIpcHandlers(context: IpcContext): void {
   // Cloud agent sync — reconciles local profiles with the signed-in Hermes One
   // account's cloud agents. `agent-sync-updated` tells the renderer to reload
   // its profile list (pull-created profiles appear without a manual refresh).
-  ipcMain.handle("agent-sync-run", async (event) => {
-    const result = await syncAgents();
-    if (!event.sender.isDestroyed()) {
-      event.sender.send("agent-sync-updated", result);
-    }
-    return result;
-  });
+  ipcMain.handle(
+    "agent-sync-run",
+    async (event, target?: ProfileEditorTarget) => {
+      const { connection } = resolveProfileEditorTarget(undefined, target);
+      if (connection.mode !== "local")
+        throw new Error(
+          "Cloud agent sync is available only for Local connections.",
+        );
+      const result = await syncAgents();
+      if (!event.sender.isDestroyed()) {
+        event.sender.send("agent-sync-updated", result);
+      }
+      return result;
+    },
+  );
   ipcMain.handle("agent-sync-status", () => getAgentSyncStatus());
   // The cloud agent id a profile is currently linked to (null when unlinked),
   // for the per-profile Sync tab.
   ipcMain.handle("agent-sync-linked-id", (_event, profile: string) =>
     getLinkedAgentId(profile),
+  );
+
+  ipcMain.handle(
+    "get-provider-request-target",
+    (_event, connectionId: string): ProviderRequestTarget => {
+      if (typeof connectionId !== "string" || !connectionId.trim()) {
+        throw new Error("An explicit provider connection is required.");
+      }
+      const conn = getConnectionConfig(connectionId);
+      return {
+        connectionId,
+        mode: conn.mode,
+        remoteUrl: conn.remoteUrl,
+        revision: providerTargetRevision(conn),
+      };
+    },
   );
 
   // Configuration (profile-aware)
@@ -1061,11 +1135,15 @@ export function registerIpcHandlers(context: IpcContext): void {
     setAppLocale(locale),
   );
 
-  ipcMain.handle("get-env", (_event, profile?: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) return sshReadEnv(conn.ssh, profile);
-    return readEnv(profile);
-  });
+  ipcMain.handle(
+    "get-env",
+    (_event, profile?: string, target?: ProviderRequestTarget) => {
+      const conn = providerConnection(target);
+      if (conn.mode === "ssh" && conn.ssh) return sshReadEnv(conn.ssh, profile);
+      if (conn.mode === "remote") return remoteGetEnv(profile, conn);
+      return readEnv(profile);
+    },
+  );
 
   // Pre-send chat readiness — answers "if Send is clicked right now,
   // will it work?". Fail-open semantics: any uncertain state returns
@@ -1116,11 +1194,34 @@ export function registerIpcHandlers(context: IpcContext): void {
 
   ipcMain.handle(
     "set-env",
-    async (_event, key: string, value: string, profile?: string) => {
-      const conn = getConnectionConfig();
+    async (
+      _event,
+      key: string,
+      value: string,
+      requestedProfile?: string,
+      target?: ProfileEditorTarget | ProviderRequestTarget,
+    ) => {
+      const editorTarget =
+        target && "scopeToken" in target ? target : undefined;
+      const context = editorTarget
+        ? resolveProfileEditorTarget(requestedProfile, editorTarget)
+        : undefined;
+      const conn =
+        context?.connection ??
+        providerConnection(target as ProviderRequestTarget | undefined);
+      const profile = context?.profile ?? requestedProfile;
+      if (editorTarget && conn.mode === "remote")
+        throw new Error(REMOTE_MEMORY_READ_ONLY_ERROR);
       if (conn.mode === "ssh" && conn.ssh) {
         await sshSetEnvValue(conn.ssh, key, value, profile);
         return true;
+      }
+      if (conn.mode === "remote") {
+        if (!target)
+          throw new Error(
+            "Remote credential writes require an explicit connection.",
+          );
+        return remoteSetEnv(key, value, profile, conn);
       }
       assertLocalGatewayKeyMutationAllowed(key, profile);
       setEnvValue(key, value, profile);
@@ -1143,20 +1244,51 @@ export function registerIpcHandlers(context: IpcContext): void {
     },
   );
 
-  ipcMain.handle("get-config", (_event, key: string, profile?: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh)
-      return sshGetConfigValue(conn.ssh, key, profile);
-    return getConfigValue(key, profile);
-  });
+  ipcMain.handle(
+    "get-config",
+    (
+      _event,
+      key: string,
+      requestedProfile?: string,
+      target?: ProfileEditorTarget,
+    ) => {
+      const { connection: conn, profile } = resolveProfileEditorTarget(
+        requestedProfile,
+        target,
+      );
+      if (conn.mode === "ssh" && conn.ssh)
+        return sshGetConfigValue(conn.ssh, key, profile);
+      if (conn.mode === "remote" && key === "memory.provider") {
+        return remoteActiveMemoryProvider(profile, conn);
+      }
+      if (target && conn.mode === "remote")
+        throw new Error(
+          "This editor configuration is unavailable in remote mode.",
+        );
+      return getConfigValue(key, profile);
+    },
+  );
 
   ipcMain.handle(
     "set-config",
-    async (_event, key: string, value: string, profile?: string) => {
-      const conn = getConnectionConfig();
+    async (
+      _event,
+      key: string,
+      value: string,
+      requestedProfile?: string,
+      target?: ProfileEditorTarget,
+    ) => {
+      const { connection: conn, profile } = resolveProfileEditorTarget(
+        requestedProfile,
+        target,
+      );
       if (conn.mode === "ssh" && conn.ssh) {
         await sshSetConfigValue(conn.ssh, key, value, profile);
         return true;
+      }
+      if (conn.mode === "remote" && (target || key.startsWith("memory."))) {
+        // Would write the LOCAL config.yaml while the screen shows the server.
+        throw new Error(REMOTE_MEMORY_READ_ONLY_ERROR);
       }
       assertLocalGatewayKeyMutationAllowed(key, profile);
       setConfigValue(key, value, profile);
@@ -1578,10 +1710,18 @@ export function registerIpcHandlers(context: IpcContext): void {
     if (loginConfig.mode !== "remote" || !loginConfig.remoteUrl.trim()) {
       throw new Error("Configure a Remote gateway URL before signing in.");
     }
-    const result = await openRemoteOAuthLogin(
-      loginConfig.remoteUrl,
-      context.getMainWindow(),
-    );
+    beginProviderAuthChange(loginConfig.remoteUrl);
+    notifyConnectionConfigChanged();
+    let result: Awaited<ReturnType<typeof openRemoteOAuthLogin>>;
+    try {
+      result = await openRemoteOAuthLogin(
+        loginConfig.remoteUrl,
+        context.getMainWindow(),
+      );
+    } finally {
+      finishProviderAuthChange(loginConfig.remoteUrl);
+      notifyConnectionConfigChanged();
+    }
     setConnectionConfig(
       connectionConfigAfterRemoteOAuthLogin(
         loginConfig.remoteUrl,
@@ -1597,7 +1737,14 @@ export function registerIpcHandlers(context: IpcContext): void {
     if (conn.mode !== "remote" || !conn.remoteUrl.trim()) {
       throw new Error("Remote gateway is not configured.");
     }
-    await clearRemoteOAuthSession(conn.remoteUrl);
+    beginProviderAuthChange(conn.remoteUrl);
+    notifyConnectionConfigChanged();
+    try {
+      await clearRemoteOAuthSession(conn.remoteUrl);
+    } finally {
+      finishProviderAuthChange(conn.remoteUrl);
+      notifyConnectionConfigChanged();
+    }
     return { signedIn: false };
   });
 
@@ -2056,7 +2203,12 @@ export function registerIpcHandlers(context: IpcContext): void {
       baseUrl: string | undefined,
       apiKey: string | undefined,
       profile?: string,
+      target?: ProviderRequestTarget,
     ) => {
+      const conn = providerConnection(target);
+      if (conn.mode === "remote") {
+        return discoverModelsRemote(provider, baseUrl, profile, conn);
+      }
       return discoverProviderModels(provider, baseUrl, apiKey, profile);
     },
   );
@@ -2449,6 +2601,16 @@ export function registerIpcHandlers(context: IpcContext): void {
     },
   );
 
+  // Server-side token/cost totals of one session. Remote only: a local chat
+  // gets live usage events, and the totals are not stored in a form we read.
+  ipcMain.handle(
+    "get-session-usage",
+    (_event, sessionId: string, connectionId?: string, profile?: string) => {
+      const conn = sessionConnection(connectionId);
+      if (conn.mode !== "remote") return null;
+      return remoteGetSessionUsage(conn, sessionId, activeSshProfile(profile));
+    },
+  );
   ipcMain.handle(
     "get-session-messages",
     (_event, sessionId: string, connectionId?: string, profile?: string) => {
@@ -2596,91 +2758,141 @@ export function registerIpcHandlers(context: IpcContext): void {
     },
   );
 
-  // Profiles
-  ipcMain.handle("list-profiles", async () => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) {
-      // The desktop's active profile is the LOCAL selection (persisted in
-      // ~/.hermes/active_profile by set-active-profile), not whatever the remote
-      // CLI last marked active. Override isActive so the UI highlights the
-      // profile the user actually selected — and it survives relaunches.
-      const active = getActiveProfileNameSync();
-      const list = await sshListProfiles(conn.ssh);
-      return list.map((p) => ({
-        ...p,
-        id: p.name,
-        isActive: p.name === active,
-      }));
-    }
-    return listProfiles();
-  });
+  // Profiles: captured scope fences queued renderer actions and async SSH follow-ups.
+  ipcMain.handle(
+    "list-profiles",
+    async (_event, target?: ProfileEditorTarget) => {
+      const { connection: conn } = resolveProfileEditorTarget(
+        undefined,
+        target,
+      );
+      if (conn.mode === "remote") {
+        const id = target?.connectionId || getActiveConnection().connectionId;
+        return remoteListProfiles(getRemoteSelectedProfile(id, conn), conn);
+      }
+      if (conn.mode === "ssh" && conn.ssh) {
+        const active = getActiveProfileNameSync();
+        const list = await sshListProfiles(conn.ssh);
+        return list.map((p) => ({
+          ...p,
+          id: p.name,
+          isActive: p.name === active,
+        }));
+      }
+      return listProfiles();
+    },
+  );
   ipcMain.handle(
     "create-profile",
-    (_event, name: string, cloneFrom: string | null) => {
-      const conn = getConnectionConfig();
+    (
+      _event,
+      name: string,
+      cloneFrom: string | null,
+      target?: ProfileEditorTarget,
+    ) => {
+      const { connection: conn } = resolveProfileEditorTarget(
+        undefined,
+        target,
+      );
+      if (conn.mode === "remote") {
+        if (!target)
+          throw new Error(
+            "Remote profile creation requires an explicit target.",
+          );
+        return remoteCreateProfile(name, cloneFrom, conn);
+      }
       if (conn.mode === "ssh" && conn.ssh)
         return sshCreateProfile(conn.ssh, name, cloneFrom);
       return createProfile(name, cloneFrom);
     },
   );
-  ipcMain.handle("delete-profile", (_event, name: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh)
-      return sshDeleteProfile(conn.ssh, name);
-    if (conn.mode !== "local") {
-      return {
-        success: false,
-        error:
-          "Profile deletion is unavailable for this connection. Use the connected server's profile controls.",
-      };
-    }
-    return deleteProfileWithSync(name);
-  });
-  ipcMain.handle("set-active-profile", async (_event, name: string) => {
-    // Persist the selection LOCALLY in every mode (incl. SSH) — the desktop
-    // tracks "which profile is active" via the local ~/.hermes/active_profile,
-    // so without this an SSH session forgot the choice and reset to `default`
-    // on every relaunch. Then drop the cached health flag so the next check
-    // probes the newly-active profile's gateway, not the previous one's.
-    setActiveProfile(name);
-    notifyProfileSwitched();
-    // Bring the activated profile's own gateway up if it isn't already —
-    // without stopping any other profile's gateway (their bots stay online).
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) {
-      // Per-profile gateway lives on the remote; start it over SSH. (Previously
-      // SSH was skipped entirely, so selecting/Chatting a profile in the Agents
-      // page never started its gateway and the status spun on "Starting…".)
-      if (!(await sshGatewayStatus(conn.ssh, name))) {
-        await sshStartGateway(conn.ssh, name);
-      }
-    } else if (!isRemoteMode() && !isGatewayRunning(name)) {
-      startGateway(name);
-    }
-    return true;
-  });
-
-  // Profile appearance (desktop-only avatar + accent colour). Local-only —
-  // these write to the local ~/.hermes profile dirs, not the SSH remote.
-  ipcMain.handle("set-profile-color", (_event, name: string, color: string) =>
-    setProfileColor(name, color),
+  ipcMain.handle(
+    "delete-profile",
+    (_event, name: string, target?: ProfileEditorTarget) => {
+      const { connection: conn } = resolveProfileEditorTarget(
+        undefined,
+        target,
+      );
+      if (conn.mode === "ssh" && conn.ssh)
+        return sshDeleteProfile(conn.ssh, name);
+      if (conn.mode !== "local")
+        return {
+          success: false,
+          error:
+            "Profile deletion is unavailable for this connection. Use the connected server's profile controls.",
+        };
+      return deleteProfileWithSync(name);
+    },
   );
-  ipcMain.handle("set-profile-name", (_event, id: string, name: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" || conn.mode === "remote") {
-      return {
-        success: false,
-        error: "Agent renaming is only supported for local profiles",
-      };
-    }
-    return setProfileName(id, name);
-  });
+  ipcMain.handle(
+    "set-active-profile",
+    async (_event, name: string, target?: ProfileEditorTarget) => {
+      const { connection: conn } = resolveProfileEditorTarget(
+        undefined,
+        target,
+      );
+      if (!isValidProfileName(name)) throw new Error(PROFILE_NAME_ERROR);
+      if (conn.mode === "remote") {
+        if (!target)
+          throw new Error(
+            "Remote profile selection requires an explicit target.",
+          );
+        setRemoteSelectedProfile(target.connectionId, conn, name);
+        notifyProfileSwitched();
+        return true;
+      }
+      setActiveProfile(name);
+      notifyProfileSwitched();
+      if (conn.mode === "ssh" && conn.ssh) {
+        if (!(await sshGatewayStatus(conn.ssh, name))) {
+          // Revalidate after status awaits so an obsolete UI cannot start a new target.
+          resolveProfileEditorTarget(undefined, target);
+          await sshStartGateway(conn.ssh, name);
+        }
+      } else if (!isGatewayRunning(name)) startGateway(name);
+      return true;
+    },
+  );
+
+  // Appearance is desktop-only. Remote rows never read or mutate local metadata.
+  ipcMain.handle(
+    "set-profile-color",
+    (_event, name: string, color: string, target?: ProfileEditorTarget) => {
+      const { connection } = resolveProfileEditorTarget(name, target);
+      if (connection.mode === "remote")
+        throw new Error("Remote profile appearance is unavailable.");
+      return setProfileColor(name, color);
+    },
+  );
+  ipcMain.handle(
+    "set-profile-name",
+    (_event, id: string, name: string, target?: ProfileEditorTarget) => {
+      const { connection } = resolveProfileEditorTarget(id, target);
+      if (connection.mode !== "local")
+        return {
+          success: false,
+          error: "Agent renaming is only supported for local profiles",
+        };
+      return setProfileName(id, name);
+    },
+  );
   ipcMain.handle(
     "set-profile-avatar",
-    (_event, name: string, dataUrl: string) => setProfileAvatar(name, dataUrl),
+    (_event, name: string, dataUrl: string, target?: ProfileEditorTarget) => {
+      const { connection } = resolveProfileEditorTarget(name, target);
+      if (connection.mode === "remote")
+        throw new Error("Remote profile appearance is unavailable.");
+      return setProfileAvatar(name, dataUrl);
+    },
   );
-  ipcMain.handle("remove-profile-avatar", (_event, name: string) =>
-    removeProfileAvatar(name),
+  ipcMain.handle(
+    "remove-profile-avatar",
+    (_event, name: string, target?: ProfileEditorTarget) => {
+      const { connection } = resolveProfileEditorTarget(name, target);
+      if (connection.mode === "remote")
+        throw new Error("Remote profile appearance is unavailable.");
+      return removeProfileAvatar(name);
+    },
   );
 
   // Profile wallets are desktop-local and profile-scoped. The renderer only
@@ -2751,67 +2963,153 @@ export function registerIpcHandlers(context: IpcContext): void {
     getTokenBalances(address),
   );
 
+  ipcMain.handle(
+    "get-profile-editor-target",
+    (_event, profile?: string, connectionId?: string) =>
+      captureProfileEditorTarget(profile, connectionId),
+  );
+
   // Memory
-  ipcMain.handle("read-memory", (_event, profile?: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh)
-      return sshReadMemory(conn.ssh, profile);
-    return readMemory(profile);
-  });
+  ipcMain.handle(
+    "read-memory",
+    (_event, requestedProfile?: string, target?: ProfileEditorTarget) => {
+      const { connection: conn, profile } = resolveProfileEditorTarget(
+        requestedProfile,
+        target,
+      );
+      if (conn.mode === "ssh" && conn.ssh)
+        return sshReadMemory(conn.ssh, profile);
+      if (conn.mode === "remote") return remoteReadMemory(profile, conn);
+      return readMemory(profile);
+    },
+  );
   ipcMain.handle(
     "add-memory-entry",
-    (_event, content: string, profile?: string) => {
-      const conn = getConnectionConfig();
+    (
+      _event,
+      content: string,
+      requestedProfile?: string,
+      target?: ProfileEditorTarget,
+    ) => {
+      const { connection: conn, profile } = resolveProfileEditorTarget(
+        requestedProfile,
+        target,
+      );
       if (conn.mode === "ssh" && conn.ssh)
         return sshAddMemoryEntry(conn.ssh, content, profile);
+      if (conn.mode === "remote") {
+        return { success: false, error: REMOTE_MEMORY_READ_ONLY_ERROR };
+      }
       return addMemoryEntry(content, profile);
     },
   );
   ipcMain.handle(
     "update-memory-entry",
-    (_event, index: number, content: string, profile?: string) => {
-      const conn = getConnectionConfig();
+    (
+      _event,
+      index: number,
+      content: string,
+      requestedProfile?: string,
+      target?: ProfileEditorTarget,
+    ) => {
+      const { connection: conn, profile } = resolveProfileEditorTarget(
+        requestedProfile,
+        target,
+      );
       if (conn.mode === "ssh" && conn.ssh)
         return sshUpdateMemoryEntry(conn.ssh, index, content, profile);
+      if (conn.mode === "remote") {
+        return { success: false, error: REMOTE_MEMORY_READ_ONLY_ERROR };
+      }
       return updateMemoryEntry(index, content, profile);
     },
   );
   ipcMain.handle(
     "remove-memory-entry",
-    (_event, index: number, profile?: string) => {
-      const conn = getConnectionConfig();
+    (
+      _event,
+      index: number,
+      requestedProfile?: string,
+      target?: ProfileEditorTarget,
+    ) => {
+      const { connection: conn, profile } = resolveProfileEditorTarget(
+        requestedProfile,
+        target,
+      );
       if (conn.mode === "ssh" && conn.ssh)
         return sshRemoveMemoryEntry(conn.ssh, index, profile);
+      if (conn.mode === "remote") return false;
       return removeMemoryEntry(index, profile);
     },
   );
   ipcMain.handle(
     "write-user-profile",
-    (_event, content: string, profile?: string) => {
-      const conn = getConnectionConfig();
+    (
+      _event,
+      content: string,
+      requestedProfile?: string,
+      target?: ProfileEditorTarget,
+    ) => {
+      const { connection: conn, profile } = resolveProfileEditorTarget(
+        requestedProfile,
+        target,
+      );
       if (conn.mode === "ssh" && conn.ssh)
         return sshWriteUserProfile(conn.ssh, content, profile);
+      if (conn.mode === "remote") {
+        return { success: false, error: REMOTE_MEMORY_READ_ONLY_ERROR };
+      }
       return writeUserProfile(content, profile);
     },
   );
 
   // Soul
-  ipcMain.handle("read-soul", (_event, profile?: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) return sshReadSoul(conn.ssh, profile);
-    return readSoul(profile);
-  });
-  ipcMain.handle("write-soul", (_event, content: string, profile?: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh)
-      return sshWriteSoul(conn.ssh, content, profile);
-    return writeSoul(content, profile);
-  });
-  ipcMain.handle("reset-soul", (_event, profile?: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) return sshResetSoul(conn.ssh, profile);
-    return resetSoul(profile);
-  });
+  ipcMain.handle(
+    "read-soul",
+    (_event, requestedProfile?: string, target?: ProfileEditorTarget) => {
+      const { connection: conn, profile } = resolveProfileEditorTarget(
+        requestedProfile,
+        target,
+      );
+      if (conn.mode === "ssh" && conn.ssh)
+        return sshReadSoul(conn.ssh, profile);
+      if (conn.mode === "remote") return remoteReadSoul(profile, conn);
+      return readSoul(profile);
+    },
+  );
+  ipcMain.handle(
+    "write-soul",
+    (
+      _event,
+      content: string,
+      requestedProfile?: string,
+      target?: ProfileEditorTarget,
+    ) => {
+      const { connection: conn, profile } = resolveProfileEditorTarget(
+        requestedProfile,
+        target,
+      );
+      if (conn.mode === "ssh" && conn.ssh)
+        return sshWriteSoul(conn.ssh, content, profile);
+      if (conn.mode === "remote")
+        return remoteWriteSoul(content, profile, conn);
+      return writeSoul(content, profile);
+    },
+  );
+  ipcMain.handle(
+    "reset-soul",
+    (_event, requestedProfile?: string, target?: ProfileEditorTarget) => {
+      const { connection: conn, profile } = resolveProfileEditorTarget(
+        requestedProfile,
+        target,
+      );
+      if (conn.mode === "ssh" && conn.ssh)
+        return sshResetSoul(conn.ssh, profile);
+      if (conn.mode === "remote")
+        throw new Error("Soul reset is unavailable in remote mode.");
+      return resetSoul(profile);
+    },
+  );
 
   // Tools
   ipcMain.handle("get-toolsets", (_event, profile?: string) => {
@@ -2993,8 +3291,14 @@ export function registerIpcHandlers(context: IpcContext): void {
   // credential pool helpers default to the currently active profile's
   // auth.json (see config.ts:authFilePath), so the renderer can pass an
   // explicit profile or rely on the active-profile fallback.
-  ipcMain.handle("get-credential-pool", (_event, profile?: string) =>
-    getCredentialPool(profile),
+  ipcMain.handle(
+    "get-credential-pool",
+    (_event, profile?: string, target?: ProviderRequestTarget) => {
+      const conn = providerConnection(target);
+      if (conn.mode === "remote") return remoteGetCredentialPool(profile, conn);
+      if (conn.mode === "ssh") return {};
+      return getCredentialPool(profile);
+    },
   );
   ipcMain.handle(
     "set-credential-pool",
@@ -3003,7 +3307,13 @@ export function registerIpcHandlers(context: IpcContext): void {
       provider: string,
       entries: Array<Record<string, unknown>>,
       profile?: string,
+      target?: ProviderRequestTarget,
     ) => {
+      const conn = providerConnection(target);
+      if (conn.mode === "remote")
+        return remoteSetCredentialPool(provider, entries, profile, conn);
+      if (conn.mode === "ssh")
+        throw new Error("SSH credential pool operations are unavailable.");
       setCredentialPool(provider, entries, profile);
       return true;
     },
@@ -3021,7 +3331,24 @@ export function registerIpcHandlers(context: IpcContext): void {
       apiKey: string,
       label: string,
       profile?: string,
+      target?: ProviderRequestTarget,
     ) => {
+      const conn = providerConnection(target);
+      if (conn.mode === "remote") {
+        if (!target)
+          throw new Error(
+            "Remote credential writes require an explicit connection.",
+          );
+        return remoteAddCredentialPoolEntry(
+          provider,
+          apiKey,
+          label,
+          profile,
+          conn,
+        );
+      }
+      if (conn.mode === "ssh")
+        throw new Error("SSH credential pool operations are unavailable.");
       return addCredentialPoolEntry(provider, apiKey, label, profile);
     },
   );
@@ -3606,12 +3933,20 @@ export function registerIpcHandlers(context: IpcContext): void {
   );
 
   // Memory providers
-  ipcMain.handle("discover-memory-providers", (_event, profile?: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh)
-      return sshDiscoverMemoryProviders(conn.ssh, profile);
-    return discoverMemoryProviders(profile);
-  });
+  ipcMain.handle(
+    "discover-memory-providers",
+    (_event, requestedProfile?: string, target?: ProfileEditorTarget) => {
+      const { connection: conn, profile } = resolveProfileEditorTarget(
+        requestedProfile,
+        target,
+      );
+      if (conn.mode === "ssh" && conn.ssh)
+        return sshDiscoverMemoryProviders(conn.ssh, profile);
+      if (conn.mode === "remote")
+        return remoteDiscoverMemoryProviders(profile, conn);
+      return discoverMemoryProviders(profile);
+    },
+  );
 
   // Log viewer
   ipcMain.handle("read-logs", (_event, logFile?: string, lines?: number) => {

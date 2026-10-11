@@ -8,6 +8,8 @@ export interface ContextUsage {
   window: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+  /** `used` is a transcript estimate, not a provider-reported count. */
+  estimated?: boolean;
 }
 
 function fmtTokens(n: number): string {
@@ -33,6 +35,7 @@ export const ContextGauge = memo(function ContextGauge({
   window: ctxWindow,
   cacheReadTokens,
   cacheWriteTokens,
+  estimated = false,
 }: ContextUsage): React.JSX.Element {
   const { t } = useI18n();
   const pct =
@@ -81,17 +84,21 @@ export const ContextGauge = memo(function ContextGauge({
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
         />
       </svg>
-      <span className="chat-ctx-gauge-num">{pct}</span>
+      <span className="chat-ctx-gauge-num">
+        {estimated ? "~" : ""}
+        {pct}
+      </span>
 
       <div className="chat-ctx-tooltip" role="tooltip">
         <div className="chat-ctx-tooltip-title">{t("chat.contextWindow")}</div>
         <div>{t("chat.contextUsed", { pct, left })}</div>
         <div>
           {t("chat.contextTokens", {
-            used: fmtTokens(used),
+            used: `${estimated ? "~" : ""}${fmtTokens(used)}`,
             total: fmtTokens(ctxWindow),
           })}
         </div>
+        {estimated && <div>{t("chat.contextEstimated")}</div>}
         {hasCache && (
           <div>
             {t("chat.contextCache", {

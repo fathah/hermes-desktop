@@ -1,3 +1,5 @@
+import type { ProfileEditorTarget } from "../shared/profile-editor-target";
+import type { ProviderRequestTarget } from "../shared/provider-target";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { AppLocale } from "../shared/i18n/types";
 import type { BotGroupAPI } from "../shared/bot-groups";
@@ -299,8 +301,8 @@ const hermesAPI = {
     ipcRenderer.invoke("hermesone-credits"),
 
   // Cloud agent sync (profiles ↔ signed-in Hermes One account)
-  syncAgents: (): Promise<AgentSyncResult> =>
-    ipcRenderer.invoke("agent-sync-run"),
+  syncAgents: (target?: ProfileEditorTarget): Promise<AgentSyncResult> =>
+    ipcRenderer.invoke("agent-sync-run", target),
   getAgentSyncStatus: (): Promise<AgentSyncStatus> =>
     ipcRenderer.invoke("agent-sync-status"),
   getLinkedAgentId: (profile: string): Promise<string | null> =>
@@ -321,11 +323,24 @@ const hermesAPI = {
     ipcRenderer.invoke("set-locale", locale),
 
   // Configuration (profile-aware)
-  getEnv: (profile?: string): Promise<Record<string, string>> =>
-    ipcRenderer.invoke("get-env", profile),
+  getProviderRequestTarget: (
+    connectionId: string,
+  ): Promise<ProviderRequestTarget> =>
+    ipcRenderer.invoke("get-provider-request-target", connectionId),
 
-  setEnv: (key: string, value: string, profile?: string): Promise<boolean> =>
-    ipcRenderer.invoke("set-env", key, value, profile),
+  getEnv: (
+    profile?: string,
+    target?: ProviderRequestTarget,
+  ): Promise<Record<string, string>> =>
+    ipcRenderer.invoke("get-env", profile, target),
+
+  setEnv: (
+    key: string,
+    value: string,
+    profile?: string,
+    target?: ProfileEditorTarget | ProviderRequestTarget,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("set-env", key, value, profile, target),
 
   validateChatReadiness: (
     profile?: string,
@@ -363,11 +378,20 @@ const hermesAPI = {
   getConfigFixLog: (maxEntries?: number): Promise<unknown[]> =>
     ipcRenderer.invoke("get-config-fix-log", maxEntries),
 
-  getConfig: (key: string, profile?: string): Promise<string | null> =>
-    ipcRenderer.invoke("get-config", key, profile),
+  getConfig: (
+    key: string,
+    profile?: string,
+    target?: ProfileEditorTarget,
+  ): Promise<string | null> =>
+    ipcRenderer.invoke("get-config", key, profile, target),
 
-  setConfig: (key: string, value: string, profile?: string): Promise<boolean> =>
-    ipcRenderer.invoke("set-config", key, value, profile),
+  setConfig: (
+    key: string,
+    value: string,
+    profile?: string,
+    target?: ProfileEditorTarget,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("set-config", key, value, profile, target),
 
   getHermesHome: (profile?: string): Promise<string> =>
     ipcRenderer.invoke("get-hermes-home", profile),
@@ -651,6 +675,7 @@ const hermesAPI = {
     baseUrl?: string,
     apiKey?: string,
     profile?: string,
+    target?: ProviderRequestTarget,
   ): Promise<{
     models: string[];
     status: "ok" | "no-key" | "error" | "unsupported" | "unknown-host";
@@ -666,6 +691,7 @@ const hermesAPI = {
       baseUrl,
       apiKey,
       profile,
+      target,
     ),
 
   getModelContextWindow: (
@@ -955,6 +981,20 @@ const hermesAPI = {
   > =>
     ipcRenderer.invoke("list-sessions", limit, offset, connectionId, profile),
 
+  getSessionUsage: (
+    sessionId: string,
+    connectionId?: string,
+    profile?: string,
+  ): Promise<{
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    cost?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+  } | null> =>
+    ipcRenderer.invoke("get-session-usage", sessionId, connectionId, profile),
+
   getSessionMessages: (
     sessionId: string,
     connectionId?: string,
@@ -1011,7 +1051,9 @@ const hermesAPI = {
     ipcRenderer.invoke("set-session-model-override", sessionId, override),
 
   // Profiles
-  listProfiles: (): Promise<
+  listProfiles: (
+    target?: ProfileEditorTarget,
+  ): Promise<
     Array<{
       id: string;
       name: string;
@@ -1027,44 +1069,52 @@ const hermesAPI = {
       color?: string;
       avatar?: string | null;
     }>
-  > => ipcRenderer.invoke("list-profiles"),
+  > => ipcRenderer.invoke("list-profiles", target),
 
   createProfile: (
     name: string,
     cloneFrom: string | null,
+    target?: ProfileEditorTarget,
   ): Promise<{ success: boolean; error?: string; id?: string }> =>
-    ipcRenderer.invoke("create-profile", name, cloneFrom),
+    ipcRenderer.invoke("create-profile", name, cloneFrom, target),
 
   deleteProfile: (
     name: string,
+    target?: ProfileEditorTarget,
   ): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke("delete-profile", name),
+    ipcRenderer.invoke("delete-profile", name, target),
 
-  setActiveProfile: (name: string): Promise<boolean> =>
-    ipcRenderer.invoke("set-active-profile", name),
+  setActiveProfile: (
+    name: string,
+    target?: ProfileEditorTarget,
+  ): Promise<boolean> => ipcRenderer.invoke("set-active-profile", name, target),
 
   setProfileColor: (
     name: string,
     color: string,
+    target?: ProfileEditorTarget,
   ): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke("set-profile-color", name, color),
+    ipcRenderer.invoke("set-profile-color", name, color, target),
 
   setProfileName: (
     id: string,
     name: string,
+    target?: ProfileEditorTarget,
   ): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke("set-profile-name", id, name),
+    ipcRenderer.invoke("set-profile-name", id, name, target),
 
   setProfileAvatar: (
     name: string,
     dataUrl: string,
+    target?: ProfileEditorTarget,
   ): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke("set-profile-avatar", name, dataUrl),
+    ipcRenderer.invoke("set-profile-avatar", name, dataUrl, target),
 
   removeProfileAvatar: (
     name: string,
+    target?: ProfileEditorTarget,
   ): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke("remove-profile-avatar", name),
+    ipcRenderer.invoke("remove-profile-avatar", name, target),
 
   listWallets: (profile?: string): Promise<ProfileWallet[]> =>
     ipcRenderer.invoke("list-wallets", profile),
@@ -1126,38 +1176,57 @@ const hermesAPI = {
   // Memory
   readMemory: (
     profile?: string,
+    target?: ProfileEditorTarget,
   ): Promise<{
     memory: { content: string; exists: boolean; lastModified: number | null };
     user: { content: string; exists: boolean; lastModified: number | null };
     stats: { totalSessions: number; totalMessages: number };
-  }> => ipcRenderer.invoke("read-memory", profile),
+  }> => ipcRenderer.invoke("read-memory", profile, target),
 
   addMemoryEntry: (
     content: string,
     profile?: string,
+    target?: ProfileEditorTarget,
   ): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke("add-memory-entry", content, profile),
+    ipcRenderer.invoke("add-memory-entry", content, profile, target),
   updateMemoryEntry: (
     index: number,
     content: string,
     profile?: string,
+    target?: ProfileEditorTarget,
   ): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke("update-memory-entry", index, content, profile),
-  removeMemoryEntry: (index: number, profile?: string): Promise<boolean> =>
-    ipcRenderer.invoke("remove-memory-entry", index, profile),
+    ipcRenderer.invoke("update-memory-entry", index, content, profile, target),
+  removeMemoryEntry: (
+    index: number,
+    profile?: string,
+    target?: ProfileEditorTarget,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("remove-memory-entry", index, profile, target),
   writeUserProfile: (
     content: string,
     profile?: string,
+    target?: ProfileEditorTarget,
   ): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke("write-user-profile", content, profile),
+    ipcRenderer.invoke("write-user-profile", content, profile, target),
 
   // Soul
-  readSoul: (profile?: string): Promise<string> =>
-    ipcRenderer.invoke("read-soul", profile),
-  writeSoul: (content: string, profile?: string): Promise<boolean> =>
-    ipcRenderer.invoke("write-soul", content, profile),
-  resetSoul: (profile?: string): Promise<string> =>
-    ipcRenderer.invoke("reset-soul", profile),
+  getProfileEditorTarget: (
+    profile?: string,
+    connectionId?: string,
+  ): Promise<ProfileEditorTarget> =>
+    ipcRenderer.invoke("get-profile-editor-target", profile, connectionId),
+  readSoul: (profile?: string, target?: ProfileEditorTarget): Promise<string> =>
+    ipcRenderer.invoke("read-soul", profile, target),
+  writeSoul: (
+    content: string,
+    profile?: string,
+    target?: ProfileEditorTarget,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("write-soul", content, profile, target),
+  resetSoul: (
+    profile?: string,
+    target?: ProfileEditorTarget,
+  ): Promise<string> => ipcRenderer.invoke("reset-soul", profile, target),
 
   // Tools
   getToolsets: (
@@ -1293,14 +1362,22 @@ const hermesAPI = {
   // from API key, plus `id`/`priority`/`source` for rotation.
   getCredentialPool: (
     profile?: string,
+    target?: ProviderRequestTarget,
   ): Promise<Record<string, Array<CredentialPoolEntry>>> =>
-    ipcRenderer.invoke("get-credential-pool", profile),
+    ipcRenderer.invoke("get-credential-pool", profile, target),
   setCredentialPool: (
     provider: string,
     entries: Array<CredentialPoolEntry>,
     profile?: string,
+    target?: ProviderRequestTarget,
   ): Promise<boolean> =>
-    ipcRenderer.invoke("set-credential-pool", provider, entries, profile),
+    ipcRenderer.invoke(
+      "set-credential-pool",
+      provider,
+      entries,
+      profile,
+      target,
+    ),
   // Add a manually-typed key as a properly-shaped pool entry. Returns
   // the updated entries list for the provider.
   addCredentialPoolEntry: (
@@ -1308,6 +1385,7 @@ const hermesAPI = {
     apiKey: string,
     label: string,
     profile?: string,
+    target?: ProviderRequestTarget,
   ): Promise<Array<CredentialPoolEntry>> =>
     ipcRenderer.invoke(
       "add-credential-pool-entry",
@@ -1315,6 +1393,7 @@ const hermesAPI = {
       apiKey,
       label,
       profile,
+      target,
     ),
 
   // Models
@@ -1733,6 +1812,7 @@ const hermesAPI = {
   // Memory providers
   discoverMemoryProviders: (
     profile?: string,
+    target?: ProfileEditorTarget,
   ): Promise<
     Array<{
       name: string;
@@ -1741,7 +1821,7 @@ const hermesAPI = {
       active: boolean;
       envVars: string[];
     }>
-  > => ipcRenderer.invoke("discover-memory-providers", profile),
+  > => ipcRenderer.invoke("discover-memory-providers", profile, target),
 
   // MCP servers
   listMcpServers: (
