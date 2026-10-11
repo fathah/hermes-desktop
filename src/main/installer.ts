@@ -1,3 +1,4 @@
+import { buildInstallErrorMessage } from "./installer-errors";
 import { spawn, execFile, execFileSync } from "child_process";
 import {
   existsSync,
@@ -1039,7 +1040,7 @@ export async function runInstall(
             );
             resolve();
           } else {
-            const errorMessage = buildInstallErrorMessage(code ?? 1);
+            const errorMessage = buildInstallErrorMessage(code);
             reject(new Error(errorMessage));
           }
         }
@@ -1053,23 +1054,6 @@ export async function runInstall(
     askpass?.cleanup();
     sudoPrecache.stop();
   }
-}
-
-// Build a detailed error message based on exit code for better user experience.
-function buildInstallErrorMessage(exitCode: number): string {
-  const baseMsg = `Installation failed (exit code ${exitCode}).`;
-
-  // Common Windows exit codes and their meanings
-  const codeDetails: Record<number, string> = {
-    259: "File path is too long. This can happen on Windows if the installation directory path exceeds 260 characters. Try installing to a shorter path (e.g., C:\\hermes instead of a deeply nested directory).",
-    1: "Script encountered an error. Check that PowerShell execution policy allows scripts: Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser",
-    5: "Permission denied. Try running PowerShell as Administrator.",
-    3221225781: "Application crashed. This may indicate a system compatibility issue.",
-  };
-
-  const detail = codeDetails[exitCode] || "The installer encountered an unexpected error.";
-
-  return `${baseMsg}\n\n${detail}\n\nTroubleshooting steps:\n1. Delete the venv directory: Remove-Item "${HERMES_VENV}" -Recurse -Force\n2. Delete the Hermes directory: Remove-Item "${HERMES_REPO}" -Recurse -Force\n3. Restart the application and try again.\n4. If problems persist, open PowerShell and run the installer manually:\nirm https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.ps1 | iex`;
 }
 
 // PS single-quoted string escape: ' → ''
@@ -1215,11 +1199,7 @@ async function runInstallWindows(emit: (t: string) => void): Promise<void> {
         );
         resolve();
       } else {
-        reject(
-          new Error(
-            `Installation failed (exit code ${code}). Open PowerShell and try: irm https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.ps1 | iex`,
-          ),
-        );
+        reject(new Error(buildInstallErrorMessage(code)));
       }
     });
 

@@ -1966,14 +1966,6 @@ export function registerIpcHandlers(context: IpcContext): void {
     },
   );
 
-  // Issue #965: Keep approval prompts alive with periodic ping/pong
-  // Prevents 5-minute timeout when user is deciding on approvals
-  setInterval(() => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("approval-keepalive-ping");
-    }
-  }, 30000); // Send ping every 30 seconds
-
   // Renderer-driven clipboard write (issue #298 — "Copy entire chat").
   // Routed through the main process so it doesn't depend on the renderer's
   // document being focused, which the navigator.clipboard API requires.

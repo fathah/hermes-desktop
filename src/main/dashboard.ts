@@ -1,4 +1,5 @@
-import { spawn, execSync, type ChildProcess } from "child_process";
+import { stopDashboardProcess } from "./dashboard-process-stop";
+import { spawn, type ChildProcess } from "child_process";
 import { randomBytes } from "crypto";
 import { closeSync, existsSync, mkdirSync, openSync } from "fs";
 import http from "http";
@@ -65,6 +66,18 @@ interface ManagedDashboard {
 }
 
 const dashboards = new Map<string, ManagedDashboard>();
+const stopping = new Map<ChildProcess, Promise<boolean>>();
+const stoppingProfiles = new Map<string, Promise<boolean>>();
+
+function stopManagedProcess(proc: ChildProcess): Promise<boolean> {
+  const existing = stopping.get(proc);
+  if (existing) return existing;
+  const pending = stopDashboardProcess(proc).finally(() =>
+    stopping.delete(proc),
+  );
+  stopping.set(proc, pending);
+  return pending;
+}
 
 function resolveProfile(profile?: string): string | undefined {
   return normalizeProfileName(profile ?? getActiveProfileNameSync());
@@ -717,12 +730,8 @@ export async function startDashboard(
     );
     await probeDashboardWebSocket(connection, 5_000);
   } catch (err) {
-    dashboards.delete(key);
-    try {
-      proc.kill();
-    } catch {
-      // Ignore shutdown errors for a failed probe; the log path is returned.
-    }
+    if (dashboards.get(key)?.proc === proc) dashboards.delete(key);
+    await stopManagedProcess(proc);
     return {
       supported: true,
       running: false,
@@ -739,47 +748,22 @@ export async function startDashboard(
   return { supported: true, running: true, connection, logPath };
 }
 
-export function stopDashboard(profile?: string): boolean {
+export async function stopDashboard(profile?: string): Promise<boolean> {
   const key = profileKey(profile);
   const managed = dashboards.get(key);
-  if (!managed) return true;
+  if (!managed) return stoppingProfiles.get(key) ?? true;
   dashboards.delete(key);
-
-  const proc = managed.proc;
-  const IS_WINDOWS = process.platform === "win32";
-
-  try {
-    if (IS_WINDOWS && proc.pid) {
-      // Windows: Use taskkill to ensure the process is terminated.
-      // kill() on Windows may not terminate child processes, causing orphans.
-      try {
-        execSync(`taskkill /PID ${proc.pid} /F`, { stdio: "ignore" });
-      } catch {
-        // taskkill failed, fall back to kill()
-        proc.kill();
-      }
-    } else {
-      // Unix: Try SIGTERM first, then SIGKILL if process doesn't exit.
-      proc.kill("SIGTERM");
-      const killTimer = setTimeout(() => {
-        try {
-          proc.kill("SIGKILL");
-        } catch {
-          // Process may already be dead.
-        }
-      }, 2000);
-
-      proc.once("exit", () => clearTimeout(killTimer));
-    }
-    return true;
-  } catch {
-    return false;
-  }
+  const pending = stopManagedProcess(managed.proc).finally(() => {
+    if (stoppingProfiles.get(key) === pending) stoppingProfiles.delete(key);
+  });
+  stoppingProfiles.set(key, pending);
+  return pending;
 }
 
-export function stopAllDashboards(): void {
-  for (const key of [...dashboards.keys()]) {
-    // Keep default explicit: undefined resolves to the currently active profile.
-    stopDashboard(key);
-  }
+export async function stopAllDashboards(): Promise<void> {
+  const pending = [...dashboards.keys()].map((key) => stopDashboard(key));
+  // Include already admitted stops after their profile entries were removed.
+  const results = await Promise.all([...pending, ...stopping.values()]);
+  if (results.some((success) => !success))
+    console.warn("[SHUTDOWN] A managed dashboard did not confirm termination.");
 }

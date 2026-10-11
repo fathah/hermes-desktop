@@ -1,3 +1,4 @@
+import { registerManagedQuit } from "./managed-quit";
 import { app, BrowserWindow, nativeTheme, session, shell } from "electron";
 import { join } from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
@@ -116,17 +117,20 @@ export function startMainProcess(): void {
     if (process.platform !== "darwin") app.quit();
   });
 
-  app.on("before-quit", () => {
+  registerManagedQuit(app, async () => {
     stopHealthPolling();
     for (const abort of activeRuns.values()) abort();
     activeRuns.clear();
     cleanupTempMediaFiles();
-    stopAllDashboards();
-    // Kill the SSH tunnel process on quit — otherwise the `ssh -N -L` child is
-    // orphaned (reparented to PID 1) and keeps holding its local port, so each
-    // relaunch leaks another tunnel and the port drifts (18642 → 61799 → …).
-    stopSshTunnel();
-    closeDbConnection();
+    try {
+      await stopAllDashboards();
+    } finally {
+      // Kill the SSH tunnel process on quit — otherwise the `ssh -N -L` child is
+      // orphaned (reparented to PID 1) and keeps holding its local port, so each
+      // relaunch leaks another tunnel and the port drifts (18642 → 61799 → …).
+      stopSshTunnel();
+      closeDbConnection();
+    }
   });
 }
 

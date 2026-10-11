@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
   active: "default",
   home: "",
   children: [] as ChildProcess[],
+  ignoresTerm: false,
 }));
 vi.mock("../src/main/config", () => ({
   getConnectionConfig: () => ({ mode: "local" }),
@@ -47,6 +48,7 @@ vi.mock("child_process", async (original) => {
           "-e",
           `
       const http = require('http');
+      if (${state.ignoresTerm}) process.on('SIGTERM', () => {});
       const server = http.createServer((req, res) => res.end('{}'));
       server.on('upgrade', (req, socket) => {
         socket.on('error', () => {});
@@ -71,10 +73,11 @@ import {
 beforeEach(() => {
   state.home = mkdtempSync(join(tmpdir(), "hermes-shutdown-"));
   state.active = "default";
+  state.ignoresTerm = false;
 });
 afterEach(async () => {
   state.active = "default";
-  stopAllDashboards();
+  await stopAllDashboards();
   await Promise.all(
     state.children.splice(0).map(
       (child) =>
@@ -100,7 +103,7 @@ it("stops default and named dashboard processes after changing the active profil
   state.active = "work";
   const work = await start();
   const other = await start("other");
-  stopAllDashboards();
+  await stopAllDashboards();
   await vi.waitFor(
     () => {
       for (const child of [primary, work, other]) {
@@ -116,17 +119,45 @@ it("keeps single-profile stop semantics and makes repeated shutdown harmless", a
   const primary = await start("default");
   state.active = "work";
   const work = await start();
-  expect(stopDashboard()).toBe(true);
+  expect(await stopDashboard()).toBe(true);
   await vi.waitFor(() =>
     expect(work.exitCode !== null || work.signalCode !== null).toBe(true),
   );
   expect(primary.killed).toBe(false);
-  expect(stopDashboard("default")).toBe(true);
+  expect(await stopDashboard("default")).toBe(true);
   await vi.waitFor(() =>
     expect(primary.exitCode !== null || primary.signalCode !== null).toBe(true),
   );
-  expect(() => {
-    stopAllDashboards();
-    stopAllDashboards();
-  }).not.toThrow();
+  await expect(stopAllDashboards()).resolves.toBeUndefined();
+  await expect(stopAllDashboards()).resolves.toBeUndefined();
 });
+
+// @lat: [[dashboard-shutdown#Confirmed forced termination]]
+it.skipIf(process.platform === "win32")(
+  "awaits SIGKILL for a real dashboard that ignores SIGTERM, including an already admitted stop",
+  async () => {
+    state.ignoresTerm = true;
+    const child = await start("stubborn");
+    const stopped = stopDashboard("stubborn");
+    let repeatedComplete = false;
+    const repeated = stopDashboard("stubborn").then((success) => {
+      repeatedComplete = true;
+      return success;
+    });
+    let shutdownComplete = false;
+    const shutdown = stopAllDashboards().then(() => {
+      shutdownComplete = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(shutdownComplete).toBe(false);
+    expect(repeatedComplete).toBe(false);
+    expect(child.killed).toBe(true);
+    expect(child.exitCode).toBeNull();
+    expect(child.signalCode).toBeNull();
+    expect(await stopped).toBe(true);
+    expect(await repeated).toBe(true);
+    await shutdown;
+    expect(child.signalCode).toBe("SIGKILL");
+  },
+  5000,
+);
