@@ -200,6 +200,7 @@ async function remoteFetch(
   init: RequestInit,
   conn: ConnectionConfig,
   profile?: string,
+  gatewayProfile = false,
 ): Promise<Response> {
   const headers: Record<string, string> = {
     ...getRemoteAuthHeader(conn),
@@ -207,8 +208,20 @@ async function remoteFetch(
   };
   const apiUrl = await getCronApiUrl(headers, conn);
   const profilePrefix =
-    profile && profile !== "default" ? `/p/${encodeURIComponent(profile)}` : "";
-  return fetch(`${apiUrl}${profilePrefix}${path}`, { ...init, headers });
+    gatewayProfile && profile && profile !== "default"
+      ? `/p/${encodeURIComponent(profile)}`
+      : "";
+  const response = await fetch(`${apiUrl}${profilePrefix}${path}`, {
+    ...init,
+    headers,
+  });
+  if (
+    response.ok &&
+    response.headers?.get("content-type")?.toLowerCase().includes("text/html")
+  ) {
+    throw new Error("Remote cron returned HTML instead of an API response.");
+  }
+  return response;
 }
 
 async function getCronApiUrl(
@@ -381,7 +394,13 @@ async function remoteFetchCron(
   const gatewayPath = jobPath.endsWith("/trigger")
     ? `${jobPath.slice(0, -"/trigger".length)}/run`
     : jobPath;
-  return remoteFetch(`${GATEWAY_CRON_BASE}${gatewayPath}`, init, conn, profile);
+  return remoteFetch(
+    `${GATEWAY_CRON_BASE}${gatewayPath}`,
+    init,
+    conn,
+    profile,
+    true,
+  );
 }
 
 function normalizeCronJobRows(
@@ -434,7 +453,13 @@ export async function listCronJobs(
       );
       if (isUnsupportedCronRoute(res)) {
         const qs = includeDisabled ? "?include_disabled=true" : "";
-        res = await remoteFetch(`${GATEWAY_CRON_BASE}${qs}`, {}, conn, profile);
+        res = await remoteFetch(
+          `${GATEWAY_CRON_BASE}${qs}`,
+          {},
+          conn,
+          profile,
+          true,
+        );
       }
       if (!res.ok) {
         console.error("[CRON] remote list failed:", await remoteJsonError(res));

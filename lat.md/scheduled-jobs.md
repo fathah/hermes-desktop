@@ -37,3 +37,11 @@ A delayed unsupported-route reply followed by a connection change still sends th
 ### OAuth failures remain authenticated
 
 Auto-mode OAuth login or probe failures never retry through bare fetch, preventing unauthenticated requests or misleading success after authentication fails.
+
+### Anonymous dashboard profile routing
+
+Anonymous dashboard requests select profiles through a query parameter; the gateway profile prefix is reserved for fallback routes to prevent named-profile requests from hitting a dashboard SPA page.
+
+### Anonymous HTML actions fail
+
+An HTML success response from an anonymous dashboard fails the operation, so the desktop cannot report that a destructive cron mutation completed when only a sign-in or SPA page was returned.

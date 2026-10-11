@@ -460,6 +460,52 @@ describe("Cron SSH fallback", () => {
     expect((await listCronJobs()).map((j) => j.id)).toEqual(["k1"]);
   });
 
+  // @lat: [[scheduled-jobs#Test specifications#Anonymous dashboard profile routing]]
+  it.each(["token", "auto"])(
+    "uses dashboard profile queries for named keyless %s requests",
+    async (mode) => {
+      connModeRef.mode = "remote";
+      connAuthRef.mode = mode;
+      dashboardRequestMock.mockReset();
+      dashboardRequestMock.mockRejectedValue(
+        new Error("Remote Hermes dashboard token is not configured."),
+      );
+      const fetchSpy = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => [],
+      } as Response);
+      vi.stubGlobal("fetch", fetchSpy);
+      const { listCronJobs, removeCronJob } =
+        await import("../src/main/cronjobs");
+      await listCronJobs(true, "work");
+      expect((await removeCronJob("j1", "work")).success).toBe(true);
+      expect(fetchSpy.mock.calls.map((c) => c[0])).toEqual([
+        "http://example.com/api/cron/jobs?profile=work",
+        "http://example.com/api/cron/jobs/j1?profile=work",
+      ]);
+    },
+  );
+
+  // @lat: [[scheduled-jobs#Test specifications#Anonymous HTML actions fail]]
+  it("rejects a keyless mutation answered by an HTML SPA page", async () => {
+    connModeRef.mode = "remote";
+    connAuthRef.mode = "token";
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response("<html>Sign in</html>", {
+        status: 200,
+        headers: { "Content-Type": "text/html" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+    const { removeCronJob } = await import("../src/main/cronjobs");
+    expect(await removeCronJob("j1", "work")).toEqual({
+      success: false,
+      error: "Remote cron returned HTML instead of an API response.",
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("does not report a job action as done when the OAuth reply was a sign-in page", async () => {
     connModeRef.mode = "remote";
     connAuthRef.mode = "oauth";
