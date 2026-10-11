@@ -19,6 +19,7 @@ import {
   Pin,
   X,
 } from "../../assets/icons";
+import { confirmSessionRename } from "../Sessions/confirmSessionRename";
 import SidebarSessionMenu, {
   type SidebarMenuProject,
   type SidebarMenuTarget,
@@ -32,6 +33,39 @@ interface RecentSession {
 
 // ChatGPT-style paged conversation list under the pinned app navigation.
 export const RECENT_SESSIONS_PAGE_SIZE = 30;
+
+// @lat: [[sidebar-navigation#Provisional fresh sessions#Live first-turn rows]]
+/**
+ * A missing live or newly-created session receives one unthrottled sync in
+ * its connection/profile scope, even if generation already completed.
+ *
+ * A run's session id is revealed the moment the agent produces its first
+ * visible token, reasoning, or tool call, so the sidebar can be showing a
+ * chat it cannot list yet. The refresh that would pick the row up is normally
+ * throttled, and the click that opened "New Chat" usually still sits inside
+ * that window, which is what kept a new conversation out of the list for the
+ * rest of its first run (issue #980).
+ *
+ * Completed newly-created runs retain their identity independently of loading.
+ * Older resumed conversations past the loaded page stay throttled, and a row
+ * that remains absent after one attempt falls back to the normal polling.
+ */
+export function needsForcedSessionSync(
+  sessionId: string | null,
+  listed: ReadonlyArray<{ id: string }>,
+  liveSessionIds: ReadonlySet<string>,
+  createdSessionIds?: ReadonlySet<string>,
+  attemptedSessionIds?: ReadonlySet<string>,
+): boolean {
+  if (
+    !sessionId ||
+    attemptedSessionIds?.has(sessionId) ||
+    (!liveSessionIds.has(sessionId) && !createdSessionIds?.has(sessionId))
+  ) {
+    return false;
+  }
+  return !listed.some((row) => row.id === sessionId);
+}
 
 // Re-sync cadence while the list is visible. Deliberately slower than the
 // Sessions screen (30s) — the sidebar is always on screen, so this interval
@@ -163,6 +197,7 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
   activeProfile,
   currentSessionId,
   loadingSessionIds,
+  createdSessionIds,
   resumingSessionId,
   onSelect,
   onSessionDeleted,
@@ -176,6 +211,8 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
   currentSessionId: string | null;
   /** Session ids of every run currently generating (multiple run at once). */
   loadingSessionIds: Set<string>;
+  /** Scoped sessions created here, including first turns already completed. */
+  createdSessionIds?: ReadonlySet<string>;
   /** A session whose history is being fetched for resume (transient spinner). */
   resumingSessionId: string | null;
   onSelect: (sessionId: string) => void;
@@ -211,10 +248,20 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
   const [editingTitle, setEditingTitle] = useState("");
   const editingIdRef = useRef<string | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const [renameSaving, setRenameSaving] = useState(false);
+  const renameContext = `${connectionId}\0${activeProfile}`;
+  const renameContextRef = useRef(renameContext);
+  useEffect(() => {
+    renameContextRef.current = renameContext;
+  }, [renameContext]);
   // Pending delete confirmation (small inline dialog in a portal-free overlay).
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const lastRefreshRef = useRef(0);
+  const forcedSessionSyncsRef = useRef({
+    scope: renameContext,
+    sessionIds: new Set<string>(),
+  });
   const sessionsRef = useRef<RecentSession[]>([]);
   const hasMoreRef = useRef(false);
   const loadingMoreRef = useRef(false);
@@ -309,6 +356,27 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
       });
     },
     [normalizeRows],
+  );
+
+  // Loading may already be false when React batches a fast first turn.
+  const forceSessionSync = useMemo(
+    () =>
+      needsForcedSessionSync(
+        currentSessionId,
+        sessions,
+        loadingSessionIds,
+        createdSessionIds,
+        forcedSessionSyncsRef.current.scope === renameContext
+          ? forcedSessionSyncsRef.current.sessionIds
+          : undefined,
+      ),
+    [
+      currentSessionId,
+      loadingSessionIds,
+      createdSessionIds,
+      sessions,
+      renameContext,
+    ],
   );
 
   const refresh = useCallback(
@@ -443,9 +511,29 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
   // Resuming/switching sessions reorders recency — refresh (throttled).
   // Also refreshes when going to "New Chat" (currentSessionId becomes null)
   // so the just-left session appears in the list immediately.
+  //
+  // A new or live run with no loaded row skips the throttle: the click that opened
+  // "New Chat" is usually still inside the 5s window, so a throttled refresh
+  // here is dropped and the new row stays invisible until the 60s poll (issue
+  // #980). Consume the attempt before starting it so a permanently absent or
+  // deleted row cannot cause repeated forced reads when switching tabs.
   useEffect(() => {
-    if (open) void refresh();
-  }, [open, currentSessionId, refresh]);
+    if (!open) return;
+    if (forcedSessionSyncsRef.current.scope !== renameContext) {
+      forcedSessionSyncsRef.current = {
+        scope: renameContext,
+        sessionIds: new Set<string>(),
+      };
+    }
+    const force =
+      forceSessionSync &&
+      !!currentSessionId &&
+      !forcedSessionSyncsRef.current.sessionIds.has(currentSessionId);
+    if (force && currentSessionId) {
+      forcedSessionSyncsRef.current.sessionIds.add(currentSessionId);
+    }
+    void refresh(force);
+  }, [forceSessionSync, open, currentSessionId, refresh, renameContext]);
 
   // Switching agent points the list at a different profile's DB. Force a
   // reload immediately (bypassing the throttle) so the list isn't stale.
@@ -507,14 +595,18 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
     });
   }, []);
 
-  const startRename = useCallback((s: RecentSession): void => {
-    setEditingId(s.id);
-    setEditingTitle(s.title || "");
-    setTimeout(() => {
-      renameInputRef.current?.focus();
-      renameInputRef.current?.select();
-    }, 0);
-  }, []);
+  const startRename = useCallback(
+    (s: RecentSession): void => {
+      if (renameSaving) return;
+      setEditingId(s.id);
+      setEditingTitle(s.title || "");
+      setTimeout(() => {
+        renameInputRef.current?.focus();
+        renameInputRef.current?.select();
+      }, 0);
+    },
+    [renameSaving],
+  );
 
   const cancelRename = useCallback((): void => {
     setEditingId(null);
@@ -523,33 +615,36 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
 
   const confirmRename = useCallback(
     async (id: string, value: string): Promise<void> => {
-      const trimmed = value.trim();
-      const current = sessionsRef.current.find((s) => s.id === id);
-      if (!trimmed || trimmed === (current?.title ?? "")) {
-        cancelRename();
-        return;
-      }
-      const previous = current?.title ?? "";
-      // Optimistic local update; roll back if the write fails.
-      setSessions((prev) =>
-        prev.map((s) => (s.id === id ? { ...s, title: trimmed } : s)),
-      );
-      if (editingIdRef.current === id) cancelRename();
-      try {
-        await window.hermesAPI.updateSessionTitle(
-          id,
-          trimmed,
-          connectionId,
-          activeProfile,
-        );
-      } catch (err) {
-        console.error("Failed to rename session", id, err);
-        setSessions((prev) =>
-          prev.map((s) => (s.id === id ? { ...s, title: previous } : s)),
-        );
-      }
+      const previous =
+        sessionsRef.current.find((s) => s.id === id)?.title ?? "";
+      await confirmSessionRename({
+        sessionId: id,
+        value,
+        currentTitle: previous,
+        isCurrentContext: () => renameContextRef.current === renameContext,
+        setSaving: setRenameSaving,
+        isStillEditing: () => editingIdRef.current === id,
+        applyOptimistic: (title) =>
+          setSessions((prev) =>
+            prev.map((s) => (s.id === id ? { ...s, title } : s)),
+          ),
+        rollback: () =>
+          setSessions((prev) =>
+            prev.map((s) => (s.id === id ? { ...s, title: previous } : s)),
+          ),
+        clearEditing: cancelRename,
+        inputRef: renameInputRef,
+        fallbackErrorMessage: t("sessions.renameFailed"),
+        persist: (sessionId, title) =>
+          window.hermesAPI.updateSessionTitle(
+            sessionId,
+            title,
+            connectionId,
+            activeProfile,
+          ),
+      });
     },
-    [activeProfile, cancelRename, connectionId],
+    [cancelRename, t, connectionId, activeProfile, renameContext],
   );
 
   const handleMoveToProject = useCallback(
@@ -687,6 +782,7 @@ const SidebarRecentSessions = memo(function SidebarRecentSessions({
         >
           <input
             ref={renameInputRef}
+            disabled={renameSaving}
             className="sidebar-recent-session-rename"
             type="text"
             value={editingTitle}

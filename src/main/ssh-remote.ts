@@ -5,10 +5,16 @@
  */
 
 import { spawn } from "child_process";
+import { SSH_SESSION_DELETE_SCRIPT } from "./ssh-session-delete";
+import { buildSshRemoteCommand } from "./ssh-command";
 import { homedir } from "os";
 import { join } from "path";
 import { existsSync } from "fs";
-import { randomBytes } from "crypto";
+import {
+  REMOTE_ENV_UPDATE_SCRIPT,
+  type RemoteEnvUpdate,
+  type RemoteEnvUpdateResult,
+} from "./ssh-env-update";
 import type { SshConfig } from "./ssh-tunnel";
 import type { KanbanTask } from "./kanban";
 import { buildSshControlOptions } from "./ssh-options";
@@ -18,10 +24,16 @@ import {
   type SkillSearchResult,
 } from "./skills";
 import type { MemoryInfo } from "./memory";
-import type { HistoryItem, SessionSummary, SearchResult } from "./sessions";
+import type {
+  HistoryItem,
+  SessionSummary,
+  SearchResult,
+  DeleteSessionsResult,
+} from "./sessions";
 import type { CachedSession } from "./session-cache";
 import type { Attachment } from "../shared/attachments";
 import { isImageMime, MAX_IMAGE_BYTES } from "../shared/attachments";
+import { normalizeModelEndpointUrl } from "../shared/model-endpoint";
 import type { ToolsetInfo } from "./tools";
 import {
   extractLeadingVisionImageFallback,
@@ -67,10 +79,14 @@ export function sshExec(
       return reject(new Error(`SSH private key file not found at: ${keyPath}`));
     }
 
-    const child = spawn("ssh", [...buildExecArgs(config), command], {
-      stdio: ["pipe", "pipe", "pipe"],
-      ...HIDDEN_SUBPROCESS_OPTIONS,
-    });
+    const child = spawn(
+      "ssh",
+      [...buildExecArgs(config), buildSshRemoteCommand(command)],
+      {
+        stdio: ["pipe", "pipe", "pipe"],
+        ...HIDDEN_SUBPROCESS_OPTIONS,
+      },
+    );
     let stdout = "";
     let stderr = "";
     const timeout = setTimeout(() => {
@@ -1050,34 +1066,17 @@ print(json.dumps(result))
   );
 }
 
-// Pure line-rewrite for sshSetEnvValue, exported for tests. Rewrites the
-// FIRST matching line (commented-out counts — it becomes live) and DROPS any
-// later duplicates. Both sshReadEnv and the remote gateway's dotenv are
-// last-wins, and pre-dedup desktops left .env files with several
-// API_SERVER_KEY / HERMES_DASHBOARD_SESSION_TOKEN lines — replacing only the
-// first while a stale later line survives means the gateway keeps using the
-// OLD value while this desktop caches the new one (a permanent 401). One
-// canonical line, matching the grep-v writers for the dashboard token/port.
-export function upsertEnvLine(
-  content: string,
-  key: string,
-  value: string,
-): string {
-  if (!content.trim()) return `${key}=${value}\n`;
-  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const matcher = new RegExp(`^#?\\s*${escaped}\\s*=`);
-  let found = false;
-  const lines: string[] = [];
-  for (const line of content.split("\n")) {
-    if (!line.trim().match(matcher)) {
-      lines.push(line);
-      continue;
-    }
-    if (!found) lines.push(`${key}=${value}`);
-    found = true;
-  }
-  if (!found) lines.push(`${key}=${value}`);
-  return lines.join("\n");
+async function sshUpdateEnv(
+  config: SshConfig,
+  update: RemoteEnvUpdate,
+  profile?: string,
+): Promise<RemoteEnvUpdateResult> {
+  const output = await sshPython(
+    config,
+    REMOTE_ENV_UPDATE_SCRIPT,
+    JSON.stringify({ path: remoteEnvPath(profile), ...update }),
+  );
+  return JSON.parse(output) as RemoteEnvUpdateResult;
 }
 
 export async function sshSetEnvValue(
@@ -1086,9 +1085,7 @@ export async function sshSetEnvValue(
   value: string,
   profile?: string,
 ): Promise<void> {
-  const envPath = remoteEnvPath(profile);
-  const content = await sshReadFile(config, envPath);
-  await sshWriteFile(config, envPath, upsertEnvLine(content, key, value));
+  await sshUpdateEnv(config, { operation: "set", key, value }, profile);
 }
 
 // ─── Dotted-path YAML helpers (mirror of the local-mode fix) ───────────────
@@ -1325,17 +1322,36 @@ export function sshGetHermesHome(_config: SshConfig, profile?: string): string {
 export async function sshGetModelConfig(
   config: SshConfig,
   profile?: string,
-): Promise<{ provider: string; model: string; baseUrl: string }> {
+): Promise<{
+  provider: string;
+  model: string;
+  baseUrl: string;
+  contextLength?: number;
+}> {
   // Use dotted paths so the lookup is scoped to the `model:` block. The
   // previous flat keys `provider` / `default` / `base_url` would each
   // match the first occurrence at any indent — typically picking up
   // `personalities.default` or `auxiliary.vision.provider` and reporting
   // them as the model fields (#240).
+  // Read once: each sshReadFile is a real SSH process, so fetching four
+  // sibling fields independently adds avoidable latency to every model read.
+  const content = await sshReadFile(config, remoteConfigPath(profile));
+  const read = (key: string): string =>
+    (content && locateInYaml(content, key)?.value) || "";
+  const rawContextLength = read("model.context_length").trim();
+  const parsedContextLength = rawContextLength
+    ? Number(rawContextLength)
+    : Number.NaN;
+  const contextLength =
+    Number.isFinite(parsedContextLength) && parsedContextLength > 0
+      ? Math.floor(parsedContextLength)
+      : undefined;
+
   return {
-    provider:
-      (await sshGetConfigValue(config, "model.provider", profile)) || "auto",
-    model: (await sshGetConfigValue(config, "model.default", profile)) || "",
-    baseUrl: (await sshGetConfigValue(config, "model.base_url", profile)) || "",
+    provider: read("model.provider") || "auto",
+    model: read("model.default"),
+    baseUrl: read("model.base_url"),
+    ...(contextLength !== undefined ? { contextLength } : {}),
   };
 }
 
@@ -1370,6 +1386,36 @@ export async function sshSetModelConfig(
 }
 
 // ── Sessions ─────────────────────────────────────────────────────────────────
+
+export async function sshDeleteSessions(
+  config: SshConfig,
+  sessionIds: string[],
+  profile?: string,
+): Promise<DeleteSessionsResult> {
+  const output = await sshPython(
+    config,
+    SSH_SESSION_DELETE_SCRIPT,
+    pythonJsonInput({ sessionIds, profile }),
+  );
+  const result = JSON.parse(output.trim()) as DeleteSessionsResult;
+  if (
+    !Number.isInteger(result.requested) ||
+    !Number.isInteger(result.deleted) ||
+    result.deleted < 0 ||
+    result.deleted > result.requested
+  ) {
+    throw new Error("Invalid SSH session deletion response");
+  }
+  return result;
+}
+
+export async function sshDeleteSession(
+  config: SshConfig,
+  sessionId: string,
+  profile?: string,
+): Promise<void> {
+  await sshDeleteSessions(config, [sessionId], profile);
+}
 
 export async function sshListSessions(
   config: SshConfig,
@@ -2392,20 +2438,6 @@ export async function sshReadRemoteApiKey(config: SshConfig): Promise<string> {
   }
 }
 
-// The gateway api_server refuses to bind with a key shorter than 16 chars or an
-// obvious placeholder, so chat over /v1 can never connect with one. Mirrors the
-// remote-side guard.
-const MIN_API_SERVER_KEY_LENGTH = 16;
-const PLACEHOLDER_API_SERVER_KEY =
-  /^(?:changeme|placeholder|your[-_]?(?:api[-_]?)?key|api[-_]?server[-_]?key|secret|password|token)$/i;
-
-export function isUsableApiServerKey(key: string): boolean {
-  const k = (key || "").trim();
-  return (
-    k.length >= MIN_API_SERVER_KEY_LENGTH && !PLACEHOLDER_API_SERVER_KEY.test(k)
-  );
-}
-
 export interface SshApiServerKeyResult {
   key: string;
   /** True when the key and/or enable flag were just written — the caller must
@@ -2435,30 +2467,12 @@ export async function sshEnsureApiServerKey(
   if (inflight) return inflight;
 
   const run = (async (): Promise<SshApiServerKeyResult> => {
-    let existing = "";
-    let enabled = false;
-    try {
-      const env = await sshReadEnv(config, profile);
-      existing = (env["API_SERVER_KEY"] || "").trim();
-      enabled = ["true", "1", "yes"].includes(
-        (env["API_SERVER_ENABLED"] || "").trim().toLowerCase(),
-      );
-    } catch {
-      // remote .env missing/unreadable — provision from scratch below.
-    }
-
-    let key = existing;
-    let created = false;
-    if (!isUsableApiServerKey(existing)) {
-      key = randomBytes(24).toString("hex"); // 48 hex chars, well over the minimum
-      await sshSetEnvValue(config, "API_SERVER_KEY", key, profile);
-      created = true;
-    }
-    if (!enabled) {
-      await sshSetEnvValue(config, "API_SERVER_ENABLED", "true", profile);
-      created = true; // gateway must (re)start to load the api_server platform
-    }
-    return { key, created };
+    const result = await sshUpdateEnv(
+      config,
+      { operation: "ensure-api" },
+      profile,
+    );
+    return { key: result.values.API_SERVER_KEY, created: result.changed };
   })();
 
   apiServerKeyPromises.set(cacheKey, run);
@@ -2547,27 +2561,12 @@ export async function sshEnsureDashboardToken(
   if (inflight) return inflight;
 
   const run = (async (): Promise<string> => {
-    let token = "";
-    try {
-      const env = await sshReadEnv(config, profile);
-      token = (env["HERMES_DASHBOARD_SESSION_TOKEN"] || "").trim();
-    } catch {
-      // .env missing/unreadable — generate below.
-    }
-    if (!token) token = randomBytes(24).toString("hex");
-    // Write exactly ONE canonical line: strip any existing (possibly duplicated)
-    // entries, append one, then truncate-in-place via `cat > file` so the file's
-    // permissions/owner are preserved. Idempotent and self-heals prior dupes.
-    await sshExec(
+    const result = await sshUpdateEnv(
       config,
-      `mkdir -p "$(dirname ${envPath})" 2>/dev/null; ` +
-        `touch ${envPath}; ` +
-        `tmp=${envPath}.tmp.$$; ` +
-        `grep -v '^HERMES_DASHBOARD_SESSION_TOKEN=' ${envPath} > $tmp 2>/dev/null || true; ` +
-        `printf 'HERMES_DASHBOARD_SESSION_TOKEN=%s\\n' ${shellQuote(token)} >> $tmp; ` +
-        `cat $tmp > ${envPath}; rm -f $tmp`,
+      { operation: "ensure-dashboard" },
+      profile,
     );
-    return token;
+    return result.values.HERMES_DASHBOARD_SESSION_TOKEN;
   })();
 
   dashboardTokenPromises.set(cacheKey, run);
@@ -2619,19 +2618,11 @@ async function sshPersistDashboardPort(
   profile: string | undefined,
   port: number,
 ): Promise<void> {
-  const envPath = remoteEnvPath(profile);
-  // Write exactly ONE canonical line (strip any prior entries, then append) so
-  // repeated port reallocations don't accumulate duplicate
-  // HERMES_DESKTOP_DASHBOARD_PORT lines — sshReadEnv is last-wins, so dupes
-  // "worked" by luck but drifted and grew. cat-in-place preserves perms.
-  await sshExec(
+  await sshSetEnvValue(
     config,
-    `mkdir -p "$(dirname ${envPath})" 2>/dev/null; ` +
-      `touch ${envPath}; ` +
-      `tmp=${envPath}.tmp.$$; ` +
-      `grep -v '^${REMOTE_DASHBOARD_PORT_ENV}=' ${envPath} > $tmp 2>/dev/null || true; ` +
-      `printf '${REMOTE_DASHBOARD_PORT_ENV}=%s\\n' ${shellQuote(String(port))} >> $tmp; ` +
-      `cat $tmp > ${envPath}; rm -f $tmp`,
+    REMOTE_DASHBOARD_PORT_ENV,
+    String(port),
+    profile,
   );
 }
 
@@ -3523,7 +3514,11 @@ export async function sshAddModel(
 ): Promise<SavedModel> {
   const models = await sshListModels(config);
   const existing = models.find(
-    (m) => m.model === model && m.provider === provider,
+    (m) =>
+      m.model === model &&
+      m.provider === provider &&
+      normalizeModelEndpointUrl(m.baseUrl) ===
+        normalizeModelEndpointUrl(baseUrl),
   );
   if (existing) return existing;
   const entry: SavedModel = {

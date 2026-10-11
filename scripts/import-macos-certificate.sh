@@ -62,7 +62,9 @@ security set-key-partition-list \
   -k "$keychain_password" \
   "$keychain_path"
 
-if ! security find-identity -v -p codesigning "$keychain_path" | grep -q "Developer ID Application"; then
+# Consume the full identity list: grep -q can close the pipe early, causing
+# security to exit with SIGPIPE and pipefail to reject a valid identity.
+if ! security find-identity -v -p codesigning "$keychain_path" | grep "Developer ID Application" > /dev/null; then
   echo "No Developer ID Application identity was imported." >&2
   exit 1
 fi

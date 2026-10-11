@@ -1,4 +1,5 @@
 export default {
+  showEarlierMessages: "以前のメッセージを{{count}}件表示",
   title: "新規チャット",
   sessionTitle: "セッション {{id}}",
   noModel: "モデル未設定",

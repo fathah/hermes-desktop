@@ -1,4 +1,4 @@
-import { URL_KEY_MAP } from "../shared/url-key-map";
+import { matchesProviderUrl, URL_KEY_MAP } from "../shared/url-key-map";
 
 /**
  * Shared URL → host-derived env-var lookup.
@@ -24,8 +24,8 @@ import { URL_KEY_MAP } from "../shared/url-key-map";
  * the upstream engine falls back to `no-key-required` for those.
  */
 export function hostDerivedEnvKeyForUrl(baseUrl: string): string | null {
-  for (const { pattern, envKey } of URL_KEY_MAP) {
-    if (pattern.test(baseUrl)) return envKey;
+  for (const { pattern, envKey, matchHostname } of URL_KEY_MAP) {
+    if (matchesProviderUrl(baseUrl, pattern, matchHostname)) return envKey;
   }
   return null;
 }

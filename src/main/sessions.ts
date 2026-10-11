@@ -3,7 +3,7 @@ import type { Attachment } from "../shared/attachments";
 import { isImageMime } from "../shared/attachments";
 import { clearStagedAttachments } from "./attachment-staging";
 import { removeSessionFromCache } from "./session-cache";
-import { getDbConnection } from "./db";
+import { getDbConnection, sessionVisibilityPredicate } from "./db";
 import {
   attachmentFromLocalVisionImagePath,
   deletePromptImageAttachmentsForSession,
@@ -280,6 +280,7 @@ export function listSessions(
         s.model,
         s.title
       FROM sessions s
+      WHERE ${sessionVisibilityPredicate(db)}
       ORDER BY s.started_at DESC
       LIMIT ? OFFSET ?`,
     )

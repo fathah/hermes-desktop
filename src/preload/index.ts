@@ -2,6 +2,11 @@ import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { AppLocale } from "../shared/i18n/types";
 import type { BotGroupAPI } from "../shared/bot-groups";
 import type { Attachment } from "../shared/attachments";
+import type {
+  RemoteGatewayAction,
+  RemoteGatewayActionResult,
+  RemoteGatewayCommandStatus,
+} from "../shared/gateway";
 import type { SessionModelOverride } from "../shared/model-override";
 import type { DesktopSessionContinuationItem } from "../shared/session-continuation";
 import type { DesktopSessionLocalError } from "../shared/session-continuation";
@@ -21,6 +26,10 @@ import type {
   MessagingPlatformUpdate,
 } from "../shared/messaging-platforms";
 import type { ChatToolEvent } from "../shared/chat-stream";
+import type {
+  ApprovalChoice,
+  ChatApprovalRequest,
+} from "../shared/chat-approval";
 import type {
   DeviceCodeInfo,
   EnsureHermesOneKeyResult,
@@ -320,6 +329,8 @@ const hermesAPI = {
 
   validateChatReadiness: (
     profile?: string,
+    override?: { provider?: string; model?: string; baseUrl?: string },
+    connectionId?: string,
   ): Promise<{
     ok: boolean;
     code?:
@@ -331,7 +342,13 @@ const hermesAPI = {
     message?: string;
     fixLocation?: "providers" | "models" | "gateway" | "setup";
     expectedEnvKey?: string;
-  }> => ipcRenderer.invoke("validate-chat-readiness", profile),
+  }> =>
+    ipcRenderer.invoke(
+      "validate-chat-readiness",
+      profile,
+      override,
+      connectionId,
+    ),
 
   getConfigHealth: (profile?: string): Promise<unknown> =>
     ipcRenderer.invoke("get-config-health", profile),
@@ -825,13 +842,45 @@ const hermesAPI = {
   respondClarify: (requestId: string, answer: string): Promise<boolean> =>
     ipcRenderer.invoke("clarify-respond", { requestId, answer }),
 
+  onApprovalRequest: (
+    callback: (runId: string, req: ChatApprovalRequest) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      runId: string,
+      req: ChatApprovalRequest,
+    ): void => callback(runId, req);
+    ipcRenderer.on("chat-approval-request", handler);
+    return () => ipcRenderer.removeListener("chat-approval-request", handler);
+  },
+
+  respondApproval: (
+    requestId: string,
+    choice: ApprovalChoice,
+    runId: string,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("approval-respond", { requestId, choice, runId }),
+
   // Gateway
-  startGateway: (): Promise<GatewayStartResult> =>
-    ipcRenderer.invoke("start-gateway"),
-  stopGateway: (): Promise<boolean> => ipcRenderer.invoke("stop-gateway"),
+  remoteGatewayAction: (
+    action: RemoteGatewayAction,
+    profile?: string,
+  ): Promise<RemoteGatewayActionResult> =>
+    ipcRenderer.invoke("remote-gateway-action", action, profile),
+  startGateway: (profile?: string): Promise<GatewayStartResult> =>
+    ipcRenderer.invoke("start-gateway", profile),
+  stopGateway: (profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("stop-gateway", profile),
   restartGateway: (profile?: string): Promise<boolean> =>
     ipcRenderer.invoke("restart-gateway", profile),
-  gatewayStatus: (): Promise<boolean> => ipcRenderer.invoke("gateway-status"),
+  gatewayStatus: (profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("gateway-status", profile),
+  gatewayCommandPending: (profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("gateway-command-pending", profile),
+  gatewayCommandStatus: (
+    profile?: string,
+  ): Promise<RemoteGatewayCommandStatus> =>
+    ipcRenderer.invoke("gateway-command-status", profile),
   setNativeAppearance: (source: "dark" | "light" | "system"): Promise<void> =>
     ipcRenderer.invoke("set-native-appearance", source),
 

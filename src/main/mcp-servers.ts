@@ -2,6 +2,8 @@ import { execFile } from "child_process";
 import { existsSync, readFileSync } from "fs";
 import { profilePaths, safeWriteFile } from "./utils";
 import { getApiUrl, getRemoteAuthHeader, isRemoteMode } from "./hermes";
+import { getConnectionConfig } from "./config";
+import { remoteDashboardRequestJson } from "./remote-api";
 import { getApiServerKey } from "./config";
 import { getEnhancedPath, HERMES_PYTHON, hermesCliArgs } from "./installer";
 
@@ -609,11 +611,51 @@ async function mcpApi<T>(
   init: RequestInit = {},
   profile?: string,
 ): Promise<T> {
+  const conn = getConnectionConfig();
+  if (
+    conn.mode === "remote" &&
+    !(conn.remoteAuthMode === "token" && !conn.apiKey.trim())
+  ) {
+    // Direct Remote: a bare fetch carries no OAuth cookie (401 Unauthorized).
+    const method = (init.method || "GET").toUpperCase() as
+      | "GET"
+      | "POST"
+      | "PUT"
+      | "PATCH"
+      | "DELETE";
+    const body =
+      typeof init.body === "string" && init.body
+        ? JSON.parse(init.body)
+        : undefined;
+    try {
+      const data = await remoteDashboardRequestJson<T>(
+        conn,
+        path,
+        { method, body },
+        profile,
+      );
+      return (data ?? {}) as T;
+    } catch (err) {
+      if (
+        conn.remoteAuthMode === "auto" &&
+        !conn.apiKey.trim() &&
+        err instanceof Error &&
+        err.message === "Remote Hermes dashboard token is not configured."
+      ) {
+        // The shared boundary resolved auto to token mode before rejecting
+        // the absent key. Preserve anonymous access only for that outcome.
+      } else {
+        const statusCode = (err as { statusCode?: number }).statusCode;
+        if (statusCode) Object.assign(err as object, { status: statusCode });
+        throw err;
+      }
+    }
+  }
   const headers: Record<string, string> = {
-    ...getRemoteAuthHeader(),
+    ...getRemoteAuthHeader(conn),
     ...((init.headers as Record<string, string>) || {}),
   };
-  if (!isRemoteMode()) {
+  if (!isRemoteMode(conn)) {
     const apiServerKey = getApiServerKey(profile);
     if (apiServerKey && !headers.Authorization) {
       headers.Authorization = `Bearer ${apiServerKey}`;
@@ -622,7 +664,11 @@ async function mcpApi<T>(
   if (init.body && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";
   }
-  const response = await fetch(`${getApiUrl(profile)}${path}`, {
+  const url = new URL(`${getApiUrl(profile, conn)}${path}`);
+  if (conn.mode === "remote" && profile && profile !== "default") {
+    url.searchParams.set("profile", profile);
+  }
+  const response = await fetch(url.toString(), {
     ...init,
     headers,
   });

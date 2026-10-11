@@ -25,9 +25,12 @@ import {
 } from "./secrets";
 import { canonicalProviderBaseUrl } from "./provider-registry";
 import {
+  customProviderEnvKey,
   expectedEnvKeyForUrl,
   OPENAI_COMPAT_PROVIDERS,
 } from "../shared/url-key-map";
+import { readModelsRaw } from "./models";
+import { normalizeModelEndpointUrl } from "../shared/model-endpoint";
 
 // ── Connection Config (local / remote / ssh) ─────────────
 
@@ -956,7 +959,8 @@ function readTopLevelBlock(
   while (cursor < content.length) {
     const lineEnd = content.indexOf("\n", cursor);
     const lineEndExclusive = lineEnd === -1 ? content.length : lineEnd;
-    const line = content.slice(cursor, lineEndExclusive);
+    const rawLine = content.slice(cursor, lineEndExclusive);
+    const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
 
     // Stop at a non-indented, non-empty line (= next top-level key).
     if (line.trim() !== "" && !/^\s/.test(line)) break;
@@ -1068,10 +1072,8 @@ export function getModelContextLengthOverride(
  * does. Returns false for providers the runtime does NOT route through the
  * custom path, so their specific-key checks still apply.
  *
- * (The runtime also consults a per-model `CUSTOM_PROVIDER_<name>_KEY` ahead of
- * the generic keys; that lookup needs models.json and is intentionally omitted
- * here to keep config.ts free of a models.ts import — the generic chain covers
- * the reported cases.)
+ * Named custom providers use the same endpoint identity and per-label keys
+ * as the runtime, with the model name retained for older saved rows.
  */
 export function customEndpointKeyResolvable(
   provider: string,
@@ -1087,11 +1089,31 @@ export function customEndpointKeyResolvable(
     "CUSTOM_API_KEY",
     "OPENAI_API_KEY",
   ]);
+
+  // Provider-owned models may store a per-label key like CUSTOM_PROVIDER_<NAME>_KEY.
+  // Include those so the config-health audit does not flag a configured provider
+  // whose key lives under its own env var.
+  try {
+    const modelRows = readModelsRaw();
+    const endpoint = normalizeModelEndpointUrl(baseUrl);
+    for (const row of modelRows) {
+      const label = row.providerLabel || row.name;
+      if (
+        row.provider === "custom" &&
+        label &&
+        normalizeModelEndpointUrl(row.baseUrl) === endpoint
+      ) {
+        candidates.add(customProviderEnvKey(label));
+      }
+    }
+  } catch {
+    // models.json unreadable — the fallback chain above still applies
+  }
+
   for (const k of candidates) {
     if ((env[k] ?? "").trim()) return true;
   }
-  // Vault-aware: a `command` provider with any of the fallback keys
-  // configured in the vault satisfies the requirement too — don't
+  // A matching key configured in the vault satisfies the requirement too — don't
   // return false and trigger a cascade of "MODEL_KEY_MISSING" / "set up
   // provider" warnings for a vault-only user. NOTE: ./secrets is already
   // statically imported at the top of this file, so this lazy require does
@@ -1860,29 +1882,23 @@ const SUPPORTED_PLATFORMS = Object.keys(PLATFORM_RULES);
  *       allowed_chats: ''
  *
  * Returns true/false if found, null if absent. The block must start at
- * column 0; `enabled:` is captured if it sits anywhere inside the
- * contiguous indented sub-block (any depth, in any position).
+ * column 0 and `enabled:` must be one of its direct children.
  */
 function readPlatformOverride(
   content: string,
   platform: string,
 ): boolean | null {
-  const blockStartRe = new RegExp(
-    `^${escapeRegex(platform)}:[ \\t]*\\r?\\n`,
-    "m",
-  );
-  const startMatch = content.match(blockStartRe);
-  if (!startMatch || startMatch.index === undefined) return null;
-
-  const after = content.slice(startMatch.index + startMatch[0].length);
-  const lines = after.split(/\r?\n/);
-  for (const line of lines) {
-    if (line.trim() === "") continue;
-    if (!/^\s/.test(line)) break; // hit next top-level key
-    const m = line.match(/^[ \t]+enabled:[ \t]*(true|false)\b/);
-    if (m) return m[1] === "true";
-  }
+  const value = readTopLevelBlock(content, platform).children.get(
+    "enabled",
+  )?.value;
+  if (value === "true") return true;
+  if (value === "false") return false;
   return null;
+}
+
+function configLineEnding(content: string): "\r\n" | "\n" {
+  const firstNewline = content.indexOf("\n");
+  return firstNewline > 0 && content[firstNewline - 1] === "\r" ? "\r\n" : "\n";
 }
 
 export function getPlatformEnabled(profile?: string): Record<string, boolean> {
@@ -1939,90 +1955,56 @@ export function setPlatformEnabled(
   }
 
   let content = readFileSync(configFile, "utf-8");
-  const enabledLineRe = new RegExp(
-    `^([ \\t]+enabled:[ \\t]*)(true|false)\\b([ \\t]*)$`,
-    "m",
-  );
-  const blockStartRe = new RegExp(
-    `^(${escapeRegex(configKey)}:[ \\t]*\\r?\\n)`,
-    "m",
-  );
+  const originalContent = content;
+  const lineEnding = configLineEnding(content);
   const flowStyleRe = new RegExp(
-    `^${escapeRegex(configKey)}:[ \\t]*\\{\\s*\\}[ \\t]*$`,
+    `^${escapeRegex(configKey)}:[ \\t]*\\{\\s*\\}[ \\t]*(?=\\r?$)`,
     "m",
   );
 
-  const blockMatch = content.match(blockStartRe);
-  const hasBlock = !!blockMatch;
   const isFlowEmpty = flowStyleRe.test(content);
 
   if (isFlowEmpty) {
+    if (enabled) return;
     // Convert `<platform>: {}` to a block we can edit.
     content = content.replace(
       flowStyleRe,
-      `${configKey}:\n  enabled: ${enabled}`,
+      `${configKey}:${lineEnding}  enabled: false`,
     );
     safeWriteFile(configFile, content);
     return;
   }
 
-  if (hasBlock && blockMatch?.index !== undefined) {
-    const blockStart = blockMatch.index + blockMatch[0].length;
-    const rest = content.slice(blockStart);
-    const restLines = rest.split(/\r?\n/);
+  const { children, blockBodyStart, childIndent } = readTopLevelBlock(
+    content,
+    configKey,
+  );
+  const existing = children.get("enabled");
 
-    // Find the extent of the platform's sub-block (indented children).
-    let subBlockEndOffset = 0;
-    let existingEnabledLineStart: number | null = null;
-    let existingEnabledLineEnd: number | null = null;
-    for (const line of restLines) {
-      const lineLen = line.length + 1; // include trailing \n
-      if (line.trim() === "") {
-        subBlockEndOffset += lineLen;
-        continue;
-      }
-      if (!/^\s/.test(line)) break;
-      const localStart = blockStart + subBlockEndOffset;
-      const enabledMatch = line.match(enabledLineRe);
-      if (enabledMatch) {
-        existingEnabledLineStart = localStart;
-        existingEnabledLineEnd = localStart + line.length;
-      }
-      subBlockEndOffset += lineLen;
-    }
-
-    if (existingEnabledLineStart !== null && existingEnabledLineEnd !== null) {
-      if (enabled) {
-        // Remove the entire `  enabled: false` line, including its newline.
-        const removeEnd =
-          content[existingEnabledLineEnd] === "\n"
-            ? existingEnabledLineEnd + 1
-            : existingEnabledLineEnd;
-        content =
-          content.slice(0, existingEnabledLineStart) + content.slice(removeEnd);
-      } else {
-        content =
-          content.slice(0, existingEnabledLineStart) +
-          `  enabled: false` +
-          content.slice(existingEnabledLineEnd);
-      }
-    } else if (!enabled) {
-      // Append `enabled: false` as the first child of the block.
+  if (blockBodyStart !== null) {
+    if (existing && enabled) {
+      content = removeBlockChild(content, configKey, "enabled");
+    } else if (existing && !enabled && existing.value !== "false") {
       content =
-        content.slice(0, blockStart) +
-        `  enabled: false\n` +
-        content.slice(blockStart);
+        content.slice(0, existing.valueStart) +
+        "false" +
+        content.slice(existing.valueEnd);
+    } else if (!existing && !enabled) {
+      content =
+        content.slice(0, blockBodyStart) +
+        `${childIndent}enabled: false${lineEnding}` +
+        content.slice(blockBodyStart);
     }
-    // (enabled=true with no existing override: nothing to do.)
 
-    safeWriteFile(configFile, content);
+    if (content !== originalContent) safeWriteFile(configFile, content);
     return;
   }
 
   // No block at all — only need to materialize one when recording a disable.
   if (!enabled) {
-    const trailingNewline = content.endsWith("\n") ? "" : "\n";
-    content += `${trailingNewline}${configKey}:\n  enabled: false\n`;
+    const separator =
+      content === "" || content.endsWith("\n") ? "" : lineEnding;
+    content += `${separator}${configKey}:${lineEnding}  enabled: false${lineEnding}`;
     safeWriteFile(configFile, content);
   }
 }

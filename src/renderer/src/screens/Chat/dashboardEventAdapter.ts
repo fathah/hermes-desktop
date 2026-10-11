@@ -1,6 +1,12 @@
 import type { ChatToolEvent } from "../../../../shared/chat-stream";
+import { normalizeApprovalRequest } from "../../../../shared/chat-approval";
 import { isLossyChunkCopy } from "./lossyText";
-import type { ActiveTurn, ChatBubbleMessage, ChatMessage } from "./types";
+import type {
+  ActiveTurn,
+  ChatBubbleMessage,
+  ChatMessage,
+  ClarifyMessage,
+} from "./types";
 
 export interface DashboardStreamEvent<T = unknown> {
   payload?: T;
@@ -15,8 +21,57 @@ export interface DashboardEventState {
 
 interface ApplyDashboardEventOptions {
   activeTurn?: ActiveTurn | null;
+  approvalRequestId?: string;
   now?: number;
   renderAssistantDeltas?: boolean;
+}
+
+export function dashboardApprovalRequestId(
+  event: DashboardStreamEvent,
+  now = Date.now(),
+  fallbackNonce?: number,
+): string {
+  const payload = isRecord(event.payload) ? event.payload : {};
+  const supplied = textFromPayload(payload, "request_id", "id").trim();
+  if (supplied) return supplied;
+  const payloadTime = textFromPayload(
+    payload,
+    "timestamp",
+    "time",
+    "created_at",
+  );
+  if (payloadTime) {
+    return `dashboard-approval-${event.session_id || "session"}-${payloadTime}`;
+  }
+  return `dashboard-approval-${event.session_id || "session"}-${now}${
+    fallbackNonce === undefined ? "" : `-${fallbackNonce}`
+  }`;
+}
+
+function appendApprovalRequest(
+  messages: ReadonlyArray<ChatMessage>,
+  payload: unknown,
+  requestId: string,
+): ChatMessage[] {
+  if (
+    messages.some(
+      (message) =>
+        message.kind === "approval" && message.requestId === requestId,
+    )
+  ) {
+    return [...messages];
+  }
+  const request = normalizeApprovalRequest(payload, requestId);
+  return [
+    ...messages,
+    {
+      id: `approval-dashboard-${requestId}`,
+      kind: "approval",
+      role: "agent",
+      responsePath: "dashboard",
+      ...request,
+    },
+  ];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -143,20 +198,24 @@ function appendClarifyRequest(
         .map((choice) => stringValue(choice))
         .filter((choice) => choice.trim())
     : [];
-  const content =
-    choices.length > 0
-      ? `${question}\n\n${choices
-          .map((choice, index) => `${index + 1}. ${choice}`)
-          .join("\n")}`
-      : question;
   const id = `clarify-${requestId || `${now}-${messages.length}`}`;
   const existingIndex = messages.findIndex((message) => message.id === id);
-  const bubble: ChatBubbleMessage = {
+  const existing = messages[existingIndex];
+  // Gateway replays must not re-open an already answered or expired card.
+  if (
+    existing?.kind === "clarify" &&
+    (existing.resolved || existing.unavailable)
+  )
+    return [...messages];
+  const bubble: ClarifyMessage = {
     id,
+    kind: "clarify",
     role: "agent",
-    content,
-    pending: false,
-    localOnly: true,
+    requestId,
+    question,
+    choices,
+    responsePath: "dashboard",
+    unavailable: !requestId,
   };
   if (existingIndex >= 0) {
     return [
@@ -704,6 +763,18 @@ export function applyDashboardStreamEvent(
         messages: appendClarifyRequest(state.messages, event.payload, now),
         reasoningSegmentClosed: true,
       };
+    case "approval.request": {
+      const requestId =
+        options.approvalRequestId ?? dashboardApprovalRequestId(event, now);
+      return {
+        messages: appendApprovalRequest(
+          state.messages,
+          event.payload,
+          requestId,
+        ),
+        reasoningSegmentClosed: true,
+      };
+    }
     case "message.complete": {
       const finalText = textFromPayload(event.payload, "text", "rendered");
       const finalReasoning = thinkingTextFromPayload(

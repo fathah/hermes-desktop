@@ -20,9 +20,39 @@
 export interface UrlKeyMapping {
   pattern: RegExp;
   envKey: string;
+  matchHostname?: boolean;
+}
+
+/** Match opted-in providers by parsed host, never URL credentials or paths. */
+export function matchesProviderUrl(
+  url: string,
+  pattern: RegExp,
+  matchHostname = false,
+): boolean {
+  if (!matchHostname) return pattern.test(url);
+  try {
+    const parsed = new URL(url.includes("://") ? url : `https://${url}`);
+    return (
+      /^https?:$/.test(parsed.protocol) &&
+      pattern.test(parsed.hostname.replace(/\.$/, ""))
+    );
+  } catch {
+    return false;
+  }
 }
 
 export const URL_KEY_MAP: ReadonlyArray<UrlKeyMapping> = [
+  // Strict hosts take precedence over legacy URL-substring mappings.
+  {
+    pattern: /(?:^|\.)requesty\.ai$/i,
+    envKey: "REQUESTY_API_KEY",
+    matchHostname: true,
+  },
+  {
+    pattern: /^api\.cheaperinference\.com$/i,
+    envKey: "CHEAPERINFERENCE_API_KEY",
+    matchHostname: true,
+  },
   { pattern: /inference\.hermesone\.org/i, envKey: "HERMESONE_API_KEY" },
   { pattern: /openrouter\.ai/i, envKey: "OPENROUTER_API_KEY" },
   { pattern: /anthropic\.com/i, envKey: "ANTHROPIC_API_KEY" },
@@ -36,6 +66,7 @@ export const URL_KEY_MAP: ReadonlyArray<UrlKeyMapping> = [
   { pattern: /api\.fireworks\.ai/i, envKey: "FIREWORKS_API_KEY" },
   { pattern: /api\.cerebras\.ai/i, envKey: "CEREBRAS_API_KEY" },
   { pattern: /atlascloud\.ai/i, envKey: "ATLASCLOUD_API_KEY" },
+  { pattern: /api\.novita\.ai/i, envKey: "NOVITA_API_KEY" },
   { pattern: /api\.mistral\.ai/i, envKey: "MISTRAL_API_KEY" },
   { pattern: /api\.perplexity\.ai/i, envKey: "PERPLEXITY_API_KEY" },
   { pattern: /api\.xiaomimimo\.com/i, envKey: "XIAOMI_API_KEY" },
@@ -68,8 +99,8 @@ export function customProviderEnvKey(name: string): string {
  */
 export function expectedEnvKeyForUrl(url: string | null | undefined): string {
   if (!url) return CUSTOM_API_KEY_ENV;
-  for (const { pattern, envKey } of URL_KEY_MAP) {
-    if (pattern.test(url)) return envKey;
+  for (const { pattern, envKey, matchHostname } of URL_KEY_MAP) {
+    if (matchesProviderUrl(url, pattern, matchHostname)) return envKey;
   }
   return CUSTOM_API_KEY_ENV;
 }
@@ -82,7 +113,9 @@ export function expectedEnvKeyForUrl(url: string | null | undefined): string {
  */
 export function isKnownProviderUrl(url: string | null | undefined): boolean {
   if (!url) return false;
-  return URL_KEY_MAP.some(({ pattern }) => pattern.test(url));
+  return URL_KEY_MAP.some(({ pattern, matchHostname }) =>
+    matchesProviderUrl(url, pattern, matchHostname),
+  );
 }
 
 /**
@@ -127,5 +160,8 @@ export const OPENAI_COMPAT_PROVIDERS: ReadonlySet<string> = new Set([
   "fireworks",
   "cerebras",
   "atlascloud",
+  "novita",
+  "requesty",
+  "cheaperinference",
   "mistral",
 ]);

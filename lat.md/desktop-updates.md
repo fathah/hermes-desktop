@@ -36,8 +36,20 @@ Stable and beta release jobs import the Developer ID certificate into a workflow
 
 `scripts/import-macos-certificate.sh` creates a random keychain password, adds the keychain to the user search list, imports the `.p12` with `CSC_KEY_PASSWORD`, and grants `codesign` access with the distinct keychain password required by macOS 26.6. Electron Builder receives only `CSC_KEYCHAIN`, so it cannot recreate the password mix-up. Both architecture jobs run even if one fails, verify that a Developer ID Application identity exists before packaging, and delete the temporary keychain afterward. [[tests/macos-signing.test.ts]] exercises keychain discovery, password separation, and credential cleanup; [[tests/release-artifacts.test.ts]] prevents either release channel from bypassing the staging flow.
 
+#### Identity output consumption
+
+Signing verification consumes the complete identity list before deciding success, so early pipe closure cannot reject a valid Developer ID identity under `pipefail`.
+
+`scripts/import-macos-certificate.sh` retains failure propagation from the identity command and requires a matching identity. [[tests/macos-signing.test.ts]] exercises short output and a list exceeding pipe capacity, alongside password separation and credential cleanup.
+
 ### Native module packaging
 
 Stable and beta macOS builds verify the exact architecture-specific `better-sqlite3` prebuild that the packaged runtime loads.
 
 Electron Builder explicitly unpacks `node_modules/better-sqlite3/prebuilds/*.node` from ASAR. After signing and notarization, `scripts/verify-native-module-architecture.sh` locates `darwin-x64.node` or `darwin-arm64.node` inside the packaged app and rejects a missing or mismatched binary. [[tests/release-artifacts.test.ts]] keeps the package rule and both release workflows aligned with the dependency's runtime layout.
+
+### Platform package identity
+
+Linux packages use the space-free `/opt/HermesOne` directory while macOS keeps the existing `Hermes One.app` bundle and executable name. RPM filenames retain the `.rpm` extension expected by release uploads.
+
+The global packaging product name supplies Electron Builder's Linux install-directory component. The explicit macOS `executableName` preserves its bundle path, and platform display labels retain Hermes One. The Linux sandbox hook targets the same directory. [[tests/packaging-identity.test.ts]] validates the configuration with the installed Electron Builder schema and evaluates its real application metadata and artifact macros.

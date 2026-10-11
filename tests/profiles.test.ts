@@ -283,6 +283,16 @@ describe("listProfiles", () => {
     );
   });
 
+  // @lat: [[agent-sync#Tests#Rejects incomplete CLI deletion]]
+  it("reports failure if the CLI exits successfully but leaves the profile directory", () => {
+    mkdirSync(join(PROFILES_DIR, "still-here"), { recursive: true });
+    execFileSyncMock.mockReturnValue(Buffer.from("Could not remove profile"));
+    expect(deleteProfile("still-here")).toMatchObject({
+      success: false,
+      error: expect.stringContaining("still exists"),
+    });
+  });
+
   it("bounds profile deletion with the same timeout as profile creation", () => {
     execFileSyncMock.mockReturnValue(Buffer.from(""));
 

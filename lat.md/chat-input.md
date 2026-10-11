@@ -15,3 +15,15 @@ The beam is an absolutely positioned, non-interactive decoration whose generated
 The ChatInput integration test verifies the requested preset, strength, and theme while ensuring the beam is decorative and not an overflow-clipping ancestor of the textarea or toolbar.
 
 [[src/renderer/src/screens/Chat/ChatInput.test.tsx]] protects the component boundary and configuration without coupling tests to the dependency's generated animation CSS.
+
+## Attachment capacity
+
+The composer counts only attachments successfully prepared for a message toward its per-message limit.
+
+[[src/renderer/src/screens/Chat/attachmentUtils.ts#processFiles]] validates each candidate before it occupies a slot, allowing later valid files to use capacity left by rejected files.
+
+### Rejected files do not consume slots
+
+A rejected file followed by a valid file can still fill the final available attachment slot.
+
+[[src/renderer/src/screens/Chat/attachmentUtils.test.ts]] covers an oversized text file followed by a valid text file when one slot remains.

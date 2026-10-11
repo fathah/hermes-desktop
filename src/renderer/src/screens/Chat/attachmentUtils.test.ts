@@ -197,6 +197,23 @@ describe("processFiles", () => {
       "5.txt",
     ]);
   });
+
+  // @lat: [[chat-input#Attachment capacity#Rejected files do not consume slots]]
+  it("does not count rejected files toward the attachment cap", async () => {
+    const files = [
+      makeFile("big.md", "text/markdown", "x", 300 * 1024),
+      makeFile("valid.txt", "text/plain", "hello"),
+    ];
+
+    const out = await processFiles(files, 9);
+
+    expect(out.attachments.map((attachment) => attachment.name)).toEqual([
+      "valid.txt",
+    ]);
+    expect(out.errors).toEqual([
+      { code: "text-too-large", filename: "big.md" },
+    ]);
+  });
 });
 
 // ── filesFromClipboard ───────────────────────────────────

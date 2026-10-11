@@ -190,6 +190,7 @@ export default function OneChatModal({
         [selectedAgentId]: toChatMessages(items),
       }));
     } catch (err) {
+      const errorText = `Error: ${(err as Error).message}`;
       // The response may have been persisted even though the promise rejected.
       // Try to reload from the database before showing a raw error.
       try {
@@ -205,7 +206,17 @@ export default function OneChatModal({
         if (loaded.length > 0) {
           setMessages((prev) => ({
             ...prev,
-            [selectedAgentId]: loaded,
+            [selectedAgentId]: (err as Error).message.includes("Approval flow")
+              ? [
+                  ...loaded,
+                  {
+                    id: `err-${Date.now()}`,
+                    role: "agent",
+                    text: errorText,
+                    timestamp: Date.now(),
+                  },
+                ]
+              : loaded,
           }));
           return;
         }
@@ -222,7 +233,7 @@ export default function OneChatModal({
             {
               id: `err-${Date.now()}`,
               role: "agent",
-              text: `Error: ${(err as Error).message}`,
+              text: errorText,
               timestamp: Date.now(),
             },
           ],

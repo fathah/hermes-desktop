@@ -36,13 +36,13 @@ For non-loopback HTTP gateways, [[src/main/dashboard-websocket-relay.ts#createLo
 
 Remote session history uses the same selected authentication transport as management APIs.
 
-[[src/main/remote-sessions.ts#remoteRequestJson]] routes direct OAuth session lists, search, messages, media, titles, and deletion through the persistent cookie partition. Token and SSH session requests retain the session-token header.
+[[src/main/remote-sessions.ts#remoteRequestJson]] routes direct OAuth session lists, search, messages, media, titles, and deletion through the persistent cookie partition. Token and SSH session requests send `X-Hermes-Session-Token` plus `Authorization: Bearer` for gateway compatibility. When the configured URL contains Basic credentials for a reverse proxy, Node supplies Basic authorization and the dashboard still receives its separate session-token header. The gateway API key and dashboard session token remain distinct credentials; adding a header does not make them interchangeable.
 
 ## Authenticated management request boundary
 
 Direct Remote management features share one main-process request client that selects cookie or token authentication without exposing reusable credentials through IPC.
 
-[[src/main/remote-api.ts#remoteDashboardRequestJson]] resolves `auto` through the public status probe, routes OAuth through the persistent Electron partition, and routes token mode through `X-Hermes-Session-Token`. Unexpected probe failures never guess another transport or fall back to local state.
+[[src/main/remote-api.ts#remoteDashboardRequestJson]] resolves `auto` through the public status probe, routes OAuth through the persistent Electron partition, and routes token mode through the shared session request client with the same Bearer/Basic handling. Unexpected probe failures never guess another transport or fall back to local state.
 
 [[src/main/remote-api.ts#RemoteDashboardApiError]] normalizes HTTP status for feature adapters. A `404` marks only that feature unsupported; OAuth login-required errors retain their original reauthentication signal.
 
@@ -52,13 +52,31 @@ Missing or expired OAuth sessions stop Remote chat and request browser sign-in w
 
 [[src/renderer/src/screens/Chat/hooks/useDashboardChatTransport.ts#useDashboardChatTransport]] marks OAuth login-required errors as dashboard-reachable failures. Settings hides Legacy transport for OAuth and provides Sign in and Sign out actions.
 
+## Auxiliary feature authentication
+
+Remote Skills uses cookie-aware fetch, while MCP uses the authenticated management request boundary. Both retain the selected profile and keep credentials in the main process.
+
+[[src/main/remote-oauth.ts#remoteAuthFetch]] accepts the connection snapshot used to build the Skills URL and headers, preventing an intervening selection change from choosing another target's authentication. Explicit token connections retain the caller's headers.
+
+[[src/renderer/src/screens/Layout/Layout.tsx#Layout]] mounts Skills separately for each connection and profile, discarding the previous target's list and selection before install or uninstall controls become usable.
+
+Explicit token dashboards without a key retain anonymous, profile-scoped MCP access, as does auto mode after the management boundary identifies a keyless token dashboard. OAuth failures never fall back to anonymous requests.
+
 ## Test specifications
 
 Focused tests protect credential isolation, automatic routing, ticket freshness, no-fallback behavior, and Settings presentation.
 
 ### Cookie session boundary
 
-Session recognition accepts only Hermes access or refresh cookie names and keeps cookie-backed requests inside the selected Electron partition.
+Session recognition accepts Hermes access or refresh cookie names in every deploy shape — bare, `__Host-` (direct HTTPS), `__Secure-` (path prefix), or `<tenant>_`-prefixed — and keeps cookie-backed requests inside the selected Electron partition.
+
+### Session token compatibility
+
+Session requests succeed against HTTP servers that accept only Bearer authentication or only the dedicated session header, preserving compatibility across gateway versions.
+
+### Reverse proxy authentication
+
+URLs containing proxy credentials retain Basic authorization while the dashboard receives its session token separately, preventing the compatibility header from breaking existing authenticated proxies.
 
 ### OAuth dashboard readiness
 
@@ -103,3 +121,11 @@ Management requests resolve `auto` before selecting token or OAuth transport, pr
 ### Management failure classification
 
 Token and OAuth HTTP failures expose the same structured status, with `404` identified as an unsupported feature instead of an application-wide connection failure.
+
+### Auxiliary connection snapshot
+
+Cookie-aware auxiliary requests use the caller's captured connection even after the active selection changes, keeping request authentication aligned with the original URL and profile.
+
+### Anonymous MCP compatibility
+
+Explicit token dashboards without configured keys can list MCP servers anonymously for a named profile, preserving open-gateway compatibility without weakening OAuth authentication.

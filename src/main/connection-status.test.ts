@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   getCachedAgentCapabilityEvidence: vi.fn(),
   getHermesVersion: vi.fn(),
   isGatewayRunning: vi.fn(),
+  isGatewayHealthy: vi.fn(),
   probeRemoteAuthMode: vi.fn(),
   remoteOAuthSessionState: vi.fn(),
   sshGatewayStatus: vi.fn(),
@@ -33,6 +34,7 @@ vi.mock("./hermes", () => ({
   getAgentCapabilityEvidence: mocks.getAgentCapabilityEvidence,
   getCachedAgentCapabilityEvidence: mocks.getCachedAgentCapabilityEvidence,
   isGatewayRunning: mocks.isGatewayRunning,
+  isGatewayHealthy: mocks.isGatewayHealthy,
   testRemoteConnection: mocks.testRemoteConnection,
 }));
 vi.mock("./installer", () => ({ getHermesVersion: mocks.getHermesVersion }));
@@ -73,6 +75,7 @@ describe("connection status snapshots", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.isGatewayRunning.mockReturnValue(true);
+    mocks.isGatewayHealthy.mockResolvedValue(true);
     mocks.getHermesVersion.mockResolvedValue("Hermes Agent v1.0.0");
     mocks.probeRemoteAuthMode.mockResolvedValue({
       authMode: "token",
@@ -122,5 +125,27 @@ describe("connection status snapshots", () => {
       "remote",
       "default",
     );
+  });
+
+  // @lat: [[connections#Test specifications#Local API readiness]]
+  it("reports Local offline when its own API listener is unavailable", async () => {
+    mocks.isGatewayHealthy.mockResolvedValue(false);
+    const statuses = await getConnectionStatuses("default");
+    expect(
+      statuses.find((status) => status.connectionId === "local")?.health,
+    ).toBe("offline");
+    expect(mocks.isGatewayHealthy).toHaveBeenCalledWith(
+      "default",
+      expect.objectContaining({ mode: "local" }),
+    );
+  });
+
+  it("does not allocate or rewrite a named profile's API port while probing status", async () => {
+    mocks.isGatewayHealthy.mockResolvedValue(false);
+    const statuses = await getConnectionStatuses("scout");
+    expect(
+      statuses.find((status) => status.connectionId === "local")?.health,
+    ).toBe("online");
+    expect(mocks.isGatewayHealthy).not.toHaveBeenCalled();
   });
 });

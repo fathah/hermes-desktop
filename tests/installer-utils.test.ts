@@ -329,6 +329,20 @@ describe("checkOpenClawExists", () => {
     expect(checkOpenClawExists(TEST_DIR)).toEqual({ found: true, path: dir });
   });
 
+  it.skipIf(process.platform === "win32")(
+    "returns HTML-significant path characters unchanged for the renderer to escape",
+    async () => {
+      // These characters are legal in POSIX home names; Windows forbids <>".
+      const home = join(TEST_DIR, 'Alice & <img src=x onerror="alert(1)">');
+      const dir = join(home, ".openclaw");
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, "openclaw.json"), "{}");
+
+      const { checkOpenClawExists } = await import("../src/main/installer");
+      expect(checkOpenClawExists(home)).toEqual({ found: true, path: dir });
+    },
+  );
+
   it("detects files nested under subdirectories", async () => {
     const dir = join(TEST_DIR, ".openclaw");
     mkdirSync(join(dir, "skills", "my-skill"), { recursive: true });

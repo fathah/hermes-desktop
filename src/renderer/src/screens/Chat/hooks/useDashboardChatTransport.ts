@@ -7,6 +7,7 @@ import {
 } from "../chatMessages";
 import {
   applyDashboardStreamEvent,
+  dashboardApprovalRequestId,
   type DashboardStreamEvent,
 } from "../dashboardEventAdapter";
 import { DashboardGatewayClient } from "../dashboardGatewayClient";
@@ -14,6 +15,11 @@ import { executeSlash, type SlashExecOutcome } from "../slashExec";
 import type { AgentCommandsCatalogResponse } from "../slash/types";
 import type { ActiveTurn, Attachment, ChatMessage, UsageState } from "../types";
 import type { DesktopSessionContinuationItem } from "../../../../../shared/session-continuation";
+import {
+  gatewayApprovalRequestId,
+  normalizeApprovalRequest,
+  type ApprovalChoice,
+} from "../../../../../shared/chat-approval";
 
 interface SessionResponse {
   info?: unknown;
@@ -88,7 +94,10 @@ interface UseDashboardChatTransportArgs {
   enabled: boolean;
   fallbackOnUnavailable: boolean;
   hermesSessionId: string | null;
-  messages: ChatMessage[];
+  /** Write-through transcript ref from useTranscriptState — the synchronous
+   *  source of truth this hook applies stream deltas to. Must be the same ref
+   *  the provided `setMessages` maintains, or coalesced deltas can be lost. */
+  messagesRef: React.MutableRefObject<ChatMessage[]>;
   model?: string;
   modelBaseUrl?: string;
   profile?: string;
@@ -107,6 +116,11 @@ interface UseDashboardChatTransportArgs {
 interface UseDashboardChatTransportResult {
   abort: () => void;
   enabled: boolean;
+  respondClarify: (requestId: string, answer: string) => Promise<boolean>;
+  respondApproval: (
+    requestId: string,
+    choice: ApprovalChoice,
+  ) => Promise<boolean>;
   sendMessage: (text: string, attachments?: Attachment[]) => Promise<boolean>;
   /**
    * Run a slash command through the gateway's `slash.exec` pipeline instead of
@@ -126,6 +140,15 @@ interface UseDashboardChatTransportResult {
    * a `background.complete` event rendered into the transcript.
    */
   runBackground: (text: string) => Promise<{ taskId?: string; error?: string }>;
+}
+
+interface PendingDashboardApproval {
+  choices: ApprovalChoice[];
+  gatewayRequestId: string | null;
+  requestId: string;
+  responding: boolean;
+  completed?: boolean;
+  sessionId: string;
 }
 
 interface DashboardSeedMessage {
@@ -180,6 +203,7 @@ export async function submitDashboardPromptWithRecovery(
   client: DashboardPromptClient,
   params: {
     onRecoveredSessionId?: (sessionId: string) => void;
+    canRecover?: () => boolean;
     sessionId: string;
     storedSessionId?: string | null;
     text: string;
@@ -202,7 +226,11 @@ export async function submitDashboardPromptWithRecovery(
     });
     return params.sessionId;
   } catch (err) {
-    if (!params.storedSessionId || !isDashboardSessionNotFoundError(err)) {
+    if (
+      params.canRecover?.() === false ||
+      !params.storedSessionId ||
+      !isDashboardSessionNotFoundError(err)
+    ) {
       throw err;
     }
 
@@ -580,7 +608,22 @@ export function dashboardModelMatches(
 
   // Named custom providers can be reported by Hermes Agent as custom:<slug>
   // while Hermes One's older model config still treats them as custom rows.
-  return provider === "custom" && liveProvider.startsWith("custom:");
+  if (provider === "custom" && liveProvider.startsWith("custom:")) return true;
+
+  // The reverse direction: a named providers: entry (e.g. "omlx") comes
+  // back normalized to the bare custom namespace; accept only the row the
+  // server marks current, not merely one that lists the same model.
+  if (liveProvider === "custom" || liveProvider.startsWith("custom:")) {
+    const namedRow = (live?.providers ?? []).find(
+      (row) =>
+        row.is_current &&
+        ((row.slug || "").toLowerCase() === provider ||
+          (row.slug || "").toLowerCase() === `custom:${provider}`),
+    );
+    if (namedRow) return true;
+  }
+
+  return false;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -697,6 +740,8 @@ function messageChars(message: ChatMessage): number {
       return message.name.length + message.args.length;
     case "clarify":
       return message.question.length;
+    case "approval":
+      return message.description.length + message.command.length;
     default:
       return 0;
   }
@@ -904,7 +949,7 @@ export function useDashboardChatTransport({
   enabled,
   fallbackOnUnavailable,
   hermesSessionId,
-  messages,
+  messagesRef,
   model,
   modelBaseUrl,
   profile,
@@ -928,43 +973,164 @@ export function useDashboardChatTransport({
   const dashboardUnavailableRef = useRef(false);
   const runtimeSessionIdRef = useRef<string | null>(null);
   const storedSessionIdRef = useRef<string | null>(hermesSessionId);
-  const messagesRef = useRef<ChatMessage[]>(messages);
   const reasoningSegmentClosedRef = useRef(false);
   const appliedModelRef = useRef<string | null>(null);
   const recreateRuntimeSessionRef = useRef(false);
   const lastRuntimeSessionWasCreatedRef = useRef(false);
-  const pendingClarifyRequestIdRef = useRef<string | null>(null);
+  const pendingClarifyRef = useRef<{
+    requestId: string;
+    sessionId: string | null;
+    responding: boolean;
+    activeTurn: ActiveTurn | null;
+  } | null>(null);
+  const pendingApprovalsRef = useRef<PendingDashboardApproval[]>([]);
+  const approvalNonceRef = useRef(0);
   const pendingRecoveredContinuationRef = useRef<
     DesktopSessionContinuationItem[]
   >([]);
   const lastSyncedCwdRef = useRef<string | null>(null);
+  // Delta coalescing: streaming events arrive many times per second, and each
+  // `setMessages` costs a full transcript reconciliation. Deltas are applied
+  // to `messagesRef` synchronously — the write-through ref from
+  // useTranscriptState is the source of truth every transcript writer builds
+  // on — while the React commit is batched to one per animation frame. The
+  // flush publishes whatever the ref holds at frame time, so a frame that
+  // fires after another writer took over simply republishes (or advances to)
+  // that newer state; it can never resurrect an older transcript. That
+  // one-way property is what previously required a pinned-array guard here,
+  // and it dropped chunks when a functional writer forked from a pre-delta
+  // commit (#757's coalesced twin).
+  const deltaFlushHandleRef = useRef<number | null>(null);
+
+  const cancelScheduledFlush = useCallback((): void => {
+    if (deltaFlushHandleRef.current === null) return;
+    const cancel =
+      typeof cancelAnimationFrame === "function"
+        ? cancelAnimationFrame
+        : clearTimeout;
+    cancel(deltaFlushHandleRef.current);
+    deltaFlushHandleRef.current = null;
+  }, []);
+
+  // Coalesced commit for high-frequency streaming events; at most one
+  // `setMessages` per animation frame while a burst of deltas lands.
+  const scheduleDeltaFlush = useCallback((): void => {
+    if (deltaFlushHandleRef.current !== null) return;
+    const raf =
+      typeof requestAnimationFrame === "function"
+        ? requestAnimationFrame
+        : (cb: FrameRequestCallback): number =>
+            setTimeout(() => cb(0), 16) as unknown as number;
+    deltaFlushHandleRef.current = raf(() => {
+      deltaFlushHandleRef.current = null;
+      setMessages(messagesRef.current);
+    });
+  }, [setMessages, messagesRef]);
+
+  // Immediate commit for lifecycle events, superseding any pending frame.
+  const flushDeltasNow = useCallback(
+    (next: ChatMessage[]): void => {
+      cancelScheduledFlush();
+      setMessages(next);
+    },
+    [cancelScheduledFlush, setMessages],
+  );
+
+  const expirePendingClarifyRef = useRef<(failActiveTurn?: boolean) => void>(
+    () => undefined,
+  );
+  expirePendingClarifyRef.current = (failActiveTurn = false): void => {
+    const pending = pendingClarifyRef.current;
+    pendingClarifyRef.current = null;
+    if (!pending) return;
+    if (
+      failActiveTurn &&
+      pending.responding &&
+      activeTurnRef.current === pending.activeTurn
+    ) {
+      if (activeTurnRef.current) activeTurnRef.current.status = "failed";
+      activeTurnRef.current = null;
+      setToolProgress(null);
+      setIsLoading(false);
+    }
+    setMessages((current) =>
+      current.map((message) =>
+        message.kind === "clarify" &&
+        message.responsePath === "dashboard" &&
+        message.requestId === pending.requestId &&
+        !message.resolved
+          ? { ...message, unavailable: true }
+          : message,
+      ),
+    );
+  };
+
+  const expirePendingApprovalsRef = useRef<
+    (failActiveTurn?: boolean, preserveResponding?: boolean) => void
+  >(() => undefined);
+  expirePendingApprovalsRef.current = (
+    failActiveTurn = false,
+    preserveResponding = false,
+  ): void => {
+    if (pendingApprovalsRef.current.length === 0) return;
+    const pendingIds = new Set<string>();
+    pendingApprovalsRef.current = pendingApprovalsRef.current.filter(
+      (pending) => {
+        // Turn completion can precede the response RPC acknowledgement. Keep
+        // only decisions already in flight; unanswered requests still expire.
+        if (preserveResponding && pending.responding) {
+          pending.completed = true;
+          return true;
+        }
+        pendingIds.add(pending.requestId);
+        return false;
+      },
+    );
+    setMessages((current) => {
+      const unavailable = current.map((message) =>
+        message.kind === "approval" &&
+        pendingIds.has(message.requestId) &&
+        !message.resolved
+          ? { ...message, unavailable: true }
+          : message,
+      );
+      messagesRef.current = unavailable;
+      return unavailable;
+    });
+    if (failActiveTurn) {
+      const activeTurn = activeTurnRef.current;
+      if (activeTurn) activeTurn.status = "failed";
+      activeTurnRef.current = null;
+      setToolProgress(null);
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    // `messagesRef` is the synchronous source of truth for `handleGatewayEvent`:
-    // it reads the ref, applies a stream delta, writes the ref back, then calls
-    // `setMessages`. Every `setMessages` in this hook stores that exact array in
-    // the ref, so when React finally commits our own push, `messages` is the
-    // very same reference and there is nothing to do. Re-syncing on that commit
-    // is what dropped streaming chunks (#757): a second delta could land on an
-    // older `messages` snapshot and reset the ref behind the deltas already
-    // applied. Skip when the identity matches (our push); adopt any other array,
-    // which can only come from Chat state changing underneath us — a new user
-    // turn (grows), `handleClear` (`setMessages([])`, shrinks), or a clarify
-    // card resolving in place (same length). A length check misses the last two.
-    if (messages !== messagesRef.current) {
-      messagesRef.current = messages;
+    // Cancel any pending coalesced flush on unmount/teardown — just avoids a
+    // setState-after-unmount; nothing is lost, the ref stays the truth.
+    return cancelScheduledFlush;
+  }, [cancelScheduledFlush]);
+
+  useEffect(() => {
+    // Clearing the transcript invalidates pending cards without copying a
+    // potentially stale React snapshot back over coalesced stream deltas.
+    if (messagesRef.current.length === 0) {
+      pendingApprovalsRef.current = [];
+      pendingClarifyRef.current = null;
     }
-  }, [messages]);
+  });
 
   useEffect(() => {
     if (hermesSessionId === storedSessionIdRef.current) return;
+    expirePendingApprovalsRef.current();
     storedSessionIdRef.current = hermesSessionId;
     runtimeSessionIdRef.current = null;
     reasoningSegmentClosedRef.current = false;
     appliedModelRef.current = null;
     recreateRuntimeSessionRef.current = false;
     lastRuntimeSessionWasCreatedRef.current = false;
-    pendingClarifyRequestIdRef.current = null;
+    expirePendingClarifyRef.current();
     lastSyncedCwdRef.current = null;
   }, [hermesSessionId]);
 
@@ -975,6 +1141,7 @@ export function useDashboardChatTransport({
   useEffect(() => {
     clientGenerationRef.current += 1;
     dashboardUnavailableRef.current = false;
+    expirePendingApprovalsRef.current(true);
     clientRef.current?.close();
     clientRef.current = null;
     connectingRef.current = null;
@@ -983,7 +1150,7 @@ export function useDashboardChatTransport({
     appliedModelRef.current = null;
     recreateRuntimeSessionRef.current = false;
     lastRuntimeSessionWasCreatedRef.current = false;
-    pendingClarifyRequestIdRef.current = null;
+    expirePendingClarifyRef.current();
     pendingRecoveredContinuationRef.current = [];
     lastSyncedCwdRef.current = null;
   }, [connectionId, connectionMode, connectionRevision, profile]);
@@ -1030,13 +1197,57 @@ export function useDashboardChatTransport({
             content: `${label}${body}`,
           },
         ];
-        messagesRef.current = appended;
-        setMessages(appended);
+        flushDeltasNow(appended);
         return;
       }
 
       const failed =
         event.type === "message.complete" && completionFailed(event.payload);
+      const approvalRequestId =
+        event.type === "approval.request"
+          ? dashboardApprovalRequestId(
+              event,
+              Date.now(),
+              ++approvalNonceRef.current,
+            )
+          : undefined;
+      if (approvalRequestId) {
+        // Replayed terminal cards must not re-enter the FIFO queue: their UI
+        // cannot be answered again, so they would block every later request.
+        const previous = messagesRef.current.find(
+          (message) =>
+            message.kind === "approval" &&
+            message.responsePath === "dashboard" &&
+            message.requestId === approvalRequestId,
+        );
+        if (
+          previous?.kind === "approval" &&
+          (previous.resolved || previous.unavailable)
+        )
+          return;
+        const sessionId = event.session_id || runtimeSessionId;
+        if (sessionId) {
+          if (
+            !pendingApprovalsRef.current.some(
+              (pending) => pending.requestId === approvalRequestId,
+            )
+          ) {
+            pendingApprovalsRef.current = [
+              ...pendingApprovalsRef.current,
+              {
+                requestId: approvalRequestId,
+                gatewayRequestId: gatewayApprovalRequestId(event.payload),
+                responding: false,
+                sessionId,
+                choices: normalizeApprovalRequest(
+                  event.payload,
+                  approvalRequestId,
+                ).choices,
+              },
+            ];
+          }
+        }
+      }
       const next = applyDashboardStreamEvent(
         {
           messages: messagesRef.current,
@@ -1045,6 +1256,7 @@ export function useDashboardChatTransport({
         event,
         {
           activeTurn: activeTurnRef.current,
+          approvalRequestId,
           renderAssistantDeltas: connectionMode === "local",
         },
       );
@@ -1057,9 +1269,42 @@ export function useDashboardChatTransport({
           )
         : next.messages;
       messagesRef.current = nextMessages;
-      setMessages(nextMessages);
+      // High-frequency stream events coalesce into one commit per frame;
+      // lifecycle events (start/complete/clarify/tool boundaries) commit
+      // immediately so dependent state (isLoading, toolProgress, approval
+      // cards) can't observe a stale transcript.
+      const isCoalescableDelta =
+        event.type === "message.delta" ||
+        event.type === "thinking.delta" ||
+        event.type === "reasoning.delta" ||
+        event.type === "tool.progress" ||
+        event.type === "tool.generating";
+      if (isCoalescableDelta) {
+        scheduleDeltaFlush();
+      } else {
+        flushDeltasNow(nextMessages);
+      }
+
+      if (
+        event.type === "approval.request" &&
+        !gatewayApprovalRequestId(event.payload)
+      ) {
+        // A local display ID cannot safely select a command in an upstream
+        // FIFO queue. Stop instead of asking the user to approve an unknown target.
+        expirePendingApprovalsRef.current(true);
+        if (runtimeSessionId) {
+          void clientRef.current
+            ?.request("session.interrupt", { session_id: runtimeSessionId })
+            .catch(() => undefined);
+        }
+        return;
+      }
 
       if (event.type === "message.complete") {
+        // A reply RPC can be acknowledged after the resumed turn finishes.
+        if (!pendingClarifyRef.current?.responding)
+          expirePendingClarifyRef.current();
+        expirePendingApprovalsRef.current(false, true);
         if (failed) {
           appliedModelRef.current = null;
           recreateRuntimeSessionRef.current = true;
@@ -1116,28 +1361,57 @@ export function useDashboardChatTransport({
         }
       }
 
-      if (event.type === "clarify.request") {
+      if (event.type === "clarify.expire" || event.type === "clarify.request") {
         const payload =
           event.payload && typeof event.payload === "object"
             ? (event.payload as { request_id?: unknown })
             : {};
         const requestId =
           typeof payload.request_id === "string" ? payload.request_id : "";
-        if (requestId) {
-          pendingClarifyRequestIdRef.current = requestId;
-          activeTurnRef.current = null;
-          setToolProgress(null);
-          setIsLoading(false);
+        const pending = pendingClarifyRef.current;
+        if (event.type === "clarify.expire") {
+          if (!requestId || pending?.requestId !== requestId) return;
+          expirePendingClarifyRef.current();
+          // The Agent's blocking prompt returns on timeout and the original
+          // turn resumes. Keep tracking it until message.complete arrives.
+          if (pending.activeTurn?.status === "running") {
+            activeTurnRef.current = pending.activeTurn;
+            setIsLoading(true);
+          }
+          return;
         }
+        // Replays must not retire a newer question or clear a turn that has
+        // already resumed while its answer RPC is still being acknowledged.
+        if (!requestId || pending?.requestId === requestId) return;
+        const card = messagesRef.current.find(
+          (message) =>
+            message.kind === "clarify" &&
+            message.responsePath === "dashboard" &&
+            message.requestId === requestId,
+        );
+        if (card?.kind !== "clarify" || card.resolved || card.unavailable)
+          return;
+        expirePendingClarifyRef.current();
+        pendingClarifyRef.current = {
+          requestId,
+          sessionId: runtimeSessionId,
+          responding: false,
+          activeTurn: activeTurnRef.current,
+        };
+        activeTurnRef.current = null;
+        setToolProgress(null);
+        setIsLoading(false);
       }
     },
     [
       activeTurnRef,
       connectionId,
       connectionMode,
+      flushDeltasNow,
+      messagesRef,
+      scheduleDeltaFlush,
       profile,
       setIsLoading,
-      setMessages,
       setToolProgress,
       setUsage,
     ],
@@ -1201,6 +1475,8 @@ export function useDashboardChatTransport({
             onEvent: handleGatewayEvent,
             onClose: () => {
               if (clientRef.current === client) {
+                expirePendingClarifyRef.current(true);
+                expirePendingApprovalsRef.current(true);
                 clientRef.current = null;
               }
             },
@@ -1333,7 +1609,14 @@ export function useDashboardChatTransport({
 
       return targetSessionId;
     },
-    [activeTurnRef, connectionId, contextFolder, profile, setHermesSessionId],
+    [
+      activeTurnRef,
+      connectionId,
+      contextFolder,
+      messagesRef,
+      profile,
+      setHermesSessionId,
+    ],
   );
 
   const ensureSelectedModel = useCallback(
@@ -1351,6 +1634,7 @@ export function useDashboardChatTransport({
           .request("session.close", { session_id: targetSessionId })
           .catch(() => undefined);
         runtimeSessionIdRef.current = null;
+        pendingApprovalsRef.current = [];
         storedSessionIdRef.current = storedSessionId;
         reasoningSegmentClosedRef.current = false;
         appliedModelRef.current = null;
@@ -1475,38 +1759,95 @@ export function useDashboardChatTransport({
     [],
   );
 
+  const respondClarify = useCallback(
+    async (requestId: string, answer: string): Promise<boolean> => {
+      const pending = pendingClarifyRef.current;
+      const client = clientRef.current;
+      if (
+        !enabled ||
+        !pending ||
+        pending.requestId !== requestId ||
+        pending.responding ||
+        pending.sessionId !== runtimeSessionIdRef.current ||
+        !client?.connected
+      )
+        return false;
+      pending.responding = true;
+      activeTurnRef.current = pending.activeTurn;
+      setIsLoading(true);
+      try {
+        const result = await client.request<{ status?: string }>(
+          "clarify.respond",
+          { request_id: requestId, answer },
+        );
+        if (
+          !pendingClarifyRef.current ||
+          pending.sessionId !== runtimeSessionIdRef.current ||
+          clientRef.current !== client
+        )
+          return false;
+        if (result?.status !== "ok") {
+          if (pendingClarifyRef.current === pending) {
+            setIsLoading(false);
+            activeTurnRef.current = null;
+            expirePendingClarifyRef.current();
+          }
+          return false;
+        }
+        if (pendingClarifyRef.current === pending)
+          pendingClarifyRef.current = null;
+        setMessages((current) =>
+          current.map((message) =>
+            message.kind === "clarify" &&
+            message.responsePath === "dashboard" &&
+            message.requestId === requestId
+              ? { ...message, answer, resolved: true, unavailable: false }
+              : message,
+          ),
+        );
+        return true;
+      } catch {
+        if (pendingClarifyRef.current === pending) {
+          setIsLoading(false);
+          activeTurnRef.current = null;
+        }
+        return false;
+      } finally {
+        pending.responding = false;
+      }
+    },
+    [enabled, setMessages, activeTurnRef, setIsLoading],
+  );
+
   const sendMessage = useCallback(
     async (text: string, attachments?: Attachment[]): Promise<boolean> => {
       if (!enabled) return false;
-      const pendingClarifyRequestId = pendingClarifyRequestIdRef.current;
+      const pendingClarifyRequestId = pendingClarifyRef.current?.requestId;
       if (pendingClarifyRequestId) {
-        pendingClarifyRequestIdRef.current = null;
         try {
-          const client = await ensureClient();
-          await client.request("clarify.respond", {
-            request_id: pendingClarifyRequestId,
-            answer: text,
-          });
+          if (!(await respondClarify(pendingClarifyRequestId, text))) {
+            throw new Error(
+              "Could not deliver the clarification answer. Retry from the question card.",
+            );
+          }
           return true;
         } catch (err) {
-          pendingClarifyRequestIdRef.current = pendingClarifyRequestId;
           const message = err instanceof Error ? err.message : String(err);
           const activeTurn = activeTurnRef.current;
           if (activeTurn) activeTurn.status = "failed";
-          setMessages((prev) => {
-            const failedMessages = markActiveTurnFailed(
-              prev,
-              message,
-              activeTurn,
-            );
-            messagesRef.current = failedMessages;
-            return failedMessages;
-          });
+          setMessages((prev) =>
+            markActiveTurnFailed(prev, message, activeTurn),
+          );
           activeTurnRef.current = null;
           setToolProgress(null);
           setIsLoading(false);
           return true;
         }
+      }
+      // A late reply from the completed turn must not affect a new prompt
+      // using the same runtime session, especially on an unresolved ACK.
+      if (pendingApprovalsRef.current.some((pending) => pending.completed)) {
+        expirePendingApprovalsRef.current();
       }
       const dashboardText = dashboardPromptTextForAttachments(
         text,
@@ -1541,15 +1882,18 @@ export function useDashboardChatTransport({
       const failActiveTurn = (message: string): true => {
         const activeTurn = activeTurnRef.current;
         if (activeTurn) activeTurn.status = "failed";
-        let failedMessages: ChatMessage[] | null = null;
-        setMessages((prev) => {
-          failedMessages = markActiveTurnFailed(prev, message, activeTurn);
-          messagesRef.current = failedMessages;
-          return failedMessages;
-        });
+        if (pendingApprovalsRef.current.length) {
+          expirePendingApprovalsRef.current();
+          void clientRef.current
+            ?.request("session.interrupt", {
+              session_id: runtimeSessionIdRef.current,
+            })
+            .catch(() => undefined);
+        }
+        setMessages((prev) => markActiveTurnFailed(prev, message, activeTurn));
         const storedSessionId = storedSessionIdRef.current;
         const userContent = userContentById(
-          failedMessages ?? messagesRef.current,
+          messagesRef.current,
           activeTurn?.userId,
         );
         const recordLocalError = window.hermesAPI.recordSessionLocalError;
@@ -1612,6 +1956,7 @@ export function useDashboardChatTransport({
               .catch(() => undefined);
           }
           runtimeSessionIdRef.current = null;
+          pendingApprovalsRef.current = [];
           reasoningSegmentClosedRef.current = false;
           appliedModelRef.current = null;
         }
@@ -1648,7 +1993,10 @@ export function useDashboardChatTransport({
           dashboardText,
           syncedAttachments.refs,
         );
+        const approvalNonceBeforeSubmit = approvalNonceRef.current;
         await submitDashboardPromptWithRecovery(client, {
+          canRecover: () =>
+            approvalNonceRef.current === approvalNonceBeforeSubmit,
           sessionId: selectedSessionId,
           storedSessionId: storedSessionIdRef.current,
           text: submitText,
@@ -1667,6 +2015,7 @@ export function useDashboardChatTransport({
     },
     [
       activeTurnRef,
+      respondClarify,
       connectionMode,
       enabled,
       fallbackOnUnavailable,
@@ -1674,11 +2023,77 @@ export function useDashboardChatTransport({
       ensureRuntimeSession,
       ensureSelectedModel,
       syncDashboardAttachments,
+      messagesRef,
       setIsLoading,
       setMessages,
       setToolProgress,
       profile,
     ],
+  );
+
+  const respondApproval = useCallback(
+    async (requestId: string, choice: ApprovalChoice): Promise<boolean> => {
+      const pending = pendingApprovalsRef.current[0];
+      const runtimeSessionId = runtimeSessionIdRef.current;
+      if (
+        !enabled ||
+        !pending ||
+        pending.responding ||
+        !pending.gatewayRequestId ||
+        pending.requestId !== requestId ||
+        pending.sessionId !== runtimeSessionId ||
+        !pending.choices.includes(choice)
+      ) {
+        return false;
+      }
+
+      const client = clientRef.current;
+      if (!client?.connected) return false;
+      pending.responding = true;
+      try {
+        const result = await client.request<{ resolved?: unknown }>(
+          "approval.respond",
+          {
+            session_id: pending.sessionId,
+            request_id: pending.gatewayRequestId,
+            choice,
+            all: false,
+          },
+        );
+        if (pendingApprovalsRef.current[0] !== pending) return false;
+        if (result?.resolved !== 1) {
+          expirePendingApprovalsRef.current(true);
+          void client
+            .request("session.interrupt", { session_id: pending.sessionId })
+            .catch(() => undefined);
+          return false;
+        }
+        pendingApprovalsRef.current = pendingApprovalsRef.current.slice(1);
+        // Record the acknowledgement before a replay can arrive, rather than
+        // waiting for the card's asynchronous onResolved callback.
+        setMessages((current) =>
+          current.map((message) =>
+            message.kind === "approval" &&
+            message.responsePath === "dashboard" &&
+            message.requestId === requestId
+              ? { ...message, choice, resolved: true }
+              : message,
+          ),
+        );
+        return true;
+      } catch {
+        if (pending.completed && pendingApprovalsRef.current[0] === pending) {
+          // A completed turn cannot accept a retry after an unconfirmed reply.
+          expirePendingApprovalsRef.current();
+        }
+        return false;
+      } finally {
+        if (pendingApprovalsRef.current[0] === pending) {
+          pending.responding = false;
+        }
+      }
+    },
+    [enabled, setMessages],
   );
 
   const execSlash = useCallback(
@@ -1747,6 +2162,8 @@ export function useDashboardChatTransport({
   );
 
   const abort = useCallback(() => {
+    expirePendingClarifyRef.current();
+    expirePendingApprovalsRef.current();
     const client = clientRef.current;
     const sessionId = runtimeSessionIdRef.current;
     if (!enabled || !client || !sessionId) return;
@@ -1759,6 +2176,8 @@ export function useDashboardChatTransport({
 
   useEffect(
     () => () => {
+      expirePendingClarifyRef.current();
+      expirePendingApprovalsRef.current();
       clientRef.current?.close();
       clientRef.current = null;
     },
@@ -1768,6 +2187,8 @@ export function useDashboardChatTransport({
   return {
     abort,
     enabled,
+    respondApproval,
+    respondClarify,
     sendMessage,
     execSlash,
     getCommandCatalog,

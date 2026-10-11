@@ -37,6 +37,7 @@ export default {
   together: "Together AI",
   fireworks: "Fireworks",
   cerebras: "Cerebras",
+  requesty: "Requesty",
   mistral: "Mistral",
   // Theme
   themeSystem: "Systemowy",
@@ -90,6 +91,8 @@ export default {
   fireworksHint: "Szybka inferencja dla otwartych modeli",
   cerebrasApiKey: "Klucz API Cerebras",
   cerebrasHint: "Ultraszybka inferencja na sprzęcie Cerebras",
+  requestyApiKey: "Klucz API Requesty",
+  requestyHint: "Wielomodelowa brama zgodna z OpenAI",
   mistralApiKey: "Klucz API Mistral",
   mistralHint: "Modele Mistral i Codestral",
   perplexityApiKey: "Klucz API Perplexity",

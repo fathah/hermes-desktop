@@ -1,8 +1,8 @@
 /**
  * Office layout in "canvas" space (0..1800 on both axes), matching the agent
  * simulation. A vertical partition splits the floor into a west **work area**
- * (one desk per agent) and an east **rest room** (lounge seating where agents
- * whose gateway is off go to sit). `facing` values are in radians.
+ * (one desk per agent) and an east **rest room** (lounge seating where idle
+ * agents go to sit). `facing` values are in radians.
  */
 
 export type FurnitureType =
@@ -292,7 +292,7 @@ export const EXECUTIVE_DECOR: FurniturePlacement[] = [
 const REST_CENTER_X = 1435;
 const REST_CENTER_Y = 760;
 
-// Beanbag seat centers — agents whose gateway is off sit here.
+// Beanbag seat centers — idle agents sit here.
 const BEANBAG_CENTERS: Array<[number, number]> = [
   [1300, 400],
   [1560, 400],

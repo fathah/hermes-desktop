@@ -164,6 +164,8 @@ vi.mock("better-sqlite3", () => {
     }
 
     all(...args: unknown[]): unknown[] {
+      // The deletion fixtures use the legacy schema without native archives.
+      if (this.sql === "PRAGMA table_info(sessions)") return [];
       if (
         this.sql.includes("FROM sessions s") &&
         this.sql.includes("LOWER(COALESCE(s.title")

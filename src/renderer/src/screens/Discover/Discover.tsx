@@ -17,6 +17,7 @@ import type { LucideIcon } from "lucide-react";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
 import { useI18n } from "../../components/useI18n";
 import { OrbLoader } from "../../components/OrbLoader";
+import { useConnectionTargetRevision } from "../../hooks/useConnectionTargetRevision";
 import type {
   RegistryKind,
   RegistryItem,
@@ -31,6 +32,10 @@ interface DiscoverProps {
   // Discover tab. The nonce changes per request so the effect re-fires even
   // when targeting the same kind twice.
   focusKind?: { kind: RegistryKind; nonce: number };
+  /** Remote: browsing only. Installs would unpack into the LOCAL profile and
+   *  uninstalling an MCP server would delete it on the connected server, so
+   *  neither is offered, and agent "created" markers (local profiles) are off. */
+  browseOnly?: boolean;
 }
 
 const KINDS: { key: RegistryKind; icon: LucideIcon }[] = [
@@ -58,10 +63,11 @@ const EMPTY: RegistryCatalog = {
 
 type ActionState = "idle" | "working" | "done" | "error";
 
-export default function Discover({
+function DiscoverContent({
   profile,
   visible,
   focusKind,
+  browseOnly = false,
 }: DiscoverProps): React.JSX.Element {
   const { t } = useI18n();
   const [tab, setTab] = useState<RegistryKind>("skills");
@@ -101,7 +107,8 @@ export default function Discover({
     try {
       const [reg, profiles, skills] = await Promise.all([
         window.hermesAPI.listInstalledRegistry(profile),
-        window.hermesAPI.listProfiles(),
+        // Local profiles say nothing about which agents exist on a remote server.
+        browseOnly ? Promise.resolve([]) : window.hermesAPI.listProfiles(),
         window.hermesAPI.listInstalledSkills(profile),
       ]);
       setInstalled({
@@ -113,7 +120,7 @@ export default function Discover({
     } catch {
       /* leave as-is */
     }
-  }, [profile]);
+  }, [profile, browseOnly]);
 
   const load = useCallback(
     async (force = false) => {
@@ -378,6 +385,7 @@ export default function Discover({
                           {t(`discover.actions.${act.i18n}.done`)}
                         </span>
                         {kind === "mcps" &&
+                          !browseOnly &&
                           (confirmUninstall ? (
                             <>
                               <button
@@ -411,7 +419,7 @@ export default function Discover({
                             </button>
                           ))}
                       </>
-                    ) : (
+                    ) : browseOnly ? null : (
                       <button
                         className="btn btn-primary btn-sm"
                         onClick={() => handleInstall(kind, item)}
@@ -642,7 +650,7 @@ export default function Discover({
                       <Check size={14} />
                       {t(`discover.actions.${action.i18n}.done`)}
                     </span>
-                  ) : (
+                  ) : browseOnly ? null : (
                     <button
                       type="button"
                       className="btn btn-primary btn-sm discover-install-btn"
@@ -666,5 +674,15 @@ export default function Discover({
         </div>
       )}
     </div>
+  );
+}
+
+export default function Discover(props: DiscoverProps): React.JSX.Element {
+  const revision = useConnectionTargetRevision();
+  return (
+    <DiscoverContent
+      key={`${props.profile || "default"}\u0000${revision}\u0000${props.browseOnly ? "remote" : "local"}`}
+      {...props}
+    />
   );
 }

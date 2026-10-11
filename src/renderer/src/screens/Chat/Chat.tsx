@@ -11,6 +11,7 @@ import { WorktreePanel } from "./WorktreePanel";
 import { RemoteFolderPicker } from "./RemoteFolderPicker";
 import { WebPreviewPanel } from "./WebPreviewPanel";
 import { useChatScroll } from "./hooks/useChatScroll";
+import { useTranscriptState } from "./hooks/useTranscriptState";
 import { useChatIPC } from "./hooks/useChatIPC";
 import { useChatActions, parseBackgroundCommand } from "./hooks/useChatActions";
 import {
@@ -30,8 +31,15 @@ import { buildChatTranscript } from "./transcriptUtils";
 import { ConfigHealthBanner } from "../../components/ConfigHealthBanner";
 import FollowUsModal from "../../components/FollowUsModal";
 import type { Attachment } from "../../../../shared/attachments";
+import type { ApprovalChoice } from "../../../../shared/chat-approval";
 import type { SessionModelOverride } from "../../../../shared/model-override";
-import type { ActiveTurn, ChatMessage, UsageState } from "./types";
+import type {
+  ActiveTurn,
+  ApprovalMessage,
+  ClarifyMessage,
+  ChatMessage,
+  UsageState,
+} from "./types";
 import type { ContextUsage } from "./ContextGauge";
 import { contextWindowForModel } from "./contextWindows";
 import { QueuedMessages } from "./QueuedMessages";
@@ -143,9 +151,11 @@ function Chat({
     }),
     [profile, agentAppearance?.color, agentAppearance?.avatar],
   );
-  const [messages, setMessages] = useState<ChatMessage[]>(
-    initialMessages ?? [],
-  );
+  // Write-through transcript state: `messagesRef` is the synchronous source
+  // of truth shared with the transports; see useTranscriptState for the
+  // invariants the streaming coalescing depends on.
+  const { messages, setMessages, messagesRef } =
+    useTranscriptState(initialMessages);
   const [isLoading, setIsLoading] = useState(false);
   useEffect(() => {
     onLoadingChange?.(runId, isLoading);
@@ -421,7 +431,15 @@ function Chat({
     let cancelled = false;
     (async (): Promise<void> => {
       try {
-        const r = await window.hermesAPI.validateChatReadiness(profile);
+        const r = await window.hermesAPI.validateChatReadiness(
+          profile,
+          {
+            provider: chatCurrentProvider,
+            model: chatCurrentModel,
+            baseUrl: chatCurrentBaseUrl,
+          },
+          connectionId,
+        );
         if (!cancelled) setReadiness(r);
       } catch {
         // Fail open on IPC error — never block Send on validation failure
@@ -431,7 +449,14 @@ function Chat({
     return (): void => {
       cancelled = true;
     };
-  }, [profile, chatCurrentModel, chatCurrentProvider, chatCurrentBaseUrl]);
+  }, [
+    profile,
+    chatCurrentModel,
+    chatCurrentProvider,
+    chatCurrentBaseUrl,
+    connectionId,
+    connectionMode,
+  ]);
 
   // Authoritative context-window size for the active model, resolved from the
   // provider's /models catalogue (issue #597). Null until/unless the provider
@@ -515,12 +540,8 @@ function Chat({
   }, [active]);
 
   // "Copy entire chat" context-menu items (issue #298) — serialise the whole
-  // conversation in the requested format and copy it. A ref keeps the latest
-  // messages without re-registering the IPC listener on every chunk.
-  const messagesRef = useRef(messages);
-  useEffect(() => {
-    messagesRef.current = messages;
-  });
+  // conversation in the requested format and copy it. The transcript ref keeps
+  // the latest messages without re-registering the IPC listener on every chunk.
   useEffect(() => {
     if (!active) return;
     return window.hermesAPI.onContextMenuCopyChat((format) => {
@@ -528,7 +549,7 @@ function Chat({
       if (msgs.length === 0) return;
       void window.hermesAPI.copyToClipboard(buildChatTranscript(msgs, format));
     });
-  }, [active]);
+  }, [active, messagesRef]);
 
   // "Select All" on a message (issue #298): the native selectAll role would
   // select the entire window, so scope it to the .chat-bubble under the
@@ -648,7 +669,7 @@ function Chat({
     enabled: dashboardChatEnabled,
     fallbackOnUnavailable: chatTransportPreference === "auto",
     hermesSessionId,
-    messages,
+    messagesRef,
     model: chatCurrentModel,
     modelBaseUrl: chatCurrentBaseUrl,
     profile,
@@ -660,6 +681,41 @@ function Chat({
     setUsage,
     onDashboardUnavailable: handleDashboardUnavailable,
   });
+
+  const respondDashboardClarify = dashboardTransport.respondClarify;
+  const handleClarifyRespond = useCallback(
+    (msg: ClarifyMessage, answer: string): Promise<boolean> =>
+      msg.responsePath === "dashboard"
+        ? respondDashboardClarify(msg.requestId, answer)
+        : window.hermesAPI.respondClarify(msg.requestId, answer),
+    [respondDashboardClarify],
+  );
+
+  const respondDashboardApproval = dashboardTransport.respondApproval;
+  const handleApprovalRespond = useCallback(
+    (msg: ApprovalMessage, choice: ApprovalChoice): Promise<boolean> =>
+      msg.responsePath === "dashboard"
+        ? respondDashboardApproval(msg.requestId, choice)
+        : window.hermesAPI.respondApproval(
+            msg.requestId,
+            choice,
+            msg.runId || "",
+          ),
+    [respondDashboardApproval],
+  );
+
+  const handleApprovalResolved = useCallback(
+    (msg: ApprovalMessage, choice: ApprovalChoice) => {
+      setMessages((prev) =>
+        prev.map((candidate) =>
+          candidate.kind === "approval" && candidate.id === msg.id
+            ? { ...candidate, choice, resolved: true }
+            : candidate,
+        ),
+      );
+    },
+    [setMessages],
+  );
 
   const [agentCommandCatalog, setAgentCommandCatalog] =
     useState<AgentCommandsCatalogResponse | null>(null);
@@ -989,6 +1045,9 @@ function Chat({
               onApprove={actions.handleApprove}
               onDeny={actions.handleDeny}
               onClarifyResolved={handleClarifyResolved}
+              onClarifyRespond={handleClarifyRespond}
+              onApprovalRespond={handleApprovalRespond}
+              onApprovalResolved={handleApprovalResolved}
               agentAvatar={agentAvatar}
             />
           )}

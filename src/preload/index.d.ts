@@ -1,6 +1,11 @@
 import type { AppLocale } from "../shared/i18n/types";
 import type { BotGroupAPI } from "../shared/bot-groups";
 import type { Attachment } from "../shared/attachments";
+import type {
+  RemoteGatewayAction,
+  RemoteGatewayActionResult,
+  RemoteGatewayCommandStatus,
+} from "../shared/gateway";
 import type { SessionModelOverride } from "../shared/model-override";
 import type { DesktopSessionContinuationItem } from "../shared/session-continuation";
 import type { DesktopSessionLocalError } from "../shared/session-continuation";
@@ -36,6 +41,10 @@ import type {
   MessagingPlatformUpdate,
 } from "../shared/messaging-platforms";
 import type { ChatToolEvent } from "../shared/chat-stream";
+import type {
+  ApprovalChoice,
+  ChatApprovalRequest,
+} from "../shared/chat-approval";
 import type { GpuPreferenceMode, GpuStatus } from "../shared/gpu";
 import type { AgentCapabilitySnapshot } from "../shared/agent-capabilities";
 import type { SessionLocation } from "../shared/session-location";
@@ -339,7 +348,11 @@ interface HermesAPI {
   // Configuration (profile-aware)
   getEnv: (profile?: string) => Promise<Record<string, string>>;
   setEnv: (key: string, value: string, profile?: string) => Promise<boolean>;
-  validateChatReadiness: (profile?: string) => Promise<{
+  validateChatReadiness: (
+    profile?: string,
+    override?: { provider?: string; model?: string; baseUrl?: string },
+    connectionId?: string,
+  ) => Promise<{
     ok: boolean;
     code?:
       | "NO_ACTIVE_MODEL"
@@ -566,12 +579,28 @@ interface HermesAPI {
     ) => void,
   ) => () => void;
   respondClarify: (requestId: string, answer: string) => Promise<boolean>;
+  onApprovalRequest: (
+    callback: (runId: string, req: ChatApprovalRequest) => void,
+  ) => () => void;
+  respondApproval: (
+    requestId: string,
+    choice: ApprovalChoice,
+    runId: string,
+  ) => Promise<boolean>;
 
   // Gateway
-  startGateway: () => Promise<GatewayStartResult>;
-  stopGateway: () => Promise<boolean>;
+  remoteGatewayAction: (
+    action: RemoteGatewayAction,
+    profile?: string,
+  ) => Promise<RemoteGatewayActionResult>;
+  startGateway: (profile?: string) => Promise<GatewayStartResult>;
+  stopGateway: (profile?: string) => Promise<boolean>;
   restartGateway: (profile?: string) => Promise<boolean>;
-  gatewayStatus: () => Promise<boolean>;
+  gatewayStatus: (profile?: string) => Promise<boolean>;
+  gatewayCommandPending: (profile?: string) => Promise<boolean>;
+  gatewayCommandStatus: (
+    profile?: string,
+  ) => Promise<RemoteGatewayCommandStatus>;
   setNativeAppearance: (source: "dark" | "light" | "system") => Promise<void>;
   getSpellCheckerInfo: () => Promise<{
     available: string[];

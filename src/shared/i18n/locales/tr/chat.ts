@@ -1,4 +1,5 @@
 export default {
+  showEarlierMessages: "Önceki {{count}} mesajı göster",
   title: "Yeni Sohbet",
   sessionTitle: "Oturum {{id}}",
   noModel: "Model ayarlanmamış",

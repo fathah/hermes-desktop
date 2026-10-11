@@ -84,6 +84,47 @@ describe("getYamlPath", () => {
     ).toBeNull();
   });
 
+  // @lat: [[main-process#Main Process#Dotted configuration lookup#Root and parent boundaries]]
+  it("pins root keys to column zero even when the document starts indented", () => {
+    const config = "  service_tier: nested\nservice_tier: root\n";
+    expect(getYamlPath(config, "service_tier")).toBe("root");
+    expect(
+      getYamlPath("  agent:\n    service_tier: nested\n", "agent.service_tier"),
+    ).toBeNull();
+  });
+
+  // @lat: [[main-process#Main Process#Dotted configuration lookup#Scalar parents]]
+  it.each(["|", ">-", "plain", "{}", "[]"])(
+    "does not treat %s scalar contents as map children",
+    (value) => {
+      expect(
+        getYamlPath(
+          `agent: ${value}\n  service_tier: text\n`,
+          "agent.service_tier",
+        ),
+      ).toBeNull();
+    },
+  );
+
+  // @lat: [[main-process#Main Process#Dotted configuration lookup#Nested siblings]]
+  it("walks deep direct children past unrelated sibling blocks and comments", () => {
+    const config = [
+      "agent: # options",
+      "    other:",
+      "        fallback:",
+      "            service_tier: wrong",
+      "    # direct sibling",
+      "    fallback:",
+      "        other:",
+      "            service_tier: wrong-again",
+      "        service_tier: fast",
+      "next:",
+      "    missing: outside",
+    ].join("\n");
+    expect(getYamlPath(config, "agent.fallback.service_tier")).toBe("fast");
+    expect(getYamlPath(config, "agent.fallback.missing")).toBeNull();
+  });
+
   it("handles CRLF line endings", () => {
     const crlf = "memory:\r\n  provider: honcho\r\n";
     expect(getYamlPath(crlf, "memory.provider")).toBe("honcho");
