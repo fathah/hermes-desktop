@@ -509,9 +509,122 @@ it.each(["equal", "changed"])(
         expect.anything(),
       );
       expect(f.api.sendMessage).not.toHaveBeenCalled();
+      expect(box).toHaveValue("waiting prompt");
+      await screen.findByRole("alert");
     }
   },
 );
+
+// @lat: [[remote-profiles#Tests#Refused submissions retain their payload]]
+it.each(["send", "quick ask", "background command"])(
+  "retains the actual composer text and attachment when %s loses authority",
+  async (kind) => {
+    const f = await fixture();
+    renderChat();
+    await send();
+    await complete();
+    const box = screen.getByPlaceholderText("chat.typeMessage");
+    const text = kind === "background command" ? "/btw keep me" : "keep me";
+    fireEvent.change(box, { target: { value: text } });
+    fireEvent.change(document.querySelector('input[type="file"]')!, {
+      target: {
+        files: [
+          new File(["retained file"], "retained.txt", { type: "text/plain" }),
+        ],
+      },
+    });
+    await screen.findByRole("button", { name: "Remove retained.txt" });
+    let resolve!: (value: ReturnType<typeof f.target>) => void;
+    f.api.getProviderRequestTarget.mockReturnValueOnce(
+      new Promise<ReturnType<typeof f.target>>((done) => {
+        resolve = done;
+      }),
+    );
+    await act(async () => f.rotateKey());
+    gateway.request.mockClear();
+    fireEvent.click(
+      screen.getByTitle(
+        kind === "quick ask" ? "chat.quickAskTitle" : "chat.send",
+      ),
+    );
+    await act(async () => resolve(f.target()));
+    expect(box).toHaveValue(text);
+    expect(
+      screen.getByRole("button", { name: "Remove retained.txt" }),
+    ).toBeTruthy();
+    await screen.findByRole("alert");
+    expect(gateway.request).not.toHaveBeenCalledWith(
+      "prompt.submit",
+      expect.anything(),
+    );
+    expect(gateway.request).not.toHaveBeenCalledWith(
+      "prompt.background",
+      expect.anything(),
+    );
+    expect(f.api.sendMessage).not.toHaveBeenCalled();
+  },
+);
+
+// @lat: [[remote-profiles#Tests#Refused queued submissions remain recoverable]]
+it("restores a queued prompt when private authority refuses its drain", async () => {
+  const f = await fixture();
+  renderChat();
+  await send();
+  const box = screen.getByPlaceholderText("chat.typeMessage");
+  fireEvent.change(box, { target: { value: "queued intent" } });
+  fireEvent.keyDown(box, { key: "Enter" });
+  await screen.findByText("queued intent");
+  let resolve!: (value: ReturnType<typeof f.target>) => void;
+  f.api.getProviderRequestTarget.mockReturnValueOnce(
+    new Promise<ReturnType<typeof f.target>>((done) => {
+      resolve = done;
+    }),
+  );
+  await act(async () => f.rotateKey());
+  gateway.request.mockClear();
+  fireEvent.click(screen.getByRole("button", { name: "common.stop" }));
+  await act(async () => resolve(f.target()));
+  await waitFor(() =>
+    expect(document.querySelector(".chat-queue-single")?.textContent).toBe(
+      "queued intent",
+    ),
+  );
+  expect(gateway.request).not.toHaveBeenCalledWith(
+    "prompt.submit",
+    expect.anything(),
+  );
+  expect(f.api.sendMessage).not.toHaveBeenCalled();
+});
+
+it("does not reinsert a refused old queued prompt into a different run or profile", async () => {
+  const f = await fixture();
+  const view = renderChat();
+  await send();
+  const box = screen.getByPlaceholderText("chat.typeMessage");
+  fireEvent.change(box, { target: { value: "old queued intent" } });
+  fireEvent.keyDown(box, { key: "Enter" });
+  await screen.findByText("old queued intent");
+  let resolve!: (value: ReturnType<typeof f.target>) => void;
+  f.api.getProviderRequestTarget.mockReturnValueOnce(
+    new Promise<ReturnType<typeof f.target>>((done) => {
+      resolve = done;
+    }),
+  );
+  await act(async () => f.rotateKey());
+  fireEvent.click(screen.getByRole("button", { name: "common.stop" }));
+  view.rerender(
+    <Chat
+      runId="different-run"
+      connectionId="a"
+      profile="other-profile"
+      initialSessionId="saved"
+      initialMessages={[]}
+    />,
+  );
+  await act(async () => resolve(f.target()));
+  expect(document.querySelector(".chat-queue-single")).toBeNull();
+  expect(f.api.sendMessage).not.toHaveBeenCalled();
+});
 
 // @lat: [[remote-profiles#Tests#Retained chat validates its own changed authority]]
 it.each(["same-length key", "shared-origin OAuth"])(

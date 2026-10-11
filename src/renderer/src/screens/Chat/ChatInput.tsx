@@ -62,6 +62,8 @@ interface ChatInputProps {
   remoteMode?: boolean;
   /** Active profile — used to resolve the provider for voice transcription. */
   profile?: string;
+  /** Prevent an old acknowledgement from clearing another run's composer. */
+  submissionScope?: string;
   /** Context-window occupancy for the gauge; null until the first response. */
   contextUsage?: ContextUsage | null;
   /** Pre-send validation state. When `ok` is false, Send is disabled
@@ -71,8 +73,8 @@ interface ChatInputProps {
    * pickers) so they share the composer's single bordered container. */
   toolbarExtras?: React.ReactNode;
   slashCommands?: SlashCommand[];
-  onSubmit: (text: string, attachments: Attachment[]) => void;
-  onQuickAsk: (text: string, attachments: Attachment[]) => void;
+  onSubmit: (text: string, attachments: Attachment[]) => void | Promise<void>;
+  onQuickAsk: (text: string, attachments: Attachment[]) => void | Promise<void>;
   onAbort: () => void;
 }
 
@@ -84,6 +86,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       sessionId,
       remoteMode,
       profile,
+      submissionScope,
       contextUsage,
       readiness,
       toolbarExtras,
@@ -98,12 +101,34 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     const { spellcheckEnabled } = useChatPreferences();
     const { resolved: resolvedTheme } = useTheme();
     const beamTheme = THEME_APPEARANCE.get(resolvedTheme) ?? "dark";
-    const [input, setInput] = useState("");
+    const [input, setInputState] = useState("");
+    const inputRevisionRef = useRef(0);
+    const setInput = useCallback(
+      (value: React.SetStateAction<string>): void => {
+        inputRevisionRef.current += 1;
+        setInputState(value);
+      },
+      [],
+    );
     const [slashMenuOpen, setSlashMenuOpen] = useState(false);
     const [slashFilter, setSlashFilter] = useState("");
     const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
     const [attachments, setAttachments] = useState<Attachment[]>([]);
     const [attachmentError, setAttachmentError] = useState<string | null>(null);
+    const [submissionError, setSubmissionError] = useState<string | null>(null);
+    const [pendingSubmissions, setPendingSubmissions] = useState<
+      ReadonlySet<string>
+    >(new Set());
+    const pendingSubmissionsRef = useRef(new Set<string>());
+    const submissionScopeRef = useRef(submissionScope);
+    submissionScopeRef.current = submissionScope;
+    const submissionGenerationRef = useRef(0);
+    useEffect(
+      () => () => {
+        submissionGenerationRef.current += 1;
+      },
+      [],
+    );
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const slashMenuRef = useRef<HTMLDivElement>(null);
     const slashMenuListRef = useRef<HTMLDivElement>(null);
@@ -122,13 +147,16 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     // every result so the SpeechRecognition path streams in live. The recorder
     // fallback delivers one final result on stop.
     const voiceBaseRef = useRef("");
-    const handleVoiceResult = useCallback((text: string, isFinal: boolean) => {
-      const base = voiceBaseRef.current;
-      setInput(
-        base.trim() ? (text ? `${base.trimEnd()} ${text}` : base) : text,
-      );
-      if (isFinal) inputRef.current?.focus();
-    }, []);
+    const handleVoiceResult = useCallback(
+      (text: string, isFinal: boolean) => {
+        const base = voiceBaseRef.current;
+        setInput(
+          base.trim() ? (text ? `${base.trimEnd()} ${text}` : base) : text,
+        );
+        if (isFinal) inputRef.current?.focus();
+      },
+      [setInput],
+    );
     const voice = useVoiceInput(handleVoiceResult, profile);
 
     const autoResize = useCallback((): void => {
@@ -151,13 +179,16 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       autoResize();
     }, [input, autoResize]);
 
-    const applyHistoryText = useCallback((text: string): void => {
-      setInput(text);
-      // Resize runs via the layout effect; just place the caret at the end.
-      requestAnimationFrame(() => {
-        inputRef.current?.setSelectionRange(text.length, text.length);
-      });
-    }, []);
+    const applyHistoryText = useCallback(
+      (text: string): void => {
+        setInput(text);
+        // Resize runs via the layout effect; just place the caret at the end.
+        requestAnimationFrame(() => {
+          inputRef.current?.setSelectionRange(text.length, text.length);
+        });
+      },
+      [setInput],
+    );
 
     const history = useInputHistory({
       currentInput: input,
@@ -237,9 +268,11 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           });
         },
         clear(): void {
+          submissionGenerationRef.current += 1;
           setInput("");
           setAttachments([]);
           setAttachmentError(null);
+          setSubmissionError(null);
           if (inputRef.current) inputRef.current.style.height = "auto";
         },
         focus(): void {
@@ -249,7 +282,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           return ingestFiles(files);
         },
       }),
-      [ingestFiles],
+      [ingestFiles, setInput],
     );
 
     // Refocus the textarea when a streaming response ends
@@ -360,12 +393,63 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       }
     }
 
-    function clearAfterSend(text: string): void {
+    function clearAfterSend(
+      text: string,
+      draft: string,
+      sentAttachments: Attachment[],
+      draftRevision: number,
+    ): void {
       history.push(text);
-      setInput("");
-      setAttachments([]);
+      if (inputRevisionRef.current === draftRevision)
+        setInput((current) => (current === draft ? "" : current));
+      const sentIds = new Set(
+        sentAttachments.map((attachment) => attachment.id),
+      );
+      setAttachments((current) =>
+        current.filter((attachment) => !sentIds.has(attachment.id)),
+      );
       setAttachmentError(null);
-      if (inputRef.current) inputRef.current.style.height = "auto";
+    }
+
+    // @lat: [[chat-input#Submission acknowledgement]]
+    async function submit(
+      text: string,
+      sendAttachments: Attachment[],
+      callback: ChatInputProps["onSubmit"],
+      draft = input,
+    ): Promise<void> {
+      const scope = submissionScopeRef.current;
+      const generation = submissionGenerationRef.current;
+      const draftRevision = inputRevisionRef.current;
+      const key = JSON.stringify([
+        scope,
+        generation,
+        draft,
+        sendAttachments.map((attachment) => attachment.id),
+      ]);
+      if (pendingSubmissionsRef.current.has(key)) return;
+      pendingSubmissionsRef.current.add(key);
+      setPendingSubmissions(new Set(pendingSubmissionsRef.current));
+      setSubmissionError(null);
+      try {
+        await callback(text, sendAttachments);
+        if (
+          submissionScopeRef.current === scope &&
+          submissionGenerationRef.current === generation
+        )
+          clearAfterSend(text, draft, sendAttachments, draftRevision);
+      } catch (error) {
+        if (
+          submissionScopeRef.current === scope &&
+          submissionGenerationRef.current === generation
+        )
+          setSubmissionError(
+            error instanceof Error ? error.message : String(error),
+          );
+      } finally {
+        pendingSubmissionsRef.current.delete(key);
+        setPendingSubmissions(new Set(pendingSubmissionsRef.current));
+      }
     }
 
     function handleSend(): void {
@@ -373,25 +457,19 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       const hasPayload = text.length > 0 || attachments.length > 0;
       if (!hasPayload) return;
       setSlashMenuOpen(false);
-      const sendAttachments = attachments;
-      clearAfterSend(text);
-      onSubmit(text, sendAttachments);
+      void submit(text, attachments, onSubmit);
     }
 
     function handleQuickAsk(): void {
       const text = input.trim();
       if (!text) return;
-      const sendAttachments = attachments;
-      clearAfterSend(text);
-      onQuickAsk(text, sendAttachments);
+      void submit(text, attachments, onQuickAsk);
     }
 
     function handleSlashSelect(cmd: SlashCommand): void {
       setSlashMenuOpen(false);
       if (!cmd.takesArgs) {
-        setInput("");
-        if (inputRef.current) inputRef.current.style.height = "auto";
-        onSubmit(cmd.name, []);
+        void submit(cmd.name, [], onSubmit);
         return;
       }
       setInput(`${cmd.name} `);
@@ -500,8 +578,18 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     // is intentionally dropped here vs. the pre-merge version, so users
     // can queue messages while the agent is mid-response.
     const readinessOk = readiness?.ok !== false;
+    const submissionPending = pendingSubmissions.has(
+      JSON.stringify([
+        submissionScope,
+        submissionGenerationRef.current,
+        input,
+        attachments.map((attachment) => attachment.id),
+      ]),
+    );
     const canSend =
-      (input.trim().length > 0 || attachments.length > 0) && readinessOk;
+      (input.trim().length > 0 || attachments.length > 0) &&
+      readinessOk &&
+      !submissionPending;
 
     // Map fixLocation → user-facing call to action. The strings are
     // wrapped in i18n; the location ids come from main/validation.ts.
@@ -660,6 +748,11 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             {voice.error}
           </div>
         )}
+        {submissionError && (
+          <div className="chat-attachment-error" role="alert">
+            {submissionError}
+          </div>
+        )}
         <div className="chat-input-shell">
           <div className="chat-input-wrapper">
             <input
@@ -751,6 +844,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                     <button
                       className="chat-btw-btn"
                       onClick={handleQuickAsk}
+                      disabled={submissionPending}
                       title={t("chat.quickAskTitle")}
                     >
                       💭

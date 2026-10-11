@@ -172,6 +172,22 @@ A deferred private change rejects captured native writes and late completions, i
 
 Actual Send remains undispatched during a deferred revision read. Equal authority resumes submission; changed authority rejects the obsolete action without native or Legacy dispatch.
 
+### Refused submissions retain their payload
+
+Actual Chat and composer Send, Quick Ask and typed background commands retain text and attachments after pending authority changes. Rejection reaches the composer instead of being reported as successful admission.
+
+### Refused queued submissions remain recoverable
+
+A queued prompt rejected before dispatch returns to its captured queue and reports the error. A cleared queue or changed run/profile owner cannot receive an obsolete reinsertion.
+
+### Refused action admission has no side effects
+
+Normal and side-question actions reject unavailable authority before transcript or loading effects. A rejected Dashboard-to-Legacy fallback does not dispatch and settles its own failed turn.
+
+### Handled transport admission remains accepted
+
+A handled native result stays accepted without a later authority check that could present delivered work as unsent. Legacy dispatch acknowledges immediately while existing IPC events own streamed failures.
+
 ### Retained chat validates its own changed authority
 
 A notification naming another selected machine still revalidates a retained chat's own private configuration. Changed authority closes its old client; its next native request uses its own settings without falling through to Legacy.

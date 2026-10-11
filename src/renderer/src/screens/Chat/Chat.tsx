@@ -282,6 +282,16 @@ function Chat({
   const dragCounter = useRef(0);
   const chatInputRef = useRef<ChatInputHandle>(null);
   const queueRef = useRef<QueuedMessage[]>([]);
+  const queueOwner = JSON.stringify([runId, connectionId, profile]);
+  const queueOwnerRef = useRef(queueOwner);
+  queueOwnerRef.current = queueOwner;
+  const queueMountedRef = useRef(true);
+  useEffect(() => {
+    queueMountedRef.current = true;
+    return () => {
+      queueMountedRef.current = false;
+    };
+  }, []);
   const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
   const activeTurnRef = useRef<ActiveTurn | null>(null);
   const dashboardChatEnabled = dashboardChatEnabledForConnection(
@@ -946,16 +956,27 @@ function Chat({
   // Drain queued messages one at a time when the agent finishes.
   useEffect(() => {
     if (isLoading) return;
-    const next = queueRef.current.shift();
+    const queue = queueRef.current;
+    const owner = queueOwnerRef.current;
+    const next = queue.shift();
     if (!next) return;
     setQueuedMessages([...queueRef.current]);
-    handleSendRef.current(next.text, next.attachments, true).catch(() => {
+    handleSendRef.current(next.text, next.attachments, true).catch((error) => {
       // Put the message back at the front so it isn't silently lost if
       // the send fails (e.g. IPC error before onChatError fires).
-      queueRef.current.unshift(next);
+      if (
+        !queueMountedRef.current ||
+        queueRef.current !== queue ||
+        queueOwnerRef.current !== owner
+      )
+        return;
+      queue.unshift(next);
       setQueuedMessages([...queueRef.current]);
+      addAgentMessage(
+        `error: ${error instanceof Error ? error.message : String(error)}`,
+      );
     });
-  }, [isLoading]);
+  }, [isLoading, addAgentMessage]);
 
   const handleRemoveQueued = useCallback((index: number) => {
     queueRef.current.splice(index, 1);
@@ -963,14 +984,14 @@ function Chat({
   }, []);
 
   const handleSubmitOrQueue = useCallback(
-    (text: string, attachments: Attachment[]) => {
+    async (text: string, attachments: Attachment[]): Promise<void> => {
       // Side questions (`/btw`) run on a concurrent background agent, so they
       // must never queue — fire them immediately even while the main turn is in
       // flight. This is the whole point of "ask without affecting context".
       const bgQuestion = parseBackgroundCommand(text);
       if (bgQuestion !== null) {
         if (bgQuestion)
-          void handleBackgroundRef.current(bgQuestion, attachments);
+          await handleBackgroundRef.current(bgQuestion, attachments);
         return;
       }
       // The central slash router owns queueing policy. Dispatch every slash
@@ -978,7 +999,7 @@ function Chat({
       // the concurrent worker, and model-bound commands can format once before
       // they are queued.
       if (text.startsWith("/")) {
-        void handleSendRef.current(text, attachments, true);
+        await handleSendRef.current(text, attachments, true);
         return;
       }
       if (isLoading) {
@@ -986,7 +1007,7 @@ function Chat({
         setQueuedMessages([...queueRef.current]);
         return;
       }
-      void handleSendRef.current(text, attachments);
+      await handleSendRef.current(text, attachments);
     },
     [isLoading],
   );
@@ -1172,6 +1193,7 @@ function Chat({
           sessionId={hermesSessionId}
           remoteMode={remoteMode}
           profile={profile}
+          submissionScope={queueOwner}
           contextUsage={contextUsage}
           readiness={readiness}
           slashCommands={slashMenuCommands}
