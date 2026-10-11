@@ -20,6 +20,7 @@ import ProviderKeysSection from "../../components/ProviderKeysSection";
 import RegistryBrowserModal from "../../components/RegistryBrowserModal";
 import AuxiliaryTasksSection from "../../components/AuxiliaryTasksSection";
 import { useDiscoveredModels } from "../../hooks/useDiscoveredModels";
+import { useConnectionTargetRevision } from "../../hooks/useConnectionTargetRevision";
 import { KeyRound, Workflow, User } from "../../assets/icons";
 import {
   ChevronDown,
@@ -130,7 +131,7 @@ interface CredentialPoolEntry {
   key?: string;
 }
 
-function Providers({
+function ProvidersScreen({
   profile,
   visible,
 }: {
@@ -138,6 +139,18 @@ function Providers({
   visible?: boolean;
 }): React.JSX.Element {
   const { t } = useI18n();
+  const mounted = useRef(true);
+  const connectionChanged = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    const unsubscribe = window.hermesAPI.onConnectionConfigChanged(() => {
+      connectionChanged.current = true;
+    });
+    return () => {
+      mounted.current = false;
+      unsubscribe();
+    };
+  }, []);
   const [activeTab, setActiveTab] = useState<"providers" | "auxiliary">(
     "providers",
   );
@@ -262,6 +275,7 @@ function Providers({
       window.hermesAPI.getModelConfig(profile),
       window.hermesAPI.getCredentialPool(profile),
     ]);
+    if (!mounted.current || connectionChanged.current) return;
     setEnv(envData);
     setModelProvider(displayProviderFromConfig(mc.provider, mc.baseUrl));
     setModelName(mc.model);
@@ -271,7 +285,8 @@ function Providers({
     setCredPool(pool);
 
     requestAnimationFrame(() => {
-      modelLoaded.current = true;
+      if (mounted.current && !connectionChanged.current)
+        modelLoaded.current = true;
     });
   }, [profile]);
 
@@ -285,6 +300,7 @@ function Providers({
     if (!visible) return;
     (async (): Promise<void> => {
       const mc = await window.hermesAPI.getModelConfig(profile);
+      if (!mounted.current || connectionChanged.current) return;
       modelLoaded.current = false;
       setModelProvider(displayProviderFromConfig(mc.provider, mc.baseUrl));
       setModelName(mc.model);
@@ -292,7 +308,8 @@ function Providers({
       persistedCustomUrl.current =
         mc.provider === "custom" && Boolean(mc.baseUrl?.trim());
       requestAnimationFrame(() => {
-        modelLoaded.current = true;
+        if (mounted.current && !connectionChanged.current)
+          modelLoaded.current = true;
       });
     })();
   }, [visible, profile]);
@@ -427,7 +444,11 @@ function Providers({
     return () => {
       for (const [key, timer] of timers) {
         clearTimeout(timer);
-        void window.hermesAPI.setEnv(key, envRef.current[key] || "", profile);
+        if (!connectionChanged.current) {
+          void window.hermesAPI
+            .setEnv(key, envRef.current[key] || "", profile)
+            .catch(() => {});
+        }
       }
       timers.clear();
     };
@@ -1207,4 +1228,15 @@ function Providers({
   );
 }
 
-export default Providers;
+export default function Providers(props: {
+  profile?: string;
+  visible?: boolean;
+}): React.JSX.Element {
+  const revision = useConnectionTargetRevision();
+  return (
+    <ProvidersScreen
+      key={JSON.stringify([props.profile || "default", revision])}
+      {...props}
+    />
+  );
+}

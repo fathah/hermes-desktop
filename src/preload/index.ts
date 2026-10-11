@@ -1,3 +1,4 @@
+import type { ProviderRequestTarget } from "../shared/provider-target";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
@@ -313,11 +314,24 @@ const hermesAPI = {
     ipcRenderer.invoke("set-locale", locale),
 
   // Configuration (profile-aware)
-  getEnv: (profile?: string): Promise<Record<string, string>> =>
-    ipcRenderer.invoke("get-env", profile),
+  getProviderRequestTarget: (
+    connectionId: string,
+  ): Promise<ProviderRequestTarget> =>
+    ipcRenderer.invoke("get-provider-request-target", connectionId),
 
-  setEnv: (key: string, value: string, profile?: string): Promise<boolean> =>
-    ipcRenderer.invoke("set-env", key, value, profile),
+  getEnv: (
+    profile?: string,
+    target?: ProviderRequestTarget,
+  ): Promise<Record<string, string>> =>
+    ipcRenderer.invoke("get-env", profile, target),
+
+  setEnv: (
+    key: string,
+    value: string,
+    profile?: string,
+    target?: ProviderRequestTarget,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("set-env", key, value, profile, target),
 
   validateChatReadiness: (
     profile?: string,
@@ -643,6 +657,7 @@ const hermesAPI = {
     baseUrl?: string,
     apiKey?: string,
     profile?: string,
+    target?: ProviderRequestTarget,
   ): Promise<{
     models: string[];
     status: "ok" | "no-key" | "error" | "unsupported" | "unknown-host";
@@ -658,6 +673,7 @@ const hermesAPI = {
       baseUrl,
       apiKey,
       profile,
+      target,
     ),
 
   getModelContextWindow: (
@@ -1285,14 +1301,22 @@ const hermesAPI = {
   // from API key, plus `id`/`priority`/`source` for rotation.
   getCredentialPool: (
     profile?: string,
+    target?: ProviderRequestTarget,
   ): Promise<Record<string, Array<CredentialPoolEntry>>> =>
-    ipcRenderer.invoke("get-credential-pool", profile),
+    ipcRenderer.invoke("get-credential-pool", profile, target),
   setCredentialPool: (
     provider: string,
     entries: Array<CredentialPoolEntry>,
     profile?: string,
+    target?: ProviderRequestTarget,
   ): Promise<boolean> =>
-    ipcRenderer.invoke("set-credential-pool", provider, entries, profile),
+    ipcRenderer.invoke(
+      "set-credential-pool",
+      provider,
+      entries,
+      profile,
+      target,
+    ),
   // Add a manually-typed key as a properly-shaped pool entry. Returns
   // the updated entries list for the provider.
   addCredentialPoolEntry: (
@@ -1300,6 +1324,7 @@ const hermesAPI = {
     apiKey: string,
     label: string,
     profile?: string,
+    target?: ProviderRequestTarget,
   ): Promise<Array<CredentialPoolEntry>> =>
     ipcRenderer.invoke(
       "add-credential-pool-entry",
@@ -1307,6 +1332,7 @@ const hermesAPI = {
       apiKey,
       label,
       profile,
+      target,
     ),
 
   // Models

@@ -45,3 +45,5 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[dashboard-shutdown]] — Local dashboard ownership and profile-independent app shutdown.
 
 - [[approval-completion]] — In-flight approval replies remain valid across early turn completion, with failure and lifecycle isolation.
+
+- [[remote-providers]] — Remote provider credential ownership and supported dashboard operations.

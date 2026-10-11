@@ -1,214 +1,411 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import ts from "typescript";
+import type { ConnectionConfig } from "./config";
 
-const request = vi.hoisted(() => vi.fn());
-
-vi.mock("./config", () => ({
-  getConnectionConfig: () => ({ mode: "remote", remoteUrl: "http://r:9119" }),
+const state = vi.hoisted(() => ({
+  connection: {} as ConnectionConfig,
+  request: vi.fn(),
+  getConnection: vi.fn(),
+  probe: vi.fn(),
 }));
-vi.mock("./remote-api", () => ({ remoteDashboardRequestJson: request }));
-
+vi.mock("./config", () => ({
+  getConnectionConfig: (...args: unknown[]) => state.getConnection(...args),
+}));
+vi.mock("./remote-api", () => ({ remoteDashboardRequestJson: state.request }));
+vi.mock("./remote-oauth", () => ({ probeRemoteAuthMode: state.probe }));
+import {
+  providerTargetRevision,
+  beginProviderAuthChange,
+  finishProviderAuthChange,
+} from "./provider-request-target";
 import {
   discoverModelsRemote,
-  resetRemoteProvidersState,
-  isShownRedactedPreview,
   remoteAddCredentialPoolEntry,
   remoteGetCredentialPool,
   remoteGetEnv,
   remoteSetCredentialPool,
   remoteSetEnv,
+  resetRemoteProvidersState,
 } from "./remote-providers";
 
+function connection(
+  url = "http://a:9119",
+  apiKey = "account-a",
+): ConnectionConfig {
+  return {
+    mode: "remote",
+    remoteUrl: url,
+    apiKey,
+    remoteAuthMode: "token",
+    remoteChatTransport: "dashboard",
+    sshChatTransport: "auto",
+    ssh: {} as ConnectionConfig["ssh"],
+  };
+}
 const POOL = {
   providers: [
     {
       provider: "openai",
       entries: [
-        { index: 1, id: "a1", label: "one", token_preview: "sk-a…1111" },
-        { index: 2, id: "b2", label: "two", token_preview: "sk-b…2222" },
+        { id: "a1", label: "A", token_preview: "sk-a…1111" },
+        { id: "a2", label: "B", token_preview: "sk-a…2222" },
       ],
     },
   ],
 };
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
 
-describe("remote providers env", () => {
+// Compile the registered callback and its routing helper from actual source.
+function ipcHandler(
+  name: string,
+  dependencies: Record<string, unknown>,
+): (...args: unknown[]) => unknown {
+  const source = readFileSync(
+    resolve(process.cwd(), "src/main/ipc/register.ts"),
+    "utf8",
+  );
+  const ast = ts.createSourceFile(
+    "register.ts",
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  let handler: ts.Expression | undefined;
+  let routing: ts.FunctionDeclaration | undefined;
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isFunctionDeclaration(node) &&
+      node.name?.text === "providerConnection"
+    )
+      routing = node;
+    if (
+      ts.isCallExpression(node) &&
+      node.expression.getText(ast) === "ipcMain.handle" &&
+      ts.isStringLiteral(node.arguments[0]) &&
+      node.arguments[0].text === name
+    )
+      handler = node.arguments[1];
+    ts.forEachChild(node, visit);
+  };
+  visit(ast);
+  if (!handler || !routing) throw new Error(`Missing actual handler ${name}`);
+  const code = ts.transpileModule(
+    `${routing.getText(ast)}\nconst handler = ${handler.getText(ast)};`,
+    { compilerOptions: { target: ts.ScriptTarget.ES2022 } },
+  ).outputText;
+  dependencies = { providerTargetRevision, ...dependencies };
+  return new Function(...Object.keys(dependencies), `${code};return handler;`)(
+    ...Object.values(dependencies),
+  );
+}
+
+describe("Remote provider target ownership", () => {
   beforeEach(() => {
-    request.mockReset();
+    state.connection = connection();
+    state.request.mockReset();
+    state.getConnection.mockReset().mockImplementation(() => state.connection);
     resetRemoteProvidersState();
+    state.probe.mockReset().mockResolvedValue({ authMode: "token" });
   });
 
-  it("returns only set keys, as redacted previews", async () => {
-    request.mockResolvedValue({
-      OPENAI_API_KEY: { is_set: true, redacted_value: "sk-…abcd" },
-      GROQ_API_KEY: { is_set: false, redacted_value: "" },
+  it("issues an opaque explicit-connection target without credentials and rejects implicit issuance", () => {
+    const issue = ipcHandler("get-provider-request-target", {
+      getConnectionConfig: state.getConnection,
     });
-    expect(await remoteGetEnv()).toEqual({ OPENAI_API_KEY: "sk-…abcd" });
+    expect(() => issue(null, undefined)).toThrow(
+      "explicit provider connection",
+    );
+    const target = issue(null, "A") as Record<string, unknown>;
+    expect(target).toEqual({
+      connectionId: "A",
+      mode: "remote",
+      remoteUrl: "http://a:9119",
+      revision: expect.any(String),
+    });
+    expect(JSON.stringify(target)).not.toContain("account-a");
+    state.connection.apiKey = "account-b";
+    expect((issue(null, "A") as Record<string, unknown>).revision).not.toBe(
+      target.revision,
+    );
   });
 
-  it("does not write an untouched redacted preview back", async () => {
-    request.mockResolvedValue({
-      OPENAI_API_KEY: { is_set: true, redacted_value: "sk-…abcd" },
+  it("returns only set redacted env values and explicitly scopes default", async () => {
+    state.request.mockResolvedValue({
+      OPENAI_API_KEY: { is_set: true, redacted_value: "sk-…a" },
+      GROQ_API_KEY: { is_set: false },
+    });
+    expect(await remoteGetEnv()).toEqual({ OPENAI_API_KEY: "sk-…a" });
+    expect(state.request.mock.calls[0][1]).toBe("/api/env?profile=default");
+  });
+
+  // @lat: [[remote-providers#Remote Providers#Late preview ownership]]
+  it("keeps an A env reply under A even after the selected server and token account change", async () => {
+    const reply = deferred<Record<string, unknown>>();
+    state.request.mockReturnValueOnce(reply.promise);
+    const pending = remoteGetEnv("work");
+    state.connection = connection("http://b:9119", "account-b");
+    reply.resolve({
+      OPENAI_API_KEY: { is_set: true, redacted_value: "sk-…a" },
+    });
+    await pending;
+    state.connection = connection();
+    state.request.mockClear();
+    await remoteSetEnv("OPENAI_API_KEY", "sk-…a", "work");
+    expect(state.request).not.toHaveBeenCalled();
+  });
+
+  it("separates preview ownership for equal URLs with distinct token accounts", async () => {
+    state.request.mockResolvedValue({
+      OPENAI_API_KEY: { is_set: true, redacted_value: "sk-…a" },
     });
     await remoteGetEnv();
-    request.mockClear();
-    await remoteSetEnv("OPENAI_API_KEY", "sk-…abcd");
-    expect(request).not.toHaveBeenCalled();
+    state.connection = connection("http://a:9119", "account-b");
+    state.request.mockClear().mockResolvedValue({});
+    await remoteSetEnv("OPENAI_API_KEY", "new-key");
+    expect(state.request.mock.calls[0][0].apiKey).toBe("account-b");
   });
 
-  it("recognises a redacted preview it handed out, so it is never used as a key", async () => {
-    request.mockResolvedValue({
-      OPENAI_API_KEY: { is_set: true, redacted_value: "sk-…abcd" },
+  it("captures a copy of connection data before an awaited key write", async () => {
+    const reply = deferred<unknown>();
+    state.request.mockReturnValue(reply.promise);
+    const pending = remoteSetEnv("OPENAI_API_KEY", "new-key", "work");
+    state.connection.remoteUrl = "http://b:9119";
+    state.connection.apiKey = "account-b";
+    reply.resolve({});
+    await pending;
+    expect(state.request.mock.calls[0][0]).toMatchObject({
+      remoteUrl: "http://a:9119",
+      apiKey: "account-a",
     });
-    expect(isShownRedactedPreview("sk-…abcd")).toBe(false);
-    await remoteGetEnv();
-    expect(isShownRedactedPreview("sk-…abcd")).toBe(true);
-    expect(isShownRedactedPreview("sk-real-looking-key")).toBe(false);
-    expect(isShownRedactedPreview(undefined)).toBe(false);
+    expect(state.request.mock.calls[0][1]).toBe("/api/env?profile=work");
   });
 
-  it("PUTs a new value and DELETEs an empty one", async () => {
-    request.mockResolvedValue({});
-    await remoteSetEnv("OPENAI_API_KEY", "sk-new");
-    await remoteSetEnv("OPENAI_API_KEY", "");
-    expect(request.mock.calls.map((c) => [c[1], c[2]])).toEqual([
-      [
-        "/api/env",
-        { method: "PUT", body: { key: "OPENAI_API_KEY", value: "sk-new" } },
-      ],
-      ["/api/env", { method: "DELETE", body: { key: "OPENAI_API_KEY" } }],
+  it("uses PUT for a new key and DELETE for clearing; unset404 is already cleared", async () => {
+    state.request.mockResolvedValue({});
+    await remoteSetEnv("OPENAI_API_KEY", "new-key");
+    state.request.mockRejectedValueOnce(
+      Object.assign(new Error("not found"), { statusCode: 404 }),
+    );
+    expect(await remoteSetEnv("OPENAI_API_KEY", "")).toBe(true);
+    expect(state.request.mock.calls.map((call) => call[2].method)).toEqual([
+      "PUT",
+      "DELETE",
     ]);
   });
 
-  it("treats deleting an unset key as success", async () => {
-    request.mockImplementation(async () => {
-      throw Object.assign(new Error("404"), { statusCode: 404 });
-    });
-    expect(await remoteSetEnv("NOPE_API_KEY", "")).toBe(true);
+  it("fails closed on Remote auth/read errors", async () => {
+    state.request.mockRejectedValue(new Error("OAuth login required"));
+    await expect(remoteGetEnv()).rejects.toThrow("OAuth");
   });
-});
-
-describe("remote credential pool", () => {
-  beforeEach(() => {
-    request.mockReset();
-    resetRemoteProvidersState();
-  });
-
-  it("maps server entries to the local shape with the redacted preview", async () => {
-    request.mockResolvedValue(POOL);
-    const pool = await remoteGetCredentialPool();
-    expect(pool.openai[0]).toMatchObject({
+  it("returns redacted pool entries", async () => {
+    state.request.mockResolvedValue(POOL);
+    expect((await remoteGetCredentialPool()).openai[0]).toMatchObject({
       id: "a1",
-      label: "one",
       access_token: "sk-a…1111",
     });
   });
 
-  it("adds an entry and returns the refreshed list", async () => {
-    request.mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce(POOL);
-    const entries = await remoteAddCredentialPoolEntry("openai", "sk-x", "k");
-    expect(request.mock.calls[0][1]).toBe("/api/credentials/pool");
-    expect(request.mock.calls[0][2]).toEqual({
-      method: "POST",
-      body: { provider: "openai", api_key: "sk-x", label: "k" },
-    });
-    expect(entries).toHaveLength(2);
+  // @lat: [[remote-providers#Remote Providers#Pool add retains original target]]
+  it("retains A connection and profile across POST and refresh after switching to B", async () => {
+    const admitted = deferred<unknown>();
+    state.request
+      .mockReturnValueOnce(admitted.promise)
+      .mockResolvedValueOnce(POOL);
+    const pending = remoteAddCredentialPoolEntry(
+      "openai",
+      "new-key",
+      "label",
+      "default",
+    );
+    state.connection = connection("http://b:9119", "account-b");
+    admitted.resolve({ ok: true });
+    expect(await pending).toHaveLength(2);
+    expect(state.request.mock.calls.map((call) => call[0].remoteUrl)).toEqual([
+      "http://a:9119",
+      "http://a:9119",
+    ]);
+    expect(state.request.mock.calls.map((call) => call[1])).toEqual([
+      "/api/credentials/pool?profile=default",
+      "/api/credentials/pool?profile=default",
+    ]);
   });
 
-  it("deletes the entry the user removed, found by id in a fresh server list", async () => {
-    request.mockResolvedValueOnce(POOL); // what the screen was shown
+  // @lat: [[remote-providers#Remote Providers#Named pool operations fail closed]]
+  it("refuses named-profile pool reads and additions before HTTP because Agent ignores profile", async () => {
+    await expect(remoteGetCredentialPool("work")).rejects.toThrow(
+      "profile-scoped",
+    );
+    await expect(
+      remoteAddCredentialPoolEntry("openai", "key", "label", "work"),
+    ).rejects.toThrow("profile-scoped");
+    expect(state.request).not.toHaveBeenCalled();
+  });
+
+  // @lat: [[remote-providers#Remote Providers#Deletion race refuses HTTP]]
+  it("never dispatches index deletion even for loaded A entries after A to B selection", async () => {
+    state.request.mockResolvedValue(POOL);
     await remoteGetCredentialPool();
-    request.mockClear();
-    request.mockResolvedValueOnce(POOL).mockResolvedValueOnce({ ok: true });
-    await remoteSetCredentialPool("openai", [{ id: "a1" }]);
-    expect(request.mock.calls[1][1]).toBe("/api/credentials/pool/openai/2");
-    expect(request.mock.calls[1][2]).toEqual({ method: "DELETE" });
+    state.connection = connection("http://b:9119");
+    state.request.mockClear();
+    await expect(
+      remoteSetCredentialPool("openai", [{ id: "a1" }]),
+    ).rejects.toThrow("unavailable");
+    expect(state.request).not.toHaveBeenCalled();
   });
 
-  it("refuses when the credential the user removed was replaced on the server meanwhile", async () => {
-    request.mockResolvedValueOnce(POOL);
-    await remoteGetCredentialPool(); // screen shows [a1, b2]
-    request.mockClear();
-    // Another client replaced b2 with c3: the fresh list is [a1, c3].
-    request.mockResolvedValueOnce({
+  // @lat: [[remote-providers#Remote Providers#Agent owned discovery]]
+  it("uses selected Agent profile catalog without invoking any desktop key or account cache", async () => {
+    state.request.mockResolvedValue({
+      providers: [{ slug: "openai-codex", models: ["remote-model"] }],
+    });
+    expect(
+      await discoverModelsRemote("openai-codex", undefined, "work"),
+    ).toEqual({
+      models: ["remote-model"],
+      status: "unsupported",
+      cached: false,
+    });
+    expect(state.request.mock.calls[0][1]).toBe(
+      "/api/model/options?profile=work",
+    );
+    expect(state.request.mock.calls[0][0].remoteUrl).toBe("http://a:9119");
+  });
+
+  it("does not mix catalogs from an unmatched custom endpoint", async () => {
+    state.request.mockResolvedValue({
       providers: [
-        {
-          provider: "openai",
-          entries: [
-            { index: 1, id: "a1" },
-            { index: 2, id: "c3" },
-          ],
-        },
+        { slug: "custom", api_url: "https://a.example/v1", models: ["A"] },
       ],
     });
-    await expect(
-      remoteSetCredentialPool("openai", [{ id: "a1" }]),
-    ).rejects.toThrow(/no longer exists/);
-    // Only the list was read; nothing was deleted.
-    expect(request).toHaveBeenCalledTimes(1);
+    expect(
+      (await discoverModelsRemote("custom", "https://b.example/v1")).models,
+    ).toEqual([]);
   });
 
-  it("refuses to delete before the list was ever loaded", async () => {
-    await expect(
-      remoteSetCredentialPool("anthropic", [{ id: "x" }]),
-    ).rejects.toThrow(/not loaded/);
-    expect(request).not.toHaveBeenCalled();
-  });
-
-  it("refuses to delete more than one credential in a single call", async () => {
-    request.mockResolvedValueOnce(POOL);
-    await remoteGetCredentialPool();
-    request.mockClear();
-    await expect(remoteSetCredentialPool("openai", [])).rejects.toThrow(
-      /multiple/,
+  // @lat: [[remote-providers#Remote Providers#Explicit IPC routing]]
+  it("actual env IPC resolves explicit A while B is active and rejects changed mode or URL", async () => {
+    const localRead = vi.fn();
+    const selected = connection();
+    const getConfig = vi.fn((id?: string) =>
+      id === "A" ? selected : connection("http://b:9119"),
     );
-    expect(request).not.toHaveBeenCalled();
+    const handler = ipcHandler("get-env", {
+      getConnectionConfig: getConfig,
+      remoteGetEnv,
+      readEnv: localRead,
+    });
+    state.request.mockResolvedValue({});
+    const target = {
+      connectionId: "A",
+      mode: "remote",
+      remoteUrl: "http://a:9119",
+      revision: providerTargetRevision(selected),
+    };
+    await handler(undefined, "work", target);
+    expect(getConfig).toHaveBeenCalledWith("A");
+    expect(localRead).not.toHaveBeenCalled();
+    expect(state.request.mock.calls[0][0].remoteUrl).toBe("http://a:9119");
+    selected.mode = "local";
+    expect(() => handler(undefined, "work", target)).toThrow("changed");
+    expect(localRead).not.toHaveBeenCalled();
+    selected.mode = "remote";
+    selected.remoteUrl = "http://new:9119";
+    expect(() => handler(undefined, "work", target)).toThrow("changed");
   });
 
-  it("keeps each profile's pool separate and sends the profile to the server", async () => {
-    request.mockResolvedValue(POOL);
-    await remoteGetCredentialPool("work");
-    expect(request.mock.calls[0][1]).toBe("/api/credentials/pool?profile=work");
-    request.mockClear();
-    // 'default' was never loaded, so removal there is refused even though
-    // 'work' showed the same ids.
+  // @lat: [[remote-providers#Remote Providers#Stale authentication revisions are rejected]]
+  it("actual env IPC refuses an old typed draft after same-ID same-URL token or auth changes", async () => {
+    const selected = connection();
+    const target = {
+      connectionId: "A",
+      mode: "remote",
+      remoteUrl: selected.remoteUrl,
+      revision: providerTargetRevision(selected),
+    };
+    const localWrite = vi.fn();
+    const handler = ipcHandler("set-env", {
+      getConnectionConfig: () => selected,
+      remoteSetEnv,
+      setEnvValue: localWrite,
+    });
+    selected.apiKey = "account-b";
     await expect(
-      remoteSetCredentialPool("openai", [{ id: "a1" }]),
-    ).rejects.toThrow(/not loaded/);
+      handler(undefined, "OPENAI_API_KEY", "typed-account-a", "work", target),
+    ).rejects.toThrow("changed");
+    selected.apiKey = "account-a";
+    selected.remoteAuthMode = "oauth";
+    await expect(
+      handler(undefined, "OPENAI_API_KEY", "typed-account-a", "work", target),
+    ).rejects.toThrow("changed");
+    expect(state.request).not.toHaveBeenCalled();
+    expect(localWrite).not.toHaveBeenCalled();
   });
 
-  it("never sends a shown preview to the provider, but still runs key-independent discovery", async () => {
-    request.mockResolvedValue({
-      NOUS_API_KEY: { is_set: true, redacted_value: "nous-…9z" },
-    });
-    await remoteGetEnv();
-    // A catalog/OAuth provider lists models without any key: keep them.
-    const nous = vi
-      .fn()
-      .mockResolvedValue({ models: ["a", "b"], status: "ok" });
-    expect(await discoverModelsRemote("nous-…9z", nous)).toEqual({
-      models: ["a", "b"],
-      status: "ok",
-    });
-    expect(nous).toHaveBeenCalledWith(undefined);
+  it("rejects an OAuth account change during auto auth resolution before HTTP dispatch", async () => {
+    state.connection.remoteAuthMode = "auto";
+    const probed = deferred<{ authMode: "oauth" }>();
+    state.probe.mockReturnValueOnce(probed.promise);
+    const pending = remoteSetEnv("OPENAI_API_KEY", "typed-A", "work");
+    beginProviderAuthChange(state.connection.remoteUrl);
+    finishProviderAuthChange(state.connection.remoteUrl);
+    probed.resolve({ authMode: "oauth" });
+    await expect(pending).rejects.toThrow("authentication changed");
+    expect(state.request).not.toHaveBeenCalled();
   });
 
-  it("reports unsupported, not a failed key check, for a key-based provider without the real key", async () => {
-    request.mockResolvedValue({
-      OPENAI_API_KEY: { is_set: true, redacted_value: "sk-…abcd" },
-    });
-    await remoteGetEnv();
-    const openai = vi
-      .fn()
-      .mockResolvedValue({ models: [], status: "no-key", cached: false });
-    expect(await discoverModelsRemote("sk-…abcd", openai)).toMatchObject({
-      models: [],
-      status: "unsupported",
-    });
-    expect(openai).toHaveBeenCalledWith(undefined);
+  it("does not refresh a pool under a new OAuth account after an admitted add", async () => {
+    state.connection.remoteAuthMode = "oauth";
+    const admitted = deferred<unknown>();
+    state.request.mockReturnValueOnce(admitted.promise);
+    const pending = remoteAddCredentialPoolEntry("openai", "key-A", "A");
+    beginProviderAuthChange(state.connection.remoteUrl);
+    finishProviderAuthChange(state.connection.remoteUrl);
+    admitted.resolve({ ok: true });
+    await expect(pending).rejects.toThrow("authentication changed");
+    expect(state.request).toHaveBeenCalledTimes(1);
   });
 
-  it("leaves a real (typed) key untouched", async () => {
-    const discover = vi.fn().mockResolvedValue({ models: ["m"], status: "ok" });
-    await discoverModelsRemote("sk-typed-by-user", discover);
-    expect(discover).toHaveBeenCalledWith("sk-typed-by-user");
+  it("actual discover IPC never invokes local discovery even with a typed key", async () => {
+    const localDiscovery = vi.fn();
+    const handler = ipcHandler("discover-provider-models", {
+      getConnectionConfig: () => state.connection,
+      discoverModelsRemote,
+      discoverProviderModels: localDiscovery,
+    });
+    state.request.mockResolvedValue({ providers: [] });
+    await handler(undefined, "openai", undefined, "typed-key", "work");
+    expect(localDiscovery).not.toHaveBeenCalled();
+    expect(state.request).toHaveBeenCalledTimes(1);
+  });
+
+  it("actual Remote writes require explicit targets and never mutate local env or pool", async () => {
+    const localWrite = vi.fn();
+    const handler = ipcHandler("set-env", {
+      getConnectionConfig: () => state.connection,
+      remoteSetEnv,
+      setEnvValue: localWrite,
+    });
+    await expect(
+      handler(undefined, "OPENAI_API_KEY", "desktop-key", "default"),
+    ).rejects.toThrow("explicit connection");
+    expect(localWrite).not.toHaveBeenCalled();
+    expect(state.request).not.toHaveBeenCalled();
+    const poolWrite = ipcHandler("set-credential-pool", {
+      getConnectionConfig: () => state.connection,
+      remoteSetCredentialPool,
+      setCredentialPool: localWrite,
+    });
+    await expect(
+      poolWrite(undefined, "openai", [{ id: "a1" }], "default"),
+    ).rejects.toThrow("unavailable");
+    expect(localWrite).not.toHaveBeenCalled();
   });
 });

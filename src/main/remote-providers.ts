@@ -1,11 +1,10 @@
-import { getConnectionConfig } from "./config";
+import { providerTargetRevision } from "./provider-request-target";
+import { probeRemoteAuthMode } from "./remote-oauth";
+import type { RemoteDashboardRequestOptions } from "./remote-api";
+import { getConnectionConfig, type ConnectionConfig } from "./config";
 import { remoteDashboardRequestJson } from "./remote-api";
-
-// Remote (HTTP) mode backing for the Providers screen: API keys (.env) and the
-// credential pool live on the server and are reached through the dashboard's
-// /api/env and /api/credentials/pool. The server only ever returns REDACTED
-// previews, so the renderer never holds a real secret from a remote read, and
-// the server refuses to accept a preview back as a write.
+import type { DiscoverModelsResult } from "./model-discovery";
+import { normalizeModelEndpointUrl } from "../shared/model-endpoint";
 
 export interface RemoteCredentialEntry {
   id?: string;
@@ -18,64 +17,93 @@ export interface RemoteCredentialEntry {
 }
 
 type EnvRow = { is_set?: boolean; redacted_value?: string | null };
-type PoolEntry = {
-  index: number;
-  id?: string;
-  label?: string;
-  auth_type?: string;
-  source?: string;
-  priority?: number;
-  request_count?: number;
-  token_preview?: string;
-};
-
-// Last redacted previews handed to the renderer, per connection + profile. The
-// Providers screen blur-saves every field it shows; writing an untouched preview
-// back is pointless (the server rejects it), so those are skipped client-side.
-// Keyed by server too: switching servers must not reuse another server's state.
+type PoolEntry = RemoteCredentialEntry & { token_preview?: string };
 const shownPreviews = new Map<string, Map<string, string>>();
+const authSnapshots = new WeakMap<ConnectionConfig, string>();
 
-function targetKey(profile?: string): string {
-  return `${getConnectionConfig().remoteUrl}\u0000${profile || "default"}`;
+function capture(connection?: ConnectionConfig): ConnectionConfig {
+  const current = connection ?? getConnectionConfig();
+  if (current.mode !== "remote") {
+    throw new Error("Remote providers require a direct Remote connection.");
+  }
+  const captured = { ...current, ssh: { ...current.ssh } };
+  authSnapshots.set(captured, providerTargetRevision(captured));
+  return captured;
 }
 
-/**
- * True for a value this module itself handed out as a redacted preview. Such a
- * value is display-only and must never be used as a credential (e.g. sent to a
- * provider as a bearer token).
- */
-export function isShownRedactedPreview(value: string | undefined): boolean {
-  if (!value) return false;
-  for (const previews of shownPreviews.values()) {
-    for (const preview of previews.values()) {
-      if (preview === value) return true;
-    }
-  }
-  return false;
+async function providerRequest<T>(
+  connection: ConnectionConfig,
+  path: string,
+  options?: RemoteDashboardRequestOptions,
+): Promise<T> {
+  const revision = authSnapshots.get(connection);
+  const assertAuth = (): void => {
+    if (revision !== providerTargetRevision(connection))
+      throw new Error("Remote authentication changed; reload and retry.");
+  };
+  assertAuth();
+  const authMode =
+    connection.remoteAuthMode === "auto"
+      ? (await probeRemoteAuthMode(connection.remoteUrl)).authMode
+      : connection.remoteAuthMode;
+  assertAuth();
+  const result = await remoteDashboardRequestJson<T>(
+    { ...connection, remoteAuthMode: authMode },
+    path,
+    options,
+  );
+  assertAuth();
+  return result;
+}
+
+function targetKey(connection: ConnectionConfig, profile?: string): string {
+  // Equal URLs can belong to different token accounts. This private cache key
+  // never crosses IPC, and an awaited reply retains its original owner.
+  return JSON.stringify([
+    connection.remoteUrl,
+    connection.remoteAuthMode,
+    connection.apiKey,
+    authSnapshots.get(connection),
+    profile || "default",
+  ]);
 }
 
 function profileQuery(path: string, profile?: string): string {
-  return profile && profile !== "default"
-    ? `${path}?profile=${encodeURIComponent(profile)}`
-    : path;
+  return `${path}${path.includes("?") ? "&" : "?"}profile=${encodeURIComponent(profile || "default")}`;
+}
+
+function requireDefaultPoolProfile(profile?: string): void {
+  // Current Agent pool routes ignore profile parameters entirely. Do not
+  // pretend that a named-profile query protects another profile's accounts.
+  if (profile && profile !== "default") {
+    throw new Error(
+      "Remote credential pools are available only for the default profile; this server API does not support profile-scoped pool operations.",
+    );
+  }
 }
 
 export async function remoteGetEnv(
   profile?: string,
+  connection?: ConnectionConfig,
 ): Promise<Record<string, string>> {
-  const rows = await remoteDashboardRequestJson<Record<string, EnvRow>>(
-    getConnectionConfig(),
+  const conn = capture(connection);
+  const owner = targetKey(conn, profile);
+  const rows = await providerRequest<Record<string, EnvRow>>(
+    conn,
     profileQuery("/api/env", profile),
   );
+  if (!rows || typeof rows !== "object" || Array.isArray(rows)) {
+    throw new Error("Remote environment response was invalid.");
+  }
   const env: Record<string, string> = {};
   const previews = new Map<string, string>();
-  for (const [key, row] of Object.entries(rows ?? {})) {
+  for (const [key, row] of Object.entries(rows)) {
     if (!row?.is_set) continue;
     const preview = row.redacted_value || "***";
     env[key] = preview;
     previews.set(key, preview);
   }
-  shownPreviews.set(targetKey(profile), previews);
+  shownPreviews.set(owner, previews);
   return env;
 }
 
@@ -83,89 +111,72 @@ export async function remoteSetEnv(
   key: string,
   value: string,
   profile?: string,
+  connection?: ConnectionConfig,
 ): Promise<boolean> {
-  const conn = getConnectionConfig();
-  const previews = shownPreviews.get(targetKey(profile));
-  if (value && previews?.get(key) === value) return true; // untouched preview
+  const conn = capture(connection);
+  const previews = shownPreviews.get(targetKey(conn, profile));
+  if (value && previews?.get(key) === value) return true;
+  if (
+    value &&
+    Array.from(shownPreviews.values()).some((owner) =>
+      Array.from(owner.values()).includes(value),
+    )
+  ) {
+    throw new Error(
+      "Display-only credential previews cannot be saved as keys.",
+    );
+  }
   if (!value) {
     try {
-      await remoteDashboardRequestJson(
-        conn,
-        profileQuery("/api/env", profile),
-        { method: "DELETE", body: { key } },
-      );
-    } catch (err) {
-      // Clearing a key that is not set is already the desired state.
-      if ((err as { statusCode?: number }).statusCode !== 404) throw err;
+      await providerRequest(conn, profileQuery("/api/env", profile), {
+        method: "DELETE",
+        body: { key },
+      });
+    } catch (error) {
+      if ((error as { statusCode?: number }).statusCode !== 404) throw error;
     }
-    previews?.delete(key);
-    return true;
+  } else {
+    await providerRequest(conn, profileQuery("/api/env", profile), {
+      method: "PUT",
+      body: { key, value },
+    });
   }
-  await remoteDashboardRequestJson(conn, profileQuery("/api/env", profile), {
-    method: "PUT",
-    body: { key, value },
-  });
   previews?.delete(key);
   return true;
 }
 
 async function listPool(
+  conn: ConnectionConfig,
   profile?: string,
-): Promise<Record<string, PoolEntry[]>> {
-  const data = await remoteDashboardRequestJson<{
-    providers?: Array<{ provider: string; entries: PoolEntry[] }>;
-  }>(getConnectionConfig(), profileQuery("/api/credentials/pool", profile));
-  const pool: Record<string, PoolEntry[]> = {};
-  for (const p of data?.providers ?? []) pool[p.provider] = p.entries ?? [];
-  return pool;
-}
-
-function toLocalEntry(entry: PoolEntry): RemoteCredentialEntry {
-  return {
-    id: entry.id,
-    label: entry.label,
-    auth_type: entry.auth_type,
-    source: entry.source,
-    priority: entry.priority,
-    request_count: entry.request_count,
-    access_token: entry.token_preview,
-  };
-}
-
-// Ids of the pool entries last shown to the renderer, per connection + profile
-// + provider. A removal is expressed by the renderer as "the list without X";
-// only this record says which entry the user actually removed.
-const shownPools = new Map<string, string[]>();
-
-function poolKey(provider: string, profile?: string): string {
-  return `${targetKey(profile)}\u0000${provider}`;
-}
-
-function rememberPool(
-  provider: string,
-  entries: RemoteCredentialEntry[],
-  profile?: string,
-): void {
-  shownPools.set(
-    poolKey(provider, profile),
-    entries.map((e) => e.id).filter((id): id is string => Boolean(id)),
+): Promise<Record<string, RemoteCredentialEntry[]>> {
+  requireDefaultPoolProfile(profile);
+  const data = await providerRequest<{
+    providers: Array<{ provider: string; entries: PoolEntry[] }>;
+  }>(conn, profileQuery("/api/credentials/pool", profile));
+  if (!Array.isArray(data?.providers)) {
+    throw new Error("Remote credential pool response was invalid.");
+  }
+  return Object.fromEntries(
+    data.providers.map((provider) => [
+      provider.provider,
+      provider.entries.map((entry) => ({
+        id: entry.id,
+        label: entry.label,
+        auth_type: entry.auth_type,
+        source: entry.source,
+        priority: entry.priority,
+        request_count: entry.request_count,
+        access_token: entry.token_preview,
+      })),
+    ]),
   );
 }
 
 export async function remoteGetCredentialPool(
   profile?: string,
+  connection?: ConnectionConfig,
 ): Promise<Record<string, RemoteCredentialEntry[]>> {
-  const pool = await listPool(profile);
-  const mapped = Object.fromEntries(
-    Object.entries(pool).map(([provider, entries]) => [
-      provider,
-      entries.map(toLocalEntry),
-    ]),
-  );
-  for (const [provider, entries] of Object.entries(mapped)) {
-    rememberPool(provider, entries, profile);
-  }
-  return mapped;
+  return listPool(capture(connection), profile);
 }
 
 export async function remoteAddCredentialPoolEntry(
@@ -173,91 +184,67 @@ export async function remoteAddCredentialPoolEntry(
   apiKey: string,
   label: string,
   profile?: string,
+  connection?: ConnectionConfig,
 ): Promise<RemoteCredentialEntry[]> {
-  await remoteDashboardRequestJson(
-    getConnectionConfig(),
-    profileQuery("/api/credentials/pool", profile),
-    {
-      method: "POST",
-      body: { provider, api_key: apiKey, label: label || undefined },
-    },
-  );
-  const entries = (await remoteGetCredentialPool(profile))[provider] ?? [];
-  rememberPool(provider, entries, profile);
-  return entries;
+  const conn = capture(connection);
+  requireDefaultPoolProfile(profile);
+  await providerRequest(conn, profileQuery("/api/credentials/pool", profile), {
+    method: "POST",
+    body: { provider, api_key: apiKey, label: label || undefined },
+  });
+  return (await listPool(conn, profile))[provider] ?? [];
 }
 
-/**
- * The renderer removes a key by sending the provider's remaining entries. The
- * server has no "replace" — it deletes by 1-based index. The removed entry is
- * the one the renderer was SHOWN but no longer sends; it is then looked up by
- * id in a fresh server list, so an entry that another client changed in the
- * meantime is never deleted by mistake — if the chosen credential is gone, the
- * call is refused instead. Nothing is ever added here.
- */
+// @lat: [[remote-providers#Remote Providers#Pool removal requires atomic identity]]
 export async function remoteSetCredentialPool(
-  provider: string,
-  entries: RemoteCredentialEntry[],
-  profile?: string,
+  _provider: string,
+  _entries: RemoteCredentialEntry[],
+  _profile?: string,
+  connection?: ConnectionConfig,
 ): Promise<boolean> {
-  const shown = shownPools.get(poolKey(provider, profile));
-  if (!shown) {
-    throw new Error("Credential list was not loaded; reload and retry.");
-  }
-  const sent = new Set(entries.map((e) => e.id).filter(Boolean));
-  const removedIds = shown.filter((id) => !sent.has(id));
-  if (removedIds.length === 0) return true;
-  // The screen removes one key at a time. A bigger diff means the renderer's
-  // list is stale or malformed — refuse rather than delete server secrets.
-  if (removedIds.length > 1) {
-    throw new Error(
-      "Refusing to remove multiple remote credentials at once; reload and retry.",
-    );
-  }
-  const target = ((await listPool(profile))[provider] ?? []).find(
-    (e) => e.id === removedIds[0],
+  capture(connection);
+  // A fresh ID lookup followed by an index-only DELETE still races another
+  // client. The Agent must atomically compare the chosen ID before removing it.
+  throw new Error(
+    "Remote credential removal is unavailable in this server API. Remove the selected account in the server dashboard.",
   );
-  if (!target) {
-    throw new Error(
-      "That credential no longer exists on the server; reload and retry.",
-    );
-  }
-  await remoteDashboardRequestJson(
-    getConnectionConfig(),
-    profileQuery(
-      `/api/credentials/pool/${encodeURIComponent(provider)}/${target.index}`,
-      profile,
-    ),
-    { method: "DELETE" },
-  );
-  rememberPool(provider, entries, profile);
-  return true;
 }
 
-/**
- * Model discovery in Remote mode. A key the screen holds is only ever a REDACTED
- * preview; sending it to the provider as a bearer token fails and reads as a bad
- * key, so it is dropped. Discovery still runs without it because some providers
- * (OAuth/catalog ones such as Nous) don't use the key. When a key-based provider
- * has nothing to list without the real key, report "unsupported" instead of
- * "no key"/"error" for a key that is in fact set.
- */
-export async function discoverModelsRemote<
-  R extends { models: unknown[]; status: string },
->(
-  apiKey: string | undefined,
-  discover: (key: string | undefined) => Promise<R>,
-): Promise<R> {
-  if (!isShownRedactedPreview(apiKey)) return discover(apiKey);
-  const result = await discover(undefined);
-  return result.models.length === 0 &&
-    (result.status === "no-key" || result.status === "error")
-    ? { ...result, status: "unsupported" }
-    : result;
+/** Account-aware catalogs come from the selected Agent, never desktop keys/cache. */
+export async function discoverModelsRemote(
+  provider: string,
+  baseUrl: string | undefined,
+  profile?: string,
+  connection?: ConnectionConfig,
+): Promise<DiscoverModelsResult> {
+  const conn = capture(connection);
+  const data = await providerRequest<{
+    providers?: Array<{
+      slug?: string;
+      provider?: string;
+      api_url?: string;
+      base_url?: string;
+      models?: string[];
+    }>;
+  }>(conn, profileQuery("/api/model/options", profile));
+  const wanted = provider.trim().toLowerCase();
+  const row = data?.providers?.find(
+    (candidate) =>
+      (candidate.slug || candidate.provider || "").toLowerCase() === wanted &&
+      (!baseUrl ||
+        normalizeModelEndpointUrl(
+          candidate.api_url || candidate.base_url || "",
+        ) === normalizeModelEndpointUrl(baseUrl)),
+  );
+  // Catalog presence is not live credential verification. The UI may offer
+  // the Agent's models without falsely claiming the redacted key was tested.
+  return {
+    models: row?.models?.filter((model) => typeof model === "string") ?? [],
+    status: "unsupported",
+    cached: false,
+  };
 }
 
-/** Test seam: forget everything shown to the renderer. */
 export function resetRemoteProvidersState(): void {
   shownPreviews.clear();
-  shownPools.clear();
 }
