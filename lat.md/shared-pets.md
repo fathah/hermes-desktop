@@ -65,3 +65,11 @@ A delayed native prompt reply cannot fail a replacement turn, clear its loading 
 ### Current native failure
 
 A failure of the currently submitted turn still clears its loading state, displays its error and projects one failure event for that turn's pet owner.
+
+### Connection teardown retires its turn
+
+A connection edit immediately fails only the still-current originating UI turn, including pending session creation or prompt submission. Old replies cannot mutate the new runtime, persist old-target errors or project a current-authority pet failure.
+
+### Initial handshake teardown settles its turn
+
+Editing the connection during initial Dashboard startup releases the originating turn's loading state. A delayed handshake cannot dispatch its session or prompt on the edited target.

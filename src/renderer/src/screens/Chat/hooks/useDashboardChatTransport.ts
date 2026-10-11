@@ -1032,6 +1032,7 @@ export function useDashboardChatTransport({
   const connectingRef = useRef<Promise<DashboardGatewayClient> | null>(null);
   const clientGenerationRef = useRef(0);
   const submissionGenerationRef = useRef(0);
+  const retireSupersededSubmissionRef = useRef<(() => true) | null>(null);
   // Sticky "dashboard transport can't connect on this remote/SSH connection"
   // flag. The dashboard WebSocket (`/api/ws`) never connects against a tunneled
   // `hermes gateway` (issue #667), so once we've learned it's unavailable we
@@ -1217,6 +1218,8 @@ export function useDashboardChatTransport({
 
   useEffect(() => {
     clientGenerationRef.current += 1;
+    retireSupersededSubmissionRef.current?.();
+    retireSupersededSubmissionRef.current = null;
     cumulativeUsageRef.current.clear();
     subagentResumeRef.current = null;
     dashboardUnavailableRef.current = false;
@@ -2058,6 +2061,33 @@ export function useDashboardChatTransport({
         conversationGenerationRef.current === conversationGeneration;
       const ownsSubmission = (): boolean =>
         ownsLifetime() && activeTurnRef.current === submittedTurn;
+      const retireSupersededSubmission = (): true => {
+        // Teardown may invalidate the socket while this exact originating turn
+        // still owns the UI. Retire only that turn; never touch current runtime
+        // refs, persist an old-target error or project into a new pet authority.
+        if (
+          retireSupersededSubmissionRef.current ===
+            retireSupersededSubmission &&
+          submittedTurn &&
+          submissionGenerationRef.current === submissionGeneration &&
+          conversationGenerationRef.current === conversationGeneration &&
+          activeTurnRef.current === submittedTurn
+        ) {
+          submittedTurn.status = "failed";
+          setMessages((messages) =>
+            markActiveTurnFailed(
+              messages,
+              "Dashboard connection changed during this turn. Retry on the current chat.",
+              submittedTurn,
+            ),
+          );
+          activeTurnRef.current = null;
+          setToolProgress(null);
+          setIsLoading(false);
+        }
+        return true;
+      };
+      retireSupersededSubmissionRef.current = retireSupersededSubmission;
       const assertSubmission = (): void => {
         if (!ownsSubmission())
           throw new Error("Hermes dashboard submission was superseded");
@@ -2076,7 +2106,7 @@ export function useDashboardChatTransport({
             !ownsLifetime() ||
             (activeTurnRef.current && activeTurnRef.current !== submittedTurn)
           )
-            return true;
+            return retireSupersededSubmission();
           const message = err instanceof Error ? err.message : String(err);
           const activeTurn = submittedTurn;
           if (activeTurn) activeTurn.status = "failed";
@@ -2128,7 +2158,7 @@ export function useDashboardChatTransport({
       const failActiveTurn = (message: string): true => {
         // The native request is already handled; an obsolete reply must not
         // fail a replacement turn or send it through the legacy fallback.
-        if (!ownsSubmission()) return true;
+        if (!ownsSubmission()) return retireSupersededSubmission();
         onPetFailure?.();
         const activeTurn = submittedTurn;
         if (activeTurn) activeTurn.status = "failed";
@@ -2174,7 +2204,7 @@ export function useDashboardChatTransport({
       try {
         client = await ensureClient();
       } catch (err) {
-        if (!ownsSubmission()) return true;
+        if (!ownsSubmission()) return retireSupersededSubmission();
         // Dashboard was reachable but the chat WS wouldn't connect: do NOT fall
         // back to the /v1 path — over the dashboard tunnel /v1 doesn't exist and
         // 405s. Surface the error so the user retries on the same transport.
@@ -2192,7 +2222,7 @@ export function useDashboardChatTransport({
         return failActiveTurn(message);
       }
 
-      if (!ownsSubmission()) return true;
+      if (!ownsSubmission()) return retireSupersededSubmission();
       // Session/model/attachment helpers may mutate runtime refs after their
       // awaits. Admit each response only while this submission still owns them.
       const submissionClient: DashboardPromptClient = {
@@ -2255,7 +2285,7 @@ export function useDashboardChatTransport({
         );
         assertSubmission();
         if (!syncedAttachments.handled) {
-          if (!ownsSubmission()) return true;
+          if (!ownsSubmission()) return retireSupersededSubmission();
           if (fallbackOnUnavailable) return false;
           return failActiveTurn(
             "Hermes dashboard could not attach the selected file. Use Auto or Legacy to fall back to the legacy attachment path.",
@@ -2286,7 +2316,7 @@ export function useDashboardChatTransport({
         });
         return true;
       } catch (err) {
-        if (!ownsSubmission()) return true;
+        if (!ownsSubmission()) return retireSupersededSubmission();
         appliedModelRef.current = null;
         recreateRuntimeSessionRef.current = true;
         const message = err instanceof Error ? err.message : String(err);
@@ -2457,6 +2487,7 @@ export function useDashboardChatTransport({
 
   useEffect(
     () => () => {
+      retireSupersededSubmissionRef.current = null;
       clientGenerationRef.current += 1;
       subagentResumeRef.current = null;
       expirePendingClarifyRef.current();
