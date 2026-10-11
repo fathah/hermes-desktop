@@ -163,6 +163,8 @@ A keyed Hermes One is mirrored into config.yaml as `providers: hermesone:` ([[sr
 
 This exists because desktop models on `inference.hermesone.org` are saved as bare `custom` + base URL, and the agent resolves `/model … --provider custom` against the **session's current** base URL — a session sitting on another provider (e.g. Nous) would send the Hermes One model to the wrong endpoint (the hermesone-swift → Nous-proxy 404). The named entry gives the switch a slug that always carries the right URL and `HERMESONE_API_KEY`; the dashboard transport's [[src/renderer/src/screens/Chat/hooks/useDashboardChatTransport.ts#resolveDashboardProviderForModel]] correspondingly matches **any** gateway provider row by base URL (named user providers included, not just `custom:*` rows) before ever falling back to bare `custom`.
 
+After a named provider switch, the agent may report the live provider as `custom` or `custom:<slug>`. [[src/renderer/src/screens/Chat/hooks/useDashboardChatTransport.ts#dashboardModelMatches]] accepts that alias only when the model ID matches exactly and the requested named provider's row is marked `is_current`; a row that merely lists the model cannot validate the switch. [[tests/dashboard-chat-transport.test.ts]] covers both current-row acceptance and rejection when another provider owns the live selection.
+
 ## Models live under each provider (OpenCode-style)
 
 A provider's config modal manages the models it serves — the **only** place models are added/edited, since there is no standalone Models screen. The provider→models hierarchy lives in one place instead of a separate flat list.
