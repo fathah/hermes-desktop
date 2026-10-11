@@ -21,6 +21,7 @@ import { getActiveProfileNameSync, profileHome, stripAnsi } from "./utils";
 import { setupAskpass, AskpassHandle } from "./askpass";
 import { precacheSudoCredentials } from "./sudoCreds";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
+import { matchesProviderUrl } from "../shared/url-key-map";
 import {
   INSTALLER_VERIFICATION_FAILED,
   verifiedInstallerCommand,
@@ -391,7 +392,7 @@ const PROVIDER_ENV_KEYS: Record<string, string> = {
 // When provider is "custom" or "auto", the desktop's setup flow falls
 // back to recognizing the endpoint by base URL. Same patterns hermes.ts
 // uses for runtime header injection.
-const URL_TO_ENV_KEY: Array<[RegExp, string]> = [
+const URL_TO_ENV_KEY: Array<[RegExp, string, boolean?]> = [
   [/openrouter\.ai/i, "OPENROUTER_API_KEY"],
   [/anthropic\.com/i, "ANTHROPIC_API_KEY"],
   [/openai\.com/i, "OPENAI_API_KEY"],
@@ -405,10 +406,7 @@ const URL_TO_ENV_KEY: Array<[RegExp, string]> = [
   [/api\.cerebras\.ai/i, "CEREBRAS_API_KEY"],
   [/atlascloud\.ai/i, "ATLASCLOUD_API_KEY"],
   [/api\.novita\.ai/i, "NOVITA_API_KEY"],
-  [
-    /^(?:https?:\/\/)?(?:[a-z0-9-]+\.)*requesty\.ai(?=[:/?#]|$)/i,
-    "REQUESTY_API_KEY",
-  ],
+  [/(?:^|\.)requesty\.ai$/i, "REQUESTY_API_KEY", true],
   [/api\.mistral\.ai/i, "MISTRAL_API_KEY"],
   [/api\.perplexity\.ai/i, "PERPLEXITY_API_KEY"],
   [/api\.xiaomimimo\.com/i, "XIAOMI_API_KEY"],
@@ -429,8 +427,8 @@ export function expectedEnvKeyForModel(
 ): string | null {
   const direct = PROVIDER_ENV_KEYS[provider.trim().toLowerCase()];
   if (direct) return direct;
-  for (const [pattern, envKey] of URL_TO_ENV_KEY) {
-    if (pattern.test(baseUrl)) return envKey;
+  for (const [pattern, envKey, matchHostname] of URL_TO_ENV_KEY) {
+    if (matchesProviderUrl(baseUrl, pattern, matchHostname)) return envKey;
   }
   return null;
 }

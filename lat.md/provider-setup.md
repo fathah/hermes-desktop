@@ -248,3 +248,9 @@ Routing updates and credential removal address direct task children only, preser
 Requesty is available as a remote OpenAI-compatible preset, with a dedicated API-key field. It is an LLM gateway that serves many vendors behind one key.
 
 The desktop stores the model as `custom` at `https://router.requesty.ai/v1` because Hermes Agent has no native `requesty` provider id. Setup, the configured-provider picker, installer readiness, and runtime key lookup use `REQUESTY_API_KEY`, which matches the key the agent host-derives from `router.requesty.ai`. Model ids use the `vendor/model` form, for example `openai/gpt-4o-mini`. Regional endpoints such as `https://router.eu.requesty.ai/v1` map to the same key.
+
+### Credential host boundary
+
+Requesty key lookup matches the parsed HTTP(S) hostname, including regional subdomains. URL credentials, ports and paths never identify the provider, so unrelated hosts cannot select its saved key by embedding the provider name in userinfo.
+
+[[src/shared/url-key-map.ts#matchesProviderUrl]] applies this boundary to shared lookup, runtime environment hydration and installer readiness. Tests retain valid credential-bearing URLs and default ports while rejecting lookalikes and userinfo spoofs.

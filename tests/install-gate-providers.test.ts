@@ -56,6 +56,17 @@ describe("expectedEnvKeyForModel — provider-name lookup", () => {
 });
 
 describe("expectedEnvKeyForModel — URL fallback for custom/auto providers", () => {
+  it.each([
+    ["https://user:pass@router.requesty.ai:443/v1", "REQUESTY_API_KEY"],
+    ["https://ROUTER.EU.REQUESTY.AI:443/v1", "REQUESTY_API_KEY"],
+    ["https://router.requesty.ai:443@evil.example/v1", null],
+    ["https://user:pass@requesty.ai.attacker.example/v1", null],
+  ])(
+    "uses the parsed Requesty hostname for installer readiness %s",
+    (url, expected) => {
+      expect(expectedEnvKeyForModel("custom", url)).toBe(expected);
+    },
+  );
   it("recognizes a known endpoint when provider is 'custom'", () => {
     expect(
       expectedEnvKeyForModel("custom", "https://api.deepseek.com/v1"),

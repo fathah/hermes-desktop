@@ -6,6 +6,7 @@ import {
   isKnownProviderUrl,
   CUSTOM_API_KEY_ENV,
 } from "../src/shared/url-key-map";
+import { hostDerivedEnvKeyForUrl } from "../src/main/host-derived-env";
 
 /**
  * The shared URL → env-var-name table backs three call sites:
@@ -19,6 +20,28 @@ import {
  */
 
 describe("URL_KEY_MAP", () => {
+  // @lat: [[provider-setup#Requesty provider preset#Credential host boundary]]
+  it.each([
+    ["https://user:pass@router.requesty.ai:443/v1", true],
+    ["https://ROUTER.EU.REQUESTY.AI:443/v1", true],
+    ["router.requesty.ai/v1", true],
+    ["https://router.requesty.ai.:443/v1", true],
+    ["https://router.requesty.ai:443@evil.example/v1", false],
+    ["https://user:pass@requesty.ai.attacker.example/v1", false],
+    ["https://evil.example/requesty.ai/v1", false],
+    ["ftp://router.requesty.ai/v1", false],
+  ])(
+    "resolves Requesty credentials only for the parsed HTTP host %s",
+    (url, known) => {
+      expect(expectedEnvKeyForUrl(url)).toBe(
+        known ? "REQUESTY_API_KEY" : CUSTOM_API_KEY_ENV,
+      );
+      expect(isKnownProviderUrl(url)).toBe(known);
+      expect(hostDerivedEnvKeyForUrl(url)).toBe(
+        known ? "REQUESTY_API_KEY" : null,
+      );
+    },
+  );
   it("covers each known commercial OpenAI-compatible host", () => {
     const expected: Record<string, string> = {
       "https://openrouter.ai/api/v1": "OPENROUTER_API_KEY",
