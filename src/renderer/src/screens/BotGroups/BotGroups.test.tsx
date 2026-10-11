@@ -34,11 +34,21 @@ const rooms = [room("one"), room("two")];
 const api = vi.fn();
 let actions: BotGroupAction[] = [];
 let loseAck = false;
-let notifyConnectionChange = (): void => {};
+let notifyConnectionChange: (event?: unknown) => void = () => {};
+let authorityRevision = "local-authority";
+const captureAuthority = vi.fn();
 
 beforeEach(() => {
   actions = [];
   loseAck = false;
+  authorityRevision = "local-authority";
+  captureAuthority.mockReset();
+  captureAuthority.mockImplementation(async (connectionId: string) => ({
+    connectionId,
+    revision: authorityRevision,
+    mode: "local",
+    remoteUrl: "",
+  }));
   api.mockReset();
   api.mockImplementation(
     async (
@@ -109,6 +119,7 @@ beforeEach(() => {
     configurable: true,
     value: {
       botGroups: api,
+      getProviderRequestTarget: captureAuthority,
       onConnectionConfigChanged: (handler: () => void) => {
         notifyConnectionChange = handler;
         return (): void => {};
@@ -255,6 +266,7 @@ it("discards drafts and cached rooms when a connection is edited without changin
         }
       : Promise.reject(new Error("must not read old local group")),
   );
+  authorityRevision = "changed-remote-authority";
   act(() => notifyConnectionChange());
   expect(
     await screen.findByText("Remote connections are unsupported"),
@@ -470,6 +482,7 @@ it("closes a successfully submitted creation while retained behind Chat", async 
   fireEvent.click(
     screen.getAllByRole("button", { name: "botGroups.create" })[1],
   );
+  await waitFor(() => expect(finish).toBeTypeOf("function"));
   view.rerender(<BotGroups connectionId="local-one" visible={false} />);
   await act(async () => finish());
   view.rerender(<BotGroups connectionId="local-one" visible />);
@@ -520,12 +533,14 @@ it.each(["success", "error"])(
     expect(name).toBeDisabled();
     expect(research).toBeDisabled();
     expect(review).toBeDisabled();
-    expect(
-      api.mock.calls.find((call) => call[1] === "create")?.[2],
-    ).toMatchObject({
-      name: "Submitted room",
-      members: [{ profile: "research" }, { profile: "review" }],
-    });
+    await waitFor(() =>
+      expect(
+        api.mock.calls.find((call) => call[1] === "create")?.[2],
+      ).toMatchObject({
+        name: "Submitted room",
+        members: [{ profile: "research" }, { profile: "review" }],
+      }),
+    );
     await act(async () => finish());
     if (outcome === "error") {
       expect(name).toBeEnabled();
@@ -573,4 +588,175 @@ it("routes an underscore-prefixed profile from the actual picker through request
       .find((call) => call[1] === "create")?.[2]
       .members.map((member: { profile: string }) => member.profile),
   ).toEqual(["research", "_ops"]);
+});
+
+// @lat: [[bot-groups#Recovery regressions#Label changes preserve drafts]]
+it.each(["selected label", "unrelated label"])(
+  "preserves the selected room and unsent draft across a %s notification",
+  async (kind) => {
+    await open();
+    fireEvent.click(screen.getByRole("button", { name: "Team two" }));
+    await screen.findByRole("heading", { name: "Team two" });
+    const composer = screen.getByRole("textbox", {
+      name: "botGroups.composeHint",
+    });
+    fireEvent.change(composer, { target: { value: "unsent room draft" } });
+    await act(async () => {
+      notifyConnectionChange({
+        connectionId: kind === "selected label" ? "local-one" : "other",
+        name: "Renamed display label",
+      });
+    });
+    expect(screen.getByRole("heading", { name: "Team two" })).toBeVisible();
+    expect(composer).toHaveValue("unsent room draft");
+    expect(api.mock.calls.filter((call) => call[1] === "send")).toHaveLength(0);
+    expect(captureAuthority).toHaveBeenLastCalledWith("local-one");
+  },
+);
+
+// @lat: [[bot-groups#Recovery regressions#Pending authority admission]]
+it.each(["same", "changed", "failed"] as const)(
+  "%s authority recapture fences a Send that has not crossed IPC",
+  async (outcome) => {
+    await open();
+    const composer = screen.getByRole("textbox", {
+      name: "botGroups.composeHint",
+    });
+    fireEvent.change(composer, { target: { value: "pending room draft" } });
+    let finish!: () => void;
+    captureAuthority.mockImplementationOnce(
+      (connectionId) =>
+        new Promise((resolve, reject) => {
+          finish = () =>
+            outcome === "failed"
+              ? reject(new Error("Settings unavailable"))
+              : resolve({
+                  connectionId,
+                  mode: "local",
+                  remoteUrl: "",
+                  revision:
+                    outcome === "same" ? authorityRevision : "changed-settings",
+                });
+        }),
+    );
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: "botGroups.send" }));
+      notifyConnectionChange();
+    });
+    expect(api.mock.calls.filter((call) => call[1] === "send")).toHaveLength(0);
+    expect(composer).toHaveValue("pending room draft");
+    await act(async () => finish());
+    await waitFor(() =>
+      expect(api.mock.calls.filter((call) => call[1] === "send")).toHaveLength(
+        outcome === "same" ? 1 : 0,
+      ),
+    );
+    if (outcome === "same") expect(composer).toHaveValue("");
+    else expect(screen.queryByDisplayValue("pending room draft")).toBeNull();
+  },
+);
+
+it("ignores a previously admitted Send reply after real same-ID settings change", async () => {
+  await open();
+  const ordinary = api.getMockImplementation()!;
+  let finish!: () => void;
+  api.mockImplementation((connection, operation, params) =>
+    operation === "send"
+      ? new Promise((resolve) => {
+          finish = () => resolve({ accepted: true });
+        })
+      : ordinary(connection, operation, params),
+  );
+  fireEvent.change(
+    screen.getByRole("textbox", { name: "botGroups.composeHint" }),
+    { target: { value: "submitted old authority" } },
+  );
+  fireEvent.click(screen.getByRole("button", { name: "botGroups.send" }));
+  await waitFor(() => expect(finish).toBeTypeOf("function"));
+  authorityRevision = "changed-local-settings";
+  await act(async () => notifyConnectionChange());
+  await screen.findByRole("heading", { name: "Team one" });
+  const composer = screen.getByRole("textbox", {
+    name: "botGroups.composeHint",
+  });
+  fireEvent.change(composer, { target: { value: "new authority draft" } });
+  await act(async () => finish());
+  expect(composer).toHaveValue("new authority draft");
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(api.mock.calls.filter((call) => call[1] === "send")).toHaveLength(1);
+});
+
+it("keeps a superseded private revision read from restoring old drafts", async () => {
+  await open();
+  fireEvent.change(
+    screen.getByRole("textbox", { name: "botGroups.composeHint" }),
+    { target: { value: "old private settings draft" } },
+  );
+  let oldRead!: () => void;
+  captureAuthority.mockImplementationOnce(
+    (connectionId) =>
+      new Promise((resolve) => {
+        oldRead = () =>
+          resolve({ connectionId, revision: "local-authority", mode: "local" });
+      }),
+  );
+  act(() => notifyConnectionChange());
+  authorityRevision = "newer-private-settings";
+  await act(async () => notifyConnectionChange());
+  await screen.findByRole("heading", { name: "Team one" });
+  const composer = screen.getByRole("textbox", {
+    name: "botGroups.composeHint",
+  });
+  fireEvent.change(composer, {
+    target: { value: "new private settings draft" },
+  });
+  await act(async () => oldRead());
+  expect(composer).toHaveValue("new private settings draft");
+});
+
+// @lat: [[bot-groups#Recovery regressions#Superseded authority waits]]
+it.each(["same", "changed", "connection"] as const)(
+  "wakes pending admission onto %s authority without waiting for an obsolete read",
+  async (outcome) => {
+    const view = await open();
+    const composer = screen.getByRole("textbox", {
+      name: "botGroups.composeHint",
+    });
+    fireEvent.change(composer, { target: { value: "surviving intent" } });
+    captureAuthority.mockImplementationOnce(() => new Promise(() => {}));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "botGroups.send" }));
+      notifyConnectionChange();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(api.mock.calls.filter((call) => call[1] === "send")).toHaveLength(0);
+    if (outcome === "changed") authorityRevision = "new-private-settings";
+    await act(async () => {
+      if (outcome === "connection")
+        view.rerender(<BotGroups connectionId="local-two" visible />);
+      else notifyConnectionChange();
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("textbox", { name: "botGroups.composeHint" }),
+      ).toHaveValue(""),
+    );
+    expect(api.mock.calls.filter((call) => call[1] === "send")).toHaveLength(
+      outcome === "same" ? 1 : 0,
+    );
+    expect(
+      screen.getByRole("button", { name: "botGroups.send" }),
+    ).toBeDisabled();
+  },
+);
+
+it("does not start group reads while initial private authority is unavailable", async () => {
+  captureAuthority.mockImplementationOnce(() => new Promise(() => {}));
+  render(<BotGroups connectionId="local-one" visible />);
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  expect(api).not.toHaveBeenCalled();
 });

@@ -114,6 +114,11 @@ const botGroups = (async (_connection: string, op: string, params = {}) => {
 }) as BotGroupAPI;
 window.hermesAPI = {
   botGroups,
+  getProviderRequestTarget: async (connectionId: string) => ({
+    connectionId,
+    mode: "local",
+    revision: "visual-fixture-settings",
+  }),
   onConnectionConfigChanged: () => () => {},
 } as Window["hermesAPI"];
 createRoot(document.getElementById("root")!).render(

@@ -27,9 +27,13 @@ Profile results exclude filesystem paths and private session previews.
 
 [[src/main/bot-groups.ts#botGroupsRequest]] checks the feature flag and explicit connection identity in the main process. A remote or SSH connection is rejected, never silently routed to the local installation.
 
-Connection changes remount the page, discarding the previous display cache and
-in-memory drafts. Public Dashboard OAuth and SSH owner scope need a separate
-reviewed adapter before remote support is enabled.
+An explicit connection change or a changed main-issued settings revision remounts
+the page, discarding the previous display cache and in-memory drafts. Selected
+and unrelated label renames preserve the room and drafts. Every notification
+synchronously pauses request admission until this connection's opaque authority
+is recaptured; reads and action replies must still belong to that authority.
+Public Dashboard OAuth and SSH owner scope need a separate reviewed adapter
+before remote support is enabled.
 
 ## Explicit send retry
 
@@ -108,6 +112,18 @@ Missing methods, malformed capabilities and a stopped driver leave groups unavai
 ### Edited connection scope
 
 Editing a connection under the same ID releases the old view, drafts and requests before displaying the new target. Navigation refreshes its flag and the renderer cannot reuse old group state. Covered by [[src/renderer/src/screens/BotGroups/BotGroups.test.tsx]].
+
+### Label changes preserve drafts
+
+Selected and unrelated label notifications preserve the selected room and unsent draft when the main-issued private settings revision is unchanged. Rechecking authority cannot silently submit or clear the draft.
+
+### Pending authority admission
+
+Unknown authority blocks group requests. A changed or failed recapture refuses pending actions and discards old replies; an unchanged revision permits the original request without duplicating its identity.
+
+### Superseded authority waits
+
+A newer capture or connection teardown wakes pending admission without waiting for an obsolete read. Only the latest unchanged private revision may admit the original action; changed targets discard it.
 
 ### Unconfirmed room creation
 

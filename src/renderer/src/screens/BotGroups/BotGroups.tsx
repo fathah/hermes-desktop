@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { useI18n } from "../../components/useI18n";
 import {
   mergeBotGroupLog,
@@ -10,21 +16,133 @@ import {
   type BotGroupState,
 } from "../../../../shared/bot-groups";
 import "./bot-groups.css";
-import { useConnectionTargetRevision } from "../../hooks/useConnectionTargetRevision";
 
 type Draft = { text: string; eventId?: string };
 interface Props {
   connectionId: string;
   visible: boolean;
 }
+type GroupRequest = <K extends BotGroupOperation>(
+  operation: K,
+  params?: Record<string, unknown>,
+) => Promise<BotGroupResults[K]>;
+interface GroupAuthority {
+  connectionId: string;
+  revision: string | null;
+  pending: Promise<void> | null;
+  superseded: Promise<void>;
+  release: () => void;
+}
+
+function groupAuthority(connectionId: string): GroupAuthority {
+  let release = (): void => {};
+  const superseded = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { connectionId, revision: null, pending: null, superseded, release };
+}
+
+/** Compare private settings authority, not display labels or notification count. */
+function useBotGroupConnection(connectionId: string): {
+  identity: string;
+  ready: boolean;
+  request: GroupRequest;
+} {
+  const [identity, setIdentity] = useState("initial");
+  const [ready, setReady] = useState(false);
+  const authority = useRef<GroupAuthority>(groupAuthority(connectionId));
+  useEffect(() => {
+    let alive = true;
+    let generation = 0;
+    const capture = (): void => {
+      const current = ++generation;
+      authority.current.release();
+      const record = groupAuthority(connectionId);
+      authority.current = record;
+      setReady(false);
+      record.pending = window.hermesAPI
+        .getProviderRequestTarget(connectionId)
+        .then((target) => {
+          if (!alive || current !== generation) return;
+          if (target.connectionId !== connectionId || !target.revision)
+            throw new Error("Group connection authority is unavailable.");
+          record.revision = target.revision;
+          setIdentity(target.revision);
+          setReady(true);
+        })
+        .catch(() => {
+          if (!alive || current !== generation) return;
+          setIdentity(`unavailable:${current}`);
+        });
+    };
+    const unsubscribe = window.hermesAPI.onConnectionConfigChanged(capture);
+    capture();
+    return () => {
+      alive = false;
+      generation += 1;
+      authority.current.release();
+      authority.current = groupAuthority(connectionId);
+      unsubscribe();
+    };
+  }, [connectionId]);
+
+  const request = useCallback<GroupRequest>(
+    async (operation, params = {}) => {
+      const current = (): boolean =>
+        authority.current.connectionId === connectionId &&
+        authority.current.revision === identity;
+      const confirm = async (): Promise<void> => {
+        let record: GroupAuthority;
+        do {
+          record = authority.current;
+          await Promise.race([record.pending, record.superseded]);
+        } while (record !== authority.current);
+        if (
+          record.connectionId !== connectionId ||
+          record.revision !== identity
+        )
+          throw new Error("Group connection changed; refresh before retrying.");
+      };
+      await confirm();
+      if (!current())
+        throw new Error("Group connection changed; refresh before retrying.");
+      const result = await window.hermesAPI.botGroups(
+        connectionId,
+        operation,
+        params,
+      );
+      await confirm();
+      if (!current())
+        throw new Error("Group connection changed; refresh before retrying.");
+      return result;
+    },
+    [connectionId, identity],
+  );
+  return { identity, ready, request };
+}
 
 /** UI-only state. Hermes is the sole owner of rooms, turns, context and approvals. */
 export default function BotGroups(props: Props): React.JSX.Element {
-  const revision = useConnectionTargetRevision();
-  return <BotGroupsView key={`${props.connectionId}:${revision}`} {...props} />;
+  const authority = useBotGroupConnection(props.connectionId);
+  return (
+    <BotGroupsView
+      key={`${props.connectionId}:${authority.identity}`}
+      {...props}
+      ready={authority.ready}
+      request={authority.request}
+    />
+  );
 }
 
-function BotGroupsView({ connectionId, visible }: Props): React.JSX.Element {
+function BotGroupsView({
+  connectionId,
+  visible,
+  ready,
+  request,
+}: Props & {
+  ready: boolean;
+  request: GroupRequest;
+}): React.JSX.Element {
   const { t } = useI18n();
   const tr = (key: string): string => t("botGroups." + key);
   const [cap, setCap] = useState<BotGroupResults["capabilities"] | null>(null);
@@ -59,15 +177,11 @@ function BotGroupsView({ connectionId, visible }: Props): React.JSX.Element {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const following = useRef(true);
   const can = (op: BotGroupOperation): boolean =>
+    ready &&
     cap?.capabilities?.driver === true &&
     cap.capabilities.methods.includes("groups." + op);
   const message = (error: unknown): string =>
     error instanceof Error ? error.message : tr("requestFailed");
-  const request = <K extends BotGroupOperation>(
-    op: K,
-    params: Record<string, unknown> = {},
-  ): Promise<BotGroupResults[K]> =>
-    window.hermesAPI.botGroups(connectionId, op, params);
 
   useEffect(() => {
     if (!visible) return;
@@ -77,10 +191,7 @@ function BotGroupsView({ connectionId, visible }: Props): React.JSX.Element {
     setReadError("");
     void (async () => {
       try {
-        const status = await window.hermesAPI.botGroups(
-          connectionId,
-          "capabilities",
-        );
+        const status = await request("capabilities");
         if (!alive) return;
         setCap(status);
         if (
@@ -93,11 +204,11 @@ function BotGroupsView({ connectionId, visible }: Props): React.JSX.Element {
           return;
         }
         const [list, roster] = await Promise.all([
-          window.hermesAPI.botGroups(connectionId, "list", {
+          request("list", {
             limit: 100,
             offset: 0,
           }),
-          window.hermesAPI.botGroups(connectionId, "profiles"),
+          request("profiles"),
         ]);
         if (!alive) return;
         setRooms(list.rooms);
@@ -120,7 +231,7 @@ function BotGroupsView({ connectionId, visible }: Props): React.JSX.Element {
     return () => {
       alive = false;
     };
-  }, [connectionId, visible, reload, t]);
+  }, [connectionId, visible, reload, t, request]);
 
   useEffect(() => {
     setText(selected ? drafts.current.get(selected)?.text || "" : "");
@@ -141,7 +252,7 @@ function BotGroupsView({ connectionId, visible }: Props): React.JSX.Element {
       reading = true;
       let more = false;
       try {
-        const state = await window.hermesAPI.botGroups(connectionId, "state", {
+        const state = await request("state", {
           room_id: selected,
         });
         if (!alive) return;
@@ -152,7 +263,7 @@ function BotGroupsView({ connectionId, visible }: Props): React.JSX.Element {
           history = [];
         }
         authority = identity;
-        const page = await window.hermesAPI.botGroups(connectionId, "log", {
+        const page = await request("log", {
           room_id: selected,
           since_seq: cursor,
           limit: 100,
@@ -201,7 +312,7 @@ function BotGroupsView({ connectionId, visible }: Props): React.JSX.Element {
       pollNow.current = () => {};
       document.removeEventListener("visibilitychange", wake);
     };
-  }, [connectionId, visible, selected, cap, t]);
+  }, [connectionId, visible, selected, cap, t, request]);
 
   useEffect(() => {
     if (following.current && logRef.current)
