@@ -219,6 +219,7 @@ describe("getApiUrl in SSH mode", () => {
 });
 
 describe("Cron SSH fallback", () => {
+  // @lat: [[scheduled-jobs#Test specifications#SSH default profile isolation]]
   it("scopes the configured/default port fallback to cron after a successful /health probe", async () => {
     connModeRef.mode = "ssh";
     sshTunnelUrlRef.value = null;
@@ -228,7 +229,7 @@ describe("Cron SSH fallback", () => {
       if (target === "http://127.0.0.1:18642/health") {
         return { ok: true } as Response;
       }
-      if (target === "http://127.0.0.1:18642/api/cron/jobs") {
+      if (target === "http://127.0.0.1:18642/api/cron/jobs?profile=default") {
         return {
           ok: true,
           status: 200,
@@ -253,7 +254,7 @@ describe("Cron SSH fallback", () => {
     );
     expect(fetchSpy).toHaveBeenNthCalledWith(
       2,
-      "http://127.0.0.1:18642/api/cron/jobs",
+      "http://127.0.0.1:18642/api/cron/jobs?profile=default",
       expect.any(Object),
     );
   });

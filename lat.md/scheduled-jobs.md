@@ -45,3 +45,7 @@ Anonymous dashboard requests select profiles through a query parameter; the gate
 ### Anonymous HTML actions fail
 
 An HTML success response from an anonymous dashboard fails the operation, so the desktop cannot report that a destructive cron mutation completed when only a sign-in or SPA page was returned.
+
+### SSH default profile isolation
+
+SSH dashboard cron requests explicitly select the default profile, including the probed-tunnel fallback, so the dashboard's all-profile default cannot mix another agent's jobs into Schedules.

@@ -293,11 +293,13 @@ async function dashboardCronFetch(
   conn: ConnectionConfig,
   profile?: string,
 ): Promise<Response> {
-  if (conn.mode !== "remote") return remoteFetch(path, init, conn, profile);
+  // Both direct Remote and SSH dashboards default lists to all profiles.
+  const scopedPath = `${path}${path.includes("?") ? "&" : "?"}profile=${encodeURIComponent(profile || "default")}`;
+  if (conn.mode !== "remote")
+    return remoteFetch(scopedPath, init, conn, profile);
   // A raw gateway without an API key has no session to send. Keep the plain
   // request for it (as before) rather than failing in the token helper, which
   // refuses to run without a token.
-  const scopedPath = `${path}${path.includes("?") ? "&" : "?"}profile=${encodeURIComponent(profile || "default")}`;
   const keylessToken = conn.remoteAuthMode === "token" && !conn.apiKey?.trim();
   if (keylessToken) return remoteFetch(scopedPath, init, conn, profile);
 
