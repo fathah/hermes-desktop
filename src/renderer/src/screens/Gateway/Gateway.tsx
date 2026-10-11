@@ -56,20 +56,24 @@ function Gateway({
     null,
   );
 
+  const mountedRef = useRef(false);
+
   // A pending "check again in 5 s" must not outlive the screen (or the profile
   // it was started for): it would write that profile's status into a page that
   // has moved on.
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
       if (gatewayStatusTimeoutRef.current) {
         clearTimeout(gatewayStatusTimeoutRef.current);
         gatewayStatusTimeoutRef.current = null;
       }
-    },
-    [],
-  );
+    };
+  }, []);
 
   const loadConfig = useCallback(async (): Promise<void> => {
+    if (!mountedRef.current) return;
     setLoadError(null);
     try {
       // Independent requests: a failing platform list must not discard a
@@ -78,6 +82,7 @@ function Gateway({
         window.hermesAPI.gatewayStatus(profile),
         window.hermesAPI.getMessagingPlatforms(profile),
       ]);
+      if (!mountedRef.current) return;
       if (statusResult.status === "fulfilled") {
         const gwStatus = statusResult.value;
         setGatewayRunning(gwStatus);
@@ -183,6 +188,7 @@ function Gateway({
     } else {
       try {
         const result = await window.hermesAPI.startGateway(profile);
+        if (!mountedRef.current) return;
         setGatewayRunning(result.running);
         if (!result.success) {
           setGatewayError(
@@ -196,6 +202,7 @@ function Gateway({
           // Refresh status + platform catalog once the adapters have had a
           // moment to come up; surface an error if it exited immediately.
           void window.hermesAPI.gatewayStatus(profile).then((status) => {
+            if (!mountedRef.current) return;
             setGatewayRunning(status);
             if (status) {
               void loadConfig();
@@ -229,6 +236,7 @@ function Gateway({
     setGatewayError(null);
     try {
       const restarted = await window.hermesAPI.restartGateway(profile);
+      if (!mountedRef.current) return;
       setGatewayRunning(restarted);
       if (!restarted) {
         await loadConfig();
@@ -236,6 +244,7 @@ function Gateway({
       } else {
         gatewayStatusTimeoutRef.current = setTimeout(async () => {
           const status = await window.hermesAPI.gatewayStatus(profile);
+          if (!mountedRef.current) return;
           setGatewayRunning(status);
           if (status) {
             void loadConfig();

@@ -84,6 +84,43 @@ describe("Gateway screen with a selected profile / failing platform list", () =>
     expect(window.hermesAPI.stopGateway).toHaveBeenCalledWith("work");
   });
 
+  // @lat: [[main-process#Main Process#Remote Gateway management#Pending actions after teardown]]
+  it.each(["start", "restart"])(
+    "does not schedule status reads when pending %s resolves after unmount",
+    async (action) => {
+      let resolve!: (result: unknown) => void;
+      const pending = new Promise((r) => {
+        resolve = r;
+      });
+      installApi({
+        gatewayStatus: vi.fn().mockResolvedValue(action === "restart"),
+        [action === "start" ? "startGateway" : "restartGateway"]: vi
+          .fn()
+          .mockReturnValue(pending),
+      });
+      const { unmount } = render(<Gateway profile="work" remoteMode />);
+      await settle();
+      fireEvent.click(
+        screen.getByText(
+          action === "start" ? "common.start" : "gateway.restart",
+        ),
+      );
+      const before = (
+        window.hermesAPI.gatewayStatus as ReturnType<typeof vi.fn>
+      ).mock.calls.length;
+      unmount();
+      await act(async () => {
+        resolve(action === "start" ? { success: true, running: false } : true);
+        await pending;
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15000);
+      });
+      expect(window.hermesAPI.gatewayStatus).toHaveBeenCalledTimes(before);
+      expect(window.hermesAPI.getMessagingPlatforms).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it("drops the pending 5 s status check when the screen goes away (profile switch remounts it)", async () => {
     installApi({ gatewayStatus: vi.fn().mockResolvedValue(false) });
     const { unmount } = render(<Gateway profile="work" />);

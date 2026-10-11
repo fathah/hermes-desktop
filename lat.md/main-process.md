@@ -82,6 +82,14 @@ The Remote Gateway screen controls the server's gateway and messaging platforms 
 
 Remote messaging list, update and test calls retain the selected profile through IPC and the authenticated dashboard client, so a named profile's platform settings cannot fall through to the server's default profile.
 
+### Keyless messaging compatibility
+
+Explicit or auto-detected keyless token servers keep anonymous messaging access and profile scoping. OAuth login and probe failures remain errors and never retry through anonymous fetch.
+
+### Pending actions after teardown
+
+Start or Restart promises that settle after Gateway unmount cannot schedule status timers or new reads against the previous profile or connection.
+
 ### Renderer mode transitions
 
 Switching connections on the same screen refreshes its Remote restrictions. Outdated mode replies cannot undo a newer answer, and in-place configuration changes invalidate prior local-control permissions until resolved.

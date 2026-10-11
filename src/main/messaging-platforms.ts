@@ -13,6 +13,7 @@ import {
 } from "../shared/messaging-platforms";
 import { getConnectionConfig } from "./config";
 import { remoteDashboardRequestJson } from "./remote-api";
+import { normaliseRemoteUrl } from "./hermes";
 
 export function buildDesktopMessagingPlatforms(
   env: Record<string, string>,
@@ -150,18 +151,49 @@ export function testDesktopMessagingPlatform(
 // Remote messaging goes through the authenticated dashboard boundary: a bare
 // fetch carries no OAuth cookie, so the Gateway page could not load its
 // platform list for OAuth users.
-function remoteMessagingJson<T>(
+async function remoteMessagingJson<T>(
   path: string,
   method: "GET" | "PUT" | "POST" = "GET",
   body?: unknown,
   profile?: string,
 ): Promise<T> {
-  return remoteDashboardRequestJson<T>(
-    getConnectionConfig(),
-    path,
-    { method, body },
-    profile,
-  );
+  const connection = getConnectionConfig();
+  const anonymousRequest = async (): Promise<T> => {
+    const url = new URL(`${normaliseRemoteUrl(connection.remoteUrl)}${path}`);
+    if (profile) url.searchParams.set("profile", profile);
+    const response = await fetch(url.toString(), {
+      method,
+      headers: body === undefined ? {} : { "Content-Type": "application/json" },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    const data = await response.json();
+    if (!response.ok)
+      throw new Error(data.error || data.detail || `HTTP ${response.status}`);
+    return data as T;
+  };
+  if (connection.remoteAuthMode === "token" && !connection.apiKey?.trim()) {
+    return anonymousRequest();
+  }
+  try {
+    return await remoteDashboardRequestJson<T>(
+      connection,
+      path,
+      { method, body },
+      profile,
+    );
+  } catch (error) {
+    // Auto mode may resolve to a keyless token server. Only this exact boundary
+    // failure allows anonymous compatibility; OAuth and probe failures stay errors.
+    if (
+      !connection.apiKey?.trim() &&
+      connection.remoteAuthMode !== "oauth" &&
+      error instanceof Error &&
+      error.message === "Remote Hermes dashboard token is not configured."
+    ) {
+      return anonymousRequest();
+    }
+    throw error;
+  }
 }
 
 export async function fetchRemoteMessagingPlatforms(
