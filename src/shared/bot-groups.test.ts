@@ -2,6 +2,44 @@ import { describe, expect, it } from "vitest";
 import { mergeBotGroupLog, validateBotGroupRequest } from "./bot-groups";
 
 describe("Bot group request boundary", () => {
+  // @lat: [[bot-groups#Recovery regressions#Existing profile names]]
+  it("accepts the existing profile-name contract while rejecting unsafe names", () => {
+    const create = (profile: unknown): Record<string, unknown> => ({
+      room_id: "room-one",
+      name: "Ops",
+      members: [
+        {
+          member_id: "member-one",
+          profile: "default",
+          handle: "default",
+          display_name: "Default",
+        },
+        {
+          member_id: "member-two",
+          profile,
+          handle: "ops",
+          display_name: "Ops",
+        },
+      ],
+    });
+    for (const profile of ["_ops", "work_1-prod", "a".repeat(64)])
+      expect(validateBotGroupRequest("create", create(profile))).toEqual(
+        create(profile),
+      );
+    for (const profile of [
+      "../ops",
+      "-ops",
+      "ops.name",
+      "ops:one",
+      "UpperCase",
+      "a".repeat(65),
+      "",
+      null,
+    ])
+      expect(() => validateBotGroupRequest("create", create(profile))).toThrow(
+        "Invalid profile.",
+      );
+  });
   it("preserves the send identity and shared discussion thread", () => {
     // @lat: [[bot-groups#Request boundary]]
     const input = {

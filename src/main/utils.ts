@@ -9,8 +9,8 @@ import {
   writeFileSync,
 } from "fs";
 import { HERMES_HOME } from "./installer";
+import { PROFILE_NAME_RE } from "../shared/profile-name";
 
-const PROFILE_NAME_RE = /^[a-z0-9_][a-z0-9_-]{0,63}$/;
 export const PROFILE_NAME_ERROR =
   "Profile names may contain lowercase letters, numbers, underscores, and hyphens, and cannot start with a hyphen.";
 

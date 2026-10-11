@@ -120,3 +120,25 @@ A delayed creation adds its accepted room to the list without replacing a newer 
 ### Delayed action room isolation
 
 Late approval, retry and send successes or failures preserve the newly selected room and its unsent draft. Old-room errors cannot replace feedback for the newer selection.
+
+### Hidden creation completion
+
+Accepted creation closes and clears the submitted form even behind Chat, preventing accidental duplicate creation on return. Selecting its room still requires a visible view without a newer deliberate selection.
+
+### Submitted creation fields
+
+Name and member controls are disabled while creation is pending, so success cannot discard newer edits. Failed acknowledgement retains the submitted form and stable retry identity while re-enabling its controls.
+
+### Existing profile names
+
+Group members use the shared Desktop profile-name contract, including existing underscore-prefixed profiles. Picker and main routing preserve names unchanged while validation rejects unsafe paths, uppercase names and overlong values.
+
+[[src/shared/profile-name.ts#PROFILE_NAME_RE]] is also consumed by Desktop's existing profile-path helpers, keeping group admission aligned without importing main-process modules into the renderer.
+
+Desktop forwards the selected profile unchanged; Hermes still controls discovery
+and group membership. The reference Agent CLI rejects leading underscores, and
+hosted-room validation applies its stricter identifier rule to all discovered
+local profiles. An existing `_ops` directory can therefore block creation even
+when it is not selected. Backend refusals remain visible; upstream support or
+repair of that legacy profile is needed. Runtime acceptance covers `default`
+and `ops`.

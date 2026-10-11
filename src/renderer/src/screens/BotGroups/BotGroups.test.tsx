@@ -11,6 +11,7 @@ import type {
   BotGroupOperation,
   BotGroupRoom,
 } from "../../../../shared/bot-groups";
+import { validateBotGroupRequest } from "../../../../shared/bot-groups";
 vi.mock("../../components/useI18n", () => {
   const t = (key: string): string => key;
   return { useI18n: () => ({ t }) };
@@ -437,3 +438,139 @@ it.each([
     expect(screen.queryByText(/Late old-room failure/)).toBeNull();
   },
 );
+
+// @lat: [[bot-groups#Recovery regressions#Hidden creation completion]]
+it("closes a successfully submitted creation while retained behind Chat", async () => {
+  const view = await open();
+  const ordinary = api.getMockImplementation()!;
+  let finish!: () => void;
+  let created: BotGroupRoom | null = null;
+  api.mockImplementation((connection, op, params) => {
+    if (op === "create")
+      return new Promise((resolve) => {
+        finish = () => {
+          created = {
+            ...room(params.room_id),
+            name: params.name,
+            members: params.members,
+          };
+          resolve({ room: created });
+        };
+      });
+    if (op === "list" && created)
+      return Promise.resolve({ rooms: [...rooms, created], next_offset: null });
+    return ordinary(connection, op, params);
+  });
+  fireEvent.click(screen.getByRole("button", { name: "botGroups.create" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "botGroups.name" }), {
+    target: { value: "Hidden accepted room" },
+  });
+  fireEvent.click(screen.getByRole("checkbox", { name: "research" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "review" }));
+  fireEvent.click(
+    screen.getAllByRole("button", { name: "botGroups.create" })[1],
+  );
+  view.rerender(<BotGroups connectionId="local-one" visible={false} />);
+  await act(async () => finish());
+  view.rerender(<BotGroups connectionId="local-one" visible />);
+  await screen.findByRole("heading", { name: "Team one" });
+  expect(screen.queryByRole("textbox", { name: "botGroups.name" })).toBeNull();
+  expect(api.mock.calls.filter((call) => call[1] === "create")).toHaveLength(1);
+  fireEvent.click(screen.getByRole("button", { name: "botGroups.create" }));
+  expect(screen.getByRole("textbox", { name: "botGroups.name" })).toHaveValue(
+    "",
+  );
+  expect(screen.getByRole("checkbox", { name: "research" })).not.toBeChecked();
+  expect(screen.getByRole("checkbox", { name: "review" })).not.toBeChecked();
+});
+
+// @lat: [[bot-groups#Recovery regressions#Submitted creation fields]]
+it.each(["success", "error"])(
+  "locks submitted fields until a slow creation returns %s",
+  async (outcome) => {
+    await open();
+    const ordinary = api.getMockImplementation()!;
+    let finish!: () => void;
+    api.mockImplementation((connection, op, params) => {
+      if (op === "create")
+        return new Promise((resolve, reject) => {
+          finish = () =>
+            outcome === "error"
+              ? reject(new Error("Creation unconfirmed"))
+              : resolve({
+                  room: {
+                    ...room("one"),
+                    name: params.name,
+                    members: params.members,
+                  },
+                });
+        });
+      return ordinary(connection, op, params);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "botGroups.create" }));
+    const name = screen.getByRole("textbox", { name: "botGroups.name" });
+    const research = screen.getByRole("checkbox", { name: "research" });
+    const review = screen.getByRole("checkbox", { name: "review" });
+    fireEvent.change(name, { target: { value: "Submitted room" } });
+    fireEvent.click(research);
+    fireEvent.click(review);
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "botGroups.create" })[1],
+    );
+    expect(name).toBeDisabled();
+    expect(research).toBeDisabled();
+    expect(review).toBeDisabled();
+    expect(
+      api.mock.calls.find((call) => call[1] === "create")?.[2],
+    ).toMatchObject({
+      name: "Submitted room",
+      members: [{ profile: "research" }, { profile: "review" }],
+    });
+    await act(async () => finish());
+    if (outcome === "error") {
+      expect(name).toBeEnabled();
+      expect(research).toBeEnabled();
+      expect(name).toHaveValue("Submitted room");
+      expect(research).toBeChecked();
+      expect(review).toBeChecked();
+    } else
+      expect(
+        screen.queryByRole("textbox", { name: "botGroups.name" }),
+      ).toBeNull();
+  },
+);
+
+it("routes an underscore-prefixed profile from the actual picker through request validation", async () => {
+  const ordinary = api.getMockImplementation()!;
+  api.mockImplementation((connection, op, params) => {
+    if (op === "profiles")
+      return Promise.resolve({
+        profiles: [
+          { name: "research", display_name: "Research" },
+          { name: "_ops", display_name: "Operations" },
+        ],
+      });
+    if (op === "create") validateBotGroupRequest(op, params);
+    return ordinary(connection, op, params);
+  });
+  await open();
+  fireEvent.click(screen.getByRole("button", { name: "botGroups.create" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "botGroups.name" }), {
+    target: { value: "Team operations" },
+  });
+  fireEvent.click(screen.getByRole("checkbox", { name: "Research" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "Operations" }));
+  fireEvent.click(
+    screen.getAllByRole("button", { name: "botGroups.create" })[1],
+  );
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("textbox", { name: "botGroups.name" }),
+    ).toBeNull(),
+  );
+  expect(
+    api.mock.calls
+      .find((call) => call[1] === "create")?.[2]
+      .members.map((member: { profile: string }) => member.profile),
+  ).toEqual(["research", "_ops"]);
+});

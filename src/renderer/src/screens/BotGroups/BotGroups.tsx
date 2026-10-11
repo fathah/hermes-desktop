@@ -309,7 +309,6 @@ function BotGroupsView({ connectionId, visible }: Props): React.JSX.Element {
         room_id: createAttempt.current.roomId,
       });
       createAttempt.current = null;
-      if (!current.current.visible) return;
       setRooms((previous) => [
         result.room,
         ...previous.filter((r) => r.room_id !== result.room.room_id),
@@ -317,7 +316,10 @@ function BotGroupsView({ connectionId, visible }: Props): React.JSX.Element {
       setCreating(false);
       setName("");
       setChosen([]);
-      if (selectionGeneration.current === selectedAtAdmission)
+      if (
+        current.current.visible &&
+        selectionGeneration.current === selectedAtAdmission
+      )
         setSelected(result.room.room_id);
     } catch (error) {
       setActionError(message(error));
@@ -437,13 +439,14 @@ function BotGroupsView({ connectionId, visible }: Props): React.JSX.Element {
               {tr("name")}
               <input
                 autoFocus
+                disabled={busy}
                 value={name}
                 maxLength={120}
                 required
                 onChange={(e) => setName(e.target.value)}
               />
             </label>
-            <fieldset>
+            <fieldset disabled={busy}>
               <legend>{tr("selectMembers")}</legend>
               {profiles.map((p) => (
                 <label key={p.name}>

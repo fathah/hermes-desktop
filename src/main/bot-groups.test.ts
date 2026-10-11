@@ -11,6 +11,30 @@ beforeEach(() => {
 });
 
 describe("Bot groups main-process boundary", () => {
+  it("forwards a valid existing underscore profile without changing its identity", async () => {
+    const params = {
+      room_id: "room-one",
+      name: "Ops",
+      members: [
+        {
+          member_id: "member-one",
+          profile: "default",
+          handle: "default",
+          display_name: "Default",
+        },
+        {
+          member_id: "member-two",
+          profile: "_ops",
+          handle: "ops",
+          display_name: "Ops",
+        },
+      ],
+    };
+    mocks.request.mockResolvedValue({ room: { room_id: "room-one" } });
+    await botGroupsRequest("local-one", "create", params);
+    expect(mocks.config).toHaveBeenCalledWith("local-one");
+    expect(mocks.request).toHaveBeenCalledWith("create", params);
+  });
   it("does not start a gateway when disabled or silently route remote requests locally", async () => {
     // @lat: [[bot-groups#Connection scope]]
     vi.stubEnv("HERMES_DESKTOP_BOT_GROUPS", "");

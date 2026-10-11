@@ -33,6 +33,7 @@ describe("profile name validation", () => {
     expect(isValidProfileName("default")).toBe(true);
     expect(isValidNamedProfileName("work")).toBe(true);
     expect(isValidNamedProfileName("work_1-prod")).toBe(true);
+    expect(isValidNamedProfileName("_ops")).toBe(true);
     expect(normalizeProfileName("default")).toBeUndefined();
     expect(normalizeProfileName("")).toBeUndefined();
     expect(normalizeProfileName(undefined)).toBeUndefined();

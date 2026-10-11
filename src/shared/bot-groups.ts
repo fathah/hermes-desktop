@@ -1,4 +1,6 @@
 /** Presentation contract for Hermes groups protocol v2. Hermes owns all execution. */
+import { PROFILE_NAME_RE } from "./profile-name";
+
 export interface BotGroupMember {
   member_id: string;
   profile: string;
@@ -183,8 +185,12 @@ export function validateBotGroupRequest(
         "handle",
         "display_name",
       ]);
-      for (const key of ["member_id", "profile", "handle"])
-        identifier(member[key], key);
+      for (const key of ["member_id", "handle"]) identifier(member[key], key);
+      if (
+        typeof member.profile !== "string" ||
+        !PROFILE_NAME_RE.test(member.profile)
+      )
+        throw new Error("Invalid profile.");
       text(member.display_name, "display_name", 120);
       if (["all", "everyone"].includes(String(member.handle).toLowerCase()))
         throw new Error("Reserved handle.");
