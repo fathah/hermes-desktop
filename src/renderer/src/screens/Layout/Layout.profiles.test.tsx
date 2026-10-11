@@ -152,6 +152,13 @@ async function openAgents(): Promise<void> {
   fireEvent.click(await screen.findByText("agents.manageProfiles"));
   await screen.findByText("agents.newAgent");
 }
+async function showSelectedChat(): Promise<void> {
+  // Selecting an Agents row keeps its administrative screen open. The real
+  // Chat becomes active only when the user returns to the conversation view.
+  expect(screen.queryByTestId("active-chat")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "navigation.newChat" }));
+  await screen.findByTestId("active-chat");
+}
 // @lat: [[remote-profiles#Tests#Real Layout selection and chat acceptance]]
 it("routes Remote selection and Chat through the actual Layout parent with captured authority", async () => {
   const { api } = fixture();
@@ -161,11 +168,13 @@ it("routes Remote selection and Chat through the actual Layout parent with captu
   await waitFor(() =>
     expect(screen.getByTestId("selected-profile").textContent).toBe("work"),
   );
+  await showSelectedChat();
   expect(screen.getByTestId("active-chat").textContent).toBe("a:work");
   expect(api.setActiveProfile).toHaveBeenCalledWith(
     "work",
     expect.objectContaining({ mode: "remote" }),
   );
+  await openAgents();
   fireEvent.click(screen.getAllByText("agents.chat")[0]);
   await waitFor(() =>
     expect(screen.getByTestId("active-chat").textContent).toBe("a:default"),
@@ -189,6 +198,7 @@ it("an old Agents selection cannot retarget the real parent after switching conn
   );
   await act(async () => pending.resolve(true));
   expect(screen.getByTestId("selected-profile").textContent).toBe("server-b");
+  await showSelectedChat();
   expect(screen.getByTestId("active-chat").textContent).toBe("b:server-b");
 });
 // @lat: [[remote-profiles#Tests#Restoration cannot undo a newer choice]]
@@ -207,6 +217,7 @@ it("a delayed initial restore cannot undo the user's newly selected profile", as
   await waitFor(() =>
     expect(screen.getByTestId("selected-profile").textContent).toBe("work"),
   );
+  await showSelectedChat();
   await act(async () => restore.resolve([row("default", true), row("work")]));
   expect(screen.getByTestId("active-chat").textContent).toBe("a:work");
 });
@@ -218,8 +229,10 @@ it("aligns the visible chat with the default fallback when a same-ID reload cann
   await openAgents();
   fireEvent.click(document.querySelectorAll(".agents-row")[1]);
   await waitFor(() =>
-    expect(screen.getByTestId("active-chat").textContent).toBe("a:work"),
+    expect(screen.getByTestId("selected-profile").textContent).toBe("work"),
   );
+  await showSelectedChat();
+  expect(screen.getByTestId("active-chat").textContent).toBe("a:work");
   api.listProfiles.mockRejectedValue(
     new Error("offline after reconfiguration"),
   );
@@ -239,8 +252,10 @@ it.each(["selected label", "unrelated connection"] as const)(
     await openAgents();
     fireEvent.click(document.querySelectorAll(".agents-row")[1]);
     await waitFor(() =>
-      expect(screen.getByTestId("active-chat")).toHaveTextContent("a:work"),
+      expect(screen.getByTestId("selected-profile")).toHaveTextContent("work"),
     );
+    await showSelectedChat();
+    expect(screen.getByTestId("active-chat")).toHaveTextContent("a:work");
     fireEvent.click(
       screen.getByRole("button", { name: "Resume existing conversation" }),
     );
@@ -298,8 +313,10 @@ it.each(["endpoint", "authentication"] as const)(
     await openAgents();
     fireEvent.click(document.querySelectorAll(".agents-row")[1]);
     await waitFor(() =>
-      expect(screen.getByTestId("active-chat")).toHaveTextContent("a:work"),
+      expect(screen.getByTestId("selected-profile")).toHaveTextContent("work"),
     );
+    await showSelectedChat();
+    expect(screen.getByTestId("active-chat")).toHaveTextContent("a:work");
     fireEvent.click(
       screen.getByRole("button", { name: "Resume existing conversation" }),
     );
@@ -352,8 +369,12 @@ it.each([
       await openAgents();
       fireEvent.click(document.querySelectorAll(".agents-row")[1]);
       await waitFor(() =>
-        expect(screen.getByTestId("active-chat")).toHaveTextContent("a:work"),
+        expect(screen.getByTestId("selected-profile")).toHaveTextContent(
+          "work",
+        ),
       );
+      await showSelectedChat();
+      expect(screen.getByTestId("active-chat")).toHaveTextContent("a:work");
       fireEvent.click(
         screen.getByRole("button", { name: "Resume existing conversation" }),
       );

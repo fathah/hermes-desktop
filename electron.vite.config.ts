@@ -41,6 +41,17 @@ export default defineConfig({
       // the ported office agent renderer.
       dedupe: ["three"],
     },
+    // Discover the optional Office stack together before its first navigation.
+    // @lat: [[main-process#Deferred Office loading]]
+    optimizeDeps: {
+      include: [
+        "@react-three/drei",
+        "@react-three/fiber",
+        "three",
+        "troika-three-text",
+        "three/examples/jsm/utils/SkeletonUtils.js",
+      ],
+    },
     plugins: [tailwindcss(), react()],
   },
 });

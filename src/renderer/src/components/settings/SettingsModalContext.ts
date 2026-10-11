@@ -4,6 +4,8 @@ import { createContext, useContext } from "react";
 export interface OpenSettingsOptions {
   /** Active profile whose config the modal reads/writes. Defaults to "default". */
   profile?: string;
+  /** Machine that owns the displayed conversation, for profile-scoped pets. */
+  connectionId?: string;
 }
 
 export interface SettingsModalContextValue {

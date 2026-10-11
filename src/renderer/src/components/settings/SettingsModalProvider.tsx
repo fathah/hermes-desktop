@@ -9,6 +9,7 @@ interface OpenState {
   /** Nav item to land on (resolved by SettingsModal). */
   section?: string;
   profile?: string;
+  connectionId?: string;
 }
 
 /**
@@ -26,7 +27,11 @@ export function SettingsModalProvider({
 
   const openSettings = useCallback(
     (section?: string, opts?: OpenSettingsOptions) => {
-      setOpen({ section, profile: opts?.profile });
+      setOpen({
+        section,
+        profile: opts?.profile,
+        connectionId: opts?.connectionId,
+      });
       setVisible(true);
     },
     [],
@@ -47,6 +52,7 @@ export function SettingsModalProvider({
       {open && (
         <SettingsModal
           profile={open.profile}
+          connectionId={open.connectionId}
           initialSection={open.section}
           open={visible}
           onClose={closeSettings}

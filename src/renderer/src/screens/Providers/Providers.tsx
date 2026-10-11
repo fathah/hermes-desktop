@@ -20,6 +20,7 @@ import ProviderKeysSection from "../../components/ProviderKeysSection";
 import RegistryBrowserModal from "../../components/RegistryBrowserModal";
 import AuxiliaryTasksSection from "../../components/AuxiliaryTasksSection";
 import { useDiscoveredModels } from "../../hooks/useDiscoveredModels";
+import MiniMaxSpeechSettings from "./MiniMaxSpeechSettings";
 import { useConnectionTargetRevision } from "../../hooks/useConnectionTargetRevision";
 import { KeyRound, Workflow, User } from "../../assets/icons";
 import {
@@ -163,7 +164,6 @@ function ProvidersScreen({
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set());
   // Which key row is expanded into an editable input ("Add key" / edit).
   const [editingKey, setEditingKey] = useState<string | null>(null);
-
   // Model config
   const [modelProvider, setModelProvider] = useState("auto");
   const [modelName, setModelName] = useState("");
@@ -1124,6 +1124,9 @@ function ProvidersScreen({
                     );
                   })}
                 </div>
+                {section.title === "constants.sectionVoiceStt" && (
+                  <MiniMaxSpeechSettings profile={profile} />
+                )}
               </div>
             );
           })}

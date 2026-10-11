@@ -208,6 +208,12 @@ Speech-to-text IPC sends recorded desktop audio through the Hermes API server, n
 
 [[src/main/ipc/register.ts#registerIpcHandlers]] exposes `transcribe-audio` for the preload bridge, and [[src/main/hermes.ts#transcribeAudio]] posts a base64 data URL to `/api/audio/transcribe`. If the local gateway lacks that desktop route, it falls back to the Python `tools.transcription_tools.transcribe_audio` dispatcher, so local Whisper, Groq, OpenAI, ElevenLabs, and command/plugin STT providers remain independent from the selected chat model.
 
+## MiniMax speech synthesis
+
+Local agent message actions can request spoken audio without exposing speech credentials to the renderer.
+
+[[speech-playback]] defines selected Local target authority, one playback owner, request cancellation, bounded encoded synthesis and scoped speech settings. [[speech-playback-tests]] documents actual IPC and rendered lifecycle regressions.
+
 ## SSH credential persistence
 
 Every Desktop SSH `.env` update uses a remote-side locked transaction, so overlapping dashboard, API-server, and provider writes preserve unrelated credentials.
@@ -324,3 +330,9 @@ Legacy SSH sessions can be deleted without a dashboard. The selected connection 
 [[src/renderer/src/screens/Sessions/Sessions.tsx#Sessions]] keeps rows until deletion is acknowledged, reports failures, and refreshes after the attempt. In-flight results are discarded after changing connection/profile, updating connection settings, or unmounting. Confirmation remains explicit and concurrent delete submissions are blocked.
 
 The deletion command passes through [[src/main/ssh-command.ts#buildSshRemoteCommand]] before SSH executes it, preserving the POSIX interpreter boundary while leaving the selected IDs and profile on stdin.
+
+## Deferred Office loading
+
+The renderer imports Office only when that tab is first visited, so Chat startup does not depend on loading the optional Three.js scene.
+
+[[src/renderer/src/screens/Layout/Layout.tsx#Layout]] retains the existing visited-tab lifecycle with a Suspense boundary. [[electron.vite.config.ts]] discovers the Office dependency graph together, including SkeletonUtils, during dev prebundling. Production emits an independent Office chunk; switching tabs preserves its mounted state.

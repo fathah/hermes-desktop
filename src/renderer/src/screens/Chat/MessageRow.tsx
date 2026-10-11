@@ -8,6 +8,7 @@ import { AttachmentChip } from "../../components/AttachmentChip";
 import { MediaSegmentView } from "../../components/MediaImage";
 import { useI18n } from "../../components/useI18n";
 import { parseMediaTokens, cleanLeakedToolTags } from "./mediaUtils";
+import { SpeechButton } from "./SpeechButton";
 import type { ChatBubbleMessage, ChatMessage } from "./types";
 
 export const APPROVAL_RE =
@@ -166,6 +167,9 @@ interface MessageRowProps {
   showAvatar?: boolean;
   /** Appearance of the chatting agent, shown once the avatar goes idle. */
   agent?: AgentAvatarInfo;
+  profile?: string;
+  connectionId?: string;
+  speechEnabled?: boolean;
 }
 
 export const MessageRow = memo(function MessageRow({
@@ -176,10 +180,12 @@ export const MessageRow = memo(function MessageRow({
   onDeny,
   showAvatar = true,
   agent,
+  profile,
+  connectionId,
+  speechEnabled,
 }: MessageRowProps): React.JSX.Element {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
-
   // MessageRow is wrapped in memo() but still re-renders on any prop change
   // (e.g. isLoading toggling at the end of a stream), and `parseMediaTokens`
   // runs a full regex pipeline. Cache the result against the message content
@@ -199,6 +205,11 @@ export const MessageRow = memo(function MessageRow({
         : null,
     [msg.role, bubbleContent],
   );
+  const speechText = segments
+    ?.filter((segment) => segment.type === "text")
+    .map((segment) => segment.value)
+    .join("\n")
+    .trim();
 
   const handleCopy = useCallback(async () => {
     if (!bubbleContent) return;
@@ -258,6 +269,16 @@ export const MessageRow = memo(function MessageRow({
       >
         {msg.content && !isLoading && !msg.isSlashLoader && (
           <div className="chat-bubble-actions">
+            {msg.role === "agent" &&
+              speechEnabled &&
+              connectionId &&
+              speechText && (
+                <SpeechButton
+                  text={speechText}
+                  profile={profile || "default"}
+                  connectionId={connectionId}
+                />
+              )}
             <button
               type="button"
               className="chat-bubble-copy"

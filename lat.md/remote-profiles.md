@@ -118,7 +118,7 @@ The actual sidebar picker rejects failed and obsolete selections without optimis
 
 ### Real Layout selection and chat acceptance
 
-Actual Agents and sidebar flow reach the real Layout parent; selected profile, active chat target and captured IPC authority remain aligned.
+Actual Agents and sidebar flow reach the real Layout parent. Administrative selection leaves Chat inactive until navigation opens it; the selected profile, visible chat target and captured IPC authority then align.
 
 ### Real Layout stale callback isolation
 

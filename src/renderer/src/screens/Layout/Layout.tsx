@@ -1,4 +1,12 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import {
+  lazy,
+  Suspense,
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+} from "react";
 import Chat from "../Chat/Chat";
 import BotGroups from "../BotGroups/BotGroups";
 import {
@@ -32,7 +40,6 @@ import Skills from "../Skills/Skills";
 import Memory from "../Memory/Memory";
 import Tools from "../Tools/Tools";
 import Gateway from "../Gateway/Gateway";
-import Office from "../Office/Office";
 import Providers from "../Providers/Providers";
 import RemoteProviders from "../Providers/RemoteProviders";
 import Schedules from "../Schedules/Schedules";
@@ -58,6 +65,10 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import { useConnectionTargetRevision } from "../../hooks/useConnectionTargetRevision";
+import FloatingPet from "../../components/pet/FloatingPet";
+
+// @lat: [[main-process#Deferred Office loading]]
+const Office = lazy(() => import("../Office/Office"));
 
 type View =
   | "chat"
@@ -353,12 +364,15 @@ function Layout({
     const handleKey = (e: KeyboardEvent): void => {
       if ((e.metaKey || e.ctrlKey) && e.key === ",") {
         e.preventDefault();
-        openSettings(undefined, { profile: activeProfile });
+        openSettings(undefined, {
+          profile: activeProfile,
+          connectionId: activeRun?.connectionId ?? connectionId,
+        });
       }
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [openSettings, activeProfile]);
+  }, [openSettings, activeProfile, activeRun?.connectionId, connectionId]);
 
   const focusDiscover = useCallback(
     (kind: "skills" | "mcps") => {
@@ -945,7 +959,10 @@ function Layout({
               <button
                 className="sidebar-footer-action"
                 onClick={() =>
-                  openSettings(undefined, { profile: activeProfile })
+                  openSettings(undefined, {
+                    profile: activeProfile,
+                    connectionId: activeRun?.connectionId ?? connectionId,
+                  })
                 }
                 aria-label={t("navigation.settings")}
                 data-tooltip={t("navigation.settings")}
@@ -999,11 +1016,14 @@ function Layout({
                   connectionId={run.connectionId}
                   initialMessages={run.seed}
                   initialSessionId={run.sessionId}
-                  active={run.runId === activeRunId}
+                  active={view === "chat" && run.runId === activeRunId}
                   profile={run.profile}
                   onNewChat={handleNewChat}
                   onOpenDiagnose={(section?: string) =>
-                    openSettings(section, { profile: run.profile })
+                    openSettings(section, {
+                      profile: run.profile,
+                      connectionId: run.connectionId,
+                    })
                   }
                   onLoadingChange={handleRunLoading}
                   onSessionIdChange={handleRunSessionId}
@@ -1078,7 +1098,9 @@ function Layout({
 
           {visitedViews.has("office") && (
             <div style={paneStyle("office")}>
-              <Office profile={activeProfile} visible={view === "office"} />
+              <Suspense fallback={null}>
+                <Office profile={activeProfile} visible={view === "office"} />
+              </Suspense>
             </div>
           )}
 
@@ -1159,6 +1181,21 @@ function Layout({
                 remoteMode={remoteMode}
               />
             </div>
+          )}
+          {activeRun && (
+            <FloatingPet
+              key={`${activeRun.connectionId}:${activeRun.profile}`}
+              connectionId={activeRun.connectionId}
+              profile={activeRun.profile}
+              runId={activeRun.runId}
+              busy={activeRun.loading}
+              onOpenSettings={() =>
+                openSettings("pets", {
+                  profile: activeRun.profile,
+                  connectionId: activeRun.connectionId,
+                })
+              }
+            />
           )}
         </main>
       </div>
