@@ -679,6 +679,30 @@ describe("testRemoteConnection candidate probing", () => {
     },
   );
 
+  // @lat: [[scheduled-jobs#Test specifications#Gateway token validation]]
+  it.each([false, true])(
+    "validates a gateway token through protected models (valid=%s)",
+    async (valid) => {
+      const probe = stubHttp((url, options) => {
+        if (url.endsWith("/health"))
+          return { status: 200, type: "application/json" };
+        if (url.endsWith("/api/status"))
+          return { status: 404, type: "application/json" };
+        expect(url).toBe("http://new-gateway:8642/v1/models");
+        expect(options.headers.Authorization).toBe("Bearer candidate-token");
+        return { status: valid ? 200 : 401, type: "application/json" };
+      });
+      try {
+        await expect(
+          testRemoteConnection("http://new-gateway:8642", "candidate-token"),
+        ).resolves.toBe(valid);
+        expect(probe.seen).toContain("http://new-gateway:8642/v1/models");
+      } finally {
+        probe.restore();
+      }
+    },
+  );
+
   it("still rejects a URL that answers HTML on both paths", async () => {
     const probe = stubHttp(() => ({ status: 200, type: "text/html" }));
     await expect(testRemoteConnection("http://spa-only:9119")).resolves.toBe(
@@ -694,11 +718,11 @@ describe("testRemoteConnection URL probe", () => {
     // Reported in #266: stale code path was building
     // `http://host/v1/health` from a user-supplied `http://host/v1`,
     // which 404s and produces the "Cannot reach remote Hermes" splash.
-    let capturedTarget: string | undefined;
+    const capturedTargets: string[] = [];
     const reqSpy = vi
       .spyOn(http, "request")
       .mockImplementation((target: unknown, ...rest: unknown[]) => {
-        capturedTarget = String(target);
+        capturedTargets.push(String(target));
         // Find the response callback (last arg) and immediately fire it
         // with a fake 200 so the promise resolves cleanly.
         const cb = rest[rest.length - 1] as (res: unknown) => void;
@@ -716,10 +740,16 @@ describe("testRemoteConnection URL probe", () => {
       });
 
     await testRemoteConnection("http://127.0.0.1:8642/v1");
-    expect(capturedTarget).toBe("http://127.0.0.1:8642/health");
+    expect(capturedTargets.splice(0)).toEqual([
+      "http://127.0.0.1:8642/health",
+      "http://127.0.0.1:8642/v1/models",
+    ]);
 
     await testRemoteConnection("http://127.0.0.1:8642/V1/");
-    expect(capturedTarget).toBe("http://127.0.0.1:8642/health");
+    expect(capturedTargets.splice(0)).toEqual([
+      "http://127.0.0.1:8642/health",
+      "http://127.0.0.1:8642/v1/models",
+    ]);
 
     reqSpy.mockRestore();
   });

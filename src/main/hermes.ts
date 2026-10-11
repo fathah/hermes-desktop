@@ -3867,7 +3867,8 @@ export function testRemoteConnection(
       acc.then(async (ok) => {
         if (ok) return true;
         if (!(await probe(path))) return false;
-        if (path !== "/api/status" || configuredOAuth) return true;
+        if (path === "/health") return probe("/v1/models");
+        if (configuredOAuth) return true;
         // Dashboard status is public, even when a supplied token is invalid.
         // Verify candidate token access before saving a successful connection.
         return probe("/api/sessions?limit=1", {
