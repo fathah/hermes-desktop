@@ -11,6 +11,7 @@ interface MemoryProfileProps extends ProfileEditorScope {
   charLimit: number;
   profile?: string;
   onRefresh: () => void;
+  onMutationStart?: () => (() => void) | null;
 }
 
 export function MemoryProfile({
@@ -20,6 +21,7 @@ export function MemoryProfile({
   onRefresh,
   target,
   isCurrent,
+  onMutationStart,
 }: MemoryProfileProps): React.JSX.Element {
   const { t } = useI18n();
   const live = useProfileEditorLifetime({ target, isCurrent });
@@ -39,6 +41,8 @@ export function MemoryProfile({
 
   async function handleSave(): Promise<void> {
     if (!writable()) return;
+    const finish = onMutationStart?.();
+    if (onMutationStart && !finish) return;
     setError("");
     try {
       const result = await window.hermesAPI.writeUserProfile(
@@ -59,6 +63,8 @@ export function MemoryProfile({
     } catch (reason) {
       if (live())
         setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      finish?.();
     }
   }
 

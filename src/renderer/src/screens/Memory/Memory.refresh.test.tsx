@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { profileEditorFixture } from "../../test/profileEditorFixture";
 const t = (key: string): string => key;
@@ -65,6 +65,128 @@ it.each(["local", "remote"] as const)(
     expect(api.readSoul).toHaveBeenCalledTimes(1);
   },
 );
+
+// @lat: [[profile-editors#Tests#Refresh waits for admitted memory mutations]]
+it("waits for a pending SSH deletion before refreshing and editing the new entry positions", async () => {
+  let deleted = false;
+  let resolveDelete!: (result: boolean) => void;
+  const original = memoryData("entry A", "entry B");
+  const refreshed = memoryData("entry B", "entry C");
+  const api = {
+    ...profileEditorFixture("ssh").api,
+    readMemory: vi
+      .fn()
+      .mockImplementation(async () => (deleted ? refreshed : original)),
+    getConfig: vi.fn().mockResolvedValue(null),
+    discoverMemoryProviders: vi.fn().mockResolvedValue([]),
+    removeMemoryEntry: vi
+      .fn()
+      .mockReturnValue(new Promise((done) => (resolveDelete = done))),
+    updateMemoryEntry: vi.fn().mockResolvedValue({ success: true }),
+  };
+  Object.defineProperty(window, "hermesAPI", {
+    configurable: true,
+    value: api,
+  });
+  render(<Memory profile="work" />);
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  fireEvent.click(document.querySelectorAll(".memory-entry-actions button")[1]);
+  fireEvent.click(screen.getByRole("button", { name: "memory.yes" }));
+  fireEvent.click(document.querySelector(".memory-header button")!);
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  const readsDuringWrite = api.readMemory.mock.calls.length;
+  await act(async () => {
+    deleted = true;
+    resolveDelete(true);
+  });
+  const entryB = screen.getByText("entry B").closest(".memory-entry-card")!;
+  fireEvent.click(
+    within(entryB as HTMLElement).getByRole("button", { name: "memory.edit" }),
+  );
+  fireEvent.change(screen.getByRole("textbox"), {
+    target: { value: "edited entry B" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "memory.save" }));
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  expect(api.updateMemoryEntry).toHaveBeenCalledWith(
+    0,
+    "edited entry B",
+    "work",
+    expect.objectContaining({ mode: "ssh", profile: "work" }),
+  );
+  expect(readsDuringWrite).toBe(1);
+  expect(screen.queryByText("entry A")).toBeNull();
+});
+
+it("retains a failed write's explanation and releases mutation controls for retry", async () => {
+  let rejectDelete!: (reason: Error) => void;
+  const api = {
+    ...profileEditorFixture("ssh").api,
+    readMemory: vi.fn().mockResolvedValue(memoryData("entry A", "entry B")),
+    getConfig: vi.fn().mockResolvedValue(null),
+    discoverMemoryProviders: vi.fn().mockResolvedValue([]),
+    removeMemoryEntry: vi
+      .fn()
+      .mockReturnValue(new Promise((_done, reject) => (rejectDelete = reject))),
+  };
+  Object.defineProperty(window, "hermesAPI", {
+    configurable: true,
+    value: api,
+  });
+  render(<Memory profile="work" />);
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  fireEvent.click(document.querySelectorAll(".memory-entry-actions button")[1]);
+  fireEvent.click(screen.getByRole("button", { name: "memory.yes" }));
+  expect(document.querySelector(".memory-header button")).toBeDisabled();
+  expect(
+    screen.getByRole("button", { name: "memory.userProfile" }),
+  ).toBeDisabled();
+  expect(screen.getByRole("button", { name: "memory.yes" })).toBeDisabled();
+  await act(async () => rejectDelete(new Error("SSH deletion failed")));
+  expect(screen.getByText("SSH deletion failed")).toBeInTheDocument();
+  expect(document.querySelector(".memory-header button")).toBeEnabled();
+  expect(screen.getByRole("button", { name: "memory.yes" })).toBeEnabled();
+  expect(api.readMemory).toHaveBeenCalledTimes(1);
+});
+
+// @lat: [[profile-editors#Tests#Failed refresh cannot enable old positions]]
+it("keeps old positional controls disabled after a successful delete until its refresh succeeds", async () => {
+  const api = {
+    ...profileEditorFixture("ssh").api,
+    readMemory: vi
+      .fn()
+      .mockResolvedValueOnce(memoryData("entry A", "entry B"))
+      .mockRejectedValueOnce(new Error("refresh offline"))
+      .mockResolvedValue(memoryData("entry B", "entry C")),
+    getConfig: vi.fn().mockResolvedValue(null),
+    discoverMemoryProviders: vi.fn().mockResolvedValue([]),
+    removeMemoryEntry: vi.fn().mockResolvedValue(true),
+  };
+  Object.defineProperty(window, "hermesAPI", {
+    configurable: true,
+    value: api,
+  });
+  render(<Memory profile="work" />);
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  fireEvent.click(document.querySelectorAll(".memory-entry-actions button")[1]);
+  fireEvent.click(screen.getByRole("button", { name: "memory.yes" }));
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  expect(screen.getByRole("alert")).toHaveTextContent("refresh offline");
+  expect(
+    screen.getAllByRole("button", { name: "memory.edit" })[0],
+  ).toBeDisabled();
+  expect(
+    screen.getByRole("button", { name: "memory.addMemory" }),
+  ).toBeDisabled();
+  expect(document.querySelector(".memory-header button")).toBeEnabled();
+  fireEvent.click(document.querySelector(".memory-header button")!);
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  expect(screen.queryByText("entry A")).toBeNull();
+  expect(
+    screen.getAllByRole("button", { name: "memory.edit" })[0],
+  ).toBeEnabled();
+  expect(screen.queryByRole("alert")).toBeNull();
+});
 
 const memoryData = (first: string, second: string): MemoryData => ({
   memory: {

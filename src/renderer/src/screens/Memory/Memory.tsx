@@ -54,6 +54,12 @@ function MemoryEditor({
   const [memoryProvider, setMemoryProvider] = useState<string | null>(null);
   const [providers, setProviders] = useState<MemoryProviderInfo[]>([]);
   const [dataRevision, setDataRevision] = useState(0);
+  const [writing, setWriting] = useState(false);
+  const pendingWrites = useRef(0);
+  const refreshAfterWrite = useRef(false);
+  const loadingRef = useRef(loading);
+  const snapshotValid = useRef(false);
+  loadingRef.current = loading;
 
   const mounted = useRef(true);
   const generation = useRef(0);
@@ -70,7 +76,13 @@ function MemoryEditor({
   }, []);
   const loadData = useCallback(async () => {
     if (!live()) return;
+    if (pendingWrites.current) {
+      refreshAfterWrite.current = true;
+      return;
+    }
     const request = ++generation.current;
+    snapshotValid.current = false;
+    loadingRef.current = true;
     setLoading(true);
     setError("");
     try {
@@ -80,6 +92,7 @@ function MemoryEditor({
         window.hermesAPI.discoverMemoryProviders(profile, target),
       ]);
       if (!live() || request !== generation.current) return;
+      snapshotValid.current = true;
       setData(d as MemoryData);
       setMemoryProvider(provider);
       setProviders(provs);
@@ -92,9 +105,36 @@ function MemoryEditor({
       if (live() && request === generation.current)
         setError(err instanceof Error ? err.message : String(err));
     } finally {
-      if (live() && request === generation.current) setLoading(false);
+      if (live() && request === generation.current) {
+        loadingRef.current = false;
+        setLoading(false);
+      }
     }
   }, [profile, target, live]);
+
+  const beginMutation = (): (() => void) | null => {
+    if (
+      !live() ||
+      !snapshotValid.current ||
+      loadingRef.current ||
+      pendingWrites.current
+    )
+      return null;
+    pendingWrites.current += 1;
+    setWriting(true);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      pendingWrites.current -= 1;
+      if (!live()) return;
+      setWriting(false);
+      if (refreshAfterWrite.current) {
+        refreshAfterWrite.current = false;
+        void loadData();
+      }
+    };
+  };
 
   useEffect(() => {
     // A different profile: drop the previous one's data NOW. If this load fails,
@@ -148,14 +188,14 @@ function MemoryEditor({
         <button
           className="btn btn-secondary btn-sm"
           onClick={loadData}
-          disabled={loading}
+          disabled={loading || writing}
         >
           <Refresh size={13} />
         </button>
       </div>
 
       <CapacityCards data={data} />
-      <MemoryTabs activeTab={tab} onTabChange={setTab} />
+      <MemoryTabs activeTab={tab} onTabChange={setTab} disabled={writing} />
 
       {error && (
         <div className="memory-error" role="alert">
@@ -174,7 +214,7 @@ function MemoryEditor({
       {/* A disabled fieldset natively disables every button/input inside it. */}
       <fieldset
         key={dataRevision}
-        disabled={readOnly || loading}
+        disabled={readOnly || loading || writing || !!error}
         style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
       >
         {tab === "entries" && !data.contentUnavailable && (
@@ -184,6 +224,7 @@ function MemoryEditor({
             target={target}
             isCurrent={isCurrent}
             onRefresh={loadData}
+            onMutationStart={beginMutation}
           />
         )}
 
@@ -195,6 +236,7 @@ function MemoryEditor({
             target={target}
             isCurrent={isCurrent}
             onRefresh={loadData}
+            onMutationStart={beginMutation}
           />
         )}
 
@@ -206,6 +248,7 @@ function MemoryEditor({
             target={target}
             isCurrent={isCurrent}
             onRefresh={loadData}
+            onMutationStart={beginMutation}
           />
         )}
       </fieldset>

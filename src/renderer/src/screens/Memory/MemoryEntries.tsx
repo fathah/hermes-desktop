@@ -12,6 +12,7 @@ interface MemoryEntriesProps extends ProfileEditorScope {
   entries: MemoryEntry[];
   profile?: string;
   onRefresh: () => void;
+  onMutationStart?: () => (() => void) | null;
 }
 
 export function MemoryEntries({
@@ -20,6 +21,7 @@ export function MemoryEntries({
   onRefresh,
   target,
   isCurrent,
+  onMutationStart,
 }: MemoryEntriesProps): React.JSX.Element {
   const { t } = useI18n();
   const live = useProfileEditorLifetime({ target, isCurrent });
@@ -37,19 +39,26 @@ export function MemoryEntries({
     done: () => void,
   ): Promise<void> {
     if (!writable()) return;
+    const finish = onMutationStart?.();
+    if (onMutationStart && !finish) return;
     setError("");
     try {
       const result = await operation();
+      // A pane can unmount while its parent still owns this target. The parent's
+      // guarded reload must observe accepted writes even when this draft is gone.
+      if (result.success && (target && isCurrent ? isCurrent(target) : live()))
+        onRefresh();
       if (!live()) return;
       if (!result.success) {
         setError(result.error || t(failed));
         return;
       }
       done();
-      onRefresh();
     } catch (reason) {
       if (live())
         setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      finish?.();
     }
   }
 

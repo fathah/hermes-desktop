@@ -11,6 +11,7 @@ import { profileEditorFixture } from "../../test/profileEditorFixture";
 import { ProfileModalProvider } from "./ProfileModalProvider";
 import type { ProfileSection } from "./ProfileModalContext";
 import { ProfileModalContext } from "./ProfileModalContext";
+import type { MemoryData } from "../../screens/Memory/types";
 
 const t = (key: string): string => key;
 vi.mock("../useI18n", () => ({ useI18n: () => ({ t }) }));
@@ -58,6 +59,92 @@ afterEach(() => {
 async function flush(ms = 0): Promise<void> {
   await act(async () => vi.advanceTimersByTimeAsync(ms));
 }
+
+// @lat: [[profile-editors#Tests#Modal memory completion follows the parent target]]
+it("reloads an admitted memory deletion after leaving its pane without refreshing a different target", async () => {
+  let deleted = false;
+  let resolveDelete!: (value: boolean) => void;
+  const data = (content: string): MemoryData => ({
+    memory: {
+      entries: [{ index: 0, content }],
+      content,
+      exists: true,
+      lastModified: null,
+      charCount: content.length,
+      charLimit: 2000,
+    },
+    user: {
+      content: "",
+      exists: false,
+      lastModified: null,
+      charCount: 0,
+      charLimit: 1000,
+    },
+    stats: { totalSessions: 0, totalMessages: 0 },
+  });
+  const fixture = profileEditorFixture("ssh");
+  const api = {
+    ...fixture.api,
+    listProfiles: vi.fn().mockResolvedValue([
+      { id: "a", name: "a", provider: "auto", model: "", skillCount: 0 },
+      { id: "b", name: "b", provider: "auto", model: "", skillCount: 0 },
+    ]),
+    readMemory: vi
+      .fn()
+      .mockImplementation(async (profile) =>
+        data(
+          profile === "b"
+            ? "new target memory"
+            : deleted
+              ? "entry B"
+              : "entry A",
+        ),
+      ),
+    readSoul: vi.fn().mockResolvedValue("persona"),
+    removeMemoryEntry: vi
+      .fn()
+      .mockReturnValue(new Promise((done) => (resolveDelete = done))),
+  };
+  Object.defineProperty(window, "hermesAPI", {
+    configurable: true,
+    value: api,
+  });
+  render(
+    <ProfileModalProvider>
+      <Openers section="agentMemory" />
+    </ProfileModalProvider>,
+  );
+  fireEvent.click(screen.getByText("Open a"));
+  await flush();
+  fireEvent.click(document.querySelectorAll(".memory-entry-actions button")[1]);
+  fireEvent.click(screen.getByRole("button", { name: "memory.yes" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "agents.sectionPersona" }),
+  );
+  await flush();
+  await act(async () => {
+    deleted = true;
+    resolveDelete(true);
+  });
+  fireEvent.click(
+    screen.getByRole("button", { name: "agents.sectionAgentMemory" }),
+  );
+  await flush();
+  expect(screen.queryByText("entry A")).toBeNull();
+  expect(screen.getByText("entry B")).toBeInTheDocument();
+  expect(api.readMemory).toHaveBeenCalledTimes(2);
+  api.removeMemoryEntry.mockReturnValueOnce(
+    new Promise((done) => (resolveDelete = done)),
+  );
+  fireEvent.click(document.querySelectorAll(".memory-entry-actions button")[1]);
+  fireEvent.click(screen.getByRole("button", { name: "memory.yes" }));
+  fireEvent.click(screen.getByText("Open b"));
+  await flush();
+  expect(screen.getByText("new target memory")).toBeInTheDocument();
+  await act(async () => resolveDelete(true));
+  expect(api.readMemory).toHaveBeenCalledTimes(3);
+  expect(screen.getByText("new target memory")).toBeInTheDocument();
+});
 
 // @lat: [[profile-editors#Tests#Global modal editor lifecycle]]
 it("isolates real Soul editors through the global opener and closes them on connection changes", async () => {

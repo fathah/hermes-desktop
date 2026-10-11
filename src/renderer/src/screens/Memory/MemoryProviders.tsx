@@ -34,6 +34,7 @@ interface MemoryProvidersProps extends ProfileEditorScope {
   activeProvider: string | null;
   profile?: string;
   onRefresh: () => void;
+  onMutationStart?: () => (() => void) | null;
 }
 
 export function MemoryProviders({
@@ -43,6 +44,7 @@ export function MemoryProviders({
   onRefresh,
   target,
   isCurrent,
+  onMutationStart,
 }: MemoryProvidersProps): React.JSX.Element {
   const { t } = useI18n();
   const live = useProfileEditorLifetime({ target, isCurrent });
@@ -64,6 +66,8 @@ export function MemoryProviders({
 
   async function selectProvider(name: string): Promise<void> {
     if (!writable()) return;
+    const finish = onMutationStart?.();
+    if (onMutationStart && !finish) return;
     setError("");
     setActivating(name || "deactivate");
     try {
@@ -85,11 +89,14 @@ export function MemoryProviders({
         setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       if (live()) setActivating(null);
+      finish?.();
     }
   }
 
   async function saveEnvironment(key: string): Promise<void> {
     if (!writable()) return;
+    const finish = onMutationStart?.();
+    if (onMutationStart && !finish) return;
     setError("");
     try {
       const result = await window.hermesAPI.setEnv(
@@ -108,6 +115,8 @@ export function MemoryProviders({
     } catch (reason) {
       if (live())
         setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      finish?.();
     }
   }
 

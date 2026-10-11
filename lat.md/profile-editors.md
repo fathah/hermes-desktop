@@ -20,6 +20,8 @@ Editors wait for target capture, remount when profile or configuration changes, 
 
 Same-target Memory refresh preserves Soul's independent autosave lifetime. Refreshed entries, user text and providers remount together so positional edits, delete confirmations and provider drafts cannot outlive the data they describe.
 
+An admitted Memory write blocks refresh and tab changes until its result is handled. Successful mutation refreshes wait for the write to settle, then replace the snapshot before positional controls become editable. Target changes still invalidate all callbacks.
+
 [[src/renderer/src/hooks/useProfileEditorTarget.ts#useProfileEditorTarget]] invalidates its current target synchronously on configuration events. The global profile modal closes on these events and passes the validated target to Memory operations. Remote modal navigation exposes only Persona and read-only Memory; it never loads desktop profile metadata or local appearance, sync and delete controls.
 
 ### Remote capabilities
@@ -127,3 +129,15 @@ Refreshing reordered entries removes the previous index-based edit before contro
 ### Refresh replaces memory tab state
 
 Same-target refresh replaces user text and provider activation state and discards their old drafts. Soul stays mounted separately with its pending autosave intact.
+
+### Refresh waits for admitted memory mutations
+
+A delayed SSH deletion cannot be overtaken by Refresh. Its completion reloads the new positions before the next edit is admitted, while failed writes retain their error and release controls for retry.
+
+### Modal memory completion follows the parent target
+
+A Memory mutation completed after pane navigation still refreshes the current modal target. Switching to a different profile cancels that continuation and cannot refresh or replace its contents.
+
+### Failed refresh cannot enable old positions
+
+If the read after a successful mutation fails, old positional controls remain unavailable. A later successful retry installs the new snapshot and enables editing again.
