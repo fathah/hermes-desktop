@@ -110,12 +110,14 @@ function Layout({
   // preserve existing conversations and activate a scratch run for the selected
   // agent so `activeProfile` stays aligned with the visible chat transport.
   const [activeProfile, setActiveProfile] = useState("default");
-  const {
-    target: profileTarget,
-    isCurrent: isProfileCurrent,
-    revision: profileRevision,
-  } = useProfileEditorTarget("default", connectionId);
+  const { target: profileTarget, isCurrent: isProfileCurrent } =
+    useProfileEditorTarget("default", connectionId);
   const profileChoiceRevision = useRef(0);
+  const profileSettings = useRef({
+    connectionId,
+    scopeToken: null as string | null,
+  });
+  const restoredProfileScope = useRef<string | null>(null);
   const [runs, setRuns] = useState<ChatRun[]>(() => [
     mintRun(connectionId, "default"),
   ]);
@@ -340,6 +342,22 @@ function Layout({
   );
 
   useEffect(() => {
+    const previous = profileSettings.current;
+    if (previous.connectionId === connectionId) {
+      // Notifications revoke request authority immediately, but display labels
+      // and unrelated connections do not change this main-issued settings token.
+      if (!profileTarget || previous.scopeToken === profileTarget.scopeToken)
+        return;
+      if (previous.scopeToken === null) {
+        previous.scopeToken = profileTarget.scopeToken;
+        return;
+      }
+    }
+    profileSettings.current = {
+      connectionId,
+      scopeToken: profileTarget?.scopeToken ?? null,
+    };
+    restoredProfileScope.current = null;
     profileChoiceRevision.current += 1;
     setActiveProfile("default");
     setProfileAppearance({});
@@ -353,15 +371,19 @@ function Layout({
     );
     setRuns(next.runs);
     setActiveRunId(next.activeRunId);
-  }, [connectionId, profileRevision]);
+  }, [connectionId, profileTarget]);
 
   // Restore the selected profile for each captured connection. Remote uses a
   // desktop preference; Local/SSH retain their existing active-profile source.
   useEffect(() => {
     if (!profileTarget) return;
     const captured = profileTarget;
+    const scope = JSON.stringify([connectionId, captured.scopeToken]);
+    if (restoredProfileScope.current === scope) return;
+    restoredProfileScope.current = scope;
     const choice = profileChoiceRevision.current;
     let cancelled = false;
+    let settled = false;
     window.hermesAPI
       .listProfiles(profileTarget || undefined)
       .then((profiles) => {
@@ -371,6 +393,7 @@ function Layout({
           profileChoiceRevision.current !== choice
         )
           return;
+        settled = true;
         const active = profiles.find((p) => p.isActive);
         if (active) {
           setActiveProfile(active.id);
@@ -385,10 +408,25 @@ function Layout({
         }
       })
       .catch(() => {
+        if (
+          cancelled ||
+          !isProfileCurrent(captured) ||
+          profileChoiceRevision.current !== choice
+        )
+          return;
+        settled = true;
         /* fall back to the default profile */
       });
     return () => {
       cancelled = true;
+      // An invalidated initial read can retry with fresh authority. A newer
+      // user choice owns this scope and must not be undone by its retry.
+      if (
+        !settled &&
+        profileChoiceRevision.current === choice &&
+        restoredProfileScope.current === scope
+      )
+        restoredProfileScope.current = null;
     };
   }, [connectionId, profileTarget, isProfileCurrent]);
 

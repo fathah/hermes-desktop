@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { profileEditorFixture } from "../../test/profileEditorFixture";
+import { useState } from "react";
 vi.mock("../../components/useI18n", () => ({
   useI18n: () => ({ t: (key: string) => key }),
 }));
@@ -17,20 +18,35 @@ vi.mock("../../components/profile/ProfileModalContext", () => ({
   useProfileModal: () => ({ openProfile: vi.fn() }),
 }));
 vi.mock("../Chat/Chat", () => ({
-  default: ({
+  default: function Chat({
     profile,
     connectionId,
     active,
+    runId,
+    initialSessionId,
   }: {
     profile: string;
     connectionId: string;
     active: boolean;
-  }) =>
-    active ? (
-      <div data-testid="active-chat">
+    runId: string;
+    initialSessionId?: string;
+  }) {
+    const [draft, setDraft] = useState("");
+    return active ? (
+      <div
+        data-testid="active-chat"
+        data-run-id={runId}
+        data-session-id={initialSessionId}
+      >
         {connectionId}:{profile}
+        <textarea
+          aria-label="Conversation draft"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+        />
       </div>
-    ) : null,
+    ) : null;
+  },
 }));
 vi.mock("./StatusBar", () => ({
   StatusBar: ({ activeProfile }: { activeProfile: string }) => (
@@ -38,7 +54,13 @@ vi.mock("./StatusBar", () => ({
   ),
 }));
 vi.mock("./ActiveSessionsBar", () => ({ ActiveSessionsBar: () => null }));
-vi.mock("./SidebarRecentSessions", () => ({ default: () => null }));
+vi.mock("./SidebarRecentSessions", () => ({
+  default: ({ onSelect }: { onSelect: (id: string) => void }) => (
+    <button onClick={() => onSelect("existing-conversation")}>
+      Resume existing conversation
+    </button>
+  ),
+}));
 vi.mock("../Sessions/Sessions", () => ({ default: () => null }));
 vi.mock("../Discover/Discover", () => ({ default: () => null }));
 vi.mock("../Skills/Skills", () => ({ default: () => null }));
@@ -90,6 +112,7 @@ function fixture(): {
       .mockResolvedValue([row("default", true), row("work")]),
     setActiveProfile: vi.fn().mockResolvedValue(true),
     createProfile: vi.fn(),
+    getSessionMessages: vi.fn().mockResolvedValue([]),
     isRemoteOnlyMode: vi.fn().mockResolvedValue(true),
     onUpdateAvailable: vi.fn().mockReturnValue(() => {}),
     onUpdateDownloadProgress: vi.fn().mockReturnValue(() => {}),
@@ -173,8 +196,9 @@ it("a delayed initial restore cannot undo the user's newly selected profile", as
   const { api } = fixture();
   const restore =
     deferred<Awaited<ReturnType<typeof window.hermesAPI.listProfiles>>>();
-  // Layout appearance loads first, restoration second, sidebar and Agents later.
+  // ProfileSwitcher loads first, Layout appearance second, restoration third.
   api.listProfiles
+    .mockResolvedValueOnce([row("default", true), row("work")])
     .mockResolvedValueOnce([row("default", true), row("work")])
     .mockReturnValueOnce(restore.promise);
   render(<Layout connectionId="a" />);
@@ -205,3 +229,163 @@ it("aligns the visible chat with the default fallback when a same-ID reload cann
   );
   expect(screen.getByTestId("active-chat").textContent).toBe("a:default");
 });
+
+// @lat: [[remote-profiles#Tests#Connection renames preserve the visible conversation]]
+it.each(["selected label", "unrelated connection"] as const)(
+  "preserves a named existing conversation and its draft after renaming the %s",
+  async (renamed) => {
+    const { scope, api } = fixture();
+    render(<Layout connectionId="a" />);
+    await openAgents();
+    fireEvent.click(document.querySelectorAll(".agents-row")[1]);
+    await waitFor(() =>
+      expect(screen.getByTestId("active-chat")).toHaveTextContent("a:work"),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Resume existing conversation" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("active-chat")).toHaveAttribute(
+        "data-session-id",
+        "existing-conversation",
+      ),
+    );
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Conversation draft" }),
+      { target: { value: "unsent named-profile draft" } },
+    );
+    const runId = screen.getByTestId("active-chat").getAttribute("data-run-id");
+    // Both rename IPC paths emit selected configuration again without changing
+    // its private settings or the main-issued authority token.
+    api.listProfiles.mockResolvedValue([row("default"), row("work", true)]);
+    await act(async () =>
+      scope.listeners.forEach((notify) =>
+        (notify as (config: { connectionId: string; name: string }) => void)({
+          connectionId: "a",
+          name:
+            renamed === "selected label"
+              ? "Renamed selected connection"
+              : "Original selected connection",
+        }),
+      ),
+    );
+    expect(screen.getByTestId("selected-profile")).toHaveTextContent("work");
+    expect(screen.getByTestId("active-chat")).toHaveAttribute(
+      "data-run-id",
+      runId,
+    );
+    expect(screen.getByTestId("active-chat")).toHaveAttribute(
+      "data-session-id",
+      "existing-conversation",
+    );
+    expect(
+      screen.getByRole("textbox", { name: "Conversation draft" }),
+    ).toHaveValue("unsent named-profile draft");
+    expect(api.getSessionMessages).toHaveBeenCalledExactlyOnceWith(
+      "existing-conversation",
+      "a",
+      "work",
+    );
+  },
+);
+
+// @lat: [[remote-profiles#Tests#Selected settings still reset profile restoration]]
+it.each(["endpoint", "authentication"] as const)(
+  "invalidates the named conversation after selected %s settings change",
+  async () => {
+    const { scope, api } = fixture();
+    render(<Layout connectionId="a" />);
+    await openAgents();
+    fireEvent.click(document.querySelectorAll(".agents-row")[1]);
+    await waitFor(() =>
+      expect(screen.getByTestId("active-chat")).toHaveTextContent("a:work"),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Resume existing conversation" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("active-chat")).toHaveAttribute(
+        "data-session-id",
+        "existing-conversation",
+      ),
+    );
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Conversation draft" }),
+      { target: { value: "old target draft" } },
+    );
+    const runId = screen.getByTestId("active-chat").getAttribute("data-run-id");
+    api.listProfiles.mockResolvedValue([row("default", true), row("work")]);
+    await act(async () => scope.change("a"));
+    await waitFor(() =>
+      expect(screen.getByTestId("active-chat")).toHaveTextContent("a:default"),
+    );
+    expect(
+      screen.getByTestId("active-chat").getAttribute("data-run-id"),
+    ).not.toBe(runId);
+    expect(
+      screen.getByRole("textbox", { name: "Conversation draft" }),
+    ).toHaveValue("");
+    expect(api.setActiveProfile).toHaveBeenCalledTimes(1);
+  },
+);
+
+// @lat: [[remote-profiles#Tests#Renames during pending restoration preserve user choices]]
+it.each([
+  { userChose: false, oldReadTiming: "later" },
+  { userChose: false, oldReadTiming: "during rename" },
+  { userChose: true, oldReadTiming: "during rename" },
+])(
+  "retries renamed initial authority: choice=$userChose, old read=$oldReadTiming",
+  async ({ userChose, oldReadTiming }) => {
+    const { scope, api } = fixture();
+    const restore =
+      deferred<Awaited<ReturnType<typeof window.hermesAPI.listProfiles>>>();
+    api.listProfiles
+      .mockResolvedValueOnce([row("default", true), row("work")])
+      .mockResolvedValueOnce([row("default", true), row("work")])
+      .mockReturnValueOnce(restore.promise);
+    render(<Layout connectionId="a" />);
+    await waitFor(() =>
+      expect(api.listProfiles.mock.calls.length).toBeGreaterThanOrEqual(3),
+    );
+    if (userChose) {
+      await openAgents();
+      fireEvent.click(document.querySelectorAll(".agents-row")[1]);
+      await waitFor(() =>
+        expect(screen.getByTestId("active-chat")).toHaveTextContent("a:work"),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Resume existing conversation" }),
+      );
+      await waitFor(() =>
+        expect(screen.getByTestId("active-chat")).toHaveAttribute(
+          "data-session-id",
+          "existing-conversation",
+        ),
+      );
+    }
+    const runId = screen.getByTestId("active-chat").getAttribute("data-run-id");
+    api.listProfiles.mockResolvedValue([
+      row("default", userChose),
+      row("work", !userChose),
+    ]);
+    await act(async () => {
+      scope.listeners.forEach((notify) => notify());
+      if (oldReadTiming === "during rename") {
+        restore.resolve([row("default", true), row("work")]);
+        await Promise.resolve();
+        await Promise.resolve();
+      }
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("active-chat")).toHaveTextContent("a:work"),
+    );
+    if (userChose)
+      expect(screen.getByTestId("active-chat")).toHaveAttribute(
+        "data-run-id",
+        runId,
+      );
+    await act(async () => restore.resolve([row("default", true), row("work")]));
+    expect(screen.getByTestId("active-chat")).toHaveTextContent("a:work");
+  },
+);

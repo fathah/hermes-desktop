@@ -22,6 +22,8 @@ Profile IPC validates captured targets before list, create, select, delete, appe
 
 Layout restores each connection's selected profile onto a scratch chat run using the existing [[sidebar-navigation#Profile switch and active chat]] transition. A delayed restore cannot undo a newer user choice. Remote Agents exposes list/create/select/chat; profile editing and desktop/cloud sync controls remain unavailable there. Global editor modal invalidation is documented in [[profile-editors#Profile editors#Renderer lifetime]].
 
+Request authority is invalidated on every configuration notification. Layout resets selection only when the selected connection or its recaptured opaque settings token changes. Label-only renames and unrelated edits preserve the current conversation and draft; same-scope restoration cannot switch it to a scratch run.
+
 ### Local cloud sync boundary
 
 Automatic and manual cloud agent sync reconcile desktop files only in Local mode. Remote and SSH Agents do not mount sync controls; main rejects unsupported sync admission.
@@ -122,4 +124,16 @@ A delayed initial restore cannot reset the active profile and scratch chat after
 
 ### Failed reload keeps the shell target aligned
 
-Same-ID configuration invalidation selects a default scratch chat together with the footer fallback. A failed profile restore cannot leave the old named chat visible under the default label.
+Changed settings on the selected connection select a default scratch chat together with the footer fallback. A failed profile restore cannot leave the old named chat visible under the default label.
+
+### Connection renames preserve the visible conversation
+
+Actual Layout resumes a named-profile conversation with an unsent draft. Selected-label and unrelated connection renames recapture unchanged authority without replacing its active run, durable session or draft.
+
+### Selected settings still reset profile restoration
+
+Changing the selected endpoint or authentication changes its opaque authority token. Actual Layout then resets the selected profile and visible scratch chat together, while old editor actions remain invalidated.
+
+### Renames during pending restoration preserve user choices
+
+A rename can invalidate an initial profile read without changing its settings scope. Fresh authority retries that read, but a newer user selection keeps ownership and cannot be undone by the retry or the old response.
