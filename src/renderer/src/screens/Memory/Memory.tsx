@@ -53,6 +53,7 @@ function MemoryEditor({
   const [error, setError] = useState("");
   const [memoryProvider, setMemoryProvider] = useState<string | null>(null);
   const [providers, setProviders] = useState<MemoryProviderInfo[]>([]);
+  const [dataRevision, setDataRevision] = useState(0);
 
   const mounted = useRef(true);
   const generation = useRef(0);
@@ -82,6 +83,9 @@ function MemoryEditor({
       setData(d as MemoryData);
       setMemoryProvider(provider);
       setProviders(provs);
+      // Entry positions and the other tabs' initial state belong to this read.
+      // Reset them together; Soul has an independent lifetime and autosave.
+      setDataRevision((revision) => revision + 1);
     } catch (err) {
       // A remote read can reject (offline server, sign-in expired). Say so and
       // leave the refresh button usable instead of spinning forever.
@@ -169,6 +173,7 @@ function MemoryEditor({
 
       {/* A disabled fieldset natively disables every button/input inside it. */}
       <fieldset
+        key={dataRevision}
         disabled={readOnly || loading}
         style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
       >

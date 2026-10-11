@@ -18,6 +18,8 @@ Sign-in changes block capture and invalidate old targets. Stale targets fail bef
 
 Editors wait for target capture, remount when profile or configuration changes, and guard reads, saves and timers. Hydration does not autosave; Soul writes are serialized and stale results do not display Saved or errors.
 
+Same-target Memory refresh preserves Soul's independent autosave lifetime. Refreshed entries, user text and providers remount together so positional edits, delete confirmations and provider drafts cannot outlive the data they describe.
+
 [[src/renderer/src/hooks/useProfileEditorTarget.ts#useProfileEditorTarget]] invalidates its current target synchronously on configuration events. The global profile modal closes on these events and passes the validated target to Memory operations. Remote modal navigation exposes only Persona and read-only Memory; it never loads desktop profile metadata or local appearance, sync and delete controls.
 
 ### Remote capabilities
@@ -117,3 +119,11 @@ Refreshing Memory within the captured target keeps its real Soul editor and pend
 ### Unavailable modal memory is not empty
 
 The global profile modal explains unavailable Remote contents and does not render an empty entry list or zero-memory message.
+
+### Refresh resets positional entry drafts
+
+Refreshing reordered entries removes the previous index-based edit before controls become enabled. Saving a new edit writes the newly displayed entry, never a draft from its prior occupant.
+
+### Refresh replaces memory tab state
+
+Same-target refresh replaces user text and provider activation state and discards their old drafts. Soul stays mounted separately with its pending autosave intact.
