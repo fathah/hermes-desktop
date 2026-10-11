@@ -719,6 +719,8 @@ describe("sendMessage session model override routing", () => {
   it.each([
     ["https://router.requesty.ai/v1", "vault"],
     ["https://router.eu.requesty.ai/v1", "vault"],
+    ["https://openai.com:password@router.requesty.ai/v1", "vault"],
+    ["https://router.requesty.ai/api.deepseek.com/v1", "vault"],
     ["https://router.requesty.ai/v1", "profile"],
     ["https://router.requesty.ai/v1", "process"],
   ])(
@@ -757,6 +759,8 @@ describe("sendMessage session model override routing", () => {
   it.each([
     ["https://api.cheaperinference.com/v1", "vault"],
     ["https://user:pass@api.cheaperinference.com:443/v1", "vault"],
+    ["https://openai.com:password@api.cheaperinference.com/v1", "vault"],
+    ["https://api.cheaperinference.com/api.deepseek.com/v1", "vault"],
     ["https://api.cheaperinference.com/v1", "profile"],
     ["https://api.cheaperinference.com/v1", "process"],
   ])(

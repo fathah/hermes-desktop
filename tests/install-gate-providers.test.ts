@@ -62,6 +62,18 @@ describe("expectedEnvKeyForModel — URL fallback for custom/auto providers", ()
       "CHEAPERINFERENCE_API_KEY",
     ],
     ["https://API.CHEAPERINFERENCE.COM:443/v1", "CHEAPERINFERENCE_API_KEY"],
+    [
+      "https://openai.com:password@api.cheaperinference.com/v1",
+      "CHEAPERINFERENCE_API_KEY",
+    ],
+    [
+      "https://api.cheaperinference.com/v1/api.openai.com",
+      "CHEAPERINFERENCE_API_KEY",
+    ],
+    [
+      "https://api.cheaperinference.com/api.deepseek.com/v1",
+      "CHEAPERINFERENCE_API_KEY",
+    ],
     ["https://api.cheaperinference.com:443@evil.example/v1", null],
     ["https://user:pass@api.cheaperinference.com.attacker.example/v1", null],
   ])(
@@ -74,6 +86,9 @@ describe("expectedEnvKeyForModel — URL fallback for custom/auto providers", ()
   it.each([
     ["https://user:pass@router.requesty.ai:443/v1", "REQUESTY_API_KEY"],
     ["https://ROUTER.EU.REQUESTY.AI:443/v1", "REQUESTY_API_KEY"],
+    ["https://openai.com:password@router.requesty.ai/v1", "REQUESTY_API_KEY"],
+    ["https://router.requesty.ai/v1/api.openai.com", "REQUESTY_API_KEY"],
+    ["https://router.requesty.ai/api.deepseek.com/v1", "REQUESTY_API_KEY"],
     ["https://router.requesty.ai:443@evil.example/v1", null],
     ["https://user:pass@requesty.ai.attacker.example/v1", null],
   ])(

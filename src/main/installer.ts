@@ -393,6 +393,9 @@ const PROVIDER_ENV_KEYS: Record<string, string> = {
 // back to recognizing the endpoint by base URL. Same patterns hermes.ts
 // uses for runtime header injection.
 const URL_TO_ENV_KEY: Array<[RegExp, string, boolean?]> = [
+  // Strict hosts take precedence over legacy URL-substring mappings.
+  [/(?:^|\.)requesty\.ai$/i, "REQUESTY_API_KEY", true],
+  [/^api\.cheaperinference\.com$/i, "CHEAPERINFERENCE_API_KEY", true],
   [/openrouter\.ai/i, "OPENROUTER_API_KEY"],
   [/anthropic\.com/i, "ANTHROPIC_API_KEY"],
   [/openai\.com/i, "OPENAI_API_KEY"],
@@ -406,8 +409,6 @@ const URL_TO_ENV_KEY: Array<[RegExp, string, boolean?]> = [
   [/api\.cerebras\.ai/i, "CEREBRAS_API_KEY"],
   [/atlascloud\.ai/i, "ATLASCLOUD_API_KEY"],
   [/api\.novita\.ai/i, "NOVITA_API_KEY"],
-  [/(?:^|\.)requesty\.ai$/i, "REQUESTY_API_KEY", true],
-  [/^api\.cheaperinference\.com$/i, "CHEAPERINFERENCE_API_KEY", true],
   [/api\.mistral\.ai/i, "MISTRAL_API_KEY"],
   [/api\.perplexity\.ai/i, "PERPLEXITY_API_KEY"],
   [/api\.xiaomimimo\.com/i, "XIAOMI_API_KEY"],
