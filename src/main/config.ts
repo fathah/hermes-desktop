@@ -922,6 +922,26 @@ function appendSpeechYamlValue(
     );
     if (found) {
       if (level === segments.length - 1) {
+        // Replacing only the inline scalar must never strand a child mapping
+        // or a plain scalar continuation below the new quoted value.
+        let nextLine = found.afterLine;
+        while (nextLine < content.length) {
+          const end = content.indexOf("\n", nextLine);
+          const next = end < 0 ? content.length : end + 1;
+          const line = content.slice(nextLine, end < 0 ? next : end);
+          const trimmed = line.trimStart();
+          if (trimmed.trim() && !trimmed.startsWith("#")) {
+            const indent = line.length - trimmed.length;
+            if (indent > found.indent) return null;
+            if (
+              indent === found.indent &&
+              !/^[a-zA-Z_][a-zA-Z0-9_-]*[ \t]*:/.test(trimmed)
+            )
+              return null;
+            break;
+          }
+          nextLine = next;
+        }
         const raw = found.rawValue.trim();
         if (
           ["|", ">", "&", "*", "[", "{"].includes(raw[0]) ||
@@ -1002,8 +1022,10 @@ export function setMiniMaxSpeechConfigValue(
     );
   const complete = appendSpeechYamlValue(next, ["tts", "provider"], "minimax");
   if (complete === null)
-    throw new Error("Could not persist the speech provider.");
-  // Verify the real serialized document before one atomic write. Unsupported
+    throw new Error(
+      "Cannot update this YAML speech provider mapping; use a plain scalar.",
+    );
+  // Verify both serialized speech values before one atomic write. Unsupported
   // syntax must fail visibly rather than acknowledge a silent no-op.
   if (
     getYamlPath(complete, "tts.provider") !== "minimax" ||

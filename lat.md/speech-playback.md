@@ -36,10 +36,12 @@ Starting another message stops the previous audio and synthesis; late results ca
 
 Layout marks a Chat active only when its run and the chat screen are visible. Hidden, retained Chat instances unmount Listen actions, cancelling synthesis and releasing audio while preserving their conversation and background agent transport.
 
+Listen uses the same cleaned text segments as the displayed reply: recovered readable tool answers are included, while media paths and image payloads are omitted. Media-only replies have no Listen action.
+
 ## Scoped speech settings
 
 The Providers selectors load and save through the captured Local connection and selected profile, with no generic Remote-to-Local fallback.
 
 [[src/renderer/src/screens/Providers/MiniMaxSpeechSettings.tsx#MiniMaxSpeechSettings]] serializes changes, preserves the last confirmed value on failure and discards old hydration or save replies after scope changes. Choosing a valid model or region also selects MiniMax as the profile's TTS provider. The Automatic option persists an empty region, retaining the Agent's global-key then China-key fallback.
 
-[[src/main/config.ts#setMiniMaxSpeechConfigValue]] inserts missing nested speech mappings, preserves comments and siblings, verifies the serialized YAML and writes model/region plus provider atomically to the explicit profile. Unsupported scalar or flow parents fail visibly without rewriting the file.
+[[src/main/config.ts#setMiniMaxSpeechConfigValue]] inserts missing nested speech mappings, preserves comments and siblings, verifies both serialized speech values and writes model/region plus provider atomically to the explicit profile. Unsupported scalar or flow parents, and leaf values with child or continuation lines, fail visibly without rewriting the file.

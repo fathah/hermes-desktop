@@ -90,3 +90,15 @@ The actual Layout and Chat retain background transcripts while switching profile
 ## Hidden pending chat synthesis
 
 Profile and screen transitions cancel synthesis in the actual retained Chat, so a late vendor reply cannot allocate or play hidden audio.
+
+## Unsafe multiline speech leaf refusal
+
+Valid YAML speech leaves containing child mappings or continued text are refused before an atomic write, preserving the entire profile file rather than leaving invalid continuation lines.
+
+## Visible speech content
+
+Real rendered reply rows synthesize only their cleaned text segments, excluding hidden media paths, large image payloads and leaked tool wrappers while keeping their recovered readable answers.
+
+## Media only reply speech omission
+
+A reply containing only media has no Listen action and cannot send an invisible path to the speech provider.

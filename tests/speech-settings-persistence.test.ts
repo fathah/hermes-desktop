@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { load } from "js-yaml";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ProviderRequestTarget } from "../src/shared/provider-target";
+import type { SpeechConfigSetting } from "../src/shared/minimax-speech";
 let home = "";
 const originalHome = process.env.HERMES_HOME;
 beforeEach(() => {
@@ -131,6 +132,43 @@ it.each([
     const { speech, target } = await runtime();
     expect(() =>
       speech.setSpeechConfig("model", "speech-2.8-hd", "work", target),
+    ).toThrow(/YAML|mapping/);
+    expect(readFileSync(path, "utf8")).toBe(yaml);
+  },
+);
+
+// @lat: [[speech-playback-tests#Unsafe multiline speech leaf refusal]]
+it.each([
+  { setting: "model", yaml: "tts:\n  minimax:\n    model:\n      name: foo\n" },
+  {
+    setting: "model",
+    yaml: "tts:\n  minimax:\n    model: speech-\n      2.8-hd\n",
+  },
+  {
+    setting: "model",
+    yaml: "tts:\n  minimax:\n    model: speech-\n\n      2.8-hd\n",
+  },
+  {
+    setting: "region",
+    yaml: "tts:\n  minimax:\n    region:\n      name: cn\n",
+  },
+  { setting: "region", yaml: "tts:\n  minimax:\n    region: c\n      n\n" },
+  { setting: "model", yaml: "tts:\n  provider:\n    name: openai\n" },
+  { setting: "model", yaml: "tts:\n  provider: open\n    ai\n" },
+] satisfies { setting: SpeechConfigSetting; yaml: string }[])(
+  "preserves valid YAML when the edited $setting or provider has child/continuation lines: $yaml",
+  async ({ setting, yaml }) => {
+    const path = join(home, "profiles", "work", "config.yaml");
+    expect(() => load(yaml)).not.toThrow();
+    writeFileSync(path, yaml);
+    const { speech, target } = await runtime();
+    expect(() =>
+      speech.setSpeechConfig(
+        setting,
+        setting === "region" ? "cn" : "speech-2.8-hd",
+        "work",
+        target,
+      ),
     ).toThrow(/YAML|mapping/);
     expect(readFileSync(path, "utf8")).toBe(yaml);
   },

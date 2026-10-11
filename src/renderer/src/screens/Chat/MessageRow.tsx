@@ -205,6 +205,11 @@ export const MessageRow = memo(function MessageRow({
         : null,
     [msg.role, bubbleContent],
   );
+  const speechText = segments
+    ?.filter((segment) => segment.type === "text")
+    .map((segment) => segment.value)
+    .join("\n")
+    .trim();
 
   const handleCopy = useCallback(async () => {
     if (!bubbleContent) return;
@@ -264,13 +269,16 @@ export const MessageRow = memo(function MessageRow({
       >
         {msg.content && !isLoading && !msg.isSlashLoader && (
           <div className="chat-bubble-actions">
-            {msg.role === "agent" && speechEnabled && connectionId && (
-              <SpeechButton
-                text={msg.content}
-                profile={profile || "default"}
-                connectionId={connectionId}
-              />
-            )}
+            {msg.role === "agent" &&
+              speechEnabled &&
+              connectionId &&
+              speechText && (
+                <SpeechButton
+                  text={speechText}
+                  profile={profile || "default"}
+                  connectionId={connectionId}
+                />
+              )}
             <button
               type="button"
               className="chat-bubble-copy"

@@ -15,7 +15,9 @@ vi.mock("../../components/common/ProfileAvatar", () => ({
 }));
 vi.mock("../../components/OrbLoader", () => ({ OrbLoader: () => null }));
 vi.mock("../../components/AgentMarkdown", () => ({
-  AgentMarkdown: ({ content }: { content: string }) => <span>{content}</span>,
+  AgentMarkdown: ({ children }: { children: React.ReactNode }) => (
+    <span>{children}</span>
+  ),
 }));
 vi.mock("../../components/AttachmentChip", () => ({
   AttachmentChip: () => null,
@@ -60,6 +62,7 @@ function row(
   profile = "work",
   connectionId = "A",
   enabled = true,
+  content = `message-${id}`,
 ): React.JSX.Element {
   return (
     <MessageRow
@@ -68,7 +71,7 @@ function row(
           id,
           role: "agent",
           kind: "assistant",
-          content: `message-${id}`,
+          content,
         } as ChatMessage
       }
       isLast={false}
@@ -343,4 +346,36 @@ it("a Remote target returned during a Local transition never reaches synthesis",
   await settle();
   expect(window.hermesAPI.synthesizeSpeech).not.toHaveBeenCalled();
   expect(screen.getByRole("alert")).toHaveTextContent("Local connection");
+});
+
+// @lat: [[speech-playback-tests#Visible speech content]]
+it.each([
+  { content: "A readable reply.", expected: "A readable reply." },
+  { content: "Here you go. MEDIA:/tmp/private.png", expected: "Here you go." },
+  {
+    content: '<skill_view>{"answer":"The readable answer"}</skill_view>',
+    expected: "The readable answer",
+  },
+  {
+    content: `A short answer.\n![preview](data:image/png;base64,${"A".repeat(12000)})`,
+    expected: "A short answer.",
+  },
+])(
+  "speaks only visible reply text: $expected",
+  async ({ content, expected }) => {
+    render(row("visible", "work", "A", true, content));
+    expect(screen.getByText(expected)).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("chat.listen"));
+    await settle();
+    expect(window.hermesAPI.synthesizeSpeech).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ text: expected, profile: "work" }),
+    );
+  },
+);
+
+// @lat: [[speech-playback-tests#Media only reply speech omission]]
+it("omits Listen for a media-only reply without exposing its hidden path", () => {
+  render(row("media", "work", "A", true, "MEDIA:/tmp/private.png"));
+  expect(screen.queryByLabelText("chat.listen")).not.toBeInTheDocument();
+  expect(window.hermesAPI.synthesizeSpeech).not.toHaveBeenCalled();
 });
