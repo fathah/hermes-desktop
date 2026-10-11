@@ -6,6 +6,7 @@
 
 import { spawn } from "child_process";
 import { SSH_SESSION_DELETE_SCRIPT } from "./ssh-session-delete";
+import { SSH_SESSION_LIST_SCRIPT } from "./session-conversation";
 import { buildSshRemoteCommand } from "./ssh-command";
 import { homedir } from "os";
 import { join } from "path";
@@ -1423,37 +1424,10 @@ export async function sshListSessions(
   offset = 0,
   profile?: string,
 ): Promise<SessionSummary[]> {
-  const script = `
-import sqlite3, json, os, sys
-payload = json.load(sys.stdin)
-profile = payload.get("profile")
-limit = max(1, min(200, int(payload.get("limit") or 30)))
-offset = max(0, int(payload.get("offset") or 0))
-db = os.path.expanduser(f"~/.hermes/profiles/{profile}/state.db" if profile and profile != "default" else "~/.hermes/state.db")
-if not os.path.exists(db):
-    print("[]"); sys.exit(0)
-conn = sqlite3.connect(db)
-conn.row_factory = sqlite3.Row
-rows = conn.execute(
-    "SELECT id, source, started_at, ended_at, message_count, model, title "
-    "FROM sessions ORDER BY started_at DESC LIMIT ? OFFSET ?",
-    (limit, offset)
-).fetchall()
-result = []
-for r in rows:
-    result.append({
-        "id": r["id"], "source": r["source"] or "cli",
-        "startedAt": r["started_at"], "endedAt": r["ended_at"],
-        "messageCount": r["message_count"] or 0, "model": r["model"] or "",
-        "title": r["title"], "preview": ""
-    })
-print(json.dumps(result))
-conn.close()
-`;
   try {
     const out = await sshPython(
       config,
-      script,
+      SSH_SESSION_LIST_SCRIPT,
       pythonJsonInput({ profile, limit, offset }),
     );
     return JSON.parse(out.trim() || "[]");
