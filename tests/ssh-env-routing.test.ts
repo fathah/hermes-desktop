@@ -92,7 +92,8 @@ describe("SSH credential writer routing", () => {
     ]);
     for (const call of spawnMock.mock.calls) {
       const command = call[1].at(-1) as string;
-      expect(command).toMatch(/^python3 -c /);
+      expect(command).toMatch(/^exec \/bin\/sh -c /);
+      expect(command).toContain("python3 -c");
       expect(command).not.toContain(value);
     }
   });

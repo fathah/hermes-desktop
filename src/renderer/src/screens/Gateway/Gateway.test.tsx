@@ -106,4 +106,22 @@ describe("Gateway screen recovery controls", () => {
     expect(screen.getByText("gateway.restartFailed")).toBeTruthy();
     expect(screen.getByText("gateway.stopped")).toBeTruthy();
   });
+
+  it("does not read or show the local API server key in remote mode", async () => {
+    render(<Gateway remoteMode />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(window.hermesAPI.getApiServerKeyStatus).not.toHaveBeenCalled();
+    expect(screen.queryByText("gateway.apiServerKey.title")).toBeNull();
+  });
+
+  it("still reads and shows the API server key in local mode", async () => {
+    render(<Gateway />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(window.hermesAPI.getApiServerKeyStatus).toHaveBeenCalled();
+    expect(screen.getByText("gateway.apiServerKey.title")).toBeTruthy();
+  });
 });

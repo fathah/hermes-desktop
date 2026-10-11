@@ -49,6 +49,7 @@ import {
   getActiveProfileNameSync,
 } from "./utils";
 import { getProfilePort } from "./gateway-ports";
+import { isMultiplexGatewayRunning } from "./gateway-liveness";
 import { promptSudoPassword, promptSecretValue } from "./gatewayPrompt";
 import { getSecret } from "./secrets";
 import { readModels } from "./models";
@@ -3695,13 +3696,14 @@ function readPidFileEntry(
 export function stopGateway(
   profileOrForce?: string | boolean,
   force = false,
-): void {
+): boolean {
   const profile =
     typeof profileOrForce === "boolean" ? undefined : profileOrForce;
   const shouldForce =
     typeof profileOrForce === "boolean" ? profileOrForce : force;
   const key = profileKey(profile);
-  if (!shouldForce && !appStartedProfiles.has(key)) return;
+  if (!shouldForce && !appStartedProfiles.has(key)) return false;
+  if (isExternallyManagedMultiplexGateway(profile)) return false;
 
   const proc = gatewayProcesses.get(key);
   if (proc && isChildProcessAlive(proc)) {
@@ -3731,6 +3733,7 @@ export function stopGateway(
   appStartedProfiles.delete(key);
   invalidateApiCacheFor(profile);
   stopTuiGatewayClient(profile);
+  return true;
 }
 
 // Python image prefixes covering both native Windows (pythonw.exe / python.exe)
@@ -3751,20 +3754,56 @@ function isChildProcessAlive(proc: ChildProcess): boolean {
   }
 }
 
+export function isExternallyManagedMultiplexGateway(profile?: string): boolean {
+  const targetProfile = profileKey(profile);
+  return (
+    !appStartedProfiles.has(targetProfile) &&
+    isMultiplexGatewayRunning(profileHome(), targetProfile, (pid) =>
+      pidIsAliveAs(pid, GATEWAY_IMAGE_PREFIXES),
+    )
+  );
+}
+
+export function assertLocalGatewayKeyMutationAllowed(
+  key: string,
+  profile?: string,
+): void {
+  if (
+    (key === "API_SERVER_KEY" ||
+      key === "api_server.token" ||
+      key === "api_server.extra.key" ||
+      key === "platforms.api_server.extra.key") &&
+    isExternallyManagedMultiplexGateway(profile ?? "default")
+  ) {
+    throw new Error(
+      "The API key belongs to a gateway managed outside Hermes One. Change it through that gateway's service manager.",
+    );
+  }
+}
+
 export function isGatewayRunning(profile?: string): boolean {
-  const proc = gatewayProcesses.get(profileKey(profile));
+  const targetProfile = profileKey(profile);
+  const proc = gatewayProcesses.get(targetProfile);
   if (proc && isChildProcessAlive(proc)) return true;
   const pid = readPidFile(profile);
-  if (!pid) return false;
-  return pidIsAliveAs(pid, GATEWAY_IMAGE_PREFIXES);
+  if (pid && pidIsAliveAs(pid, GATEWAY_IMAGE_PREFIXES)) return true;
+
+  // Managed multiplex gateways publish one state file in the default home,
+  // not a gateway.pid in every profile they serve.
+  return isMultiplexGatewayRunning(profileHome(), targetProfile, (pid) =>
+    pidIsAliveAs(pid, GATEWAY_IMAGE_PREFIXES),
+  );
 }
 
 export function isApiReady(): boolean {
   return apiServerAvailable === true;
 }
 
-export function isGatewayHealthy(profile?: string): Promise<boolean> {
-  return isApiServerReady(profile);
+export function isGatewayHealthy(
+  profile?: string,
+  conn: ConnectionConfig = getConnectionConfig(),
+): Promise<boolean> {
+  return isApiServerReady(profile, conn);
 }
 
 export function testRemoteConnection(
@@ -3889,7 +3928,7 @@ async function restartGatewayLocallyOnce(
     const previousProcess = gatewayProcesses.get(key) ?? null;
     const previousStartedByApp = appStartedProfiles.has(key);
     const previousPidEntry = readPidFileEntry(profile);
-    stopGateway(profile, true);
+    if (!stopGateway(profile, true)) return false;
     const stopped = await waitForApiServerStopped(
       profile,
       stopTimeoutMs,
@@ -3942,6 +3981,8 @@ export function restartGateway(
   // in remote/SSH mode. Cheap to check; catches IPC paths that don't
   // wrap their restart calls in an isRemoteMode() check.
   if (isRemoteMode()) return Promise.resolve(false);
+  if (isExternallyManagedMultiplexGateway(profile))
+    return Promise.resolve(false);
 
   const key = gatewayRestartProfileKey(profile);
   const existing = gatewayRestartByProfile.get(key);

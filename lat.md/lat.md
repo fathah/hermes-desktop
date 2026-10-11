@@ -36,5 +36,10 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[mcp-servers]] — add / edit / remove / enable / test MCP servers from the Capabilities → MCP tab; the shared add+edit modal and the in-place atomic `updateMcpServer` upsert (config.yaml locally, gateway REST in Remote/SSH).
 - [[discover]] — community catalog browsing, remote installed markers, browse-only controls, and connection/profile lifetimes.
 - [[scheduled-jobs]] — schedule state normalization across local files, remote API responses, and named SSH profiles.
+- [[config-health-navigation]] — Configuration details navigation, profile isolation, and audit/fix recovery tests.
 
 - [[dashboard-clarify]] — Interactive WebSocket clarification cards and answer delivery tests.
+
+- [[dashboard-shutdown]] — Local dashboard ownership and profile-independent app shutdown.
+
+- [[approval-completion]] — In-flight approval replies remain valid across early turn completion, with failure and lifecycle isolation.
