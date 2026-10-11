@@ -10,7 +10,7 @@ import {
   getRemoteAuthHeader,
   normaliseRemoteUrl,
 } from "./hermes";
-import { getConnectionConfig } from "./config";
+import { getConnectionConfig, type ConnectionConfig } from "./config";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { sshRunCron } from "./ssh-remote";
 import { remoteDashboardRequestJson } from "./remote-api";
@@ -172,17 +172,20 @@ export function parseCronListOutput(output: string): CronJob[] {
   return jobs;
 }
 
-function getSshCronConfig(profile?: string): SshConfig | null {
-  if (!profile || profile === "default" || !isRemoteMode()) return null;
-  const conn = getConnectionConfig();
+function getSshCronConfig(
+  profile: string | undefined,
+  conn: ConnectionConfig,
+): SshConfig | null {
+  if (!profile || profile === "default" || !isRemoteMode(conn)) return null;
   return conn.mode === "ssh" && conn.ssh ? conn.ssh : null;
 }
 
 async function runNamedProfileSshCron(
   args: string[],
-  profile?: string,
+  profile: string | undefined,
+  conn: ConnectionConfig,
 ): Promise<{ success: boolean; output: string; error?: string } | null> {
-  const ssh = getSshCronConfig(profile);
+  const ssh = getSshCronConfig(profile, conn);
   if (!ssh) return null;
   const res = await sshRunCron(ssh, args, { profile, timeoutMs: 15000 });
   return {
@@ -194,21 +197,27 @@ async function runNamedProfileSshCron(
 
 async function remoteFetch(
   path: string,
-  init: RequestInit = {},
+  init: RequestInit,
+  conn: ConnectionConfig,
+  profile?: string,
 ): Promise<Response> {
   const headers: Record<string, string> = {
-    ...getRemoteAuthHeader(),
+    ...getRemoteAuthHeader(conn),
     ...((init.headers as Record<string, string>) || {}),
   };
-  const apiUrl = await getCronApiUrl(headers);
-  return fetch(`${apiUrl}${path}`, { ...init, headers });
+  const apiUrl = await getCronApiUrl(headers, conn);
+  const profilePrefix =
+    profile && profile !== "default" ? `/p/${encodeURIComponent(profile)}` : "";
+  return fetch(`${apiUrl}${profilePrefix}${path}`, { ...init, headers });
 }
 
-async function getCronApiUrl(headers: Record<string, string>): Promise<string> {
+async function getCronApiUrl(
+  headers: Record<string, string>,
+  conn: ConnectionConfig,
+): Promise<string> {
   try {
-    return getApiUrl();
+    return getApiUrl(undefined, conn);
   } catch (err) {
-    const conn = getConnectionConfig();
     if (conn.mode !== "ssh" || !conn.ssh?.localPort) throw err;
 
     // Schedules/Cron can be opened without first running the Chat path that
@@ -267,15 +276,17 @@ const GATEWAY_CRON_BASE = "/api/jobs";
  */
 async function dashboardCronFetch(
   path: string,
-  init: RequestInit = {},
+  init: RequestInit,
+  conn: ConnectionConfig,
+  profile?: string,
 ): Promise<Response> {
-  const conn = getConnectionConfig();
-  if (conn.mode !== "remote") return remoteFetch(path, init);
+  if (conn.mode !== "remote") return remoteFetch(path, init, conn, profile);
   // A raw gateway without an API key has no session to send. Keep the plain
   // request for it (as before) rather than failing in the token helper, which
   // refuses to run without a token.
-  const hasDashboardAuth =
-    conn.remoteAuthMode === "oauth" || Boolean(conn.apiKey?.trim());
+  const scopedPath = `${path}${path.includes("?") ? "&" : "?"}profile=${encodeURIComponent(profile || "default")}`;
+  const keylessToken = conn.remoteAuthMode === "token" && !conn.apiKey?.trim();
+  if (keylessToken) return remoteFetch(scopedPath, init, conn, profile);
 
   const method = (init.method || "GET").toUpperCase() as
     | "GET"
@@ -288,10 +299,16 @@ async function dashboardCronFetch(
       ? JSON.parse(init.body)
       : undefined;
   try {
-    const data = await remoteDashboardRequestJson<unknown>(conn, path, {
-      method,
-      body,
-    });
+    // Dashboard lists default to all profiles; explicitly request the selected one.
+    const data = await remoteDashboardRequestJson<unknown>(
+      conn,
+      scopedPath,
+      {
+        method,
+        body,
+      },
+      profile,
+    );
     return new Response(JSON.stringify(data ?? {}), {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -306,7 +323,14 @@ async function dashboardCronFetch(
     // 200 with HTML), must not turn into an "ok" response and report a job
     // action that never happened as done.
     if (!status || status < 400) {
-      if (!hasDashboardAuth) return remoteFetch(path, init);
+      if (
+        !conn.apiKey?.trim() &&
+        conn.remoteAuthMode !== "oauth" &&
+        err instanceof Error &&
+        err.message === "Remote Hermes dashboard token is not configured."
+      ) {
+        return remoteFetch(scopedPath, init, conn, profile);
+      }
       throw err;
     }
     return new Response(JSON.stringify({ error: (err as Error).message }), {
@@ -341,11 +365,15 @@ export function cronJobsFromResponseBody(
  */
 async function remoteFetchCron(
   jobPath: string,
-  init: RequestInit = {},
+  init: RequestInit,
+  conn: ConnectionConfig,
+  profile?: string,
 ): Promise<Response> {
   const dashboardRes = await dashboardCronFetch(
     `${DASHBOARD_CRON_BASE}${jobPath}`,
     init,
+    conn,
+    profile,
   );
   if (!isUnsupportedCronRoute(dashboardRes)) return dashboardRes;
 
@@ -353,7 +381,7 @@ async function remoteFetchCron(
   const gatewayPath = jobPath.endsWith("/trigger")
     ? `${jobPath.slice(0, -"/trigger".length)}/run`
     : jobPath;
-  return remoteFetch(`${GATEWAY_CRON_BASE}${gatewayPath}`, init);
+  return remoteFetch(`${GATEWAY_CRON_BASE}${gatewayPath}`, init, conn, profile);
 }
 
 function normalizeCronJobRows(
@@ -379,9 +407,11 @@ export async function listCronJobs(
   includeDisabled = true,
   profile?: string,
 ): Promise<CronJob[]> {
+  const conn = getConnectionConfig();
   const sshResult = await runNamedProfileSshCron(
     includeDisabled ? ["list", "--all"] : ["list"],
     profile,
+    conn,
   );
   if (sshResult) {
     if (!sshResult.success) {
@@ -392,14 +422,19 @@ export async function listCronJobs(
     return includeDisabled ? jobs : jobs.filter((job) => job.enabled);
   }
 
-  if (isRemoteMode()) {
+  if (isRemoteMode(conn)) {
     try {
       // Dashboard list has no include_disabled flag — filter client-side.
       // Gateway accepts ?include_disabled= when we fall back.
-      let res = await dashboardCronFetch(DASHBOARD_CRON_BASE);
+      let res = await dashboardCronFetch(
+        DASHBOARD_CRON_BASE,
+        {},
+        conn,
+        profile,
+      );
       if (isUnsupportedCronRoute(res)) {
         const qs = includeDisabled ? "?include_disabled=true" : "";
-        res = await remoteFetch(`${GATEWAY_CRON_BASE}${qs}`);
+        res = await remoteFetch(`${GATEWAY_CRON_BASE}${qs}`, {}, conn, profile);
       }
       if (!res.ok) {
         console.error("[CRON] remote list failed:", await remoteJsonError(res));
@@ -473,28 +508,34 @@ export async function createCronJob(
   deliver?: string,
   profile?: string,
 ): Promise<{ success: boolean; error?: string }> {
+  const conn = getConnectionConfig();
   const args = ["create", schedule];
   if (prompt) args.push(prompt);
   if (name) args.push("--name", name);
   if (deliver) args.push("--deliver", deliver);
 
-  const sshResult = await runNamedProfileSshCron(args, profile);
+  const sshResult = await runNamedProfileSshCron(args, profile, conn);
   if (sshResult) {
     return { success: sshResult.success, error: sshResult.error };
   }
 
-  if (isRemoteMode()) {
+  if (isRemoteMode(conn)) {
     try {
-      const res = await remoteFetchCron("", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name || "",
-          schedule,
-          prompt: prompt || "",
-          deliver: deliver || "local",
-        }),
-      });
+      const res = await remoteFetchCron(
+        "",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: name || "",
+            schedule,
+            prompt: prompt || "",
+            deliver: deliver || "local",
+          }),
+        },
+        conn,
+        profile,
+      );
       if (!res.ok) {
         return { success: false, error: await remoteJsonError(res) };
       }
@@ -513,15 +554,25 @@ export async function removeCronJob(
   profile?: string,
 ): Promise<{ success: boolean; error?: string }> {
   if (!jobId) return { success: false, error: "Missing job ID" };
-  const sshResult = await runNamedProfileSshCron(["remove", jobId], profile);
+  const conn = getConnectionConfig();
+  const sshResult = await runNamedProfileSshCron(
+    ["remove", jobId],
+    profile,
+    conn,
+  );
   if (sshResult) {
     return { success: sshResult.success, error: sshResult.error };
   }
-  if (isRemoteMode()) {
+  if (isRemoteMode(conn)) {
     try {
-      const res = await remoteFetchCron(`/${encodeURIComponent(jobId)}`, {
-        method: "DELETE",
-      });
+      const res = await remoteFetchCron(
+        `/${encodeURIComponent(jobId)}`,
+        {
+          method: "DELETE",
+        },
+        conn,
+        profile,
+      );
       if (!res.ok) {
         return { success: false, error: await remoteJsonError(res) };
       }
@@ -537,9 +588,14 @@ export async function removeCronJob(
 async function remoteJobAction(
   jobId: string,
   action: "pause" | "resume" | "run",
-  profile?: string,
+  profile: string | undefined,
+  conn: ConnectionConfig,
 ): Promise<{ success: boolean; error?: string }> {
-  const sshResult = await runNamedProfileSshCron([action, jobId], profile);
+  const sshResult = await runNamedProfileSshCron(
+    [action, jobId],
+    profile,
+    conn,
+  );
   if (sshResult) {
     return { success: sshResult.success, error: sshResult.error };
   }
@@ -549,6 +605,8 @@ async function remoteJobAction(
     const res = await remoteFetchCron(
       `/${encodeURIComponent(jobId)}/${dashboardAction}`,
       { method: "POST" },
+      conn,
+      profile,
     );
     if (!res.ok) {
       return { success: false, error: await remoteJsonError(res) };
@@ -564,7 +622,8 @@ export async function pauseCronJob(
   profile?: string,
 ): Promise<{ success: boolean; error?: string }> {
   if (!jobId) return { success: false, error: "Missing job ID" };
-  if (isRemoteMode()) return remoteJobAction(jobId, "pause", profile);
+  const conn = getConnectionConfig();
+  if (isRemoteMode(conn)) return remoteJobAction(jobId, "pause", profile, conn);
   const result = await runCronCommand(["pause", jobId], profile);
   return { success: result.success, error: result.error };
 }
@@ -574,7 +633,9 @@ export async function resumeCronJob(
   profile?: string,
 ): Promise<{ success: boolean; error?: string }> {
   if (!jobId) return { success: false, error: "Missing job ID" };
-  if (isRemoteMode()) return remoteJobAction(jobId, "resume", profile);
+  const conn = getConnectionConfig();
+  if (isRemoteMode(conn))
+    return remoteJobAction(jobId, "resume", profile, conn);
   const result = await runCronCommand(["resume", jobId], profile);
   return { success: result.success, error: result.error };
 }
@@ -584,7 +645,8 @@ export async function triggerCronJob(
   profile?: string,
 ): Promise<{ success: boolean; error?: string }> {
   if (!jobId) return { success: false, error: "Missing job ID" };
-  if (isRemoteMode()) return remoteJobAction(jobId, "run", profile);
+  const conn = getConnectionConfig();
+  if (isRemoteMode(conn)) return remoteJobAction(jobId, "run", profile, conn);
   const result = await runCronCommand(["run", jobId], profile);
   return { success: result.success, error: result.error };
 }

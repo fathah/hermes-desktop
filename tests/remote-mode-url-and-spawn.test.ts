@@ -27,7 +27,11 @@ const {
   return {
     TEST_HOME: path.join(os.tmpdir(), `hermes-remote-test-${Date.now()}`),
     connModeRef: { mode: "local" as "local" | "remote" | "ssh" },
-    connAuthRef: { mode: undefined as string | undefined, apiKey: "" },
+    connAuthRef: {
+      mode: undefined as string | undefined,
+      apiKey: "",
+      url: "http://example.com",
+    },
     sshTunnelUrlRef: { value: "http://localhost:18642" as string | null },
     sshLocalPortRef: { value: 18642 as number | undefined },
     spawnSpy: vi.fn(() => ({
@@ -58,7 +62,7 @@ vi.mock("../src/main/config", () => ({
   readEnv: () => ({}),
   getConnectionConfig: () => ({
     mode: connModeRef.mode,
-    remoteUrl: "http://example.com",
+    remoteUrl: connAuthRef.url,
     apiKey: connAuthRef.apiKey,
     remoteAuthMode: connAuthRef.mode,
     ssh: {
@@ -122,6 +126,7 @@ afterEach(() => {
   connModeRef.mode = "local";
   connAuthRef.mode = undefined;
   connAuthRef.apiKey = "";
+  connAuthRef.url = "http://example.com";
   sshTunnelUrlRef.value = "http://localhost:18642";
   sshLocalPortRef.value = 18642;
 });
@@ -271,9 +276,87 @@ describe("Cron SSH fallback", () => {
     expect(jobs.map((j) => j.name)).toEqual(["nas-md-rebuild-watch"]);
     expect(dashboardRequestMock).toHaveBeenCalledWith(
       expect.objectContaining({ mode: "remote" }),
-      "/api/cron/jobs",
+      "/api/cron/jobs?profile=default",
       expect.objectContaining({ method: "GET" }),
+      undefined,
     );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  // @lat: [[scheduled-jobs#Test specifications#Selected remote profile]]
+  it("scopes dashboard reads and mutations to the selected profile", async () => {
+    connModeRef.mode = "remote";
+    dashboardRequestMock.mockReset();
+    dashboardRequestMock.mockResolvedValue([]);
+    const {
+      listCronJobs,
+      createCronJob,
+      removeCronJob,
+      pauseCronJob,
+      resumeCronJob,
+      triggerCronJob,
+    } = await import("../src/main/cronjobs");
+    await listCronJobs(true, "work");
+    await createCronJob("every 1h", "ping", "watch", "local", "work");
+    await removeCronJob("j1", "work");
+    await pauseCronJob("j1", "work");
+    await resumeCronJob("j1", "work");
+    await triggerCronJob("j1", "work");
+    expect(dashboardRequestMock.mock.calls.map((c) => [c[1], c[3]])).toEqual([
+      ["/api/cron/jobs?profile=work", "work"],
+      ["/api/cron/jobs?profile=work", "work"],
+      ["/api/cron/jobs/j1?profile=work", "work"],
+      ["/api/cron/jobs/j1/pause?profile=work", "work"],
+      ["/api/cron/jobs/j1/resume?profile=work", "work"],
+      ["/api/cron/jobs/j1/trigger?profile=work", "work"],
+    ]);
+  });
+
+  // @lat: [[scheduled-jobs#Test specifications#Fallback retains its target]]
+  it("keeps a delayed gateway fallback on the original connection and named profile", async () => {
+    connModeRef.mode = "remote";
+    connAuthRef.apiKey = "a-token";
+    let reject!: (error: Error) => void;
+    dashboardRequestMock.mockReset();
+    dashboardRequestMock.mockImplementation(
+      () =>
+        new Promise((_, r) => {
+          reject = r;
+        }),
+    );
+    const fetchSpy = vi.fn(async () => ({ ok: true, status: 200 }) as Response);
+    vi.stubGlobal("fetch", fetchSpy);
+    const { removeCronJob } = await import("../src/main/cronjobs");
+    const pending = removeCronJob("j1", "work");
+    await vi.waitFor(() => expect(dashboardRequestMock).toHaveBeenCalled());
+    connAuthRef.url = "http://other.example.com";
+    connAuthRef.apiKey = "b-token";
+    reject(Object.assign(new Error("Not Found"), { statusCode: 404 }));
+    expect((await pending).success).toBe(true);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "http://example.com/p/work/api/jobs/j1",
+      expect.objectContaining({
+        method: "DELETE",
+        headers: { Authorization: "Bearer a-token" },
+      }),
+    );
+  });
+
+  // @lat: [[scheduled-jobs#Test specifications#OAuth failures remain authenticated]]
+  it("does not retry failed auto-mode OAuth requests through bare fetch", async () => {
+    connModeRef.mode = "remote";
+    connAuthRef.mode = "auto";
+    dashboardRequestMock.mockReset();
+    dashboardRequestMock.mockRejectedValue(
+      new Error("Remote OAuth login required"),
+    );
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const { removeCronJob } = await import("../src/main/cronjobs");
+    expect(await removeCronJob("j1")).toEqual({
+      success: false,
+      error: "Remote OAuth login required",
+    });
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -319,7 +402,7 @@ describe("Cron SSH fallback", () => {
     ]);
     expect(calls).toEqual([
       [
-        "/api/cron/jobs",
+        "/api/cron/jobs?profile=default",
         "POST",
         {
           name: "nas-watch",
@@ -328,9 +411,9 @@ describe("Cron SSH fallback", () => {
           deliver: "local",
         },
       ],
-      ["/api/cron/jobs/j1/pause", "POST", undefined],
-      ["/api/cron/jobs/j1/trigger", "POST", undefined],
-      ["/api/cron/jobs/j1", "DELETE", undefined],
+      ["/api/cron/jobs/j1/pause?profile=default", "POST", undefined],
+      ["/api/cron/jobs/j1/trigger?profile=default", "POST", undefined],
+      ["/api/cron/jobs/j1?profile=default", "DELETE", undefined],
     ]);
   });
 
@@ -360,7 +443,7 @@ describe("Cron SSH fallback", () => {
       throw new Error("Remote Hermes dashboard token is not configured.");
     });
     const fetchSpy = vi.fn(async (target: string) => {
-      if (target === "http://example.com/api/cron/jobs") {
+      if (target === "http://example.com/api/cron/jobs?profile=default") {
         return {
           ok: true,
           status: 200,
