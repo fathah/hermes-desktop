@@ -17,6 +17,7 @@ import type { LucideIcon } from "lucide-react";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
 import { useI18n } from "../../components/useI18n";
 import { OrbLoader } from "../../components/OrbLoader";
+import { useConnectionTargetRevision } from "../../hooks/useConnectionTargetRevision";
 import type {
   RegistryKind,
   RegistryItem,
@@ -62,7 +63,7 @@ const EMPTY: RegistryCatalog = {
 
 type ActionState = "idle" | "working" | "done" | "error";
 
-export default function Discover({
+function DiscoverContent({
   profile,
   visible,
   focusKind,
@@ -673,5 +674,15 @@ export default function Discover({
         </div>
       )}
     </div>
+  );
+}
+
+export default function Discover(props: DiscoverProps): React.JSX.Element {
+  const revision = useConnectionTargetRevision();
+  return (
+    <DiscoverContent
+      key={`${props.profile || "default"}\u0000${revision}\u0000${props.browseOnly ? "remote" : "local"}`}
+      {...props}
+    />
   );
 }

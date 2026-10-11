@@ -34,6 +34,7 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[office-interactions]] — space representatives: interactive bank tellers whose menu runs account status, balances, and account creation against the hermes-one backend for a chosen agent; the extensible pattern for future spaces (showroom sales, building space).
 - [[office-world-actions]] — chat-commanded errands: the agent's LLM emits world-action blocks from the office chat, its avatar walks the trip route to the bank/showroom, and the rep modal auto-opens running the requested action on arrival.
 - [[mcp-servers]] — add / edit / remove / enable / test MCP servers from the Capabilities → MCP tab; the shared add+edit modal and the in-place atomic `updateMcpServer` upsert (config.yaml locally, gateway REST in Remote/SSH).
+- [[discover]] — community catalog browsing, remote installed markers, browse-only controls, and connection/profile lifetimes.
 - [[scheduled-jobs]] — schedule state normalization across local files, remote API responses, and named SSH profiles.
 
 - [[dashboard-clarify]] — Interactive WebSocket clarification cards and answer delivery tests.
