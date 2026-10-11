@@ -37,3 +37,5 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[scheduled-jobs]] — schedule state normalization across local files, remote API responses, and named SSH profiles.
 
 - [[dashboard-clarify]] — Interactive WebSocket clarification cards and answer delivery tests.
+
+- [[approval-completion]] — In-flight approval replies remain valid across early turn completion, with failure and lifecycle isolation.
