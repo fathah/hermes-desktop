@@ -122,6 +122,16 @@ it("reloads an admitted memory deletion after leaving its pane without refreshin
     screen.getByRole("button", { name: "agents.sectionPersona" }),
   );
   await flush();
+  fireEvent.click(
+    screen.getByRole("button", { name: "agents.sectionAgentMemory" }),
+  );
+  await flush();
+  expect(screen.getByRole("button", { name: "memory.edit" })).toBeDisabled();
+  expect(api.readMemory).toHaveBeenCalledTimes(1);
+  fireEvent.click(
+    screen.getByRole("button", { name: "agents.sectionPersona" }),
+  );
+  await flush();
   await act(async () => {
     deleted = true;
     resolveDelete(true);

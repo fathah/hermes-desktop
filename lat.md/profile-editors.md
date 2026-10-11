@@ -136,7 +136,7 @@ A delayed SSH deletion cannot be overtaken by Refresh. Its completion reloads th
 
 ### Modal memory completion follows the parent target
 
-A Memory mutation completed after pane navigation still refreshes the current modal target. Switching to a different profile cancels that continuation and cannot refresh or replace its contents.
+The modal keeps re-entered Memory controls disabled during an admitted write and refreshes after completion even when its pane unmounted. Switching profiles cancels that continuation and cannot refresh the new target.
 
 ### Failed refresh cannot enable old positions
 

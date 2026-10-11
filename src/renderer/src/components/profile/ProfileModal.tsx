@@ -140,6 +140,11 @@ function ProfileModalEditor({
   const [memoryData, setMemoryData] = useState<MemoryData | null>(null);
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [memoryError, setMemoryError] = useState("");
+  const [memoryWriting, setMemoryWriting] = useState(false);
+  const memoryPendingWrite = useRef(false);
+  const memoryRefreshAfterWrite = useRef(false);
+  const memoryLoadingRef = useRef(memoryLoading);
+  memoryLoadingRef.current = memoryLoading;
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
@@ -194,7 +199,12 @@ function ProfileModalEditor({
 
   const loadMemoryData = useCallback(async (): Promise<void> => {
     if (!profile || !live()) return;
+    if (memoryPendingWrite.current) {
+      memoryRefreshAfterWrite.current = true;
+      return;
+    }
     const request = ++memoryGeneration.current;
+    memoryLoadingRef.current = true;
     setMemoryData(null);
     setMemoryLoading(true);
     setMemoryError("");
@@ -206,10 +216,36 @@ function ProfileModalEditor({
       if (live() && request === memoryGeneration.current)
         setMemoryError(t("memory.loadFailed"));
     } finally {
-      if (live() && request === memoryGeneration.current)
+      if (live() && request === memoryGeneration.current) {
+        memoryLoadingRef.current = false;
         setMemoryLoading(false);
+      }
     }
   }, [profile, target, live, t]);
+
+  const beginMemoryMutation = (): (() => void) | null => {
+    if (
+      !writable() ||
+      !memoryData ||
+      memoryLoadingRef.current ||
+      memoryPendingWrite.current
+    )
+      return null;
+    memoryPendingWrite.current = true;
+    setMemoryWriting(true);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      memoryPendingWrite.current = false;
+      if (!live()) return;
+      setMemoryWriting(false);
+      if (memoryRefreshAfterWrite.current) {
+        memoryRefreshAfterWrite.current = false;
+        void loadMemoryData();
+      }
+    };
+  };
 
   useEffect(() => {
     setMemoryData(null);
@@ -613,7 +649,9 @@ function ProfileModalEditor({
                   </div>
                 ) : memoryData ? (
                   <fieldset
-                    disabled={target.mode === "remote"}
+                    disabled={
+                      target.mode === "remote" || memoryWriting || memoryLoading
+                    }
                     style={{ border: 0, padding: 0 }}
                   >
                     <MemoryEntries
@@ -622,6 +660,7 @@ function ProfileModalEditor({
                       target={target}
                       isCurrent={isCurrent}
                       onRefresh={loadMemoryData}
+                      onMutationStart={beginMemoryMutation}
                     />
                   </fieldset>
                 ) : memoryError ? (
