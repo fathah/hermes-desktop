@@ -7,8 +7,6 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[chat-performance]] — how chat rendering stays responsive through contained transcript rows, batched textarea resizing, and fixed-row slash-command virtualization.
 - [[chat-experience-preferences]] — user-message Markdown plus persisted completion-sound and native multi-language spell-check preferences.
 - [[shared-pets]] — the official Hermes pet gateway contract shared across profiles, gallery selection, sprite rendering, and live activity.
-- [[speech-playback]] — selected Local speech authority, bounded MiniMax synthesis and shared playback lifecycle.
-- [[speech-playback-tests]] — actual speech IPC and message lifecycle regressions.
 - [[model-context]] — the per-model context-window override that drives the context gauge and the agent's auto-compaction.
 - [[model-selection]] — the session-scoped in-chat model override that switches the model (and provider) for one conversation without touching the global default.
 - [[reasoning-effort]] — the composer's Faster⟷Smarter effort control: a draggable `role="slider"` over six ordered levels that stays open until dismissed and commits one `onChange` per real change.
@@ -32,6 +30,8 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[agent-sync]] — bidirectional sync of desktop profiles with the signed-in account's cloud agents (persona, memory, color, model/provider) via the backend's `/api/agents`; hash-based per-part conflict handling, no deletion propagation.
 - [[kanban]] — the JIRA-style multi-agent board tab; a thin client over the `hermes kanban` CLI with canonical status columns, an archived toggle, and focus/poll refresh.
 - [[analytics]] — privacy-first, opt-out usage analytics that POST anonymous events to the in-house Hermes analytics service, keyed by a per-install localStorage UUID; replaces the former PostHog integration.
+- [[speech-playback]] — selected Local speech authority, bounded MiniMax synthesis and shared playback lifecycle.
+- [[speech-playback-tests]] — actual speech IPC and message lifecycle regressions.
 - [[wallet-token-balances]] — profile-scoped Base mainnet wallets with encrypted recovery phrases, and on-chain ERC-20 token balance reads via ethers v6.
 - [[office-3d-traffic]] — the Office tab's backdrop traffic: car-following and junction-yielding simulation, per-model nose orientation, and instanced fleet rendering in a dozen draw calls.
 - [[office-3d-interiors]] — enterable office/bank/showroom interiors: per-location conditional mounting (city unmounts while indoors), camera fly-in rig, interactable objects (ATM → wallet, desk → agent, car → spec card), and idle-agent walking trips between buildings.
