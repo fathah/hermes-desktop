@@ -177,6 +177,47 @@ it.skipIf(process.platform === "win32")(
   5000,
 );
 
+// @lat: [[dashboard-shutdown#Ordinary startup cancellation]]
+it("restarts promptly after stopping an admitted startup and cannot reuse its readiness promise", async () => {
+  state.responseDelay = 2000;
+  const stoppedStart = startDashboard("restart");
+  await vi.waitFor(() => expect(state.children).toHaveLength(1));
+  const old = state.children[0];
+  const stopped = stopDashboard("restart");
+  state.responseDelay = 0;
+  const replacement = startDashboard("restart");
+  const current = await replacement;
+  expect(current.running).toBe(true);
+  expect(current.connection?.pid).not.toBe(old.pid);
+  expect(await stopped).toBe(true);
+  expect((await stoppedStart).running).toBe(false);
+  expect(state.children).toHaveLength(2);
+  expect(old.exitCode !== null || old.signalCode !== null).toBe(true);
+  expect(state.children[1].killed).toBe(false);
+});
+
+// @lat: [[dashboard-shutdown#Pre-port ordinary stop]]
+it("invalidates a pre-port start before spawning and permits a same-profile replacement", async () => {
+  const stoppedStart = startDashboard("pre-port-restart");
+  expect(await stopDashboard("pre-port-restart")).toBe(true);
+  const replacement = await startDashboard("pre-port-restart");
+  expect(replacement.running).toBe(true);
+  expect((await stoppedStart).running).toBe(false);
+  expect(state.children).toHaveLength(1);
+});
+
+// @lat: [[dashboard-shutdown#Shared ready-launch cancellation]]
+it("gives duplicate starts the same stopped outcome when an existing child is synchronously stopped", async () => {
+  await start("ready-shared");
+  const first = startDashboard("ready-shared");
+  const second = startDashboard("ready-shared");
+  const stopped = stopDashboard("ready-shared");
+  expect((await first).running).toBe(false);
+  expect((await second).running).toBe(false);
+  expect(await stopped).toBe(true);
+  expect(state.children).toHaveLength(1);
+});
+
 // @lat: [[dashboard-shutdown#Quit launch admission]]
 it("blocks new and pre-port launches during quit and drains a started child's readiness", async () => {
   state.ignoresTerm = true;

@@ -74,3 +74,15 @@ A delayed remote dashboard reply cannot begin a new local tunnel after quit. Sta
 ## Admitted tunnel continuation on quit
 
 If a tunnel request was admitted before quit, its late completion cannot return a running dashboard connection. Remote services remain owned by the remote host.
+
+## Ordinary startup cancellation
+
+An ordinary profile stop invalidates its pending launch and aborts readiness probes, so a replacement start owns a new child without waiting for the stopped startup. Covered by [[tests/dashboard-shutdown.test.ts]].
+
+## Pre-port ordinary stop
+
+Stopping a launch before port selection completes prevents its child from spawning and allows a fresh same-profile start. Covered by [[tests/dashboard-shutdown.test.ts]].
+
+## Shared ready-launch cancellation
+
+Duplicate starts share one normalized outcome when an existing child is stopped before either caller resolves; no caller reports the stopped child as running. Covered by [[tests/dashboard-shutdown.test.ts]].

@@ -68,7 +68,10 @@ interface ManagedDashboard {
 const dashboards = new Map<string, ManagedDashboard>();
 const stopping = new Map<ChildProcess, Promise<boolean>>();
 const stoppingProfiles = new Map<string, Promise<boolean>>();
-const starting = new Map<string, Promise<DashboardStatus>>();
+const starting = new Map<
+  string,
+  { promise: Promise<DashboardStatus>; controller: AbortController }
+>();
 let shutdownStarted = false;
 
 /** App quit closes launch admission permanently for this process. */
@@ -82,6 +85,16 @@ function shutdownStatus(): DashboardStatus {
     running: false,
     error: "Hermes Desktop is shutting down.",
   };
+}
+
+function stoppedStartupStatus(): DashboardStatus {
+  return shutdownStarted
+    ? shutdownStatus()
+    : {
+        supported: true,
+        running: false,
+        error: "Hermes dashboard startup was stopped.",
+      };
 }
 
 function stopManagedProcess(proc: ChildProcess): Promise<boolean> {
@@ -272,6 +285,7 @@ function requestJson(
   url: string,
   token: string,
   timeoutMs = 2_000,
+  signal?: AbortSignal,
 ): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const parsed = new URL(url);
@@ -280,6 +294,7 @@ function requestJson(
       parsed,
       {
         method: "GET",
+        ...(signal ? { signal } : {}),
         headers: {
           "Content-Type": "application/json",
           "X-Hermes-Session-Token": token,
@@ -331,6 +346,7 @@ function requestJson(
 export function probeDashboardWebSocket(
   connection: DashboardConnection,
   timeoutMs = 2_000,
+  signal?: AbortSignal,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const parsed = new URL(connection.wsUrl);
@@ -338,6 +354,7 @@ export function probeDashboardWebSocket(
     parsed.protocol = parsed.protocol === "wss:" ? "https:" : "http:";
     const req = client.request(parsed, {
       method: "GET",
+      ...(signal ? { signal } : {}),
       headers: {
         Connection: "Upgrade",
         Upgrade: "websocket",
@@ -388,16 +405,24 @@ export function probeDashboardWebSocket(
 async function waitForDashboardReady(
   connection: DashboardConnection,
   timeoutMs = 45_000,
+  signal?: AbortSignal,
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   let lastError: unknown;
   while (Date.now() < deadline) {
     if (shutdownStarted) throw new Error("Hermes Desktop is shutting down.");
+    signal?.throwIfAborted();
     try {
-      await requestJson(`${connection.baseUrl}/api/status`, connection.token);
+      await requestJson(
+        `${connection.baseUrl}/api/status`,
+        connection.token,
+        2_000,
+        signal,
+      );
+      signal?.throwIfAborted();
       return;
     } catch (err) {
-      if (shutdownStarted) throw err;
+      if (shutdownStarted || signal?.aborted) throw err;
       lastError = err;
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
@@ -666,19 +691,24 @@ export async function startDashboard(
   const resolvedProfile = resolveProfile(profile);
   const key = resolvedProfile ?? "default";
   const pending = starting.get(key);
-  if (pending) return pending;
-  const launch = startLocalDashboard(resolvedProfile, key);
-  starting.set(key, launch);
+  if (pending) return pending.promise;
+  const controller = new AbortController();
+  const launch = startLocalDashboard(resolvedProfile, key, controller).then(
+    (result) => (controller.signal.aborted ? stoppedStartupStatus() : result),
+  );
+  const entry = { promise: launch, controller };
+  starting.set(key, entry);
   try {
     return await launch;
   } finally {
-    if (starting.get(key) === launch) starting.delete(key);
+    if (starting.get(key) === entry) starting.delete(key);
   }
 }
 
 async function startLocalDashboard(
   resolvedProfile: string | undefined,
   key: string,
+  controller: AbortController,
 ): Promise<DashboardStatus> {
   const existing = dashboards.get(key);
   if (existing && existing.proc.exitCode === null && !existing.proc.killed) {
@@ -706,7 +736,8 @@ async function startLocalDashboard(
   const port = await getFreePort();
   // A launch admitted before quit may still be waiting for its port. Nothing
   // after this check awaits before registering the owned process.
-  if (shutdownStarted) return shutdownStatus();
+  if (shutdownStarted || controller.signal.aborted)
+    return stoppedStartupStatus();
   const baseUrl = `http://127.0.0.1:${port}`;
   const logPath = dashboardLogPath(resolvedProfile);
   const stderrFd = openSync(logPath, "a");
@@ -760,15 +791,17 @@ async function startLocalDashboard(
   dashboards.set(key, { proc, connection });
   proc.once("exit", () => {
     if (dashboards.get(key)?.proc === proc) dashboards.delete(key);
+    controller.abort();
   });
 
   try {
     await waitForDashboardReady(
       connection,
       hasPrebuiltWebDist ? 45_000 : 180_000,
+      controller.signal,
     );
     if (shutdownStarted) throw new Error("Hermes Desktop is shutting down.");
-    await probeDashboardWebSocket(connection, 5_000);
+    await probeDashboardWebSocket(connection, 5_000, controller.signal);
   } catch (err) {
     if (dashboards.get(key)?.proc === proc) dashboards.delete(key);
     await stopManagedProcess(proc);
@@ -785,12 +818,16 @@ async function startLocalDashboard(
     };
   }
 
-  if (shutdownStarted) return shutdownStatus();
+  if (shutdownStarted || controller.signal.aborted)
+    return stoppedStartupStatus();
   return { supported: true, running: true, connection, logPath };
 }
 
 export async function stopDashboard(profile?: string): Promise<boolean> {
   const key = profileKey(profile);
+  const launch = starting.get(key);
+  starting.delete(key);
+  launch?.controller.abort();
   const managed = dashboards.get(key);
   if (!managed) return stoppingProfiles.get(key) ?? true;
   dashboards.delete(key);
@@ -802,12 +839,14 @@ export async function stopDashboard(profile?: string): Promise<boolean> {
 }
 
 export async function stopAllDashboards(): Promise<void> {
-  const pending = [...dashboards.keys()].map((key) => stopDashboard(key));
+  const launches = [...starting.values()].map((entry) => entry.promise);
+  const keys = new Set([...dashboards.keys(), ...starting.keys()]);
+  const pending = [...keys].map((key) => stopDashboard(key));
   // Include already admitted stops after their profile entries were removed.
   const results = await Promise.all([...pending, ...stopping.values()]);
   if (results.some((success) => !success))
     console.warn("[SHUTDOWN] A managed dashboard did not confirm termination.");
-  // Quit admission is already closed. Pre-spawn starts return without creating
-  // a child; readiness probes for stopped children now leave their retry loop.
-  if (shutdownStarted) await Promise.allSettled([...starting.values()]);
+  // Drain the launches captured before stop removed their admission entries.
+  // Cancelled pre-spawn starts create no child and readiness probes stop retrying.
+  await Promise.allSettled(launches);
 }
