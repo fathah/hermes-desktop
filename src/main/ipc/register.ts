@@ -4,6 +4,12 @@ import {
   resolveProfileEditorTarget,
 } from "../profile-editor-target";
 import {
+  providerTargetRevision,
+  beginProviderAuthChange,
+  finishProviderAuthChange,
+} from "../provider-request-target";
+import type { ProviderRequestTarget } from "../../shared/provider-target";
+import {
   app,
   shell,
   BrowserWindow,
@@ -267,6 +273,14 @@ import {
   remoteUpdateModel,
 } from "../remote-models";
 import {
+  discoverModelsRemote,
+  remoteAddCredentialPoolEntry,
+  remoteGetCredentialPool,
+  remoteGetEnv,
+  remoteSetCredentialPool,
+  remoteSetEnv,
+} from "../remote-providers";
+import {
   emptyOAuthProviderStatuses,
   remoteGetOAuthProviderStatuses,
 } from "../remote-provider-statuses";
@@ -511,6 +525,19 @@ async function getSshDashboardSessionConfig(
 // skipped there; explicit params like `profile=all` are never overridden).
 function activeSshProfile(profile?: string): string {
   return profile?.trim() || getActiveProfileNameSync();
+}
+
+function providerConnection(target?: ProviderRequestTarget): ConnectionConfig {
+  const conn = getConnectionConfig(target?.connectionId);
+  if (
+    target &&
+    (conn.mode !== target.mode ||
+      (target.mode === "remote" && conn.remoteUrl !== target.remoteUrl) ||
+      target.revision !== providerTargetRevision(conn))
+  ) {
+    throw new Error("Provider connection changed; reload and retry.");
+  }
+  return { ...conn, ssh: { ...conn.ssh } };
 }
 
 function sessionConnection(connectionId?: unknown): ConnectionConfig {
@@ -1062,17 +1089,37 @@ export function registerIpcHandlers(context: IpcContext): void {
     getLinkedAgentId(profile),
   );
 
+  ipcMain.handle(
+    "get-provider-request-target",
+    (_event, connectionId: string): ProviderRequestTarget => {
+      if (typeof connectionId !== "string" || !connectionId.trim()) {
+        throw new Error("An explicit provider connection is required.");
+      }
+      const conn = getConnectionConfig(connectionId);
+      return {
+        connectionId,
+        mode: conn.mode,
+        remoteUrl: conn.remoteUrl,
+        revision: providerTargetRevision(conn),
+      };
+    },
+  );
+
   // Configuration (profile-aware)
   ipcMain.handle("get-locale", () => getAppLocale());
   ipcMain.handle("set-locale", (_event, locale: AppLocale) =>
     setAppLocale(locale),
   );
 
-  ipcMain.handle("get-env", (_event, profile?: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) return sshReadEnv(conn.ssh, profile);
-    return readEnv(profile);
-  });
+  ipcMain.handle(
+    "get-env",
+    (_event, profile?: string, target?: ProviderRequestTarget) => {
+      const conn = providerConnection(target);
+      if (conn.mode === "ssh" && conn.ssh) return sshReadEnv(conn.ssh, profile);
+      if (conn.mode === "remote") return remoteGetEnv(profile, conn);
+      return readEnv(profile);
+    },
+  );
 
   // Pre-send chat readiness — answers "if Send is clicked right now,
   // will it work?". Fail-open semantics: any uncertain state returns
@@ -1128,17 +1175,29 @@ export function registerIpcHandlers(context: IpcContext): void {
       key: string,
       value: string,
       requestedProfile?: string,
-      target?: ProfileEditorTarget,
+      target?: ProfileEditorTarget | ProviderRequestTarget,
     ) => {
-      const { connection: conn, profile } = resolveProfileEditorTarget(
-        requestedProfile,
-        target,
-      );
-      if (target && conn.mode === "remote")
+      const editorTarget =
+        target && "scopeToken" in target ? target : undefined;
+      const context = editorTarget
+        ? resolveProfileEditorTarget(requestedProfile, editorTarget)
+        : undefined;
+      const conn =
+        context?.connection ??
+        providerConnection(target as ProviderRequestTarget | undefined);
+      const profile = context?.profile ?? requestedProfile;
+      if (editorTarget && conn.mode === "remote")
         throw new Error(REMOTE_MEMORY_READ_ONLY_ERROR);
       if (conn.mode === "ssh" && conn.ssh) {
         await sshSetEnvValue(conn.ssh, key, value, profile);
         return true;
+      }
+      if (conn.mode === "remote") {
+        if (!target)
+          throw new Error(
+            "Remote credential writes require an explicit connection.",
+          );
+        return remoteSetEnv(key, value, profile, conn);
       }
       assertLocalGatewayKeyMutationAllowed(key, profile);
       setEnvValue(key, value, profile);
@@ -1178,6 +1237,10 @@ export function registerIpcHandlers(context: IpcContext): void {
       if (conn.mode === "remote" && key === "memory.provider") {
         return remoteActiveMemoryProvider(profile, conn);
       }
+      if (target && conn.mode === "remote")
+        throw new Error(
+          "This editor configuration is unavailable in remote mode.",
+        );
       return getConfigValue(key, profile);
     },
   );
@@ -1199,7 +1262,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         await sshSetConfigValue(conn.ssh, key, value, profile);
         return true;
       }
-      if (conn.mode === "remote" && key.startsWith("memory.")) {
+      if (conn.mode === "remote" && (target || key.startsWith("memory."))) {
         // Would write the LOCAL config.yaml while the screen shows the server.
         throw new Error(REMOTE_MEMORY_READ_ONLY_ERROR);
       }
@@ -1623,10 +1686,18 @@ export function registerIpcHandlers(context: IpcContext): void {
     if (loginConfig.mode !== "remote" || !loginConfig.remoteUrl.trim()) {
       throw new Error("Configure a Remote gateway URL before signing in.");
     }
-    const result = await openRemoteOAuthLogin(
-      loginConfig.remoteUrl,
-      context.getMainWindow(),
-    );
+    beginProviderAuthChange(loginConfig.remoteUrl);
+    notifyConnectionConfigChanged();
+    let result: Awaited<ReturnType<typeof openRemoteOAuthLogin>>;
+    try {
+      result = await openRemoteOAuthLogin(
+        loginConfig.remoteUrl,
+        context.getMainWindow(),
+      );
+    } finally {
+      finishProviderAuthChange(loginConfig.remoteUrl);
+      notifyConnectionConfigChanged();
+    }
     setConnectionConfig(
       connectionConfigAfterRemoteOAuthLogin(
         loginConfig.remoteUrl,
@@ -1642,7 +1713,14 @@ export function registerIpcHandlers(context: IpcContext): void {
     if (conn.mode !== "remote" || !conn.remoteUrl.trim()) {
       throw new Error("Remote gateway is not configured.");
     }
-    await clearRemoteOAuthSession(conn.remoteUrl);
+    beginProviderAuthChange(conn.remoteUrl);
+    notifyConnectionConfigChanged();
+    try {
+      await clearRemoteOAuthSession(conn.remoteUrl);
+    } finally {
+      finishProviderAuthChange(conn.remoteUrl);
+      notifyConnectionConfigChanged();
+    }
     return { signedIn: false };
   });
 
@@ -2101,7 +2179,12 @@ export function registerIpcHandlers(context: IpcContext): void {
       baseUrl: string | undefined,
       apiKey: string | undefined,
       profile?: string,
+      target?: ProviderRequestTarget,
     ) => {
+      const conn = providerConnection(target);
+      if (conn.mode === "remote") {
+        return discoverModelsRemote(provider, baseUrl, profile, conn);
+      }
       return discoverProviderModels(provider, baseUrl, apiKey, profile);
     },
   );
@@ -3124,8 +3207,14 @@ export function registerIpcHandlers(context: IpcContext): void {
   // credential pool helpers default to the currently active profile's
   // auth.json (see config.ts:authFilePath), so the renderer can pass an
   // explicit profile or rely on the active-profile fallback.
-  ipcMain.handle("get-credential-pool", (_event, profile?: string) =>
-    getCredentialPool(profile),
+  ipcMain.handle(
+    "get-credential-pool",
+    (_event, profile?: string, target?: ProviderRequestTarget) => {
+      const conn = providerConnection(target);
+      if (conn.mode === "remote") return remoteGetCredentialPool(profile, conn);
+      if (conn.mode === "ssh") return {};
+      return getCredentialPool(profile);
+    },
   );
   ipcMain.handle(
     "set-credential-pool",
@@ -3134,7 +3223,13 @@ export function registerIpcHandlers(context: IpcContext): void {
       provider: string,
       entries: Array<Record<string, unknown>>,
       profile?: string,
+      target?: ProviderRequestTarget,
     ) => {
+      const conn = providerConnection(target);
+      if (conn.mode === "remote")
+        return remoteSetCredentialPool(provider, entries, profile, conn);
+      if (conn.mode === "ssh")
+        throw new Error("SSH credential pool operations are unavailable.");
       setCredentialPool(provider, entries, profile);
       return true;
     },
@@ -3152,7 +3247,24 @@ export function registerIpcHandlers(context: IpcContext): void {
       apiKey: string,
       label: string,
       profile?: string,
+      target?: ProviderRequestTarget,
     ) => {
+      const conn = providerConnection(target);
+      if (conn.mode === "remote") {
+        if (!target)
+          throw new Error(
+            "Remote credential writes require an explicit connection.",
+          );
+        return remoteAddCredentialPoolEntry(
+          provider,
+          apiKey,
+          label,
+          profile,
+          conn,
+        );
+      }
+      if (conn.mode === "ssh")
+        throw new Error("SSH credential pool operations are unavailable.");
       return addCredentialPoolEntry(provider, apiKey, label, profile);
     },
   );

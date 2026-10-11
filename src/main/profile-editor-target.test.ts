@@ -148,6 +148,19 @@ describe("Captured profile editor target", () => {
     await expect(env("KEY", "secret", "work", target)).rejects.toThrow(
       /read-only/,
     );
+    const config = handler("set-config", {
+      resolveProfileEditorTarget,
+      setConfigValue: local,
+      REMOTE_MEMORY_READ_ONLY_ERROR: "read-only",
+    });
+    await expect(
+      config("model", "old desktop model", "work", target),
+    ).rejects.toThrow(/read-only/);
+    const configRead = handler("get-config", {
+      resolveProfileEditorTarget,
+      getConfigValue: local,
+    });
+    expect(() => configRead("model", "work", target)).toThrow(/unavailable/);
     expect(local).not.toHaveBeenCalled();
   });
 

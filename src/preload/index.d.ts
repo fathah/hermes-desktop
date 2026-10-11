@@ -1,4 +1,5 @@
 import type { ProfileEditorTarget } from "../shared/profile-editor-target";
+import type { ProviderRequestTarget } from "../shared/provider-target";
 import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
 import type {
@@ -345,12 +346,18 @@ interface HermesAPI {
   setLocale: (locale: AppLocale) => Promise<AppLocale>;
 
   // Configuration (profile-aware)
-  getEnv: (profile?: string) => Promise<Record<string, string>>;
+  getProviderRequestTarget: (
+    connectionId: string,
+  ) => Promise<ProviderRequestTarget>;
+  getEnv: (
+    profile?: string,
+    target?: ProviderRequestTarget,
+  ) => Promise<Record<string, string>>;
   setEnv: (
     key: string,
     value: string,
     profile?: string,
-    target?: ProfileEditorTarget,
+    target?: ProfileEditorTarget | ProviderRequestTarget,
   ) => Promise<boolean>;
   validateChatReadiness: (
     profile?: string,
@@ -536,6 +543,7 @@ interface HermesAPI {
     baseUrl?: string,
     apiKey?: string,
     profile?: string,
+    target?: ProviderRequestTarget,
   ) => Promise<{
     models: string[];
     status: "ok" | "no-key" | "error" | "unsupported" | "unknown-host";
@@ -975,17 +983,20 @@ interface HermesAPI {
   // engine schema (issue #367). See `CredentialPoolEntry` below.
   getCredentialPool: (
     profile?: string,
+    target?: ProviderRequestTarget,
   ) => Promise<Record<string, Array<CredentialPoolEntry>>>;
   setCredentialPool: (
     provider: string,
     entries: Array<CredentialPoolEntry>,
     profile?: string,
+    target?: ProviderRequestTarget,
   ) => Promise<boolean>;
   addCredentialPoolEntry: (
     provider: string,
     apiKey: string,
     label: string,
     profile?: string,
+    target?: ProviderRequestTarget,
   ) => Promise<Array<CredentialPoolEntry>>;
   invalidateSecretsCache: () => Promise<void>;
 
