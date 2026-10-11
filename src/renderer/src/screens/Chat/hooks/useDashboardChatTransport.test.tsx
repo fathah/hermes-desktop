@@ -21,7 +21,7 @@ import {
   useDashboardChatTransport,
 } from "./useDashboardChatTransport";
 import { useTranscriptState } from "./useTranscriptState";
-import type { ActiveTurn, ChatMessage, UsageState } from "../types";
+import type { ActiveTurn, Attachment, ChatMessage, UsageState } from "../types";
 
 type SetUsageMock = Mock<(value: SetStateAction<UsageState | null>) => void>;
 
@@ -70,7 +70,7 @@ interface HarnessApi {
   respondApproval?: ReturnType<
     typeof useDashboardChatTransport
   >["respondApproval"];
-  send?: (text: string) => Promise<boolean>;
+  send?: (text: string, attachments?: Attachment[]) => Promise<boolean>;
   setConnectionMode?: Dispatch<SetStateAction<"local" | "remote" | "ssh">>;
   setMessages?: Dispatch<SetStateAction<ChatMessage[]>>;
   setModel?: Dispatch<SetStateAction<string>>;
@@ -2240,4 +2240,57 @@ it("deduplicates native runtime counters while preserving context, legacy deltas
       snapshots,
     ),
   ).toMatchObject({ promptTokens: 8, completionTokens: 4, totalTokens: 12 });
+});
+
+// @lat: [[shared-pets#Recovery regressions#Invalid payload handoff releases native authority]]
+it("invalid attachment handoff releases native teardown ownership", async () => {
+  const api: HarnessApi = {};
+  Object.defineProperty(window, "hermesAPI", {
+    configurable: true,
+    value: {
+      startDashboard: vi.fn().mockResolvedValue({
+        running: true,
+        connection: { wsUrl: "ws://fixture" },
+      }),
+      freshDashboardWsUrl: vi.fn().mockResolvedValue("ws://fixture"),
+    },
+  });
+  const view = render(
+    <Harness
+      api={api}
+      initialConnectionMode="remote"
+      fallbackOnUnavailable
+      connectionRevision={0}
+    />,
+  );
+  await waitFor(() => expect(api.send).toBeDefined());
+  const originalTurn = api.activeTurnRef!.current;
+  let handled: boolean | undefined;
+  await act(async () => {
+    handled = await api.send!("legacy payload", [
+      {
+        id: "invalid-path",
+        kind: "path-ref",
+        name: "gone.pdf",
+        mime: "application/pdf",
+        size: 10,
+        path: "",
+      },
+    ]);
+  });
+  expect(handled).toBe(false);
+  expect(api.activeTurnRef!.current).toBe(originalTurn);
+  view.rerender(
+    <Harness
+      api={api}
+      initialConnectionMode="remote"
+      fallbackOnUnavailable
+      connectionRevision={1}
+    />,
+  );
+  expect(api.activeTurnRef!.current).toBe(originalTurn);
+  expect(originalTurn!.status).toBe("running");
+  expect(
+    api.messages!.some((message) => "error" in message && !!message.error),
+  ).toBe(false);
 });

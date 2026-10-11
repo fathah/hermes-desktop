@@ -73,3 +73,11 @@ A connection edit immediately fails only the still-current originating UI turn, 
 ### Initial handshake teardown settles its turn
 
 Editing the connection during initial Dashboard startup releases the originating turn's loading state. A delayed handshake cannot dispatch its session or prompt on the edited target.
+
+### Legacy handoff preserves its turn
+
+Every native-to-Legacy fallback releases only that submission's Dashboard retirement callback. A later connection edit cannot fail the admitted Legacy turn or drop its IPC chunks and completion; active Dashboard turns still retire on teardown.
+
+### Invalid payload handoff releases native authority
+
+A payload rejected before native dispatch also releases its captured retirement callback when Auto hands it to Legacy. Later teardown preserves that turn, just as missing Dashboard and unsupported attachment APIs do.
