@@ -3833,13 +3833,13 @@ export function testRemoteConnection(
   // Both the gateway /health and the dashboard /api/status answer JSON. The
   // dashboard SPA answers every unknown path with HTML 200, so an HTML reply is
   // never a healthy Hermes endpoint, whichever path was asked.
-  const probe = (path: string): Promise<boolean> =>
+  const probe = (path: string, probeHeaders = headers): Promise<boolean> =>
     new Promise((resolve) => {
       const target = `${normalized}${path}`;
       const mod = target.startsWith("https") ? https : http;
       const req = mod.request(
         target,
-        { method: "GET", timeout: 5000, headers },
+        { method: "GET", timeout: 5000, headers: probeHeaders },
         (res) => {
           const contentType = String(res.headers?.["content-type"] || "");
           const looksLikeHtml = contentType.toLowerCase().includes("text/html");
@@ -3863,7 +3863,20 @@ export function testRemoteConnection(
       ? ["/api/status", "/health"]
       : ["/health", "/api/status"];
   return order.reduce<Promise<boolean>>(
-    (acc, path) => acc.then((ok) => (ok ? true : probe(path))),
+    (acc, path) =>
+      acc.then(async (ok) => {
+        if (ok) return true;
+        if (!(await probe(path))) return false;
+        if (path !== "/api/status" || configuredOAuth) return true;
+        // Dashboard status is public, even when a supplied token is invalid.
+        // Verify candidate token access before saving a successful connection.
+        return probe("/api/sessions?limit=1", {
+          ...headers,
+          ...(resolvedApiKey
+            ? { "X-Hermes-Session-Token": resolvedApiKey }
+            : {}),
+        });
+      }),
     Promise.resolve(false),
   );
 }

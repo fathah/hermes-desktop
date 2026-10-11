@@ -609,7 +609,10 @@ describe("cronJobsFromResponseBody", () => {
 
 describe("testRemoteConnection candidate probing", () => {
   function stubHttp(
-    reply: (target: string) => { status: number; type: string },
+    reply: (
+      target: string,
+      options: { headers: Record<string, string> },
+    ) => { status: number; type: string },
   ): { seen: string[]; restore: () => void } {
     const seen: string[] = [];
     const spy = vi
@@ -618,7 +621,7 @@ describe("testRemoteConnection candidate probing", () => {
         const url = String(target);
         seen.push(url);
         const cb = rest[rest.length - 1] as (res: unknown) => void;
-        const r = reply(url);
+        const r = reply(url, rest[0] as { headers: Record<string, string> });
         cb({
           statusCode: r.status,
           headers: { "content-type": r.type },
@@ -646,9 +649,35 @@ describe("testRemoteConnection candidate probing", () => {
     expect(probe.seen).toEqual([
       "http://new-dashboard:9119/health",
       "http://new-dashboard:9119/api/status",
+      "http://new-dashboard:9119/api/sessions?limit=1",
     ]);
     probe.restore();
   });
+
+  // @lat: [[scheduled-jobs#Test specifications#Dashboard token validation]]
+  it.each([false, true])(
+    "validates a candidate dashboard token on a protected route (valid=%s)",
+    async (valid) => {
+      const probe = stubHttp((url, options) => {
+        if (url.endsWith("/health")) return { status: 200, type: "text/html" };
+        if (url.endsWith("/api/status"))
+          return { status: 200, type: "application/json" };
+        expect(url).toBe("http://new-dashboard:9119/api/sessions?limit=1");
+        expect(options.headers["X-Hermes-Session-Token"]).toBe(
+          "candidate-token",
+        );
+        return { status: valid ? 200 : 401, type: "application/json" };
+      });
+      try {
+        await expect(
+          testRemoteConnection("http://new-dashboard:9119", "candidate-token"),
+        ).resolves.toBe(valid);
+        expect(probe.seen).toHaveLength(3);
+      } finally {
+        probe.restore();
+      }
+    },
+  );
 
   it("still rejects a URL that answers HTML on both paths", async () => {
     const probe = stubHttp(() => ({ status: 200, type: "text/html" }));

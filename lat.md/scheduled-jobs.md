@@ -10,6 +10,8 @@ Direct remote schedules use the shared OAuth or token boundary and the selected 
 
 [[src/main/cronjobs.ts#listCronJobs]] and mutations prefer dashboard cron routes. Explicit default-profile queries avoid the dashboard's all-profile list default. Only unsupported routes or an unconfigured keyless token transport permit a legacy fetch.
 
+Token dashboard connection tests use public status only for discovery, then verify a protected session-list route with the candidate session-token header. Existing OAuth discovery remains separate from native sign-in.
+
 ## Test specifications
 
 These tests protect state normalization at the boundary between Hermes cron data and the desktop schedule model.
@@ -49,3 +51,7 @@ An HTML success response from an anonymous dashboard fails the operation, so the
 ### SSH default profile isolation
 
 SSH dashboard cron requests explicitly select the default profile, including the probed-tunnel fallback, so the dashboard's all-profile default cannot mix another agent's jobs into Schedules.
+
+### Dashboard token validation
+
+A public dashboard status response cannot validate a candidate token; connection tests reject unauthorized session-list requests and accept the candidate only when protected access succeeds.
