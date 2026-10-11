@@ -28,6 +28,8 @@ Named-profile SSH output retains completed states with `enabled: false`, and act
 
 Reading a real local jobs file preserves completed states, keeps paused and legacy-disabled jobs disabled, and filters active-only results without modifying the stored job data.
 
+An explicit local connection fixture isolates these tests from the desktop connection registry and user configuration.
+
 ### Selected remote profile
 
 Dashboard cron reads and every mutation use the selected profile, including an explicit default profile, so one agent cannot operate on another agent's scheduled jobs.
