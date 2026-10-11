@@ -68,6 +68,24 @@ Messaging platform availability combines credentials from `.env` with an optiona
 
 [[src/main/config.ts#setPlatformEnabled]] edits only the platform block's direct `enabled` child. It preserves unrelated YAML and the file's existing LF or CRLF line endings, and leaves the file byte-identical when the requested enabled state is already the default. This matters at application startup, where merely reading and reconciling a configured platform must not rewrite or corrupt a shared Windows `config.yaml`.
 
+## Remote Gateway management
+
+The Remote Gateway screen controls the server's gateway and messaging platforms through authenticated, profile-scoped dashboard requests.
+
+[[src/main/remote-gateway.ts#remoteGatewayStatus]] reads liveness from `/api/status`; Start, Stop and Restart submit server actions and the screen rechecks status after startup. Action acceptance is distinct from liveness, and server refusals remain errors.
+
+[[src/renderer/src/screens/Gateway/Gateway.tsx#Gateway]] keeps successful gateway status even if platform settings fail, hides desktop-local API key controls in Remote mode, and cancels pending status timers on unmount. Layout keys it by connection and profile.
+
+[[src/renderer/src/screens/Layout/useRemoteOnlyMode.ts#useRemoteOnlyMode]] refreshes mode after connection or configuration changes, rejects late answers from earlier targets, and hides local mutation controls while the new target is unresolved.
+
+### Messaging profile isolation
+
+Remote messaging list, update and test calls retain the selected profile through IPC and the authenticated dashboard client, so a named profile's platform settings cannot fall through to the server's default profile.
+
+### Renderer mode transitions
+
+Switching connections on the same screen refreshes its Remote restrictions. Outdated mode replies cannot undo a newer answer, and in-place configuration changes invalidate prior local-control permissions until resolved.
+
 ## Voice transcription IPC
 
 Speech-to-text IPC sends recorded desktop audio through the Hermes API server, not through the active chat model endpoint.

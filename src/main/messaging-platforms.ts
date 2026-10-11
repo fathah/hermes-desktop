@@ -154,16 +154,24 @@ function remoteMessagingJson<T>(
   path: string,
   method: "GET" | "PUT" | "POST" = "GET",
   body?: unknown,
+  profile?: string,
 ): Promise<T> {
-  return remoteDashboardRequestJson<T>(getConnectionConfig(), path, {
-    method,
-    body,
-  });
+  return remoteDashboardRequestJson<T>(
+    getConnectionConfig(),
+    path,
+    { method, body },
+    profile,
+  );
 }
 
-export async function fetchRemoteMessagingPlatforms(): Promise<MessagingPlatformsResponse> {
+export async function fetchRemoteMessagingPlatforms(
+  profile?: string,
+): Promise<MessagingPlatformsResponse> {
   const data = await remoteMessagingJson<MessagingPlatformsResponse>(
     "/api/messaging/platforms",
+    "GET",
+    undefined,
+    profile,
   );
   return { ...data, editable: true, source: "remote-api" };
 }
@@ -171,19 +179,24 @@ export async function fetchRemoteMessagingPlatforms(): Promise<MessagingPlatform
 export function updateRemoteMessagingPlatform(
   platformId: string,
   update: MessagingPlatformUpdate,
+  profile?: string,
 ): Promise<{ ok: boolean; platform: string }> {
   return remoteMessagingJson(
     `/api/messaging/platforms/${encodeURIComponent(platformId)}`,
     "PUT",
     update,
+    profile,
   );
 }
 
 export function testRemoteMessagingPlatform(
   platformId: string,
+  profile?: string,
 ): Promise<MessagingPlatformTestResponse> {
   return remoteMessagingJson(
     `/api/messaging/platforms/${encodeURIComponent(platformId)}/test`,
     "POST",
+    undefined,
+    profile,
   );
 }

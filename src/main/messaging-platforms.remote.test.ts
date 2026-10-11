@@ -28,6 +28,7 @@ describe("remote messaging platforms", () => {
       expect.objectContaining({ mode: "remote" }),
       "/api/messaging/platforms",
       { method: "GET", body: undefined },
+      undefined,
     );
     expect(bare).not.toHaveBeenCalled();
   });
@@ -55,5 +56,19 @@ describe("remote messaging platforms", () => {
     await expect(fetchRemoteMessagingPlatforms()).rejects.toThrow(
       "Unauthorized",
     );
+  });
+
+  // @lat: [[main-process#Main Process#Remote Gateway management#Messaging profile isolation]]
+  it("lists, updates and tests messaging settings for the selected remote profile", async () => {
+    request.mockResolvedValue({ ok: true, platforms: [] });
+    await fetchRemoteMessagingPlatforms("work");
+    await updateRemoteMessagingPlatform("telegram", { enabled: true }, "work");
+    await testRemoteMessagingPlatform("telegram", "work");
+
+    expect(request.mock.calls.map((call) => [call[1], call[3]])).toEqual([
+      ["/api/messaging/platforms", "work"],
+      ["/api/messaging/platforms/telegram", "work"],
+      ["/api/messaging/platforms/telegram/test", "work"],
+    ]);
   });
 });
