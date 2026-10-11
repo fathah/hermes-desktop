@@ -83,6 +83,10 @@ Real main configuration writes persist missing or existing model, region and pro
 
 Scalar and flow YAML parents fail without acknowledging success or modifying the original configuration, preventing silent settings loss or duplicate mappings.
 
+## Commented empty speech scalar preservation
+
+Real saves of empty or null model, region and provider leaves keep whitespace before inline comments. Commented LF and CRLF mappings parse, preserve trailers and sibling comments, and reopen with confirmed values rather than returning model defaults.
+
 ## Hidden chat playback release
 
 The actual Layout and Chat retain background transcripts while switching profile or screen, but pause audio, revoke its URL and cancel the hidden run's matching speech request.
