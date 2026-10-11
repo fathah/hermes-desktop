@@ -4,6 +4,25 @@ import type { App } from "electron";
 import { expect, it, vi } from "vitest";
 import { registerManagedQuit } from "../src/main/app/managed-quit";
 
+// @lat: [[dashboard-shutdown#Synchronous quit admission]]
+it("closes launch admission in the first quit event before asynchronous cleanup starts", async () => {
+  let blocked = false;
+  const begin = vi.fn(() => {
+    blocked = true;
+  });
+  const cleanup = vi.fn(async () => {
+    expect(blocked).toBe(true);
+  });
+  const app = Object.assign(new EventEmitter(), { quit: vi.fn() });
+  registerManagedQuit(app as unknown as App, cleanup, begin);
+  app.emit("before-quit", { preventDefault: vi.fn() });
+  expect(blocked).toBe(true);
+  expect(cleanup).not.toHaveBeenCalled();
+  app.emit("before-quit", { preventDefault: vi.fn() });
+  await vi.waitFor(() => expect(app.quit).toHaveBeenCalledTimes(1));
+  expect(begin).toHaveBeenCalledTimes(1);
+});
+
 // @lat: [[dashboard-shutdown#Electron waits for cleanup]]
 it("prevents repeated Electron quit until asynchronous owned-process cleanup settles", async () => {
   let finish!: () => void;

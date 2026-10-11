@@ -4,6 +4,7 @@ import type { App } from "electron";
 export function registerManagedQuit(
   app: App,
   cleanup: () => Promise<void>,
+  onStart?: () => void,
 ): void {
   let started = false;
   let complete = false;
@@ -12,6 +13,7 @@ export function registerManagedQuit(
     event.preventDefault();
     if (started) return;
     started = true;
+    onStart?.();
     void Promise.resolve()
       .then(cleanup)
       .catch((error) => console.error("[SHUTDOWN] Cleanup failed:", error))

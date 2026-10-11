@@ -68,6 +68,21 @@ interface ManagedDashboard {
 const dashboards = new Map<string, ManagedDashboard>();
 const stopping = new Map<ChildProcess, Promise<boolean>>();
 const stoppingProfiles = new Map<string, Promise<boolean>>();
+const starting = new Map<string, Promise<DashboardStatus>>();
+let shutdownStarted = false;
+
+/** App quit closes launch admission permanently for this process. */
+export function beginDashboardShutdown(): void {
+  shutdownStarted = true;
+}
+
+function shutdownStatus(): DashboardStatus {
+  return {
+    supported: true,
+    running: false,
+    error: "Hermes Desktop is shutting down.",
+  };
+}
 
 function stopManagedProcess(proc: ChildProcess): Promise<boolean> {
   const existing = stopping.get(proc);
@@ -183,9 +198,11 @@ async function sshDashboardConnectionFromConfig(
   // null when the remote can't run the dashboard (no Node / no web dist) —
   // the caller then falls back to legacy over the gateway /v1 tunnel.
   const dash = await sshEnsureDashboard(config.ssh, profile);
+  if (shutdownStarted) throw new Error("Hermes Desktop is shutting down.");
   if (!dash) return null;
 
   await ensureSshTunnel({ ...config.ssh, remotePort: dash.port });
+  if (shutdownStarted) throw new Error("Hermes Desktop is shutting down.");
   return sshDashboardConnectionFromTunnel(
     config,
     getSshTunnelUrl(),
@@ -375,10 +392,12 @@ async function waitForDashboardReady(
   const deadline = Date.now() + timeoutMs;
   let lastError: unknown;
   while (Date.now() < deadline) {
+    if (shutdownStarted) throw new Error("Hermes Desktop is shutting down.");
     try {
       await requestJson(`${connection.baseUrl}/api/status`, connection.token);
       return;
     } catch (err) {
+      if (shutdownStarted) throw err;
       lastError = err;
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
@@ -561,6 +580,7 @@ export async function getDashboardStatus(
   profile?: string,
   connectionId?: unknown,
 ): Promise<DashboardStatus> {
+  if (shutdownStarted) return shutdownStatus();
   const config = getConnectionConfig(connectionId);
   const mode =
     config.mode === "remote" || config.mode === "ssh" ? config.mode : "local";
@@ -631,6 +651,7 @@ export async function startDashboard(
   profile?: string,
   connectionId?: unknown,
 ): Promise<DashboardStatus> {
+  if (shutdownStarted) return shutdownStatus();
   const config = getConnectionConfig(connectionId);
   const mode =
     config.mode === "remote" || config.mode === "ssh" ? config.mode : "local";
@@ -642,8 +663,25 @@ export async function startDashboard(
     return getSshDashboardStatusForConfig(config, profile);
   }
 
-  const existing = getManagedDashboard(profile);
-  if (existing) {
+  const resolvedProfile = resolveProfile(profile);
+  const key = resolvedProfile ?? "default";
+  const pending = starting.get(key);
+  if (pending) return pending;
+  const launch = startLocalDashboard(resolvedProfile, key);
+  starting.set(key, launch);
+  try {
+    return await launch;
+  } finally {
+    if (starting.get(key) === launch) starting.delete(key);
+  }
+}
+
+async function startLocalDashboard(
+  resolvedProfile: string | undefined,
+  key: string,
+): Promise<DashboardStatus> {
+  const existing = dashboards.get(key);
+  if (existing && existing.proc.exitCode === null && !existing.proc.killed) {
     return {
       supported: true,
       running: true,
@@ -664,10 +702,11 @@ export async function startDashboard(
       ? `${compat.detail}: ${compat.error}`
       : compat.detail;
 
-  const resolvedProfile = resolveProfile(profile);
-  const key = profileKey(profile);
   const token = randomBytes(24).toString("hex");
   const port = await getFreePort();
+  // A launch admitted before quit may still be waiting for its port. Nothing
+  // after this check awaits before registering the owned process.
+  if (shutdownStarted) return shutdownStatus();
   const baseUrl = `http://127.0.0.1:${port}`;
   const logPath = dashboardLogPath(resolvedProfile);
   const stderrFd = openSync(logPath, "a");
@@ -728,6 +767,7 @@ export async function startDashboard(
       connection,
       hasPrebuiltWebDist ? 45_000 : 180_000,
     );
+    if (shutdownStarted) throw new Error("Hermes Desktop is shutting down.");
     await probeDashboardWebSocket(connection, 5_000);
   } catch (err) {
     if (dashboards.get(key)?.proc === proc) dashboards.delete(key);
@@ -745,6 +785,7 @@ export async function startDashboard(
     };
   }
 
+  if (shutdownStarted) return shutdownStatus();
   return { supported: true, running: true, connection, logPath };
 }
 
@@ -766,4 +807,7 @@ export async function stopAllDashboards(): Promise<void> {
   const results = await Promise.all([...pending, ...stopping.values()]);
   if (results.some((success) => !success))
     console.warn("[SHUTDOWN] A managed dashboard did not confirm termination.");
+  // Quit admission is already closed. Pre-spawn starts return without creating
+  // a child; readiness probes for stopped children now leave their retry loop.
+  if (shutdownStarted) await Promise.allSettled([...starting.values()]);
 }

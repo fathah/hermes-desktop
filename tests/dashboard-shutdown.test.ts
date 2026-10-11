@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   home: "",
   children: [] as ChildProcess[],
   ignoresTerm: false,
+  responseDelay: 0,
 }));
 vi.mock("../src/main/config", () => ({
   getConnectionConfig: () => ({ mode: "local" }),
@@ -49,7 +50,7 @@ vi.mock("child_process", async (original) => {
           `
       const http = require('http');
       if (${state.ignoresTerm}) process.on('SIGTERM', () => {});
-      const server = http.createServer((req, res) => res.end('{}'));
+      const server = http.createServer((req, res) => setTimeout(() => res.end('{}'), ${state.responseDelay}));
       server.on('upgrade', (req, socket) => {
         socket.on('error', () => {});
         socket.write('HTTP/1.1 101 Switching Protocols\\r\\nConnection: Upgrade\\r\\nUpgrade: websocket\\r\\n\\r\\n');
@@ -65,6 +66,7 @@ vi.mock("child_process", async (original) => {
   };
 });
 import {
+  beginDashboardShutdown,
   startDashboard,
   stopAllDashboards,
   stopDashboard,
@@ -74,6 +76,7 @@ beforeEach(() => {
   state.home = mkdtempSync(join(tmpdir(), "hermes-shutdown-"));
   state.active = "default";
   state.ignoresTerm = false;
+  state.responseDelay = 0;
 });
 afterEach(async () => {
   state.active = "default";
@@ -96,6 +99,18 @@ async function start(profile?: string): Promise<ChildProcess> {
   expect(await startDashboard(profile)).toMatchObject({ running: true });
   return state.children.at(-1)!;
 }
+
+// @lat: [[dashboard-shutdown#Same-profile launch ownership]]
+it("shares a pending same-profile launch so both callers own one child", async () => {
+  const [first, second] = await Promise.all([
+    startDashboard("shared"),
+    startDashboard("shared"),
+  ]);
+  expect(first.running).toBe(true);
+  expect(second.running).toBe(true);
+  expect(first.connection?.pid).toBe(second.connection?.pid);
+  expect(state.children).toHaveLength(1);
+});
 
 // @lat: [[dashboard-shutdown#All managed profiles]]
 it("stops default and named dashboard processes after changing the active profile", async () => {
@@ -161,3 +176,26 @@ it.skipIf(process.platform === "win32")(
   },
   5000,
 );
+
+// @lat: [[dashboard-shutdown#Quit launch admission]]
+it("blocks new and pre-port launches during quit and drains a started child's readiness", async () => {
+  state.ignoresTerm = true;
+  const running = await start("running");
+  state.responseDelay = 2000;
+  const entering = startDashboard("entering");
+  await vi.waitFor(() => expect(state.children).toHaveLength(2));
+  const beforePort = startDashboard("before-port");
+  beginDashboardShutdown();
+  const shutdown = stopAllDashboards();
+  await expect(startDashboard("during-quit")).resolves.toMatchObject({
+    running: false,
+    error: expect.stringContaining("shutting down"),
+  });
+  await expect(beforePort).resolves.toMatchObject({ running: false });
+  await expect(entering).resolves.toMatchObject({ running: false });
+  await shutdown;
+  expect(state.children).toHaveLength(2);
+  for (const child of state.children)
+    expect(child.exitCode !== null || child.signalCode !== null).toBe(true);
+  expect(running.exitCode !== null || running.signalCode !== null).toBe(true);
+}, 8000);

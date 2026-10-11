@@ -5,10 +5,10 @@ import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import icon from "../../../resources/icon.png?asset";
 import { getPublicConnectionConfig } from "../config";
 import { stopHealthPolling } from "../hermes";
-import { stopAllDashboards } from "../dashboard";
+import { beginDashboardShutdown, stopAllDashboards } from "../dashboard";
 import { cleanupTempMediaFiles } from "../media";
 import { closeDbConnection } from "../db";
-import { stopSshTunnel } from "../ssh-tunnel";
+import { beginSshTunnelShutdown, stopSshTunnel } from "../ssh-tunnel";
 import {
   hardenAttachedWebContents,
   hardenWebviewPreferences,
@@ -117,21 +117,28 @@ export function startMainProcess(): void {
     if (process.platform !== "darwin") app.quit();
   });
 
-  registerManagedQuit(app, async () => {
-    stopHealthPolling();
-    for (const abort of activeRuns.values()) abort();
-    activeRuns.clear();
-    cleanupTempMediaFiles();
-    try {
-      await stopAllDashboards();
-    } finally {
-      // Kill the SSH tunnel process on quit — otherwise the `ssh -N -L` child is
-      // orphaned (reparented to PID 1) and keeps holding its local port, so each
-      // relaunch leaks another tunnel and the port drifts (18642 → 61799 → …).
-      stopSshTunnel();
-      closeDbConnection();
-    }
-  });
+  registerManagedQuit(
+    app,
+    async () => {
+      stopHealthPolling();
+      for (const abort of activeRuns.values()) abort();
+      activeRuns.clear();
+      cleanupTempMediaFiles();
+      try {
+        await stopAllDashboards();
+      } finally {
+        // Kill the SSH tunnel process on quit — otherwise the `ssh -N -L` child is
+        // orphaned (reparented to PID 1) and keeps holding its local port, so each
+        // relaunch leaks another tunnel and the port drifts (18642 → 61799 → …).
+        stopSshTunnel();
+        closeDbConnection();
+      }
+    },
+    () => {
+      beginDashboardShutdown();
+      beginSshTunnelShutdown();
+    },
+  );
 }
 
 function notifyConnectionConfigChanged(): void {

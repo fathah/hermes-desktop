@@ -38,3 +38,39 @@ Electron prevents initial and repeated quit events while asynchronous cleanup ru
 Actual Windows and Unix installer failures preserve their exit status and log, point to the proper terminal and supported installation instructions, and avoid guessing a failure cause or deleting existing configuration and conversations.
 
 [[src/main/installer-errors.ts#buildInstallErrorMessage]] is shared by both install paths. Interrupted processes have no invented exit code; checksum verification still fails closed even when old binaries exist.
+
+## Same-profile launch ownership
+
+Concurrent local launches for one profile share one startup promise and child, preserving complete process ownership before global shutdown snapshots the registry.
+
+## Quit launch admission
+
+Quit permanently blocks new dashboard launches and pre-spawn requests awaiting a port. Already spawned children remain owned, their readiness retries stop, and global cleanup drains their startup promises after confirming exit.
+
+[[src/main/dashboard.ts#beginDashboardShutdown]] is quit-specific; ordinary [[src/main/dashboard.ts#stopAllDashboards]] calls remain reusable. Real HTTP child fixtures cover launches before spawn, during readiness, and while forced termination is pending.
+
+## Synchronous quit admission
+
+The first Electron quit event closes launch admission synchronously before scheduling cleanup, so pending renderer requests cannot launch during the cleanup microtask gap.
+
+## Ordinary tunnel stop and restart
+
+Stopping a local SSH tunnel invalidates a pending port selection before it can spawn. A later normal start remains supported because ordinary stop does not close quit admission.
+
+## Queued tunnel quit admission
+
+Quit permanently rejects pending, queued and new local SSH tunnel requests. Port selection must recheck admission and generation before spawning so a child cannot appear after cleanup.
+
+[[src/main/ssh-tunnel.ts#beginSshTunnelShutdown]] closes admission synchronously alongside the dashboard gate. It stops only the desktop-owned local tunnel, preserving remote-owned Agent services.
+
+## Tunnel health continuation on quit
+
+A health result arriving after quit cannot declare the stopped tunnel usable or start a replacement. The owned local tunnel receives its ordinary stop signal.
+
+## SSH dashboard continuation on quit
+
+A delayed remote dashboard reply cannot begin a new local tunnel after quit. Start, status and fresh WebSocket requests reject the stale continuation before tunnel creation.
+
+## Admitted tunnel continuation on quit
+
+If a tunnel request was admitted before quit, its late completion cannot return a running dashboard connection. Remote services remain owned by the remote host.

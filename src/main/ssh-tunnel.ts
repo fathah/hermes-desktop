@@ -23,6 +23,23 @@ let tunnelRunning = false;
 let tunnelStartPromise: Promise<void> | null = null;
 let tunnelStartTargetKey: string | null = null;
 let tunnelGeneration = 0;
+let shutdownStarted = false;
+
+/** Quit closes tunnel admission; an ordinary stop still permits a restart. */
+export function beginSshTunnelShutdown(): void {
+  shutdownStarted = true;
+  stopSshTunnel();
+}
+
+function assertTunnelAdmission(): void {
+  if (shutdownStarted) throw new Error("Hermes Desktop is shutting down.");
+}
+
+function assertTunnelStartCurrent(generation: number): void {
+  assertTunnelAdmission();
+  if (generation !== tunnelGeneration)
+    throw new Error("SSH tunnel start was superseded by another target.");
+}
 
 export function getSshTunnelUrl(): string | null {
   if (!activeConfig || !tunnelRunning) return null;
@@ -65,10 +82,17 @@ async function checkTunnelHealth(
   return checkHttpPath(port, "/api/status", timeoutMs);
 }
 
-async function waitForHealth(port: number, timeoutMs: number): Promise<void> {
+async function waitForHealth(
+  port: number,
+  timeoutMs: number,
+  generation: number,
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() <= deadline) {
-    if (await checkTunnelHealth(port, 1500)) return;
+    assertTunnelStartCurrent(generation);
+    const healthy = await checkTunnelHealth(port, 1500);
+    assertTunnelStartCurrent(generation);
+    if (healthy) return;
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   throw new Error(`SSH tunnel health check failed after ${timeoutMs}ms`);
@@ -133,6 +157,7 @@ function tunnelTargetKey(config: SshConfig): string {
 }
 
 async function startSshTunnelInner(config: SshConfig): Promise<void> {
+  assertTunnelAdmission();
   stopSshTunnel();
   const generation = ++tunnelGeneration;
 
@@ -142,6 +167,9 @@ async function startSshTunnelInner(config: SshConfig): Promise<void> {
   }
 
   const localPort = await findFreePort(config.localPort || 18642);
+  // Stop may have invalidated this launch while its port was being selected.
+  // No await separates this check from spawning and recording the owned child.
+  assertTunnelStartCurrent(generation);
   activeConfig = { ...config, localPort };
   activeTargetKey = tunnelTargetKey(config);
   tunnelRunning = false;
@@ -190,6 +218,7 @@ async function startSshTunnelInner(config: SshConfig): Promise<void> {
     // Poll for both port readiness and checking if spawnError was set
     const deadline = Date.now() + 12000;
     while (Date.now() <= deadline) {
+      assertTunnelStartCurrent(generation);
       if (spawnError) throw spawnError;
 
       const portOpen = await new Promise<boolean>((resolve) => {
@@ -203,6 +232,7 @@ async function startSshTunnelInner(config: SshConfig): Promise<void> {
         });
       });
 
+      assertTunnelStartCurrent(generation);
       if (portOpen) break;
 
       await new Promise((resolve) => setTimeout(resolve, 400));
@@ -210,11 +240,9 @@ async function startSshTunnelInner(config: SshConfig): Promise<void> {
 
     if (spawnError) throw spawnError;
 
-    if (generation !== tunnelGeneration) {
-      throw new Error("SSH tunnel start was superseded by another target.");
-    }
+    assertTunnelStartCurrent(generation);
     tunnelRunning = true;
-    await waitForHealth(localPort, 20000);
+    await waitForHealth(localPort, 20000, generation);
   } catch (err) {
     if (generation === tunnelGeneration) stopSshTunnel();
     throw err;
@@ -222,6 +250,7 @@ async function startSshTunnelInner(config: SshConfig): Promise<void> {
 }
 
 export async function startSshTunnel(config: SshConfig): Promise<void> {
+  assertTunnelAdmission();
   const requestedTargetKey = tunnelTargetKey(config);
   if (tunnelStartPromise) {
     const pendingPromise = tunnelStartPromise;
@@ -229,8 +258,10 @@ export async function startSshTunnel(config: SshConfig): Promise<void> {
     try {
       await pendingPromise;
     } catch (err) {
+      assertTunnelAdmission();
       if (pendingTargetKey === requestedTargetKey) throw err;
     }
+    assertTunnelAdmission();
     if (isSshTunnelActive() && activeTargetKey === requestedTargetKey) {
       return;
     }
@@ -261,13 +292,16 @@ export function stopSshTunnel(): void {
 }
 
 export async function ensureSshTunnel(config: SshConfig): Promise<void> {
+  assertTunnelAdmission();
   if (
     isSshTunnelActive() &&
     activeTargetKey === tunnelTargetKey(config) &&
     (await isSshTunnelHealthy())
   ) {
+    assertTunnelAdmission();
     return;
   }
+  assertTunnelAdmission();
   await startSshTunnel(config);
 }
 
