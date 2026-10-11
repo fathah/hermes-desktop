@@ -58,7 +58,7 @@ Focused tests protect credential isolation, automatic routing, ticket freshness,
 
 ### Cookie session boundary
 
-Session recognition accepts only Hermes access or refresh cookie names and keeps cookie-backed requests inside the selected Electron partition.
+Session recognition accepts Hermes access or refresh cookie names in every deploy shape — bare, `__Host-` (direct HTTPS), `__Secure-` (path prefix), or `<tenant>_`-prefixed — and keeps cookie-backed requests inside the selected Electron partition.
 
 ### Session token compatibility
 

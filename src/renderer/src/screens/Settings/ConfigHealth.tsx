@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "../../components/useI18n";
 import { CONFIG_HEALTH_UPDATED_EVENT } from "../../components/ConfigHealthBanner";
 import {
@@ -40,6 +40,8 @@ interface Report {
 
 interface ConfigHealthProps {
   profile?: string;
+  /** Keep loading/clean status visible when opened from the warning banner. */
+  showStatus?: boolean;
 }
 
 function publishConfigHealthReport(report: Report): void {
@@ -60,80 +62,115 @@ function SeverityIcon({
   return <CheckCircle size={16} className="diag-icon-info" />;
 }
 
-export function ConfigHealth({
+export function ConfigHealth(props: ConfigHealthProps): React.JSX.Element {
+  return <ConfigHealthReport key={props.profile || "default"} {...props} />;
+}
+
+function ConfigHealthReport({
   profile,
+  showStatus = false,
 }: ConfigHealthProps): React.JSX.Element {
   const { t } = useI18n();
   const [report, setReport] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [fixingCode, setFixingCode] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, string>>({});
+  const request = useRef(0);
+  const busy = useRef(false);
 
-  const load = useCallback(async (): Promise<void> => {
-    setLoading(true);
-    try {
-      const r = (await window.hermesAPI.getConfigHealth(profile)) as Report;
-      setReport(r);
-      publishConfigHealthReport(r);
-    } catch {
-      setReport(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [profile]);
+  const load = useCallback(
+    async (refresh = false): Promise<void> => {
+      if (busy.current) return;
+      busy.current = true;
+      const id = ++request.current;
+      setLoading(true);
+      setError(false);
+      try {
+        const next = (await (refresh
+          ? window.hermesAPI.rerunConfigHealth(profile)
+          : window.hermesAPI.getConfigHealth(profile))) as Report;
+        if (id !== request.current) return;
+        setReport(next);
+        publishConfigHealthReport(next);
+        setResults({});
+      } catch {
+        if (id === request.current) setError(true);
+      } finally {
+        if (id === request.current) {
+          busy.current = false;
+          setLoading(false);
+        }
+      }
+    },
+    [profile],
+  );
+
+  const invalidate = useCallback(() => {
+    ++request.current;
+    busy.current = false;
+  }, []);
 
   useEffect(() => {
     void load();
-  }, [load]);
-
-  const rerun = useCallback(async (): Promise<void> => {
-    setLoading(true);
-    try {
-      const r = (await window.hermesAPI.rerunConfigHealth(profile)) as Report;
-      setReport(r);
-      publishConfigHealthReport(r);
-      setResults({});
-    } finally {
-      setLoading(false);
-    }
-  }, [profile]);
+    return invalidate;
+  }, [load, invalidate]);
 
   const fix = useCallback(
     async (issue: Issue): Promise<void> => {
+      if (busy.current) return;
+      busy.current = true;
+      const id = ++request.current;
       setFixingCode(issue.code);
+      setError(false);
       try {
         const res = await window.hermesAPI.autofixConfigIssue(
           issue.code,
           profile,
           issue.context,
         );
-        setResults((prev) => ({
-          ...prev,
-          [issue.code]:
-            res.message ||
-            (res.ok ? t("diagnose.fix.success") : t("diagnose.fix.failure")),
-        }));
+        if (id === request.current) {
+          setResults((prev) => ({
+            ...prev,
+            [issue.code]:
+              res.message ||
+              (res.ok ? t("diagnose.fix.success") : t("diagnose.fix.failure")),
+          }));
+        }
         if (res.ok) {
-          // Re-run so the issue disappears from the list when fixed
-          const r = (await window.hermesAPI.rerunConfigHealth(
-            profile,
-          )) as Report;
-          setReport(r);
-          publishConfigHealthReport(r);
+          // A successful mutation followed by a failed audit must remain visible.
+          try {
+            const next = (await window.hermesAPI.rerunConfigHealth(
+              profile,
+            )) as Report;
+            // The mutation outlives the pane. Refresh profile-scoped observers
+            // even after navigation, while suppressing obsolete local state.
+            publishConfigHealthReport(next);
+            if (id === request.current) setReport(next);
+          } catch {
+            if (id === request.current) setError(true);
+          }
+        }
+      } catch {
+        if (id === request.current) {
+          setResults((prev) => ({
+            ...prev,
+            [issue.code]: t("diagnose.fix.failure"),
+          }));
         }
       } finally {
-        setFixingCode(null);
+        if (id === request.current) {
+          busy.current = false;
+          setFixingCode(null);
+        }
       }
     },
     [profile, t],
   );
 
-  // Only surface this section when the audit actually found something to act
-  // on. A clean config needs no UI here — the "all good" state is just noise in
-  // Settings, and any real issue is still announced separately via the
-  // ConfigHealthBanner. While loading (or on a failed/empty report) we render
-  // nothing so the section never flashes in for a healthy config.
-  if (loading || !report || report.issues.length === 0) {
+  // Keep the normal About page quiet, but always explain the result of an
+  // explicit Show details action (including a now-clean or failed audit).
+  if (!showStatus && !error && (!report || report.issues.length === 0)) {
     return <></>;
   }
 
@@ -144,8 +181,8 @@ export function ConfigHealth({
         <button
           className="diagnose-rerun-btn"
           type="button"
-          onClick={rerun}
-          disabled={loading}
+          onClick={() => void load(true)}
+          disabled={loading || fixingCode !== null}
           aria-label={t("diagnose.rerun")}
         >
           <RefreshCw size={14} />
@@ -157,8 +194,13 @@ export function ConfigHealth({
         {t("diagnose.description")}
       </p>
 
+      {loading && <p role="status">{t("common.loading")}</p>}
+      {error && <p role="alert">{t("common.errorMessage")}</p>}
+      {!loading && !error && report?.issues.length === 0 && (
+        <p role="status">{t("diagnose.allGood")}</p>
+      )}
       <ul className="diagnose-issue-list">
-        {report.issues.map((issue, idx) => (
+        {report?.issues.map((issue, idx) => (
           <li
             key={`${issue.code}-${idx}`}
             className={`diagnose-issue diagnose-issue-${issue.severity}`}
@@ -184,7 +226,7 @@ export function ConfigHealth({
                   className="diagnose-fix-btn"
                   type="button"
                   onClick={() => fix(issue)}
-                  disabled={fixingCode !== null}
+                  disabled={loading || fixingCode !== null}
                 >
                   {fixingCode === issue.code
                     ? t("diagnose.fix.running")
