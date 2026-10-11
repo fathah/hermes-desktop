@@ -2,6 +2,7 @@
 lat:
   require-code-mention: true
 ---
+
 # Speech Playback Tests
 
 Actual IPC callbacks and rendered message rows protect local authority, cancellation ownership, encoded audio and stale completion behavior for [[speech-playback]].
@@ -73,3 +74,19 @@ The settings view sends the captured Local target and selected profile on load a
 ## Late settings hydration and save
 
 Old profile hydration and old connection save outcomes cannot change settings after the screen moves to a new target.
+
+## Serialized settings persistence
+
+Real main configuration writes persist missing or existing model, region and provider mappings in only the selected profile, preserving comments, sibling fields and Automatic values across reopening.
+
+## Unsafe speech mapping refusal
+
+Scalar and flow YAML parents fail without acknowledging success or modifying the original configuration, preventing silent settings loss or duplicate mappings.
+
+## Hidden chat playback release
+
+The actual Layout and Chat retain background transcripts while switching profile or screen, but pause audio, revoke its URL and cancel the hidden run's matching speech request.
+
+## Hidden pending chat synthesis
+
+Profile and screen transitions cancel synthesis in the actual retained Chat, so a late vendor reply cannot allocate or play hidden audio.

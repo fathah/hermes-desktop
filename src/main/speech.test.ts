@@ -16,7 +16,7 @@ vi.mock("./config", () => ({
   getActiveConnection: () => ({ connectionId: state.active }),
   getConnectionConfig: () => state.connection,
   getConfigValue: (...args: unknown[]) => state.getConfig(...args),
-  setConfigValue: (...args: unknown[]) => state.setConfig(...args),
+  setMiniMaxSpeechConfigValue: (...args: unknown[]) => state.setConfig(...args),
 }));
 vi.mock("./secrets", () => ({
   getSecret: (...args: unknown[]) => state.getSecret(...args),
@@ -234,18 +234,12 @@ it("actual settings IPC validates target and values before writing only the expl
   expect(
     handler("set-speech-config")(null, "region", "cn", "work", target),
   ).toBe(true);
-  expect(state.setConfig.mock.calls).toEqual([
-    ["tts.minimax.region", "cn", "work"],
-    ["tts.provider", "minimax", "work"],
-  ]);
+  expect(state.setConfig.mock.calls).toEqual([["region", "cn", "work"]]);
   state.setConfig.mockClear();
   expect(handler("set-speech-config")(null, "region", "", "work", target)).toBe(
     true,
   );
-  expect(state.setConfig.mock.calls).toEqual([
-    ["tts.minimax.region", "", "work"],
-    ["tts.provider", "minimax", "work"],
-  ]);
+  expect(state.setConfig.mock.calls).toEqual([["region", "", "work"]]);
   state.setConfig.mockClear();
   state.active = "B";
   expect(() =>

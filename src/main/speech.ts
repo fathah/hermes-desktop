@@ -3,7 +3,7 @@ import {
   getActiveConnection,
   getConnectionConfig,
   getConfigValue,
-  setConfigValue,
+  setMiniMaxSpeechConfigValue,
 } from "./config";
 import { providerTargetRevision } from "./provider-request-target";
 import { isValidProfileName } from "./utils";
@@ -83,8 +83,7 @@ export function setSpeechConfig(
   ) {
     throw new Error("Invalid MiniMax speech setting.");
   }
-  setConfigValue(`tts.minimax.${setting}`, value, profile);
-  setConfigValue("tts.provider", "minimax", profile);
+  setMiniMaxSpeechConfigValue(setting, value, profile);
   return true;
 }
 

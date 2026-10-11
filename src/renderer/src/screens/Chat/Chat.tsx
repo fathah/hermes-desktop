@@ -1051,7 +1051,7 @@ function Chat({
               agentAvatar={agentAvatar}
               profile={profile}
               connectionId={connectionId}
-              speechEnabled={connectionMode === "local"}
+              speechEnabled={active && connectionMode === "local"}
             />
           )}
           <div ref={bottomRef} />

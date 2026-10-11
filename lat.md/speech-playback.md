@@ -34,8 +34,12 @@ Starting another message stops the previous audio and synthesis; late results ca
 
 [[src/renderer/src/screens/Chat/speech-playback.ts#startSpeechPlayback]] owns Audio and blob URLs across message rows. Stop, unmount, profile/connection changes and connection configuration events release ownership. Stale play promises and old media callbacks are ignored; failed synthesis or playback leaves a visible, retryable Listen action.
 
+Layout marks a Chat active only when its run and the chat screen are visible. Hidden, retained Chat instances unmount Listen actions, cancelling synthesis and releasing audio while preserving their conversation and background agent transport.
+
 ## Scoped speech settings
 
 The Providers selectors load and save through the captured Local connection and selected profile, with no generic Remote-to-Local fallback.
 
 [[src/renderer/src/screens/Providers/MiniMaxSpeechSettings.tsx#MiniMaxSpeechSettings]] serializes changes, preserves the last confirmed value on failure and discards old hydration or save replies after scope changes. Choosing a valid model or region also selects MiniMax as the profile's TTS provider. The Automatic option persists an empty region, retaining the Agent's global-key then China-key fallback.
+
+[[src/main/config.ts#setMiniMaxSpeechConfigValue]] inserts missing nested speech mappings, preserves comments and siblings, verifies the serialized YAML and writes model/region plus provider atomically to the explicit profile. Unsupported scalar or flow parents fail visibly without rewriting the file.
