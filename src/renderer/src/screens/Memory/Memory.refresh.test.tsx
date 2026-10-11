@@ -512,6 +512,120 @@ const memoryProvider: MemoryProviderInfo = {
   envVars: ["MEM0_API_KEY"],
 };
 
+// @lat: [[profile-editors#Tests#Failed credentials do not block deactivation]]
+it.each(["failed save", "pending save"] as const)(
+  "allows SSH deactivation after a %s survives pane remount and refresh",
+  async (state) => {
+    let rejectSave!: (reason: Error) => void;
+    let active = true;
+    const api = {
+      ...profileEditorFixture("ssh").api,
+      readMemory: vi.fn().mockResolvedValue(memoryData("entry A", "entry B")),
+      getConfig: vi
+        .fn()
+        .mockImplementation(async () => (active ? "mem0" : null)),
+      discoverMemoryProviders: vi
+        .fn()
+        .mockImplementation(async () => [{ ...memoryProvider, active }]),
+      setEnv: vi.fn().mockReturnValue(
+        new Promise((_done, reject) => {
+          rejectSave = reject;
+        }),
+      ),
+      setConfig: vi.fn().mockImplementation(async () => {
+        active = false;
+        return true;
+      }),
+    };
+    Object.defineProperty(window, "hermesAPI", {
+      configurable: true,
+      value: api,
+    });
+    render(<Memory profile="work" />);
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    fireEvent.click(
+      screen.getByRole("button", { name: "memory.providersTitle" }),
+    );
+    fireEvent.change(document.querySelector("input")!, {
+      target: { value: "failed key" },
+    });
+    fireEvent.blur(document.querySelector("input")!);
+    if (state === "failed save") {
+      await act(async () =>
+        rejectSave(new Error("SSH credential save failed")),
+      );
+    }
+    fireEvent.click(screen.getByRole("button", { name: "memory.agentMemory" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "memory.providersTitle" }),
+    );
+    fireEvent.click(document.querySelector(".memory-header button")!);
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    fireEvent.click(screen.getByRole("button", { name: "memory.deactivate" }));
+    if (state === "pending save") {
+      expect(api.setConfig).not.toHaveBeenCalled();
+      await act(async () =>
+        rejectSave(new Error("SSH credential save failed")),
+      );
+    }
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    expect(api.setConfig).toHaveBeenCalledExactlyOnceWith(
+      "memory.provider",
+      "",
+      "work",
+      expect.objectContaining({ mode: "ssh", profile: "work" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "memory.activate" }),
+    ).toBeEnabled();
+    // Deactivation neither repairs nor forgets the failed key needed to activate.
+    fireEvent.click(screen.getByRole("button", { name: "memory.activate" }));
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    expect(api.setConfig).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "SSH credential save failed",
+    );
+  },
+);
+
+// @lat: [[profile-editors#Tests#Queued deactivation checks target ownership]]
+it("refuses stale deactivation after the awaited credential fails on an old target", async () => {
+  let rejectSave!: (reason: Error) => void;
+  const fixture = profileEditorFixture("ssh");
+  const api = {
+    ...fixture.api,
+    readMemory: vi.fn().mockResolvedValue(memoryData("entry A", "entry B")),
+    getConfig: vi.fn().mockResolvedValue("mem0"),
+    discoverMemoryProviders: vi
+      .fn()
+      .mockResolvedValue([{ ...memoryProvider, active: true }]),
+    setEnv: vi.fn().mockReturnValue(
+      new Promise((_done, reject) => {
+        rejectSave = reject;
+      }),
+    ),
+    setConfig: vi.fn().mockResolvedValue(true),
+  };
+  Object.defineProperty(window, "hermesAPI", {
+    configurable: true,
+    value: api,
+  });
+  render(<Memory profile="work" />);
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  fireEvent.click(
+    screen.getByRole("button", { name: "memory.providersTitle" }),
+  );
+  fireEvent.change(document.querySelector("input")!, {
+    target: { value: "old key" },
+  });
+  fireEvent.blur(document.querySelector("input")!);
+  fireEvent.click(screen.getByRole("button", { name: "memory.deactivate" }));
+  await act(async () => fixture.change("other-connection", "ssh"));
+  await act(async () => rejectSave(new Error("Old credential failed")));
+  expect(api.setConfig).not.toHaveBeenCalled();
+  expect(screen.queryByText("Old credential failed")).toBeNull();
+});
+
 // @lat: [[profile-editors#Tests#Credential blur preserves activation clicks]]
 it.each(["local", "ssh"] as const)(
   "delivers the %s provider Activate click after blur and awaits the credential save",

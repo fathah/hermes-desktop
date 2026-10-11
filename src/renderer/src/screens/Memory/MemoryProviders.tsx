@@ -76,11 +76,13 @@ export function MemoryProviders({
     try {
       // Blur runs before the Activate click. Keep that click deliverable, then
       // await its captured credential save before changing the provider.
-      if (target) await waitForProfileMemoryCredentials(target);
+      // Deactivation waits for settlement but does not need a valid credential.
+      if (target) await waitForProfileMemoryCredentials(target, name !== "");
       else {
         while (credentialWrite.current) {
           const pendingCredentials = credentialWrite.current;
-          await pendingCredentials;
+          if (name) await pendingCredentials;
+          else await pendingCredentials.catch(() => undefined);
           if (!writable()) return;
           if (credentialWrite.current === pendingCredentials) break;
         }

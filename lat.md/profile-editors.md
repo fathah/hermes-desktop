@@ -24,6 +24,8 @@ An admitted Memory write blocks refresh and tab changes until its result is hand
 
 Credential blur saves stay outside the positional fence so the following Activate or tab click is delivered. The queue survives pane remounts and serializes admitted credential writes. Activation waits for it, retains save failures, and checks its own lifetime and target again before changing configuration.
 
+Deactivation waits for credential writes to settle without requiring their success. It preserves failed saves for a later activation and rechecks the captured target before changing configuration.
+
 Each snapshot carries the target mutation revision. A sibling write invalidates old reads and positional edit admission; stale views reload before writing. Successful refresh replaces the snapshot, and target changes still invalidate all UI callbacks.
 
 [[src/renderer/src/hooks/useProfileEditorLifetime.ts#waitForProfileMemoryMutations]] waits for target-owned writes; [[src/renderer/src/hooks/useProfileEditorLifetime.ts#beginProfileMemoryMutation]] admits only mutations from the current snapshot revision.
@@ -179,6 +181,14 @@ An activation waiting for a credential save rechecks its lifetime and target bef
 ### Failed credentials block activation
 
 A rejected credential save blocks activation and preserves its explanation. A new successful blur save replaces the failed promise and permits activation with the replacement value.
+
+### Failed credentials do not block deactivation
+
+After an SSH credential save fails or remains pending across pane remount and Refresh, Deactivate waits for settlement and can turn the provider off. The retained failure still blocks reactivation until a replacement key save succeeds.
+
+### Queued deactivation checks target ownership
+
+A deactivation waiting for an old target's credential write cannot change the newly selected connection when that write fails. Late failures cannot appear in the new target's UI.
 
 ### Untouched credential blur keeps saved keys
 

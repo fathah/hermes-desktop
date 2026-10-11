@@ -78,11 +78,15 @@ export function queueProfileMemoryCredential(
 
 export async function waitForProfileMemoryCredentials(
   target: ProfileEditorTarget,
+  requireSuccess = true,
 ): Promise<void> {
   const scope = memoryScope(target);
   while (scope.credentialWrite) {
     const pending = scope.credentialWrite;
-    await pending;
+    // Turning a provider off only needs ordering, not valid credentials. Keep
+    // a rejected save in the queue so activation still requires a replacement.
+    if (requireSuccess) await pending;
+    else await pending.catch(() => undefined);
     if (scope.credentialWrite === pending) return;
   }
 }
