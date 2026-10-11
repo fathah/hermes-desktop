@@ -49,6 +49,7 @@ import {
   getActiveProfileNameSync,
 } from "./utils";
 import { getProfilePort } from "./gateway-ports";
+import { isMultiplexGatewayRunning } from "./gateway-liveness";
 import { promptSudoPassword, promptSecretValue } from "./gatewayPrompt";
 import { getSecret } from "./secrets";
 import { readModels } from "./models";
@@ -1094,7 +1095,11 @@ function isApiServerReady(
           headers: getRemoteAuthHeader(conn),
         },
         (res) => {
-          resolve(res.statusCode === 200);
+          // Dashboard SPA answers GET /health with HTML 200. That is NOT the
+          // gateway api_server — treating it as ready causes POST /v1 → 405.
+          const contentType = String(res.headers?.["content-type"] || "");
+          const looksLikeHtml = contentType.toLowerCase().includes("text/html");
+          resolve(res.statusCode === 200 && !looksLikeHtml);
           res.resume();
         },
       );
@@ -2181,6 +2186,23 @@ async function sendMessageViaTuiGateway(
   // answer. Cleared on turn end so an abandoned turn leaks no stale resolver.
   let pendingClarifyId: string | null = null;
   const pendingApprovalIds = new Set<string>();
+  let announcedSessionId = "";
+
+  // @lat: [[sidebar-navigation#Provisional fresh sessions#Live first-turn rows]]
+  //
+  // First real turn activity (visible text, reasoning, or a tool event) is
+  // also the moment a fresh session id stops being provisional, exactly as
+  // in sendMessageViaApi. Announcing here instead of waiting for finish() is
+  // what puts a still-running first turn on the sidebar list (#980), while a
+  // turn that dies before producing anything still leaves no row behind. The
+  // stored id is announced because that is the one finish() reports and the
+  // one state.db (and therefore the session cache) is keyed by.
+  function noteGatewayActivity(): void {
+    hasGatewayOutput = true;
+    if (!storedSessionId || announcedSessionId === storedSessionId) return;
+    announcedSessionId = storedSessionId;
+    cb.onSessionStarted?.(storedSessionId);
+  }
 
   function clearApprovals(): void {
     for (const requestId of pendingApprovalIds) {
@@ -2274,21 +2296,21 @@ async function sendMessageViaTuiGateway(
     const delta = gatewayMessageDelta(event);
     if (delta) {
       streamedText += delta;
-      hasGatewayOutput = true;
+      noteGatewayActivity();
       cb.onChunk(delta);
       return;
     }
 
     const reasoning = gatewayReasoningText(event);
     if (reasoning && cb.onReasoningChunk) {
-      hasGatewayOutput = true;
+      noteGatewayActivity();
       cb.onReasoningChunk(reasoning);
       return;
     }
 
     const toolEvent = gatewayToolEvent(event);
     if (toolEvent) {
-      hasGatewayOutput = true;
+      noteGatewayActivity();
       if (cb.onToolEvent) {
         cb.onToolEvent(toolEvent);
       } else if (cb.onToolProgress) {
@@ -2816,7 +2838,10 @@ function sendMessageViaCli(
     let resolvedKey = "";
     if (hostDerivedEnvKey) {
       resolvedKey =
-        profileEnv[hostDerivedEnvKey] || env[hostDerivedEnvKey] || "";
+        profileEnv[hostDerivedEnvKey] ||
+        env[hostDerivedEnvKey] ||
+        providerSecrets[hostDerivedEnvKey] ||
+        "";
     }
     if (!resolvedKey) {
       // Try custom provider auto-generated key from models.json
@@ -3695,13 +3720,14 @@ function readPidFileEntry(
 export function stopGateway(
   profileOrForce?: string | boolean,
   force = false,
-): void {
+): boolean {
   const profile =
     typeof profileOrForce === "boolean" ? undefined : profileOrForce;
   const shouldForce =
     typeof profileOrForce === "boolean" ? profileOrForce : force;
   const key = profileKey(profile);
-  if (!shouldForce && !appStartedProfiles.has(key)) return;
+  if (!shouldForce && !appStartedProfiles.has(key)) return false;
+  if (isExternallyManagedMultiplexGateway(profile)) return false;
 
   const proc = gatewayProcesses.get(key);
   if (proc && isChildProcessAlive(proc)) {
@@ -3731,6 +3757,7 @@ export function stopGateway(
   appStartedProfiles.delete(key);
   invalidateApiCacheFor(profile);
   stopTuiGatewayClient(profile);
+  return true;
 }
 
 // Python image prefixes covering both native Windows (pythonw.exe / python.exe)
@@ -3751,55 +3778,128 @@ function isChildProcessAlive(proc: ChildProcess): boolean {
   }
 }
 
+export function isExternallyManagedMultiplexGateway(profile?: string): boolean {
+  const targetProfile = profileKey(profile);
+  return (
+    !appStartedProfiles.has(targetProfile) &&
+    isMultiplexGatewayRunning(profileHome(), targetProfile, (pid) =>
+      pidIsAliveAs(pid, GATEWAY_IMAGE_PREFIXES),
+    )
+  );
+}
+
+export function assertLocalGatewayKeyMutationAllowed(
+  key: string,
+  profile?: string,
+): void {
+  if (
+    (key === "API_SERVER_KEY" ||
+      key === "api_server.token" ||
+      key === "api_server.extra.key" ||
+      key === "platforms.api_server.extra.key") &&
+    isExternallyManagedMultiplexGateway(profile ?? "default")
+  ) {
+    throw new Error(
+      "The API key belongs to a gateway managed outside Hermes One. Change it through that gateway's service manager.",
+    );
+  }
+}
+
 export function isGatewayRunning(profile?: string): boolean {
-  const proc = gatewayProcesses.get(profileKey(profile));
+  const targetProfile = profileKey(profile);
+  const proc = gatewayProcesses.get(targetProfile);
   if (proc && isChildProcessAlive(proc)) return true;
   const pid = readPidFile(profile);
-  if (!pid) return false;
-  return pidIsAliveAs(pid, GATEWAY_IMAGE_PREFIXES);
+  if (pid && pidIsAliveAs(pid, GATEWAY_IMAGE_PREFIXES)) return true;
+
+  // Managed multiplex gateways publish one state file in the default home,
+  // not a gateway.pid in every profile they serve.
+  return isMultiplexGatewayRunning(profileHome(), targetProfile, (pid) =>
+    pidIsAliveAs(pid, GATEWAY_IMAGE_PREFIXES),
+  );
 }
 
 export function isApiReady(): boolean {
   return apiServerAvailable === true;
 }
 
-export function isGatewayHealthy(profile?: string): Promise<boolean> {
-  return isApiServerReady(profile);
+export function isGatewayHealthy(
+  profile?: string,
+  conn: ConnectionConfig = getConnectionConfig(),
+): Promise<boolean> {
+  return isApiServerReady(profile, conn);
 }
 
 export function testRemoteConnection(
   url: string,
   apiKey?: string,
 ): Promise<boolean> {
-  return new Promise((resolve) => {
-    const conn = getConnectionConfig();
-    const configuredOAuth =
-      apiKey === undefined &&
-      conn.mode === "remote" &&
-      conn.remoteAuthMode === "oauth" &&
-      normaliseRemoteUrl(conn.remoteUrl) === normaliseRemoteUrl(url);
-    const target = `${normaliseRemoteUrl(url)}${
-      configuredOAuth ? "/api/status" : "/health"
-    }`;
-    const mod = target.startsWith("https") ? https : http;
-    const headers: Record<string, string> = {};
-    const resolvedApiKey = resolveRemoteApiKey(url, apiKey);
-    if (resolvedApiKey) headers.Authorization = `Bearer ${resolvedApiKey}`;
-    const req = mod.request(
-      target,
-      { method: "GET", timeout: 5000, headers },
-      (res) => {
-        resolve(res.statusCode === 200);
-        res.resume();
-      },
-    );
-    req.on("error", () => resolve(false));
-    req.on("timeout", () => {
-      req.destroy();
-      resolve(false);
+  const conn = getConnectionConfig();
+  const normalized = normaliseRemoteUrl(url);
+  const configuredOAuth =
+    apiKey === undefined &&
+    conn.mode === "remote" &&
+    conn.remoteAuthMode === "oauth" &&
+    normaliseRemoteUrl(conn.remoteUrl) === normalized;
+  const prefersDashboard =
+    conn.mode === "remote" &&
+    conn.remoteChatTransport !== "legacy" &&
+    normaliseRemoteUrl(conn.remoteUrl) === normalized;
+
+  const headers: Record<string, string> = {};
+  const resolvedApiKey = resolveRemoteApiKey(url, apiKey);
+  if (resolvedApiKey) headers.Authorization = `Bearer ${resolvedApiKey}`;
+
+  // Both the gateway /health and the dashboard /api/status answer JSON. The
+  // dashboard SPA answers every unknown path with HTML 200, so an HTML reply is
+  // never a healthy Hermes endpoint, whichever path was asked.
+  const probe = (path: string, probeHeaders = headers): Promise<boolean> =>
+    new Promise((resolve) => {
+      const target = `${normalized}${path}`;
+      const mod = target.startsWith("https") ? https : http;
+      const req = mod.request(
+        target,
+        { method: "GET", timeout: 5000, headers: probeHeaders },
+        (res) => {
+          const contentType = String(res.headers?.["content-type"] || "");
+          const looksLikeHtml = contentType.toLowerCase().includes("text/html");
+          resolve(res.statusCode === 200 && !looksLikeHtml);
+          res.resume();
+        },
+      );
+      req.on("error", () => resolve(false));
+      req.on("timeout", () => {
+        req.destroy();
+        resolve(false);
+      });
+      req.end();
     });
-    req.end();
-  });
+
+  // Try both: the saved connection says which to prefer, but a candidate URL
+  // (Welcome / Settings test a NEW url before it is saved) may be either a
+  // dashboard or a gateway, so the other probe is always the fallback.
+  const order =
+    configuredOAuth || prefersDashboard
+      ? ["/api/status", "/health"]
+      : ["/health", "/api/status"];
+  return order.reduce<Promise<boolean>>(
+    (acc, path) =>
+      acc.then(async (ok) => {
+        if (ok) return true;
+        if (!(await probe(path))) return false;
+        if (path === "/health") return probe("/v1/models");
+        if (configuredOAuth) return true;
+        // Dashboard status is public, even when a supplied token is invalid.
+        // Verify candidate token access before saving a successful connection.
+        return probe("/api/sessions?limit=1", {
+          ...headers,
+          ...(resolvedApiKey
+            ? { "X-Hermes-Session-Token": resolvedApiKey }
+            : {}),
+        });
+      }),
+    Promise.resolve(false),
+  );
 }
 
 async function waitForApiServerStopped(
@@ -3889,7 +3989,7 @@ async function restartGatewayLocallyOnce(
     const previousProcess = gatewayProcesses.get(key) ?? null;
     const previousStartedByApp = appStartedProfiles.has(key);
     const previousPidEntry = readPidFileEntry(profile);
-    stopGateway(profile, true);
+    if (!stopGateway(profile, true)) return false;
     const stopped = await waitForApiServerStopped(
       profile,
       stopTimeoutMs,
@@ -3942,6 +4042,8 @@ export function restartGateway(
   // in remote/SSH mode. Cheap to check; catches IPC paths that don't
   // wrap their restart calls in an isRemoteMode() check.
   if (isRemoteMode()) return Promise.resolve(false);
+  if (isExternallyManagedMultiplexGateway(profile))
+    return Promise.resolve(false);
 
   const key = gatewayRestartProfileKey(profile);
   const existing = gatewayRestartByProfile.get(key);

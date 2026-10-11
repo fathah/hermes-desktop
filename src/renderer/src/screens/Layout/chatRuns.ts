@@ -176,3 +176,22 @@ export function loadingSessionIds(runs: ChatRun[]): Set<string> {
   }
   return ids;
 }
+
+/** Sessions created by this desktop, retained after generation completes. */
+export function createdSessionIds(
+  runs: ChatRun[],
+  connectionId: string,
+  profile: string,
+): Set<string> {
+  return new Set(
+    runs.flatMap((run) =>
+      run.connectionId === connectionId &&
+      run.profile === profile &&
+      run.sessionId &&
+      // Resumed runs always carry a history seed, even when it is empty.
+      !run.seed
+        ? [run.sessionId]
+        : [],
+    ),
+  );
+}

@@ -20,6 +20,16 @@ Crucially, each model row keeps its **raw** `provider`/`baseUrl` for selection â
 
 A **Configure** button is pinned at the bottom of the provider rail (below the scrollable brand list), replacing the old free-text model input: it closes the picker and dispatches the `navigation:goto` window event (detail `"providers"`) that [[src/renderer/src/screens/Layout/Layout.tsx]] listens for, taking the user to the Providers screen to manage keys and the model library.
 
+## Remote picker catalog
+
+Remote and SSH pickers combine the profile's saved model library with the current provider's models from `/api/model/options`, keeping saved labels first and deduplicating by routing identity.
+
+This matters for fresh named profiles: `/api/model/library` may contain only the active model until shortcuts are saved, while the provider options still advertise every model that the CLI can select. If options discovery is unavailable, the saved library remains usable. When saved rows already exist, options enrichment is limited to 5 seconds so stalled discovery cannot hide those rows for the normal 60-second discovery window. Providers that are merely authenticated but neither current nor user-defined stay hidden, preserving the configured-only picker policy.
+
+### Named profiles keep the current provider catalog
+
+A named remote profile whose saved library contains only its active model still lists the other models advertised by that active provider, and both dashboard requests retain the profile query parameter.
+
 ## Full identity, not just the model name
 
 The override is a `SessionModelOverride` (`{provider, model, baseUrl}`), not a bare model string â€” because switching across providers must change routing, not only the `model` field.

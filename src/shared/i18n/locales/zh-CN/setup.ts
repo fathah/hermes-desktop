@@ -22,6 +22,7 @@ export default {
     together: "Together AI",
     fireworks: "Fireworks",
     cerebras: "Cerebras",
+    requesty: "Requesty",
     mistral: "Mistral",
   },
   serverPreset: "服务器预设",

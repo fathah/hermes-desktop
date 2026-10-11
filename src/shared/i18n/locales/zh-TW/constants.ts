@@ -33,6 +33,7 @@ export default {
   together: "Together AI",
   fireworks: "Fireworks",
   cerebras: "Cerebras",
+  requesty: "Requesty",
   mistral: "Mistral",
   // Theme
   themeSystem: "跟隨系統",
@@ -83,6 +84,8 @@ export default {
   fireworksHint: "Fireworks 高速推理服務",
   cerebrasApiKey: "Cerebras API Key",
   cerebrasHint: "Cerebras 硬體上的極速推理",
+  requestyApiKey: "Requesty API Key",
+  requestyHint: "相容 OpenAI 的多模型閘道",
   mistralApiKey: "Mistral API Key",
   mistralHint: "Mistral 與 Codestral 模型",
   perplexityApiKey: "Perplexity API Key",

@@ -2,7 +2,31 @@
 
 The Kanban tab ([[src/renderer/src/screens/Kanban/Kanban.tsx]]) is a JIRA-style board for the hermes-agent multi-agent task queue, presented as "JIRA for AI agents": named agent profiles pick up cards, run them, and hand off through the durable `~/.hermes/kanban.db`.
 
-It is a **thin client over the `hermes kanban` CLI** — every read and mutation shells out through [[src/main/kanban.ts]] (local exec, or SSH-tunnelled via `sshRunKanban` when in tunnel mode). Plain remote HTTP mode is unsupported and shows a "switch modes" notice. The renderer holds no domain logic; it renders board state and routes actions to the CLI.
+Local and SSH modes use the `hermes kanban` CLI through [[src/main/kanban.ts]]. Direct Remote mode uses the authenticated dashboard Kanban plugin through [[src/main/remote-kanban.ts]]. The renderer holds no domain logic; it renders board state and routes actions to the selected target.
+
+## Remote HTTP board
+
+The dashboard plugin exposes board and task operations over HTTP, with server workspace paths entered as text rather than chosen from the desktop filesystem.
+
+[[src/main/remote-kanban.ts]] maps task fields, status transitions, comments, and dispatch to `/api/plugins/kanban`. Board selection stays in desktop memory per server URL and profile and is sent as `?board=`, preserving the server's global current-board pointer. Selection writes capture their target before awaiting validation. [[src/main/remote-kanban.test.ts]] covers request schemas, profile routing, errors, and delayed board selection.
+
+## Remote target lifecycle
+
+Screen state belongs to one connection, profile, and resolved mode, so tasks, forms, and pending replies cannot carry over when the target changes.
+
+The Layout keys Kanban by connection id. The screen additionally keys its content by profile and [[src/renderer/src/hooks/useConnectionTargetRevision.ts#useConnectionTargetRevision]], which subscribes to connection configuration changes so in-place URL or mode edits also discard the old screen lifetime.
+
+### Profile changes
+
+A delayed board reply for the old profile cannot replace the new profile's tasks or send an old task with the new profile when a card action is clicked.
+
+### Connection edits
+
+Editing a connection without changing its id resets loaded tasks and workspace forms, ignores late replies, and releases the configuration listener on unmount.
+
+### SSH virtual board preference
+
+A saved SSH-only HQ board preference does not suppress the real HTTP task list or its mutation controls when the user opens a direct Remote connection.
 
 ## Statuses and columns
 

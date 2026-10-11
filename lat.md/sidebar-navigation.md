@@ -207,3 +207,31 @@ Settings boolean preferences use one accessible controlled switch with consisten
 Fresh chat session ids are provisional until a turn produces output or completes successfully, so provider errors do not create visible recent-session rows.
 
 The main-process transports still send a generated `X-Hermes-Session-Id` on fresh requests to avoid gateway fingerprint collisions, but [[src/main/hermes.ts#sendMessageViaApi]] and the runs transport announce that id to the renderer only after visible output, tool/reasoning activity, or successful completion. Resumed sessions are announced immediately because the renderer already knows they are existing conversations. This keeps [[src/renderer/src/screens/Chat/hooks/useChatIPC.ts#useChatIPC]] from binding a failed first turn to a new sidebar entry.
+
+### Live first-turn rows
+
+The gateway transport now un-provisions a fresh session id at that same moment, so a long first run is listed in the sidebar while it is still generating instead of only after it finishes.
+
+[[src/main/hermes.ts#sendMessageViaTuiGateway]] funnels the three signals that mean the turn is really under way (a message delta, a reasoning delta, and a tool event) through one helper that both records that output was seen and announces the stored session id. The stored id is the one announced because it is what `finish` reports and what `state.db` is keyed by, so the renderer and the session cache agree on which row to create.
+
+[[src/renderer/src/screens/Layout/SidebarRecentSessions.tsx#needsForcedSessionSync]] grants one immediate sync to an unlisted live or newly-created session in the selected connection and profile. Created identity survives completion, so a batched fast first turn cannot lose its refresh. Existing resumed conversations beyond the loaded page retain the normal throttle.
+
+[[src/renderer/src/screens/Layout/SidebarRecentSessions.test.tsx]] locks both directions (a live run with no loaded row forces an immediate sync and the row then renders; a listed or merely unlisted resumed session does not), and [[tests/gateway-session-announce.test.ts]] covers the gateway announcing once, on first activity rather than at session creation.
+
+### Fast first-turn completion
+
+A new session receives an immediate sidebar sync even when its announcement and completion are batched into one render with no loading session left.
+
+### Created-session scope
+
+[[src/renderer/src/screens/Layout/chatRuns.ts#createdSessionIds]] retains completed new runs only for their connection and profile. Resumed runs carry a history seed, including an empty transcript, and never enter this set.
+
+### Bounded forced refresh
+
+The sidebar consumes each session's immediate-sync attempt before starting it. A missing or deleted row cannot trigger repeated forced reads on tab switches; ordinary focus and polling can retry later. Changing connection or profile resets the scope.
+
+## Configuration health details
+
+The warning banner opens the existing About health report for its profile. Explicit details navigation remains visible while loading, after a clean audit, or when an audit fails.
+
+[[src/renderer/src/components/ConfigHealthBanner.tsx#ConfigHealthBanner]] calls the settings callback with `diagnose`, never the click event. [[src/renderer/src/components/settings/SettingsModal.tsx#resolveSection]] aliases `diagnose` to About and rejects non-string section values. [[src/renderer/src/components/settings/AboutPane.tsx]] passes the settings profile into [[src/renderer/src/screens/Settings/ConfigHealth.tsx#ConfigHealth]]. Normal About navigation retains its quiet healthy state. The details view exposes audit retry, serializes audit/fix operations, and invalidates outstanding work on profile changes or unmount. Coverage: [[config-health-navigation]].
