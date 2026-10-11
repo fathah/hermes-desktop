@@ -211,14 +211,18 @@ function BotGroupsView({
           request("profiles"),
         ]);
         if (!alive) return;
-        setRooms(list.rooms);
+        setRooms((previous) => {
+          const selectedRoom = previous.find(
+            (r) => r.room_id === current.current.selected,
+          );
+          return selectedRoom &&
+            !list.rooms.some((r) => r.room_id === selectedRoom.room_id)
+            ? [...list.rooms, selectedRoom]
+            : list.rooms;
+        });
         setOffset(list.next_offset);
         setProfiles(roster.profiles);
-        setSelected((previous) =>
-          list.rooms.some((r) => r.room_id === previous)
-            ? previous
-            : (list.rooms[0]?.room_id ?? null),
-        );
+        setSelected((previous) => previous ?? list.rooms[0]?.room_id ?? null);
       } catch (error) {
         if (alive)
           setReadError(

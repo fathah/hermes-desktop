@@ -51,6 +51,10 @@ State/log reads pause while the document is hidden. Re-entering the page reads
 authoritative state and replays committed history; ordinary Chat sessions are
 not used as group state.
 
+Reloading the first room page preserves an existing selection and its cached
+sidebar summary, including a room chosen from a later page. Exact room state,
+not absence from a partial list, determines whether its write controls are safe.
+
 ## Exact approval
 
 Approval buttons send the complete room, member, task, execution generation and request identity. Only allow-once and deny are offered; stale requests remain subject to Hermes validation.
@@ -136,6 +140,14 @@ A delayed creation adds its accepted room to the list without replacing a newer 
 ### Delayed action room isolation
 
 Late approval, retry and send successes or failures preserve the newly selected room and its unsent draft. Old-room errors cannot replace feedback for the newer selection.
+
+### Paginated selection recovery
+
+Returning or refreshing preserves a later-page selected room, its sidebar summary and draft even when the first page is empty. An explicit Send still targets that room after its exact state is confirmed.
+
+### Missing selected room refusal
+
+A failed exact read keeps the unavailable room selected and refuses writes instead of moving its draft to another room. Deliberate navigation remains available, and a later successful read restores its draft.
 
 ### Hidden creation completion
 

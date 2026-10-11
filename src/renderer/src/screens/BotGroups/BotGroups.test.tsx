@@ -760,3 +760,143 @@ it("does not start group reads while initial private authority is unavailable", 
   });
   expect(api).not.toHaveBeenCalled();
 });
+
+function paginatedRooms(): {
+  later: BotGroupRoom;
+  first: BotGroupRoom[];
+  emptyFirstPage: (empty: boolean) => void;
+  removeLater: (deleted: boolean) => void;
+} {
+  const ordinary = api.getMockImplementation()!;
+  const first = Array.from({ length: 100 }, (_, i) => room("first-" + i));
+  const later = room("later-page");
+  let empty = false;
+  let deleted = false;
+  api.mockImplementation((connection, operation, params = {}) => {
+    if (operation === "list")
+      return Promise.resolve(
+        params.offset === 100
+          ? { rooms: [later], next_offset: null }
+          : { rooms: empty ? [] : first, next_offset: empty ? null : 100 },
+      );
+    if (operation === "state") {
+      if (deleted && params.room_id === later.room_id)
+        return Promise.reject(new Error("Selected room was deleted"));
+      return Promise.resolve({
+        room: [...first, later].find((r) => r.room_id === params.room_id),
+        driver_status: {
+          running: true,
+          working: false,
+          blocked: false,
+          pending_actions: [],
+        },
+      });
+    }
+    return ordinary(connection, operation, params);
+  });
+  return {
+    later,
+    first,
+    emptyFirstPage: (value) => {
+      empty = value;
+    },
+    removeLater: (value) => {
+      deleted = value;
+    },
+  };
+}
+
+// @lat: [[bot-groups#Recovery regressions#Paginated selection recovery]]
+it.each([false, true])(
+  "retains a later-page room and draft when returning with an empty first page: %s",
+  async (empty) => {
+    const fixture = paginatedRooms();
+    const view = await open();
+    fireEvent.click(screen.getByRole("button", { name: "botGroups.more" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: fixture.later.name }),
+    );
+    await screen.findByRole("heading", { name: fixture.later.name });
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "botGroups.composeHint" }),
+      {
+        target: { value: "later-page unsent draft" },
+      },
+    );
+    view.rerender(<BotGroups connectionId="local-one" visible={false} />);
+    fixture.emptyFirstPage(empty);
+    api.mockClear();
+    view.rerender(<BotGroups connectionId="local-one" visible />);
+    await screen.findByRole("heading", { name: fixture.later.name });
+    expect(
+      screen.getByRole("button", { name: fixture.later.name }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("textbox", { name: "botGroups.composeHint" }),
+    ).toHaveValue("later-page unsent draft");
+    expect(
+      api.mock.calls
+        .filter((call) => call[1] === "state")
+        .every((call) => call[2].room_id === fixture.later.room_id),
+    ).toBe(true);
+    expect(api.mock.calls.filter((call) => call[1] === "send")).toHaveLength(0);
+    await act(async () =>
+      fireEvent.click(
+        screen.getByRole("button", { name: "botGroups.refresh" }),
+      ),
+    );
+    await screen.findByRole("heading", { name: fixture.later.name });
+    fireEvent.click(screen.getByRole("button", { name: "botGroups.send" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("textbox", { name: "botGroups.composeHint" }),
+      ).toHaveValue(""),
+    );
+    expect(
+      api.mock.calls.find((call) => call[1] === "send")?.[2],
+    ).toMatchObject({
+      room_id: fixture.later.room_id,
+      payload: { text: "later-page unsent draft" },
+    });
+  },
+);
+
+// @lat: [[bot-groups#Recovery regressions#Missing selected room refusal]]
+it("reports a deleted selected room without silently sending its draft to another room", async () => {
+  const fixture = paginatedRooms();
+  const view = await open();
+  fireEvent.click(screen.getByRole("button", { name: "botGroups.more" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: fixture.later.name }),
+  );
+  await screen.findByRole("heading", { name: fixture.later.name });
+  fireEvent.change(
+    screen.getByRole("textbox", { name: "botGroups.composeHint" }),
+    {
+      target: { value: "draft for unavailable room" },
+    },
+  );
+  view.rerender(<BotGroups connectionId="local-one" visible={false} />);
+  fixture.removeLater(true);
+  view.rerender(<BotGroups connectionId="local-one" visible />);
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Selected room was deleted",
+  );
+  expect(
+    screen.getByRole("button", { name: fixture.later.name }),
+  ).toHaveAttribute("aria-pressed", "true");
+  expect(screen.queryByRole("button", { name: "botGroups.send" })).toBeNull();
+  expect(screen.getByRole("button", { name: "botGroups.stop" })).toBeDisabled();
+  expect(api.mock.calls.filter((call) => call[1] === "send")).toHaveLength(0);
+  fireEvent.click(screen.getByRole("button", { name: fixture.first[0].name }));
+  await screen.findByRole("heading", { name: fixture.first[0].name });
+  expect(
+    screen.getByRole("textbox", { name: "botGroups.composeHint" }),
+  ).toHaveValue("");
+  fixture.removeLater(false);
+  fireEvent.click(screen.getByRole("button", { name: fixture.later.name }));
+  await screen.findByRole("heading", { name: fixture.later.name });
+  expect(
+    screen.getByRole("textbox", { name: "botGroups.composeHint" }),
+  ).toHaveValue("draft for unavailable room");
+});
