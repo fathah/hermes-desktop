@@ -104,3 +104,15 @@ Real rendered reply rows synthesize only their cleaned text segments, excluding 
 ## Media only reply speech omission
 
 A reply containing only media has no Listen action and cannot send an invisible path to the speech provider.
+
+## Single-document marker preservation
+
+Actual speech saves preserve a single YAML document's start, closing marker and comment trailer while inserting or replacing only its body. Real parsing covers CRLF, missing newlines, empty documents, nested speech and indented literal markers.
+
+## Multiple-document speech write refusal
+
+Real multi-document YAML streams are refused before either model or provider changes. Existing settings in one document cannot be rewritten using values from another, and the original file remains byte-for-byte unchanged.
+
+## Unsupported document header refusal
+
+Valid YAML directives and inline document headers remain unchanged and report a visible refusal. The bounded writer handles standalone markers without guessing through syntax that requires a full YAML editor.
