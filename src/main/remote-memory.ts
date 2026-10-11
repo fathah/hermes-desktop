@@ -1,5 +1,11 @@
 import { getConnectionConfig, type ConnectionConfig } from "./config";
-import { remoteDashboardRequestJson } from "./remote-api";
+import {
+  remoteDashboardRequestJson,
+  type RemoteDashboardRequestOptions,
+} from "./remote-api";
+import { probeRemoteAuthMode } from "./remote-oauth";
+import { providerTargetRevision } from "./provider-request-target";
+import { getYamlPath } from "./yaml-path";
 import { parseMemoryLimitsConfig } from "./memory-limits";
 import type { MemoryInfo } from "./memory";
 
@@ -19,12 +25,61 @@ function profileName(profile?: string): string {
   return profile?.trim() || "default";
 }
 
-async function serverHome(conn: ConnectionConfig): Promise<string> {
-  const status = await remoteDashboardRequestJson<{
-    hermes_home?: string;
-    home?: string;
-  }>(conn, "/api/status");
-  return status?.hermes_home || status?.home || "";
+const authSnapshots = new WeakMap<ConnectionConfig, string>();
+
+function capture(connection: ConnectionConfig): ConnectionConfig {
+  const snapshot = structuredClone(connection);
+  if (snapshot.mode !== "remote")
+    throw new Error("Remote Memory requires a direct Remote connection.");
+  authSnapshots.set(snapshot, providerTargetRevision(snapshot));
+  return snapshot;
+}
+
+async function memoryRequest<T>(
+  connection: ConnectionConfig,
+  path: string,
+  options?: RemoteDashboardRequestOptions,
+): Promise<T> {
+  const revision = authSnapshots.get(connection);
+  const assertAuth = (): void => {
+    if (!revision || revision !== providerTargetRevision(connection))
+      throw new Error("Remote authentication changed; reload before editing.");
+  };
+  assertAuth();
+  const authMode =
+    connection.remoteAuthMode === "auto"
+      ? (await probeRemoteAuthMode(connection.remoteUrl)).authMode
+      : connection.remoteAuthMode;
+  assertAuth();
+  const result = await remoteDashboardRequestJson<T>(
+    { ...connection, remoteAuthMode: authMode },
+    path,
+    options,
+  );
+  assertAuth();
+  return result;
+}
+
+async function profileConfig(
+  conn: ConnectionConfig,
+  profile?: string,
+): Promise<{ yaml: string; path: string }> {
+  const result = await memoryRequest<{
+    yaml?: unknown;
+    path?: unknown;
+  }>(
+    conn,
+    `/api/config/raw?profile=${encodeURIComponent(profileName(profile))}`,
+  );
+  if (
+    typeof result?.yaml !== "string" ||
+    typeof result?.path !== "string" ||
+    !/^(?:\/|[A-Za-z]:[\\/])/.test(result.path) ||
+    !/[\\/]config\.yaml$/.test(result.path)
+  ) {
+    throw new Error("The remote profile configuration path is unavailable.");
+  }
+  return { yaml: result.yaml, path: result.path };
 }
 
 async function readRemoteText(
@@ -32,11 +87,13 @@ async function readRemoteText(
   path: string,
 ): Promise<{ content: string; exists: boolean }> {
   try {
-    const res = await remoteDashboardRequestJson<{
+    const res = await memoryRequest<{
       text?: string;
       binary?: boolean;
     }>(conn, `/api/fs/read-text?path=${encodeURIComponent(path)}`);
-    return { content: res?.binary ? "" : (res?.text ?? ""), exists: true };
+    if (typeof res?.text !== "string" || res.binary)
+      throw new Error("The remote memory preview is not text.");
+    return { content: res.text, exists: true };
   } catch (err) {
     // A missing file is a normal state (no memory written yet); anything else
     // (auth, outside the managed read boundary) should not look like "empty".
@@ -47,33 +104,36 @@ async function readRemoteText(
   }
 }
 
-export async function remoteReadMemory(profile?: string): Promise<MemoryInfo> {
+export async function remoteReadMemory(
+  profile?: string,
+  connection: ConnectionConfig = getConnectionConfig(),
+): Promise<MemoryInfo> {
   // One connection for the whole read: the home path belongs to THIS server, so
   // every follow-up request must go to it even if the user switches meanwhile.
-  const conn = getConnectionConfig();
-  const limits = parseMemoryLimitsConfig("");
-  const home = await serverHome(conn);
-  const name = profileName(profile);
-  const root = name === "default" ? home : `${home}/profiles/${name}`;
+  const conn = capture(connection);
+  const config = await profileConfig(conn, profile);
+  const limits = parseMemoryLimitsConfig(config.yaml);
+  const root = config.path.replace(/[\\/][^\\/]+$/, "");
   let mem = { content: "", exists: false };
   let user = { content: "", exists: false };
   let contentUnavailable = false;
-  let sizes: { memory?: number; user?: number } = {};
+
   try {
     [mem, user] = await Promise.all([
       readRemoteText(conn, `${root}/memories/MEMORY.md`),
       readRemoteText(conn, `${root}/memories/USER.md`),
     ]);
   } catch (err) {
-    // A hosted/locked dashboard refuses file reads outside its managed root
-    // (403 "outside the managed read boundary") and ~/.hermes/memories is not
-    // inside it. Don't fail the screen: fall back to what /api/memory does
-    // expose (file sizes) and say that the contents are not available.
-    if ((err as { statusCode?: number }).statusCode !== 403) throw err;
+    // The managed file boundary may deliberately exclude a profile's memory.
+    // /api/memory is process-scoped, so its sizes must never stand in for this profile.
+    if (
+      (err as { statusCode?: number }).statusCode !== 403 ||
+      !/outside (?:the )?managed (?:read boundary|files root)/i.test(
+        err instanceof Error ? err.message : "",
+      )
+    )
+      throw err;
     contentUnavailable = true;
-    sizes = (await memoryStatus(profile, conn)).builtin_files ?? {};
-    mem = { content: "", exists: (sizes.memory ?? 0) > 0 };
-    user = { content: "", exists: (sizes.user ?? 0) > 0 };
   }
   const entries = mem.content.trim()
     ? mem.content
@@ -86,57 +146,45 @@ export async function remoteReadMemory(profile?: string): Promise<MemoryInfo> {
       exists: mem.exists,
       lastModified: null,
       entries,
-      // Sizes are bytes, an upper bound for characters; only used for the bar.
-      charCount: contentUnavailable ? (sizes.memory ?? 0) : mem.content.length,
+      charCount: mem.content.length,
       charLimit: limits.memoryCharLimit,
     },
     user: {
       content: user.content,
       exists: user.exists,
       lastModified: null,
-      charCount: contentUnavailable ? (sizes.user ?? 0) : user.content.length,
+      charCount: user.content.length,
       charLimit: limits.userCharLimit,
     },
     stats: { totalSessions: 0, totalMessages: 0 },
-    // The server API exposes neither the configured limits nor the session
-    // counts, so these are not measured values: say so instead of showing the
-    // defaults as if they were the server's.
+    // Configuration omits inherited defaults; do not infer unmeasured limits
+    // or session counts from the desktop defaults.
     limitsUnknown: true,
     statsUnknown: true,
     ...(contentUnavailable ? { contentUnavailable: true } : {}),
   };
 }
 
-interface RemoteMemoryStatus {
-  active?: string;
-  builtin_files?: { memory?: number; user?: number };
-  providers?: Array<{
-    name: string;
-    description?: string;
-    available?: boolean;
-  }>;
-}
-
-async function memoryStatus(
-  profile?: string,
-  conn: ConnectionConfig = getConnectionConfig(),
-): Promise<RemoteMemoryStatus> {
-  const name = profileName(profile);
-  const path =
-    name === "default"
-      ? "/api/memory"
-      : `/api/memory?profile=${encodeURIComponent(name)}`;
-  return remoteDashboardRequestJson<RemoteMemoryStatus>(conn, path);
+function configuredProvider(yaml: string): string | null {
+  const value = getYamlPath(yaml, "memory.provider")?.trim();
+  return !value ||
+    ["built-in", "builtin", "none", "null", "~"].includes(value.toLowerCase())
+    ? null
+    : value;
 }
 
 export async function remoteActiveMemoryProvider(
   profile?: string,
+  connection: ConnectionConfig = getConnectionConfig(),
 ): Promise<string | null> {
-  const status = await memoryStatus(profile);
-  return status?.active || null;
+  const config = await profileConfig(capture(connection), profile);
+  return configuredProvider(config.yaml);
 }
 
-export async function remoteDiscoverMemoryProviders(profile?: string): Promise<
+export async function remoteDiscoverMemoryProviders(
+  profile?: string,
+  connection: ConnectionConfig = getConnectionConfig(),
+): Promise<
   Array<{
     name: string;
     description: string;
@@ -145,32 +193,64 @@ export async function remoteDiscoverMemoryProviders(profile?: string): Promise<
     envVars: string[];
   }>
 > {
-  const status = await memoryStatus(profile);
-  return (status?.providers ?? []).map((p) => ({
-    name: p.name,
-    description: p.description || "",
-    installed: Boolean(p.available),
-    active: p.name === status.active,
+  const conn = capture(connection);
+  const [active, schema] = await Promise.all([
+    profileConfig(conn, profile).then((config) =>
+      configuredProvider(config.yaml),
+    ),
+    memoryRequest<{
+      fields?: Record<string, { options?: unknown }>;
+    }>(
+      conn,
+      `/api/config/schema?profile=${encodeURIComponent(profileName(profile))}`,
+    ),
+  ]);
+  const options = schema?.fields?.["memory.provider"]?.options;
+  if (!Array.isArray(options))
+    throw new Error("The remote memory provider schema is unavailable.");
+  const names = [
+    ...new Set([
+      ...options.filter(
+        (name): name is string => typeof name === "string" && !!name.trim(),
+      ),
+      ...(active ? [active] : []),
+    ]),
+  ];
+  return names.map((name) => ({
+    name,
+    description: "",
+    installed: true,
+    active: name === active,
     envVars: [],
   }));
 }
 
-export async function remoteReadSoul(profile?: string): Promise<string> {
-  const res = await remoteDashboardRequestJson<{ content?: string }>(
-    getConnectionConfig(),
+export async function remoteReadSoul(
+  profile?: string,
+  connection: ConnectionConfig = getConnectionConfig(),
+): Promise<string> {
+  const conn = capture(connection);
+  const res = await memoryRequest<{ content?: string }>(
+    conn,
     `/api/profiles/${encodeURIComponent(profileName(profile))}/soul`,
   );
-  return res?.content ?? "";
+  if (typeof res?.content !== "string")
+    throw new Error("The remote Soul response has no text content.");
+  return res.content;
 }
 
 export async function remoteWriteSoul(
   content: string,
   profile?: string,
+  connection: ConnectionConfig = getConnectionConfig(),
 ): Promise<boolean> {
-  await remoteDashboardRequestJson(
-    getConnectionConfig(),
+  const conn = capture(connection);
+  const result = await memoryRequest<{ ok?: unknown }>(
+    conn,
     `/api/profiles/${encodeURIComponent(profileName(profile))}/soul`,
     { method: "PUT", body: { content } },
   );
+  if (result?.ok !== true)
+    throw new Error("The remote Soul save was not confirmed.");
   return true;
 }

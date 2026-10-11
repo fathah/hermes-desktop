@@ -1,3 +1,8 @@
+import type { ProfileEditorTarget } from "../../shared/profile-editor-target";
+import {
+  captureProfileEditorTarget,
+  resolveProfileEditorTarget,
+} from "../profile-editor-target";
 import {
   app,
   shell,
@@ -1118,8 +1123,19 @@ export function registerIpcHandlers(context: IpcContext): void {
 
   ipcMain.handle(
     "set-env",
-    async (_event, key: string, value: string, profile?: string) => {
-      const conn = getConnectionConfig();
+    async (
+      _event,
+      key: string,
+      value: string,
+      requestedProfile?: string,
+      target?: ProfileEditorTarget,
+    ) => {
+      const { connection: conn, profile } = resolveProfileEditorTarget(
+        requestedProfile,
+        target,
+      );
+      if (target && conn.mode === "remote")
+        throw new Error(REMOTE_MEMORY_READ_ONLY_ERROR);
       if (conn.mode === "ssh" && conn.ssh) {
         await sshSetEnvValue(conn.ssh, key, value, profile);
         return true;
@@ -1145,20 +1161,40 @@ export function registerIpcHandlers(context: IpcContext): void {
     },
   );
 
-  ipcMain.handle("get-config", (_event, key: string, profile?: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh)
-      return sshGetConfigValue(conn.ssh, key, profile);
-    if (conn.mode === "remote" && key === "memory.provider") {
-      return remoteActiveMemoryProvider(profile);
-    }
-    return getConfigValue(key, profile);
-  });
+  ipcMain.handle(
+    "get-config",
+    (
+      _event,
+      key: string,
+      requestedProfile?: string,
+      target?: ProfileEditorTarget,
+    ) => {
+      const { connection: conn, profile } = resolveProfileEditorTarget(
+        requestedProfile,
+        target,
+      );
+      if (conn.mode === "ssh" && conn.ssh)
+        return sshGetConfigValue(conn.ssh, key, profile);
+      if (conn.mode === "remote" && key === "memory.provider") {
+        return remoteActiveMemoryProvider(profile, conn);
+      }
+      return getConfigValue(key, profile);
+    },
+  );
 
   ipcMain.handle(
     "set-config",
-    async (_event, key: string, value: string, profile?: string) => {
-      const conn = getConnectionConfig();
+    async (
+      _event,
+      key: string,
+      value: string,
+      requestedProfile?: string,
+      target?: ProfileEditorTarget,
+    ) => {
+      const { connection: conn, profile } = resolveProfileEditorTarget(
+        requestedProfile,
+        target,
+      );
       if (conn.mode === "ssh" && conn.ssh) {
         await sshSetConfigValue(conn.ssh, key, value, profile);
         return true;
@@ -2760,18 +2796,38 @@ export function registerIpcHandlers(context: IpcContext): void {
     getTokenBalances(address),
   );
 
+  ipcMain.handle(
+    "get-profile-editor-target",
+    (_event, profile?: string, connectionId?: string) =>
+      captureProfileEditorTarget(profile, connectionId),
+  );
+
   // Memory
-  ipcMain.handle("read-memory", (_event, profile?: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh)
-      return sshReadMemory(conn.ssh, profile);
-    if (conn.mode === "remote") return remoteReadMemory(profile);
-    return readMemory(profile);
-  });
+  ipcMain.handle(
+    "read-memory",
+    (_event, requestedProfile?: string, target?: ProfileEditorTarget) => {
+      const { connection: conn, profile } = resolveProfileEditorTarget(
+        requestedProfile,
+        target,
+      );
+      if (conn.mode === "ssh" && conn.ssh)
+        return sshReadMemory(conn.ssh, profile);
+      if (conn.mode === "remote") return remoteReadMemory(profile, conn);
+      return readMemory(profile);
+    },
+  );
   ipcMain.handle(
     "add-memory-entry",
-    (_event, content: string, profile?: string) => {
-      const conn = getConnectionConfig();
+    (
+      _event,
+      content: string,
+      requestedProfile?: string,
+      target?: ProfileEditorTarget,
+    ) => {
+      const { connection: conn, profile } = resolveProfileEditorTarget(
+        requestedProfile,
+        target,
+      );
       if (conn.mode === "ssh" && conn.ssh)
         return sshAddMemoryEntry(conn.ssh, content, profile);
       if (conn.mode === "remote") {
@@ -2782,8 +2838,17 @@ export function registerIpcHandlers(context: IpcContext): void {
   );
   ipcMain.handle(
     "update-memory-entry",
-    (_event, index: number, content: string, profile?: string) => {
-      const conn = getConnectionConfig();
+    (
+      _event,
+      index: number,
+      content: string,
+      requestedProfile?: string,
+      target?: ProfileEditorTarget,
+    ) => {
+      const { connection: conn, profile } = resolveProfileEditorTarget(
+        requestedProfile,
+        target,
+      );
       if (conn.mode === "ssh" && conn.ssh)
         return sshUpdateMemoryEntry(conn.ssh, index, content, profile);
       if (conn.mode === "remote") {
@@ -2794,8 +2859,16 @@ export function registerIpcHandlers(context: IpcContext): void {
   );
   ipcMain.handle(
     "remove-memory-entry",
-    (_event, index: number, profile?: string) => {
-      const conn = getConnectionConfig();
+    (
+      _event,
+      index: number,
+      requestedProfile?: string,
+      target?: ProfileEditorTarget,
+    ) => {
+      const { connection: conn, profile } = resolveProfileEditorTarget(
+        requestedProfile,
+        target,
+      );
       if (conn.mode === "ssh" && conn.ssh)
         return sshRemoveMemoryEntry(conn.ssh, index, profile);
       if (conn.mode === "remote") return false;
@@ -2804,8 +2877,16 @@ export function registerIpcHandlers(context: IpcContext): void {
   );
   ipcMain.handle(
     "write-user-profile",
-    (_event, content: string, profile?: string) => {
-      const conn = getConnectionConfig();
+    (
+      _event,
+      content: string,
+      requestedProfile?: string,
+      target?: ProfileEditorTarget,
+    ) => {
+      const { connection: conn, profile } = resolveProfileEditorTarget(
+        requestedProfile,
+        target,
+      );
       if (conn.mode === "ssh" && conn.ssh)
         return sshWriteUserProfile(conn.ssh, content, profile);
       if (conn.mode === "remote") {
@@ -2816,27 +2897,52 @@ export function registerIpcHandlers(context: IpcContext): void {
   );
 
   // Soul
-  ipcMain.handle("read-soul", (_event, profile?: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) return sshReadSoul(conn.ssh, profile);
-    if (conn.mode === "remote") return remoteReadSoul(profile);
-    return readSoul(profile);
-  });
-  ipcMain.handle("write-soul", (_event, content: string, profile?: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh)
-      return sshWriteSoul(conn.ssh, content, profile);
-    if (conn.mode === "remote") return remoteWriteSoul(content, profile);
-    return writeSoul(content, profile);
-  });
-  ipcMain.handle("reset-soul", (_event, profile?: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) return sshResetSoul(conn.ssh, profile);
-    // Reset would restore the LOCAL default template; leave the server's
-    // SOUL.md untouched and hand back what is actually there.
-    if (conn.mode === "remote") return remoteReadSoul(profile);
-    return resetSoul(profile);
-  });
+  ipcMain.handle(
+    "read-soul",
+    (_event, requestedProfile?: string, target?: ProfileEditorTarget) => {
+      const { connection: conn, profile } = resolveProfileEditorTarget(
+        requestedProfile,
+        target,
+      );
+      if (conn.mode === "ssh" && conn.ssh)
+        return sshReadSoul(conn.ssh, profile);
+      if (conn.mode === "remote") return remoteReadSoul(profile, conn);
+      return readSoul(profile);
+    },
+  );
+  ipcMain.handle(
+    "write-soul",
+    (
+      _event,
+      content: string,
+      requestedProfile?: string,
+      target?: ProfileEditorTarget,
+    ) => {
+      const { connection: conn, profile } = resolveProfileEditorTarget(
+        requestedProfile,
+        target,
+      );
+      if (conn.mode === "ssh" && conn.ssh)
+        return sshWriteSoul(conn.ssh, content, profile);
+      if (conn.mode === "remote")
+        return remoteWriteSoul(content, profile, conn);
+      return writeSoul(content, profile);
+    },
+  );
+  ipcMain.handle(
+    "reset-soul",
+    (_event, requestedProfile?: string, target?: ProfileEditorTarget) => {
+      const { connection: conn, profile } = resolveProfileEditorTarget(
+        requestedProfile,
+        target,
+      );
+      if (conn.mode === "ssh" && conn.ssh)
+        return sshResetSoul(conn.ssh, profile);
+      if (conn.mode === "remote")
+        throw new Error("Soul reset is unavailable in remote mode.");
+      return resetSoul(profile);
+    },
+  );
 
   // Tools
   ipcMain.handle("get-toolsets", (_event, profile?: string) => {
@@ -3631,13 +3737,20 @@ export function registerIpcHandlers(context: IpcContext): void {
   );
 
   // Memory providers
-  ipcMain.handle("discover-memory-providers", (_event, profile?: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh)
-      return sshDiscoverMemoryProviders(conn.ssh, profile);
-    if (conn.mode === "remote") return remoteDiscoverMemoryProviders(profile);
-    return discoverMemoryProviders(profile);
-  });
+  ipcMain.handle(
+    "discover-memory-providers",
+    (_event, requestedProfile?: string, target?: ProfileEditorTarget) => {
+      const { connection: conn, profile } = resolveProfileEditorTarget(
+        requestedProfile,
+        target,
+      );
+      if (conn.mode === "ssh" && conn.ssh)
+        return sshDiscoverMemoryProviders(conn.ssh, profile);
+      if (conn.mode === "remote")
+        return remoteDiscoverMemoryProviders(profile, conn);
+      return discoverMemoryProviders(profile);
+    },
+  );
 
   // Log viewer
   ipcMain.handle("read-logs", (_event, logFile?: string, lines?: number) => {

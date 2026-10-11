@@ -1,3 +1,4 @@
+import { profileEditorFixture } from "../../test/profileEditorFixture";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type React from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -78,6 +79,7 @@ function installHermesAPI(profiles: ProfileInfo[]): {
   Object.defineProperty(window, "hermesAPI", {
     configurable: true,
     value: {
+      ...profileEditorFixture().api,
       listProfiles: vi.fn().mockResolvedValue(profiles),
       setProfileName,
       setProfileColor: vi.fn().mockResolvedValue({ success: true }),

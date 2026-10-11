@@ -1,3 +1,4 @@
+import type { ProfileEditorTarget } from "../shared/profile-editor-target";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
@@ -316,8 +317,13 @@ const hermesAPI = {
   getEnv: (profile?: string): Promise<Record<string, string>> =>
     ipcRenderer.invoke("get-env", profile),
 
-  setEnv: (key: string, value: string, profile?: string): Promise<boolean> =>
-    ipcRenderer.invoke("set-env", key, value, profile),
+  setEnv: (
+    key: string,
+    value: string,
+    profile?: string,
+    target?: ProfileEditorTarget,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("set-env", key, value, profile, target),
 
   validateChatReadiness: (
     profile?: string,
@@ -355,11 +361,20 @@ const hermesAPI = {
   getConfigFixLog: (maxEntries?: number): Promise<unknown[]> =>
     ipcRenderer.invoke("get-config-fix-log", maxEntries),
 
-  getConfig: (key: string, profile?: string): Promise<string | null> =>
-    ipcRenderer.invoke("get-config", key, profile),
+  getConfig: (
+    key: string,
+    profile?: string,
+    target?: ProfileEditorTarget,
+  ): Promise<string | null> =>
+    ipcRenderer.invoke("get-config", key, profile, target),
 
-  setConfig: (key: string, value: string, profile?: string): Promise<boolean> =>
-    ipcRenderer.invoke("set-config", key, value, profile),
+  setConfig: (
+    key: string,
+    value: string,
+    profile?: string,
+    target?: ProfileEditorTarget,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("set-config", key, value, profile, target),
 
   getHermesHome: (profile?: string): Promise<string> =>
     ipcRenderer.invoke("get-hermes-home", profile),
@@ -1118,38 +1133,57 @@ const hermesAPI = {
   // Memory
   readMemory: (
     profile?: string,
+    target?: ProfileEditorTarget,
   ): Promise<{
     memory: { content: string; exists: boolean; lastModified: number | null };
     user: { content: string; exists: boolean; lastModified: number | null };
     stats: { totalSessions: number; totalMessages: number };
-  }> => ipcRenderer.invoke("read-memory", profile),
+  }> => ipcRenderer.invoke("read-memory", profile, target),
 
   addMemoryEntry: (
     content: string,
     profile?: string,
+    target?: ProfileEditorTarget,
   ): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke("add-memory-entry", content, profile),
+    ipcRenderer.invoke("add-memory-entry", content, profile, target),
   updateMemoryEntry: (
     index: number,
     content: string,
     profile?: string,
+    target?: ProfileEditorTarget,
   ): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke("update-memory-entry", index, content, profile),
-  removeMemoryEntry: (index: number, profile?: string): Promise<boolean> =>
-    ipcRenderer.invoke("remove-memory-entry", index, profile),
+    ipcRenderer.invoke("update-memory-entry", index, content, profile, target),
+  removeMemoryEntry: (
+    index: number,
+    profile?: string,
+    target?: ProfileEditorTarget,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("remove-memory-entry", index, profile, target),
   writeUserProfile: (
     content: string,
     profile?: string,
+    target?: ProfileEditorTarget,
   ): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke("write-user-profile", content, profile),
+    ipcRenderer.invoke("write-user-profile", content, profile, target),
 
   // Soul
-  readSoul: (profile?: string): Promise<string> =>
-    ipcRenderer.invoke("read-soul", profile),
-  writeSoul: (content: string, profile?: string): Promise<boolean> =>
-    ipcRenderer.invoke("write-soul", content, profile),
-  resetSoul: (profile?: string): Promise<string> =>
-    ipcRenderer.invoke("reset-soul", profile),
+  getProfileEditorTarget: (
+    profile?: string,
+    connectionId?: string,
+  ): Promise<ProfileEditorTarget> =>
+    ipcRenderer.invoke("get-profile-editor-target", profile, connectionId),
+  readSoul: (profile?: string, target?: ProfileEditorTarget): Promise<string> =>
+    ipcRenderer.invoke("read-soul", profile, target),
+  writeSoul: (
+    content: string,
+    profile?: string,
+    target?: ProfileEditorTarget,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("write-soul", content, profile, target),
+  resetSoul: (
+    profile?: string,
+    target?: ProfileEditorTarget,
+  ): Promise<string> => ipcRenderer.invoke("reset-soul", profile, target),
 
   // Tools
   getToolsets: (
@@ -1725,6 +1759,7 @@ const hermesAPI = {
   // Memory providers
   discoverMemoryProviders: (
     profile?: string,
+    target?: ProfileEditorTarget,
   ): Promise<
     Array<{
       name: string;
@@ -1733,7 +1768,7 @@ const hermesAPI = {
       active: boolean;
       envVars: string[];
     }>
-  > => ipcRenderer.invoke("discover-memory-providers", profile),
+  > => ipcRenderer.invoke("discover-memory-providers", profile, target),
 
   // MCP servers
   listMcpServers: (

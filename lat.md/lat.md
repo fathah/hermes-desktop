@@ -45,3 +45,5 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[dashboard-shutdown]] — Local dashboard ownership and profile-independent app shutdown.
 
 - [[approval-completion]] — In-flight approval replies remain valid across early turn completion, with failure and lifecycle isolation.
+
+- [[profile-editors]] — captured profile targets, Soul autosave isolation, read-only Remote Memory and global modal lifetimes.

@@ -1,3 +1,4 @@
+import type { ProfileEditorTarget } from "../shared/profile-editor-target";
 import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
 import type {
@@ -345,7 +346,12 @@ interface HermesAPI {
 
   // Configuration (profile-aware)
   getEnv: (profile?: string) => Promise<Record<string, string>>;
-  setEnv: (key: string, value: string, profile?: string) => Promise<boolean>;
+  setEnv: (
+    key: string,
+    value: string,
+    profile?: string,
+    target?: ProfileEditorTarget,
+  ) => Promise<boolean>;
   validateChatReadiness: (
     profile?: string,
     override?: { provider?: string; model?: string; baseUrl?: string },
@@ -372,8 +378,17 @@ interface HermesAPI {
     context?: Record<string, string>,
   ) => Promise<{ ok: boolean; message?: string }>;
   getConfigFixLog: (maxEntries?: number) => Promise<ConfigFixLogEntry[]>;
-  getConfig: (key: string, profile?: string) => Promise<string | null>;
-  setConfig: (key: string, value: string, profile?: string) => Promise<boolean>;
+  getConfig: (
+    key: string,
+    profile?: string,
+    target?: ProfileEditorTarget,
+  ) => Promise<string | null>;
+  setConfig: (
+    key: string,
+    value: string,
+    profile?: string,
+    target?: ProfileEditorTarget,
+  ) => Promise<boolean>;
   getHermesHome: (profile?: string) => Promise<string>;
   getModelConfig: (
     profile?: string,
@@ -806,7 +821,10 @@ interface HermesAPI {
   getTokenBalances: (address: string) => Promise<TokenBalancesResponse>;
 
   // Memory
-  readMemory: (profile?: string) => Promise<{
+  readMemory: (
+    profile?: string,
+    target?: ProfileEditorTarget,
+  ) => Promise<{
     memory: { content: string; exists: boolean; lastModified: number | null };
     user: { content: string; exists: boolean; lastModified: number | null };
     stats: { totalSessions: number; totalMessages: number };
@@ -815,22 +833,40 @@ interface HermesAPI {
   addMemoryEntry: (
     content: string,
     profile?: string,
+    target?: ProfileEditorTarget,
   ) => Promise<{ success: boolean; error?: string }>;
   updateMemoryEntry: (
     index: number,
     content: string,
     profile?: string,
+    target?: ProfileEditorTarget,
   ) => Promise<{ success: boolean; error?: string }>;
-  removeMemoryEntry: (index: number, profile?: string) => Promise<boolean>;
+  removeMemoryEntry: (
+    index: number,
+    profile?: string,
+    target?: ProfileEditorTarget,
+  ) => Promise<boolean>;
   writeUserProfile: (
     content: string,
     profile?: string,
+    target?: ProfileEditorTarget,
   ) => Promise<{ success: boolean; error?: string }>;
 
   // Soul
-  readSoul: (profile?: string) => Promise<string>;
-  writeSoul: (content: string, profile?: string) => Promise<boolean>;
-  resetSoul: (profile?: string) => Promise<string>;
+  getProfileEditorTarget: (
+    profile?: string,
+    connectionId?: string,
+  ) => Promise<ProfileEditorTarget>;
+  readSoul: (profile?: string, target?: ProfileEditorTarget) => Promise<string>;
+  writeSoul: (
+    content: string,
+    profile?: string,
+    target?: ProfileEditorTarget,
+  ) => Promise<boolean>;
+  resetSoul: (
+    profile?: string,
+    target?: ProfileEditorTarget,
+  ) => Promise<string>;
 
   // Tools
   getToolsets: (
@@ -1267,7 +1303,10 @@ interface HermesAPI {
   runHermesDump: () => Promise<string>;
 
   // Memory providers
-  discoverMemoryProviders: (profile?: string) => Promise<
+  discoverMemoryProviders: (
+    profile?: string,
+    target?: ProfileEditorTarget,
+  ) => Promise<
     Array<{
       name: string;
       description: string;

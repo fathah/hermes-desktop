@@ -1,4 +1,11 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { profileEditorFixture } from "../../test/profileEditorFixture";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../components/useI18n", () => ({
@@ -36,6 +43,7 @@ function mockApi(data: unknown): void {
   Object.defineProperty(window, "hermesAPI", {
     configurable: true,
     value: {
+      ...profileEditorFixture().api,
       readMemory: vi.fn().mockResolvedValue(data),
       getConfig: vi.fn().mockResolvedValue(null),
       discoverMemoryProviders: vi.fn().mockResolvedValue([]),
@@ -77,6 +85,7 @@ describe("Memory screen read-only (remote) mode", () => {
     Object.defineProperty(window, "hermesAPI", {
       configurable: true,
       value: {
+        ...profileEditorFixture().api,
         readMemory: vi.fn().mockRejectedValue(new Error("Sign-in expired")),
         getConfig: vi.fn().mockResolvedValue(null),
         discoverMemoryProviders: vi.fn().mockResolvedValue([]),
@@ -103,6 +112,7 @@ describe("Memory screen read-only (remote) mode", () => {
     Object.defineProperty(window, "hermesAPI", {
       configurable: true,
       value: {
+        ...profileEditorFixture().api,
         readMemory: vi.fn().mockImplementation(async (profile?: string) => {
           if (profile === "work") throw new Error("offline");
           return memoryData();
@@ -118,4 +128,72 @@ describe("Memory screen read-only (remote) mode", () => {
     // The default profile's entry controls are gone, not left editable.
     expect(screen.queryByText("memory.addMemory")).toBeNull();
   });
+});
+
+// @lat: [[profile-editors#Tests#Delayed Memory hydration]]
+it("keeps a failed new profile read disabled after the old profile resolves late", async () => {
+  let resolveOld!: (value: unknown) => void;
+  const old = new Promise((resolve) => {
+    resolveOld = resolve;
+  });
+  mockApi(memoryData());
+  vi.mocked(window.hermesAPI.readMemory).mockImplementation((profile) =>
+    profile === "a"
+      ? (old as ReturnType<typeof window.hermesAPI.readMemory>)
+      : Promise.reject(new Error("B offline")),
+  );
+  const view = render(<Memory profile="a" />);
+  await waitFor(() => expect(window.hermesAPI.readMemory).toHaveBeenCalled());
+  view.rerender(<Memory profile="b" />);
+  await screen.findByText("B offline");
+  await act(async () => resolveOld(memoryData()));
+  expect(screen.queryByText("memory.addMemory")).toBeNull();
+  expect(screen.getByText("B offline")).toBeTruthy();
+});
+
+// @lat: [[profile-editors#Tests#Memory drafts follow their target]]
+it("drops a local entry draft and enables only read-only controls after a same-ID mode change", async () => {
+  const fixture = profileEditorFixture();
+  mockApi(memoryData());
+  Object.assign(window.hermesAPI, fixture.api, {
+    addMemoryEntry: vi.fn().mockResolvedValue({ success: true }),
+  });
+  render(<Memory profile="work" />);
+  fireEvent.click(await screen.findByText("memory.addMemory"));
+  fireEvent.change(screen.getByRole("textbox"), {
+    target: { value: "desktop draft" },
+  });
+  await act(async () => fixture.change("local", "remote"));
+  const add = await screen.findByText("memory.addMemory");
+  expect(add.closest("button")?.matches(":disabled")).toBe(true);
+  expect(screen.queryByRole("textbox")).toBeNull();
+  expect(window.hermesAPI.addMemoryEntry).not.toHaveBeenCalled();
+});
+
+// @lat: [[profile-editors#Tests#Late memory mutation results]]
+it("does not refresh or surface an old entry mutation after a profile switch", async () => {
+  let rejectOld!: (reason: Error) => void;
+  const old = new Promise<{ success: boolean }>((_resolve, reject) => {
+    rejectOld = reject;
+  });
+  mockApi(memoryData());
+  Object.assign(window.hermesAPI, {
+    addMemoryEntry: vi.fn().mockReturnValue(old),
+  });
+  const view = render(<Memory profile="a" />);
+  fireEvent.click(await screen.findByText("memory.addMemory"));
+  fireEvent.change(screen.getByRole("textbox"), {
+    target: { value: "A entry" },
+  });
+  fireEvent.click(screen.getByText("Save"));
+  expect(window.hermesAPI.addMemoryEntry).toHaveBeenCalledWith(
+    "A entry",
+    "a",
+    expect.objectContaining({ profile: "a" }),
+  );
+  view.rerender(<Memory profile="b" />);
+  await screen.findByText("memory.addMemory");
+  await act(async () => rejectOld(new Error("A write failed")));
+  expect(screen.queryByText("A write failed")).toBeNull();
+  expect(window.hermesAPI.readMemory).toHaveBeenCalledTimes(2);
 });

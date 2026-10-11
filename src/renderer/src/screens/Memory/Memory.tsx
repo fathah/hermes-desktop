@@ -1,8 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Refresh } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
 import { OrbLoader } from "../../components/OrbLoader";
 import Soul from "../Soul/Soul";
+import { useProfileEditorTarget } from "../../hooks/useProfileEditorTarget";
+import type { ProfileEditorTarget } from "../../../../shared/profile-editor-target";
 import { CapacityCards } from "./CapacityCards";
 import { MemoryTabs } from "./MemoryTabs";
 import { MemoryEntries } from "./MemoryEntries";
@@ -17,6 +19,33 @@ function Memory({
   profile?: string;
   readOnly?: boolean;
 }): React.JSX.Element {
+  const scope = useProfileEditorTarget(profile);
+  if (!scope.target)
+    return scope.error ? (
+      <div role="alert">{scope.error}</div>
+    ) : (
+      <OrbLoader state="searching" size={64} />
+    );
+  return (
+    <MemoryEditor
+      key={`${scope.target.scopeToken}:${scope.revision}:${readOnly}`}
+      target={scope.target}
+      isCurrent={scope.isCurrent}
+      readOnly={readOnly || scope.target.mode === "remote"}
+    />
+  );
+}
+
+function MemoryEditor({
+  target,
+  isCurrent,
+  readOnly,
+}: {
+  target: ProfileEditorTarget;
+  isCurrent: (target: ProfileEditorTarget) => boolean;
+  readOnly: boolean;
+}): React.JSX.Element {
+  const profile = target.profile;
   const { t } = useI18n();
   const [data, setData] = useState<MemoryData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -25,25 +54,44 @@ function Memory({
   const [memoryProvider, setMemoryProvider] = useState<string | null>(null);
   const [providers, setProviders] = useState<MemoryProviderInfo[]>([]);
 
+  const mounted = useRef(true);
+  const generation = useRef(0);
+  const live = useCallback(
+    () => mounted.current && isCurrent(target),
+    [target, isCurrent],
+  );
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      generation.current += 1;
+    };
+  }, []);
   const loadData = useCallback(async () => {
+    if (!live()) return;
+    const request = ++generation.current;
+    setLoading(true);
+    setData(null);
     setError("");
     try {
       const [d, provider, provs] = await Promise.all([
-        window.hermesAPI.readMemory(profile),
-        window.hermesAPI.getConfig("memory.provider", profile),
-        window.hermesAPI.discoverMemoryProviders(profile),
+        window.hermesAPI.readMemory(profile, target),
+        window.hermesAPI.getConfig("memory.provider", profile, target),
+        window.hermesAPI.discoverMemoryProviders(profile, target),
       ]);
+      if (!live() || request !== generation.current) return;
       setData(d as MemoryData);
       setMemoryProvider(provider);
       setProviders(provs);
     } catch (err) {
       // A remote read can reject (offline server, sign-in expired). Say so and
       // leave the refresh button usable instead of spinning forever.
-      setError(err instanceof Error ? err.message : String(err));
+      if (live() && request === generation.current)
+        setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setLoading(false);
+      if (live() && request === generation.current) setLoading(false);
     }
-  }, [profile]);
+  }, [profile, target, live]);
 
   useEffect(() => {
     // A different profile: drop the previous one's data NOW. If this load fails,
@@ -107,7 +155,7 @@ function Memory({
       {readOnly && tab !== "soul" && (
         <div className="memory-error" role="note">
           {data.contentUnavailable
-            ? "Connected to a remote Hermes server: its API does not expose the contents of MEMORY.md / USER.md, so only sizes and providers are shown. View or edit them on the server."
+            ? "Connected to a remote Hermes server: its API does not expose the contents of MEMORY.md / USER.md, so only profile configuration and providers are shown. View or edit them on the server."
             : "Connected to a remote Hermes server: memory is shown read-only here. Edit it on the server (or via chat)."}
         </div>
       )}
@@ -117,19 +165,23 @@ function Memory({
         disabled={readOnly}
         style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
       >
-        {tab === "entries" && (
+        {tab === "entries" && !data.contentUnavailable && (
           <MemoryEntries
             entries={data.memory.entries}
             profile={profile}
+            target={target}
+            isCurrent={isCurrent}
             onRefresh={loadData}
           />
         )}
 
-        {tab === "profile" && (
+        {tab === "profile" && !data.contentUnavailable && (
           <MemoryProfile
             content={data.user.content}
             charLimit={data.user.charLimit}
             profile={profile}
+            target={target}
+            isCurrent={isCurrent}
             onRefresh={loadData}
           />
         )}
@@ -139,6 +191,8 @@ function Memory({
             providers={providers}
             activeProvider={memoryProvider}
             profile={profile}
+            target={target}
+            isCurrent={isCurrent}
             onRefresh={loadData}
           />
         )}

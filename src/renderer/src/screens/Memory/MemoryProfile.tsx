@@ -1,7 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useI18n } from "../../components/useI18n";
 
-interface MemoryProfileProps {
+import {
+  useProfileEditorLifetime,
+  type ProfileEditorScope,
+} from "../../hooks/useProfileEditorLifetime";
+
+interface MemoryProfileProps extends ProfileEditorScope {
   content: string;
   charLimit: number;
   profile?: string;
@@ -13,26 +18,47 @@ export function MemoryProfile({
   charLimit,
   profile,
   onRefresh,
+  target,
+  isCurrent,
 }: MemoryProfileProps): React.JSX.Element {
   const { t } = useI18n();
+  const live = useProfileEditorLifetime({ target, isCurrent });
+  const writable = (): boolean => live() && target?.mode !== "remote";
   const [userContent, setUserContent] = useState(initialContent);
   const [userEditing, setUserEditing] = useState(false);
   const [userSaved, setUserSaved] = useState(false);
   const [error, setError] = useState("");
 
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+    },
+    [],
+  );
+
   async function handleSave(): Promise<void> {
+    if (!writable()) return;
     setError("");
-    const result = await window.hermesAPI.writeUserProfile(
-      userContent,
-      profile,
-    );
-    if (result.success) {
-      setUserEditing(false);
-      setUserSaved(true);
-      setTimeout(() => setUserSaved(false), 2000);
-      onRefresh();
-    } else {
-      setError(result.error || t("memory.saveFailed"));
+    try {
+      const result = await window.hermesAPI.writeUserProfile(
+        userContent,
+        profile,
+        target,
+      );
+      if (!live()) return;
+      if (result.success) {
+        setUserEditing(false);
+        setUserSaved(true);
+        if (savedTimer.current) clearTimeout(savedTimer.current);
+        savedTimer.current = setTimeout(() => {
+          if (live()) setUserSaved(false);
+        }, 2000);
+        onRefresh();
+      } else setError(result.error || t("memory.saveFailed"));
+    } catch (reason) {
+      if (live())
+        setError(reason instanceof Error ? reason.message : String(reason));
     }
   }
 

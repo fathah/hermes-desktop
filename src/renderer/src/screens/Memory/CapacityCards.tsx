@@ -19,7 +19,9 @@ export function CapacityCards({ data }: CapacityCardsProps): React.JSX.Element {
         </div>
         {data.limitsUnknown ? (
           <div className="memory-capacity-unknown">
-            {t("memory.chars", { count: data.memory.charCount })}
+            {data.contentUnavailable
+              ? "—"
+              : t("memory.chars", { count: data.memory.charCount })}
           </div>
         ) : (
           <CapacityBar
@@ -29,7 +31,11 @@ export function CapacityCards({ data }: CapacityCardsProps): React.JSX.Element {
           />
         )}
         <div className="memory-capacity-card-footer">
-          {data.memory.entries.length} {t("memory.memories")}
+          {!data.contentUnavailable && (
+            <>
+              {data.memory.entries.length} {t("memory.memories")}
+            </>
+          )}
         </div>
       </div>
       <div className="memory-capacity-card">
@@ -39,7 +45,9 @@ export function CapacityCards({ data }: CapacityCardsProps): React.JSX.Element {
         </div>
         {data.limitsUnknown ? (
           <div className="memory-capacity-unknown">
-            {t("memory.chars", { count: data.user.charCount })}
+            {data.contentUnavailable
+              ? "—"
+              : t("memory.chars", { count: data.user.charCount })}
           </div>
         ) : (
           <CapacityBar

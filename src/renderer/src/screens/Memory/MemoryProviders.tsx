@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Check, ExternalLink } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import type { MemoryProviderInfo } from "./types";
@@ -24,7 +24,12 @@ const PROVIDER_URLS: Record<string, string> = {
   byterover: "https://app.byterover.dev",
 };
 
-interface MemoryProvidersProps {
+import {
+  useProfileEditorLifetime,
+  type ProfileEditorScope,
+} from "../../hooks/useProfileEditorLifetime";
+
+interface MemoryProvidersProps extends ProfileEditorScope {
   providers: MemoryProviderInfo[];
   activeProvider: string | null;
   profile?: string;
@@ -36,36 +41,79 @@ export function MemoryProviders({
   activeProvider,
   profile,
   onRefresh,
+  target,
+  isCurrent,
 }: MemoryProvidersProps): React.JSX.Element {
   const { t } = useI18n();
+  const live = useProfileEditorLifetime({ target, isCurrent });
+  const writable = (): boolean => live() && target?.mode !== "remote";
   const [currentProvider, setCurrentProvider] = useState(activeProvider);
   const [providerList, setProviderList] = useState(providers);
   const [providerEnv, setProviderEnv] = useState<Record<string, string>>({});
   const [providerSavedKey, setProviderSavedKey] = useState<string | null>(null);
   const [activating, setActivating] = useState<string | null>(null);
 
-  async function handleActivate(name: string): Promise<void> {
-    setActivating(name);
-    await window.hermesAPI.setConfig("memory.provider", name, profile);
-    setCurrentProvider(name);
-    setProviderList((prev) =>
-      prev.map((p) => ({ ...p, active: p.name === name })),
-    );
-    setActivating(null);
-    onRefresh();
+  const [error, setError] = useState("");
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+    },
+    [],
+  );
+
+  async function selectProvider(name: string): Promise<void> {
+    if (!writable()) return;
+    setError("");
+    setActivating(name || "deactivate");
+    try {
+      const result = await window.hermesAPI.setConfig(
+        "memory.provider",
+        name,
+        profile,
+        target,
+      );
+      if (!live()) return;
+      if (!result) throw new Error(t("memory.saveFailed"));
+      setCurrentProvider(name || null);
+      setProviderList((prev) =>
+        prev.map((p) => ({ ...p, active: p.name === name })),
+      );
+      onRefresh();
+    } catch (reason) {
+      if (live())
+        setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      if (live()) setActivating(null);
+    }
   }
 
-  async function handleDeactivate(): Promise<void> {
-    setActivating("deactivate");
-    await window.hermesAPI.setConfig("memory.provider", "", profile);
-    setCurrentProvider(null);
-    setProviderList((prev) => prev.map((p) => ({ ...p, active: false })));
-    setActivating(null);
-    onRefresh();
+  async function saveEnvironment(key: string): Promise<void> {
+    if (!writable()) return;
+    setError("");
+    try {
+      const result = await window.hermesAPI.setEnv(
+        key,
+        providerEnv[key] || "",
+        profile,
+        target,
+      );
+      if (!live()) return;
+      if (!result) throw new Error(t("memory.saveFailed"));
+      setProviderSavedKey(key);
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+      savedTimer.current = setTimeout(() => {
+        if (live()) setProviderSavedKey(null);
+      }, 2000);
+    } catch (reason) {
+      if (live())
+        setError(reason instanceof Error ? reason.message : String(reason));
+    }
   }
 
   return (
     <div className="memory-providers">
+      {error && <div role="alert">{error}</div>}
       <div className="memory-providers-hint">
         {t("memory.providersHint")}
         {currentProvider ? (
@@ -144,15 +192,7 @@ export function MemoryProviders({
                             [envKey]: e.target.value,
                           }))
                         }
-                        onBlur={async () => {
-                          await window.hermesAPI.setEnv(
-                            envKey,
-                            providerEnv[envKey] || "",
-                            profile,
-                          );
-                          setProviderSavedKey(envKey);
-                          setTimeout(() => setProviderSavedKey(null), 2000);
-                        }}
+                        onBlur={() => saveEnvironment(envKey)}
                         placeholder={t("memory.enterEnvKey", { key: envKey })}
                         style={{ fontSize: 12 }}
                       />
@@ -165,7 +205,7 @@ export function MemoryProviders({
                 {p.active ? (
                   <button
                     className="btn btn-secondary btn-sm"
-                    onClick={handleDeactivate}
+                    onClick={() => selectProvider("")}
                     disabled={activating !== null}
                   >
                     {t("memory.deactivate")}
@@ -173,7 +213,7 @@ export function MemoryProviders({
                 ) : (
                   <button
                     className="btn btn-primary btn-sm"
-                    onClick={() => handleActivate(p.name)}
+                    onClick={() => selectProvider(p.name)}
                     disabled={activating !== null}
                   >
                     {activating === p.name
