@@ -386,6 +386,22 @@ describe("Remote provider target ownership", () => {
     expect(state.request).toHaveBeenCalledTimes(1);
   });
 
+  it("actual SSH pool add rejects before either desktop or remote mutation", () => {
+    state.connection.mode = "ssh";
+    const localAdd = vi.fn();
+    const remoteAdd = vi.fn();
+    const handler = ipcHandler("add-credential-pool-entry", {
+      getConnectionConfig: () => state.connection,
+      addCredentialPoolEntry: localAdd,
+      remoteAddCredentialPoolEntry: remoteAdd,
+    });
+    expect(() =>
+      handler(undefined, "openai", "ssh-key", "Work", "work"),
+    ).toThrow("unavailable");
+    expect(localAdd).not.toHaveBeenCalled();
+    expect(remoteAdd).not.toHaveBeenCalled();
+  });
+
   it("actual Remote writes require explicit targets and never mutate local env or pool", async () => {
     const localWrite = vi.fn();
     const handler = ipcHandler("set-env", {

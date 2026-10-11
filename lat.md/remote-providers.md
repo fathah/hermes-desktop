@@ -62,3 +62,11 @@ Main issues opaque provider target revisions without exposing credential fingerp
 ## Local drafts do not flush into Remote
 
 A Local Providers draft is canceled when connection configuration changes, preventing its unmount flush from saving a desktop secret to the newly selected Remote target. Ordinary navigation within the same target still flushes the pending edit.
+
+## SSH pool capability boundary
+
+SSH pool controls stay disabled with a server-only explanation because no supported SSH pool mutation backend exists. The main callback rejects additions before desktop or Remote credentials can be changed.
+
+## Credential pool failures stay visible
+
+Rejected Local pool mutations show their actual error and retain the typed draft instead of silently clearing it. Late mutation results are ignored after the native Providers target changes.
