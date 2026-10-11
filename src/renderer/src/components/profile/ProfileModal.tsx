@@ -26,7 +26,12 @@ import ProfileWalletPane from "./ProfileWalletPane";
 import ProfileSyncPane from "./ProfileSyncPane";
 import { OrbLoader } from "../OrbLoader";
 import { useProfileEditorTarget } from "../../hooks/useProfileEditorTarget";
-import { useProfileEditorLifetime } from "../../hooks/useProfileEditorLifetime";
+import {
+  beginProfileMemoryMutation,
+  profileMemoryRevision,
+  useProfileEditorLifetime,
+  waitForProfileMemoryMutations,
+} from "../../hooks/useProfileEditorLifetime";
 import type { ProfileEditorTarget } from "../../../../shared/profile-editor-target";
 import type { ProfileSection } from "./ProfileModalContext";
 
@@ -125,6 +130,7 @@ function ProfileModalEditor({
   const id = name;
   const live = useProfileEditorLifetime({ target, isCurrent });
   const memoryGeneration = useRef(0);
+  const memorySnapshotRevision = useRef(-1);
   const writable = (): boolean => live() && target.mode !== "remote";
   const { t } = useI18n();
   const [profile, setProfile] = useState<ProfileInfo | null>(null);
@@ -209,9 +215,20 @@ function ProfileModalEditor({
     setMemoryLoading(true);
     setMemoryError("");
     try {
+      const revision = await waitForProfileMemoryMutations(target);
+      if (!live() || request !== memoryGeneration.current) return;
+      if (profileMemoryRevision(target) !== revision) {
+        void loadMemoryData();
+        return;
+      }
       const data = await window.hermesAPI.readMemory(profile.id, target);
-      if (live() && request === memoryGeneration.current)
-        setMemoryData(data as MemoryData);
+      if (!live() || request !== memoryGeneration.current) return;
+      if (profileMemoryRevision(target) !== revision) {
+        void loadMemoryData();
+        return;
+      }
+      memorySnapshotRevision.current = revision;
+      setMemoryData(data as MemoryData);
     } catch {
       if (live() && request === memoryGeneration.current)
         setMemoryError(t("memory.loadFailed"));
@@ -231,19 +248,28 @@ function ProfileModalEditor({
       memoryPendingWrite.current
     )
       return null;
+    const finishScope = beginProfileMemoryMutation(
+      target,
+      memorySnapshotRevision.current,
+    );
+    if (!finishScope) {
+      void loadMemoryData();
+      return null;
+    }
     memoryPendingWrite.current = true;
     setMemoryWriting(true);
     let released = false;
     return () => {
       if (released) return;
       released = true;
+      finishScope();
       memoryPendingWrite.current = false;
       if (!live()) return;
       setMemoryWriting(false);
       if (memoryRefreshAfterWrite.current) {
         memoryRefreshAfterWrite.current = false;
         void loadMemoryData();
-      }
+      } else memorySnapshotRevision.current = profileMemoryRevision(target);
     };
   };
 

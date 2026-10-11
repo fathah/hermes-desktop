@@ -20,7 +20,11 @@ Editors wait for target capture, remount when profile or configuration changes, 
 
 Same-target Memory refresh preserves Soul's independent autosave lifetime. Refreshed entries, user text and providers remount together so positional edits, delete confirmations and provider drafts cannot outlive the data they describe.
 
-An admitted Memory write blocks refresh and tab changes until its result is handled. Successful mutation refreshes wait for the write to settle, then replace the snapshot before positional controls become editable. Target changes still invalidate all callbacks.
+An admitted Memory write blocks refresh and tab changes until its result is handled. A shared fence keyed by the opaque target survives profile and modal remounts, so new snapshot reads wait for earlier admitted writes.
+
+Each snapshot carries the target mutation revision. A sibling write invalidates old reads and positional edit admission; stale views reload before writing. Successful refresh replaces the snapshot, and target changes still invalidate all UI callbacks.
+
+[[src/renderer/src/hooks/useProfileEditorLifetime.ts#waitForProfileMemoryMutations]] waits for target-owned writes; [[src/renderer/src/hooks/useProfileEditorLifetime.ts#beginProfileMemoryMutation]] admits only mutations from the current snapshot revision.
 
 [[src/renderer/src/hooks/useProfileEditorTarget.ts#useProfileEditorTarget]] invalidates its current target synchronously on configuration events. The global profile modal closes on these events and passes the validated target to Memory operations. Remote modal navigation exposes only Persona and read-only Memory; it never loads desktop profile metadata or local appearance, sync and delete controls.
 
@@ -141,3 +145,19 @@ The modal keeps re-entered Memory controls disabled during an admitted write and
 ### Failed refresh cannot enable old positions
 
 If the read after a successful mutation fails, old positional controls remain unavailable. A later successful retry installs the new snapshot and enables editing again.
+
+### Memory mutation admission survives remounts
+
+An admitted SSH deletion survives work→other→work editor remounts. Other profiles stay usable, while the returning profile waits and saves its displayed entry at the new position.
+
+### Sibling snapshots cannot admit old positions
+
+A sibling editor cannot save an entry using a snapshot predating another view's deletion. It reloads without dispatching the stale write, then admits the entry's current position.
+
+### Reads overtaken by sibling mutations
+
+A delayed read overtaken by a sibling deletion stays uneditable and waits for the admitted write. Only a fresh snapshot enables positional controls.
+
+### Modal mutation admission survives profile changes
+
+The global modal can open another profile during an admitted deletion. Reopening the original profile waits for that write and edits the resulting entry at its new position.

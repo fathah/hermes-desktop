@@ -322,3 +322,184 @@ it.each(["profile", "providers"] as const)(
     }
   },
 );
+
+// @lat: [[profile-editors#Tests#Memory mutation admission survives remounts]]
+it("waits across work→other→work for an admitted deletion before editing the new positions", async () => {
+  let deleted = false;
+  let resolveDelete!: (result: boolean) => void;
+  const api = {
+    ...profileEditorFixture("ssh").api,
+    readMemory: vi
+      .fn()
+      .mockImplementation(async (profile) =>
+        profile === "other"
+          ? memoryData("other A", "other B")
+          : deleted
+            ? memoryData("entry B", "entry C")
+            : memoryData("entry A", "entry B"),
+      ),
+    getConfig: vi.fn().mockResolvedValue(null),
+    discoverMemoryProviders: vi.fn().mockResolvedValue([]),
+    removeMemoryEntry: vi
+      .fn()
+      .mockReturnValue(new Promise((done) => (resolveDelete = done))),
+    updateMemoryEntry: vi.fn().mockResolvedValue({ success: true }),
+  };
+  Object.defineProperty(window, "hermesAPI", {
+    configurable: true,
+    value: api,
+  });
+  const view = render(<Memory profile="work" />);
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  fireEvent.click(document.querySelectorAll(".memory-entry-actions button")[1]);
+  fireEvent.click(screen.getByRole("button", { name: "memory.yes" }));
+  view.rerender(<Memory profile="other" />);
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  expect(screen.getByText("other A")).toBeInTheDocument();
+  view.rerender(<Memory profile="work" />);
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  expect(
+    api.readMemory.mock.calls.filter(([profile]) => profile === "work"),
+  ).toHaveLength(1);
+  expect(screen.queryByRole("button", { name: "memory.edit" })).toBeNull();
+  await act(async () => {
+    deleted = true;
+    resolveDelete(true);
+  });
+  const entryB = screen.getByText("entry B").closest(".memory-entry-card")!;
+  fireEvent.click(
+    within(entryB as HTMLElement).getByRole("button", { name: "memory.edit" }),
+  );
+  fireEvent.change(screen.getByRole("textbox"), {
+    target: { value: "edited entry B" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "memory.save" }));
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  expect(api.updateMemoryEntry).toHaveBeenCalledExactlyOnceWith(
+    0,
+    "edited entry B",
+    "work",
+    expect.objectContaining({ mode: "ssh", profile: "work" }),
+  );
+});
+
+// @lat: [[profile-editors#Tests#Sibling snapshots cannot admit old positions]]
+it("reloads a sibling's stale entry snapshot instead of writing its old position", async () => {
+  let deleted = false;
+  const fixture = profileEditorFixture("ssh");
+  const api = {
+    ...fixture.api,
+    readMemory: vi
+      .fn()
+      .mockImplementation(async () =>
+        deleted
+          ? memoryData("entry B", "entry C")
+          : memoryData("entry A", "entry B"),
+      ),
+    getConfig: vi.fn().mockResolvedValue(null),
+    discoverMemoryProviders: vi.fn().mockResolvedValue([]),
+    removeMemoryEntry: vi.fn().mockImplementation(async () => {
+      deleted = true;
+      return true;
+    }),
+    updateMemoryEntry: vi.fn().mockResolvedValue({ success: true }),
+  };
+  Object.defineProperty(window, "hermesAPI", {
+    configurable: true,
+    value: api,
+  });
+  const first = render(<Memory profile="work" />);
+  const second = render(<Memory profile="work" />);
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  fireEvent.click(
+    first.container.querySelectorAll(".memory-entry-actions button")[1],
+  );
+  fireEvent.click(
+    within(first.container).getByRole("button", { name: "memory.yes" }),
+  );
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  const staleB = within(second.container)
+    .getByText("entry B")
+    .closest(".memory-entry-card")!;
+  fireEvent.click(
+    within(staleB as HTMLElement).getByRole("button", { name: "memory.edit" }),
+  );
+  fireEvent.change(within(second.container).getByRole("textbox"), {
+    target: { value: "stale edit B" },
+  });
+  fireEvent.click(
+    within(second.container).getByRole("button", { name: "memory.save" }),
+  );
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  expect(api.updateMemoryEntry).not.toHaveBeenCalled();
+  expect(within(second.container).queryByText("entry A")).toBeNull();
+  expect(within(second.container).queryByRole("textbox")).toBeNull();
+  fireEvent.click(
+    within(second.container).getAllByRole("button", { name: "memory.edit" })[0],
+  );
+  fireEvent.change(within(second.container).getByRole("textbox"), {
+    target: { value: "current edit B" },
+  });
+  fireEvent.click(
+    within(second.container).getByRole("button", { name: "memory.save" }),
+  );
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  expect(api.updateMemoryEntry).toHaveBeenCalledExactlyOnceWith(
+    0,
+    "current edit B",
+    "work",
+    expect.objectContaining({ profile: "work" }),
+  );
+});
+
+// @lat: [[profile-editors#Tests#Reads overtaken by sibling mutations]]
+it("discards a read overtaken by a sibling deletion and waits for its new snapshot", async () => {
+  let deleted = false;
+  let resolveDelete!: (result: boolean) => void;
+  let resolveRead!: (data: MemoryData) => void;
+  const original = memoryData("entry A", "entry B");
+  const api = {
+    ...profileEditorFixture("ssh").api,
+    readMemory: vi
+      .fn()
+      .mockImplementation(async () =>
+        deleted ? memoryData("entry B", "entry C") : original,
+      ),
+    getConfig: vi.fn().mockResolvedValue(null),
+    discoverMemoryProviders: vi.fn().mockResolvedValue([]),
+    removeMemoryEntry: vi
+      .fn()
+      .mockReturnValue(new Promise((done) => (resolveDelete = done))),
+  };
+  Object.defineProperty(window, "hermesAPI", {
+    configurable: true,
+    value: api,
+  });
+  const first = render(<Memory profile="work" />);
+  const second = render(<Memory profile="work" />);
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  api.readMemory.mockReturnValueOnce(
+    new Promise((done) => (resolveRead = done)),
+  );
+  fireEvent.click(second.container.querySelector(".memory-header button")!);
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  fireEvent.click(
+    first.container.querySelectorAll(".memory-entry-actions button")[1],
+  );
+  fireEvent.click(
+    within(first.container).getByRole("button", { name: "memory.yes" }),
+  );
+  await act(async () => resolveRead(original));
+  expect(
+    within(second.container).getAllByRole("button", { name: "memory.edit" })[0],
+  ).toBeDisabled();
+  expect(api.readMemory).toHaveBeenCalledTimes(3);
+  await act(async () => {
+    deleted = true;
+    resolveDelete(true);
+  });
+  expect(within(second.container).queryByText("entry A")).toBeNull();
+  expect(
+    within(second.container).getAllByRole("button", { name: "memory.edit" })[0],
+  ).toBeEnabled();
+});

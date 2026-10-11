@@ -326,3 +326,93 @@ it("shows unavailable Remote memory without mounting empty entry controls", asyn
   expect(screen.queryByText("memory.noMemoriesYet")).toBeNull();
   expect(document.querySelector(".memory-empty")).toBeNull();
 });
+
+// @lat: [[profile-editors#Tests#Modal mutation admission survives profile changes]]
+it("waits after reopening the same modal profile until its admitted deletion settles", async () => {
+  let deleted = false;
+  let resolveDelete!: (value: boolean) => void;
+  const data = (first: string, second: string): MemoryData => ({
+    memory: {
+      entries: [
+        { index: 0, content: first },
+        { index: 1, content: second },
+      ],
+      content: `${first}\n${second}`,
+      exists: true,
+      lastModified: null,
+      charCount: first.length + second.length,
+      charLimit: 2000,
+    },
+    user: {
+      content: "",
+      exists: false,
+      lastModified: null,
+      charCount: 0,
+      charLimit: 1000,
+    },
+    stats: { totalSessions: 0, totalMessages: 0 },
+  });
+  const api = {
+    ...profileEditorFixture("ssh").api,
+    listProfiles: vi.fn().mockResolvedValue(
+      ["a", "b"].map((id) => ({
+        id,
+        name: id,
+        provider: "auto",
+        model: "",
+        skillCount: 0,
+      })),
+    ),
+    readMemory: vi
+      .fn()
+      .mockImplementation(async (profile) =>
+        profile === "b"
+          ? data("other A", "other B")
+          : deleted
+            ? data("entry B", "entry C")
+            : data("entry A", "entry B"),
+      ),
+    removeMemoryEntry: vi
+      .fn()
+      .mockReturnValue(new Promise((done) => (resolveDelete = done))),
+    updateMemoryEntry: vi.fn().mockResolvedValue({ success: true }),
+  };
+  Object.defineProperty(window, "hermesAPI", {
+    configurable: true,
+    value: api,
+  });
+  render(
+    <ProfileModalProvider>
+      <Openers section="agentMemory" />
+    </ProfileModalProvider>,
+  );
+  fireEvent.click(screen.getByText("Open a"));
+  await flush();
+  fireEvent.click(document.querySelectorAll(".memory-entry-actions button")[1]);
+  fireEvent.click(screen.getByRole("button", { name: "memory.yes" }));
+  fireEvent.click(screen.getByText("Open b"));
+  await flush();
+  expect(screen.getByText("other A")).toBeInTheDocument();
+  fireEvent.click(screen.getByText("Open a"));
+  await flush();
+  expect(
+    api.readMemory.mock.calls.filter(([profile]) => profile === "a"),
+  ).toHaveLength(1);
+  expect(screen.queryByRole("button", { name: "memory.edit" })).toBeNull();
+  await act(async () => {
+    deleted = true;
+    resolveDelete(true);
+  });
+  fireEvent.click(screen.getAllByRole("button", { name: "memory.edit" })[0]);
+  fireEvent.change(screen.getByRole("textbox"), {
+    target: { value: "edited entry B" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "memory.save" }));
+  await flush();
+  expect(api.updateMemoryEntry).toHaveBeenCalledExactlyOnceWith(
+    0,
+    "edited entry B",
+    "a",
+    expect.objectContaining({ mode: "ssh", profile: "a" }),
+  );
+});

@@ -4,6 +4,11 @@ import { useI18n } from "../../components/useI18n";
 import { OrbLoader } from "../../components/OrbLoader";
 import Soul from "../Soul/Soul";
 import { useProfileEditorTarget } from "../../hooks/useProfileEditorTarget";
+import {
+  beginProfileMemoryMutation,
+  profileMemoryRevision,
+  waitForProfileMemoryMutations,
+} from "../../hooks/useProfileEditorLifetime";
 import type { ProfileEditorTarget } from "../../../../shared/profile-editor-target";
 import { CapacityCards } from "./CapacityCards";
 import { MemoryTabs } from "./MemoryTabs";
@@ -59,6 +64,7 @@ function MemoryEditor({
   const refreshAfterWrite = useRef(false);
   const loadingRef = useRef(loading);
   const snapshotValid = useRef(false);
+  const snapshotRevision = useRef(-1);
   loadingRef.current = loading;
 
   const mounted = useRef(true);
@@ -86,12 +92,23 @@ function MemoryEditor({
     setLoading(true);
     setError("");
     try {
+      const revision = await waitForProfileMemoryMutations(target);
+      if (!live() || request !== generation.current) return;
+      if (profileMemoryRevision(target) !== revision) {
+        void loadData();
+        return;
+      }
       const [d, provider, provs] = await Promise.all([
         window.hermesAPI.readMemory(profile, target),
         window.hermesAPI.getConfig("memory.provider", profile, target),
         window.hermesAPI.discoverMemoryProviders(profile, target),
       ]);
       if (!live() || request !== generation.current) return;
+      if (profileMemoryRevision(target) !== revision) {
+        void loadData();
+        return;
+      }
+      snapshotRevision.current = revision;
       snapshotValid.current = true;
       setData(d as MemoryData);
       setMemoryProvider(provider);
@@ -120,19 +137,28 @@ function MemoryEditor({
       pendingWrites.current
     )
       return null;
+    const finishScope = beginProfileMemoryMutation(
+      target,
+      snapshotRevision.current,
+    );
+    if (!finishScope) {
+      void loadData();
+      return null;
+    }
     pendingWrites.current += 1;
     setWriting(true);
     let released = false;
     return () => {
       if (released) return;
       released = true;
+      finishScope();
       pendingWrites.current -= 1;
       if (!live()) return;
       setWriting(false);
       if (refreshAfterWrite.current) {
         refreshAfterWrite.current = false;
         void loadData();
-      }
+      } else snapshotRevision.current = profileMemoryRevision(target);
     };
   };
 
