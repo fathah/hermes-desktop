@@ -13,6 +13,7 @@ import {
 } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
 import { OrbLoader } from "../../components/OrbLoader";
+import { useConnectionTargetRevision } from "../../hooks/useConnectionTargetRevision";
 
 interface KanbanProps {
   profile?: string;
@@ -228,7 +229,7 @@ function ageLabel(createdAt: number | null): string {
   return `${Math.floor(seconds / 86400)}d`;
 }
 
-function Kanban({
+function KanbanContent({
   profile,
   visible,
   remoteMode = false,
@@ -260,7 +261,7 @@ function Kanban({
   const [activeBoardSlug, setActiveBoardSlug] = useState<string | null>(
     readStoredActiveBoard,
   );
-  const isHqActive = activeBoardSlug === HQ_BOARD_SLUG;
+  const isHqActive = !remoteMode && activeBoardSlug === HQ_BOARD_SLUG;
   const [hqAvailable, setHqAvailable] = useState(false);
   // One-shot guard: only auto-default to HQ on the first loadAll. After
   // that, respect the user's explicit choice (including switching back to
@@ -291,7 +292,7 @@ function Kanban({
       try {
         // Always refresh the real boards list, plus either the active real
         // board's tasks OR the Claw3D HQ tasks depending on which is selected.
-        const wantHq = activeBoardSlug === HQ_BOARD_SLUG;
+        const wantHq = !remoteMode && activeBoardSlug === HQ_BOARD_SLUG;
         type TasksRes = {
           success: boolean;
           data?: KanbanTask[];
@@ -361,7 +362,7 @@ function Kanban({
         if (!silent) setLoading(false);
       }
     },
-    [profile, activeBoardSlug, showArchived, t],
+    [profile, activeBoardSlug, showArchived, remoteMode, t],
   );
 
   useEffect(() => {
@@ -1393,4 +1394,12 @@ function Kanban({
   );
 }
 
-export default Kanban;
+export default function Kanban(props: KanbanProps): React.JSX.Element {
+  const revision = useConnectionTargetRevision();
+  return (
+    <KanbanContent
+      key={`${props.profile || "default"}\u0000${revision}\u0000${props.remoteMode ? "remote" : "local"}`}
+      {...props}
+    />
+  );
+}

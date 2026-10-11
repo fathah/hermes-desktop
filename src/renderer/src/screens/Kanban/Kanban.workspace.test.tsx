@@ -1,4 +1,10 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const stableT = (key: string): string => key;
@@ -11,7 +17,12 @@ vi.mock("../../components/OrbLoader", () => ({
 
 import Kanban from "./Kanban";
 
+let connectionChanged: () => void;
+const unsubscribe = vi.fn();
+
 function installApi(): void {
+  unsubscribe.mockReset();
+  window.localStorage.clear();
   Object.defineProperty(window, "hermesAPI", {
     configurable: true,
     value: {
@@ -36,6 +47,11 @@ function installApi(): void {
         .mockResolvedValue({ success: true, data: { id: "t1" } }),
       listProfiles: vi.fn().mockResolvedValue([]),
       selectFolder: vi.fn().mockResolvedValue("/Users/me/project"),
+      kanbanCompleteTask: vi.fn().mockResolvedValue({ success: true }),
+      onConnectionConfigChanged: vi.fn((listener: () => void) => {
+        connectionChanged = listener;
+        return unsubscribe;
+      }),
     },
   });
 }
@@ -72,5 +88,91 @@ describe("Kanban workspace folder", () => {
     fireEvent.change(input, { target: { value: "/srv/app" } });
     expect(input.value).toBe("/srv/app");
     expect(window.hermesAPI.selectFolder).not.toHaveBeenCalled();
+  });
+
+  // @lat: [[kanban#Kanban board tab#Remote target lifecycle#SSH virtual board preference]]
+  it("loads real remote tasks even when the saved SSH virtual board was HQ", async () => {
+    window.localStorage.setItem("hermes:kanban:active-board", "__claw3d_hq__");
+    render(<Kanban visible remoteMode />);
+    await screen.findByText("kanban.newTask");
+    expect(window.hermesAPI.kanbanListTasks).toHaveBeenCalled();
+    expect(document.querySelector(".kanban-hq-banner")).toBeNull();
+  });
+
+  // @lat: [[kanban#Kanban board tab#Remote target lifecycle#Profile changes]]
+  it("discards a late old-profile board before actions can use the new profile", async () => {
+    let finishA!: (value: unknown) => void;
+    const pendingA = new Promise((resolve) => (finishA = resolve));
+    const task = (id: string): Record<string, unknown> => ({
+      id,
+      title: id,
+      status: "ready",
+      priority: 0,
+      skills: [],
+      created_at: null,
+    });
+    vi.mocked(window.hermesAPI.kanbanListTasks).mockImplementation(
+      ({ profile } = {}) =>
+        (profile === "A"
+          ? pendingA
+          : Promise.resolve({
+              success: true,
+              data: [task("task-B")],
+            })) as ReturnType<typeof window.hermesAPI.kanbanListTasks>,
+    );
+    const { rerender } = render(<Kanban profile="A" visible remoteMode />);
+    await waitFor(() =>
+      expect(window.hermesAPI.kanbanListTasks).toHaveBeenCalled(),
+    );
+    rerender(<Kanban profile="B" visible remoteMode />);
+    await screen.findByText("task-B", { selector: ".kanban-card-title" });
+    await act(async () => {
+      finishA({ success: true, data: [task("task-A")] });
+      await pendingA;
+    });
+    expect(screen.queryByText("task-A")).toBeNull();
+    fireEvent.click(screen.getByTitle("kanban.cardMarkDone"));
+    await waitFor(() =>
+      expect(window.hermesAPI.kanbanCompleteTask).toHaveBeenCalledWith(
+        "task-B",
+        undefined,
+        "B",
+      ),
+    );
+  });
+
+  // @lat: [[kanban#Kanban board tab#Remote target lifecycle#Connection edits]]
+  it("resets tasks and forms on an in-place connection edit and ignores its late reply", async () => {
+    let finishOld!: (value: unknown) => void;
+    const pendingOld = new Promise((resolve) => (finishOld = resolve));
+    vi.mocked(window.hermesAPI.kanbanListTasks).mockImplementationOnce(
+      () => pendingOld as ReturnType<typeof window.hermesAPI.kanbanListTasks>,
+    );
+    const { unmount } = render(<Kanban profile="work" visible remoteMode />);
+    await waitFor(() =>
+      expect(window.hermesAPI.kanbanListTasks).toHaveBeenCalledTimes(1),
+    );
+    act(() => connectionChanged());
+    await screen.findByText("kanban.newTask");
+    await act(async () => {
+      finishOld({
+        success: true,
+        data: [{ id: "old-task", title: "old-target-task", skills: [] }],
+      });
+      await pendingOld;
+    });
+    expect(screen.queryByText("old-target-task")).toBeNull();
+    await openWorkspaceField();
+    fireEvent.change(
+      screen.getByPlaceholderText("kanban.workspaceServerPath"),
+      {
+        target: { value: "/srv/old-target" },
+      },
+    );
+    act(() => connectionChanged());
+    await screen.findByText("kanban.newTask");
+    expect(screen.queryByDisplayValue("/srv/old-target")).toBeNull();
+    unmount();
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
 });
