@@ -17,6 +17,7 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[desktop-security]] — verified Unix bootstrap execution and safe rendering of runtime provider names.
 - [[agent-capabilities]] — capability-based compatibility between the independent desktop and system-installed Hermes Agent, including bounded runtime evidence and update gating.
 - [[connections]] — the versioned main-process connection registry, stable active connection identity, and lossless migration from the legacy singleton configuration.
+- [[session-title-generation]] — Unicode-safe automatic titles for untitled local sessions.
 - [[sidebar-navigation]] — the recent-sessions list under the Chat nav item, capped at five with a "Show more" button that opens the full session list in a modal.
 - [[context-folder]] — the per-session linked working folder, persisted in a desktop-owned state.db table so a re-opened conversation restores its folder.
 - [[main-process]] — the Electron main-process entrypoint, app lifecycle modules, and centralized IPC registry.
@@ -34,9 +35,11 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[office-interactions]] — space representatives: interactive bank tellers whose menu runs account status, balances, and account creation against the hermes-one backend for a chosen agent; the extensible pattern for future spaces (showroom sales, building space).
 - [[office-world-actions]] — chat-commanded errands: the agent's LLM emits world-action blocks from the office chat, its avatar walks the trip route to the bank/showroom, and the rep modal auto-opens running the requested action on arrival.
 - [[mcp-servers]] — add / edit / remove / enable / test MCP servers from the Capabilities → MCP tab; the shared add+edit modal and the in-place atomic `updateMcpServer` upsert (config.yaml locally, gateway REST in Remote/SSH).
+- [[discover]] — community catalog browsing, remote installed markers, browse-only controls, and connection/profile lifetimes.
 - [[scheduled-jobs]] — schedule state normalization across local files, remote API responses, and named SSH profiles.
 - [[config-health-navigation]] — Configuration details navigation, profile isolation, and audit/fix recovery tests.
 
+- [[ssh-session-delete]] — Native SSH session deletion, transaction integrity and UI recovery tests.
 - [[dashboard-clarify]] — Interactive WebSocket clarification cards and answer delivery tests.
 
 - [[dashboard-shutdown]] — Local dashboard ownership and profile-independent app shutdown.

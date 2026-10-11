@@ -13,10 +13,14 @@ import {
 } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
 import { OrbLoader } from "../../components/OrbLoader";
+import { useConnectionTargetRevision } from "../../hooks/useConnectionTargetRevision";
 
 interface KanbanProps {
   profile?: string;
   visible?: boolean;
+  /** Remote: the workspace lives on the SERVER, so a folder picked on this
+   *  machine is meaningless there — the path is typed instead. */
+  remoteMode?: boolean;
 }
 
 interface KanbanTask {
@@ -225,7 +229,11 @@ function ageLabel(createdAt: number | null): string {
   return `${Math.floor(seconds / 86400)}d`;
 }
 
-function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
+function KanbanContent({
+  profile,
+  visible,
+  remoteMode = false,
+}: KanbanProps): React.JSX.Element {
   const { t } = useI18n();
   const [boards, setBoards] = useState<KanbanBoard[]>([]);
   const [tasks, setTasks] = useState<KanbanTask[]>([]);
@@ -253,7 +261,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
   const [activeBoardSlug, setActiveBoardSlug] = useState<string | null>(
     readStoredActiveBoard,
   );
-  const isHqActive = activeBoardSlug === HQ_BOARD_SLUG;
+  const isHqActive = !remoteMode && activeBoardSlug === HQ_BOARD_SLUG;
   const [hqAvailable, setHqAvailable] = useState(false);
   // One-shot guard: only auto-default to HQ on the first loadAll. After
   // that, respect the user's explicit choice (including switching back to
@@ -284,7 +292,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
       try {
         // Always refresh the real boards list, plus either the active real
         // board's tasks OR the Claw3D HQ tasks depending on which is selected.
-        const wantHq = activeBoardSlug === HQ_BOARD_SLUG;
+        const wantHq = !remoteMode && activeBoardSlug === HQ_BOARD_SLUG;
         type TasksRes = {
           success: boolean;
           data?: KanbanTask[];
@@ -354,7 +362,7 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
         if (!silent) setLoading(false);
       }
     },
-    [profile, activeBoardSlug, showArchived, t],
+    [profile, activeBoardSlug, showArchived, remoteMode, t],
   );
 
   useEffect(() => {
@@ -1154,16 +1162,22 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
                       type="text"
                       value={newWorkspaceDir}
                       onChange={(e) => setNewWorkspaceDir(e.target.value)}
-                      placeholder={t("kanban.workspaceNoFolder")}
-                      readOnly
+                      placeholder={
+                        remoteMode
+                          ? t("kanban.workspaceServerPath")
+                          : t("kanban.workspaceNoFolder")
+                      }
+                      readOnly={!remoteMode}
                     />
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={handlePickWorkspaceFolder}
-                    >
-                      {t("kanban.browse")}
-                    </button>
+                    {!remoteMode && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={handlePickWorkspaceFolder}
+                      >
+                        {t("kanban.browse")}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -1380,4 +1394,12 @@ function Kanban({ profile, visible }: KanbanProps): React.JSX.Element {
   );
 }
 
-export default Kanban;
+export default function Kanban(props: KanbanProps): React.JSX.Element {
+  const revision = useConnectionTargetRevision();
+  return (
+    <KanbanContent
+      key={`${props.profile || "default"}\u0000${revision}\u0000${props.remoteMode ? "remote" : "local"}`}
+      {...props}
+    />
+  );
+}

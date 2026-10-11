@@ -15,6 +15,7 @@ import {
   cycleRunId,
   runIdAtOrdinal,
   loadingSessionIds as deriveLoadingSessionIds,
+  createdSessionIds as deriveCreatedSessionIds,
 } from "./chatRuns";
 import { ActiveSessionsBar } from "./ActiveSessionsBar";
 import { StatusBar } from "./StatusBar";
@@ -137,6 +138,10 @@ function Layout({
   const loadingSessionIds = useMemo(
     () => deriveLoadingSessionIds(runs),
     [runs],
+  );
+  const createdSessionIds = useMemo(
+    () => deriveCreatedSessionIds(runs, connectionId, activeProfile),
+    [runs, connectionId, activeProfile],
   );
 
   const updateSidebarScrollbar = useCallback((visible: boolean) => {
@@ -748,6 +753,7 @@ function Layout({
                   activeProfile={activeProfile}
                   currentSessionId={currentSessionId}
                   loadingSessionIds={loadingSessionIds}
+                  createdSessionIds={createdSessionIds}
                   resumingSessionId={resumingSessionId}
                   onSelect={handleResumeSession}
                   onSessionDeleted={(id) => {
@@ -926,15 +932,13 @@ function Layout({
 
           {visitedViews.has("discover") && (
             <div style={paneStyle("discover")}>
-              {remoteMode ? (
-                <RemoteNotice feature="Discover" />
-              ) : (
-                <Discover
-                  profile={activeProfile}
-                  visible={view === "discover"}
-                  focusKind={discoverFocus ?? undefined}
-                />
-              )}
+              <Discover
+                key={connectionId}
+                browseOnly={remoteMode}
+                profile={activeProfile}
+                visible={view === "discover"}
+                focusKind={discoverFocus ?? undefined}
+              />
             </div>
           )}
 
@@ -1014,11 +1018,12 @@ function Layout({
 
           {visitedViews.has("kanban") && (
             <div style={paneStyle("kanban")}>
-              {remoteMode ? (
-                <RemoteNotice feature="Kanban" />
-              ) : (
-                <Kanban profile={activeProfile} visible={view === "kanban"} />
-              )}
+              <Kanban
+                key={connectionId}
+                profile={activeProfile}
+                visible={view === "kanban"}
+                remoteMode={remoteMode}
+              />
             </div>
           )}
 
