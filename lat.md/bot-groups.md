@@ -63,7 +63,7 @@ history. Text is rendered with React's escaping, not injected as HTML.
 
 ## Verification
 
-Focused Vitest cases cover the request/connection boundaries, late response isolation, exact approval, explicit send retry and replay fencing. Browser fixtures exercise the real React component with synthetic IPC, not a running Agent.
+Focused Vitest cases cover connection boundaries, late responses, exact approval, explicit retry and replay fencing. Browser fixtures exercise the real React component; runtime acceptance separately uses an actual Agent backend.
 
 ```bash
 npm test -- src/shared/bot-groups.test.ts src/main/bot-groups.test.ts src/renderer/src/screens/BotGroups/BotGroups.test.tsx
@@ -75,6 +75,27 @@ The browser smoke checks 1280px and 600px layouts, mentions, send/draft clearing
 overflow and page errors. It is not full Electron, installer, remote connection
 or real-provider LLM acceptance. Use isolated state for a provider-backed manual
 trial before enabling this experimental feature for daily work.
+
+### Runtime acceptance
+
+An isolated Agent Dashboard and local provider fixture verify durable rooms, successful two-profile discussion, ordinary Chat coexistence and restart recovery without user state or paid model requests.
+
+[[scripts/verify-bot-groups-runtime.py#run]] starts the actual Dashboard with a
+temporary home, two temporary profiles and an OpenAI-compatible HTTP fixture.
+Both members must settle successfully; failed or cancelled turns fail the
+trial. Restart must preserve the room and installation authority. Backend
+processes and temporary state are cleaned up after the result is written.
+
+Run with a Python environment containing the Agent Dashboard dependencies:
+
+```bash
+python scripts/verify-bot-groups-runtime.py --agent-repo ../hermes-agent
+```
+
+The repair also passed manual Chrome acceptance with the real Layout, App shell
+wrappers, providers and CSS against this isolated backend: room creation,
+mentions, accepted send, Ready state and Chat/group navigation. At 1280×600,
+1440×900 and 600×900, the composer remains visible without horizontal overflow.
 
 ## Recovery regressions
 
