@@ -27,7 +27,13 @@ import type {
 type DraftValues = Record<string, Record<string, string>>;
 type PlatformMessage = Record<string, MessagingPlatformTestResponse | null>;
 
-function Gateway({ profile }: { profile?: string }): React.JSX.Element {
+function Gateway({
+  profile,
+  remoteMode = false,
+}: {
+  profile?: string;
+  remoteMode?: boolean;
+}): React.JSX.Element {
   const { t } = useI18n();
   const [gatewayRunning, setGatewayRunning] = useState(false);
   const [gatewayBusy, setGatewayBusy] = useState(false);
@@ -50,23 +56,59 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
     null,
   );
 
+  const mountedRef = useRef(false);
+
+  // A pending "check again in 5 s" must not outlive the screen (or the profile
+  // it was started for): it would write that profile's status into a page that
+  // has moved on.
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (gatewayStatusTimeoutRef.current) {
+        clearTimeout(gatewayStatusTimeoutRef.current);
+        gatewayStatusTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
   const loadConfig = useCallback(async (): Promise<void> => {
+    if (!mountedRef.current) return;
     setLoadError(null);
     try {
-      const [gwStatus, platforms] = await Promise.all([
-        window.hermesAPI.gatewayStatus(),
+      // Independent requests: a failing platform list must not discard a
+      // successful status (the page would stay "stopped" with no controls).
+      const [statusResult, platformsResult] = await Promise.allSettled([
+        window.hermesAPI.gatewayStatus(profile),
         window.hermesAPI.getMessagingPlatforms(profile),
       ]);
-      setGatewayRunning(gwStatus);
-      // Clear stale start-failure banners once the gateway is confirmed up,
-      // but keep an explicit restart failure visible: a failed recovery can
-      // leave the old gateway running while still needing user attention.
-      if (gwStatus) {
-        setGatewayError((current) =>
-          current === t("gateway.restartFailed") ? current : null,
+      if (!mountedRef.current) return;
+      if (statusResult.status === "fulfilled") {
+        const gwStatus = statusResult.value;
+        setGatewayRunning(gwStatus);
+        // Clear stale start-failure banners once the gateway is confirmed up,
+        // but keep an explicit restart failure visible: a failed recovery can
+        // leave the old gateway running while still needing user attention.
+        if (gwStatus) {
+          setGatewayError((current) =>
+            current === t("gateway.restartFailed") ? current : null,
+          );
+        }
+      }
+      if (platformsResult.status === "fulfilled") {
+        setCatalog(platformsResult.value);
+      }
+      const failure =
+        platformsResult.status === "rejected"
+          ? platformsResult.reason
+          : statusResult.status === "rejected"
+            ? statusResult.reason
+            : null;
+      if (failure) {
+        setLoadError(
+          failure instanceof Error ? failure.message : String(failure),
         );
       }
-      setCatalog(platforms);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err));
     }
@@ -84,6 +126,12 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
   }, [loadConfig]);
 
   useEffect(() => {
+    // The API server key lives in the LOCAL .env; it says nothing about a
+    // remote server, so don't show (or regenerate) it in remote mode.
+    if (remoteMode) {
+      setApiKeyStatus(null);
+      return;
+    }
     let cancelled = false;
     window.hermesAPI
       .getApiServerKeyStatus(profile)
@@ -96,7 +144,7 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [profile]);
+  }, [profile, remoteMode]);
 
   const platforms = useMemo(() => catalog?.platforms ?? [], [catalog]);
   const filteredPlatforms = useMemo(() => {
@@ -128,7 +176,7 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
     setGatewayError(null);
     if (gatewayRunning) {
       try {
-        await window.hermesAPI.stopGateway();
+        await window.hermesAPI.stopGateway(profile);
         setGatewayRunning(false);
       } catch (err) {
         setGatewayError(
@@ -139,7 +187,8 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
       }
     } else {
       try {
-        const result = await window.hermesAPI.startGateway();
+        const result = await window.hermesAPI.startGateway(profile);
+        if (!mountedRef.current) return;
         setGatewayRunning(result.running);
         if (!result.success) {
           setGatewayError(
@@ -152,7 +201,8 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
         gatewayStatusTimeoutRef.current = setTimeout(() => {
           // Refresh status + platform catalog once the adapters have had a
           // moment to come up; surface an error if it exited immediately.
-          void window.hermesAPI.gatewayStatus().then((status) => {
+          void window.hermesAPI.gatewayStatus(profile).then((status) => {
+            if (!mountedRef.current) return;
             setGatewayRunning(status);
             if (status) {
               void loadConfig();
@@ -186,13 +236,15 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
     setGatewayError(null);
     try {
       const restarted = await window.hermesAPI.restartGateway(profile);
+      if (!mountedRef.current) return;
       setGatewayRunning(restarted);
       if (!restarted) {
         await loadConfig();
         setGatewayError(t("gateway.restartFailed"));
       } else {
         gatewayStatusTimeoutRef.current = setTimeout(async () => {
-          const status = await window.hermesAPI.gatewayStatus();
+          const status = await window.hermesAPI.gatewayStatus(profile);
+          if (!mountedRef.current) return;
           setGatewayRunning(status);
           if (status) {
             void loadConfig();

@@ -1,4 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 
 // hermes.ts pulls in the full main-process import graph; mock the modules with
 // import-time side effects (installer → electron) and the two seams under
@@ -65,11 +74,16 @@ import {
 } from "./config";
 import type { ConnectionConfig } from "./config";
 import { providerListSafe } from "./secrets";
+import { pidIsAliveAs, profileHome } from "./utils";
 import {
+  assertLocalGatewayKeyMutationAllowed,
   clearAgentCapabilityEvidence,
   getAgentCapabilityEvidence,
   getCachedAgentCapabilityEvidence,
   getRemoteAuthHeader,
+  isExternallyManagedMultiplexGateway,
+  isGatewayRunning,
+  stopGateway,
   bindPendingApproval,
   clearAllPendingApprovals,
   registerPendingApproval,
@@ -91,6 +105,207 @@ const mockedGetConnectionConfig = vi.mocked(getConnectionConfig);
 const mockedReadEnv = vi.mocked(readEnv);
 const mockedProviderListSafe = vi.mocked(providerListSafe);
 const mockedSpawn = vi.mocked(spawn);
+
+describe("local gateway status", () => {
+  let home: string;
+
+  beforeEach(() => {
+    home = mkdtempSync(join(tmpdir(), "hermes-one-gateway-status-"));
+    vi.mocked(profileHome).mockImplementation((profile) =>
+      profile ? join(home, "profiles", String(profile)) : home,
+    );
+    vi.mocked(pidIsAliveAs).mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    vi.mocked(profileHome).mockReset();
+    vi.mocked(pidIsAliveAs).mockReset();
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  // @lat: [[connections#Test specifications#Local multiplex gateway status]]
+  it.skipIf(process.platform !== "linux")(
+    "recognizes a live default-home multiplex gateway without gateway.pid",
+    () => {
+      const stat = readFileSync(`/proc/${process.pid}/stat`, "utf-8");
+      const startTime = Number(
+        stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19],
+      );
+      writeFileSync(
+        join(home, "gateway_state.json"),
+        JSON.stringify({
+          gateway_state: "running",
+          kind: "hermes-gateway",
+          hermes_home: home,
+          pid: process.pid,
+          start_time: startTime,
+          served_profiles: ["default", "scout"],
+        }),
+      );
+
+      expect(isGatewayRunning("default")).toBe(true);
+      expect(isGatewayRunning("scout")).toBe(false);
+      expect(pidIsAliveAs).toHaveBeenCalledWith(process.pid, [
+        "python",
+        "pythonw",
+      ]);
+    },
+  );
+
+  it.skipIf(process.platform !== "linux")(
+    "rejects a reused PID with a different process start fingerprint",
+    () => {
+      const stat = readFileSync(`/proc/${process.pid}/stat`, "utf-8");
+      const startTime = Number(
+        stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19],
+      );
+      writeFileSync(
+        join(home, "gateway_state.json"),
+        JSON.stringify({
+          gateway_state: "running",
+          kind: "hermes-gateway",
+          hermes_home: home,
+          pid: process.pid,
+          start_time: startTime + 1,
+          served_profiles: ["default"],
+        }),
+      );
+      expect(isGatewayRunning("default")).toBe(false);
+    },
+  );
+
+  // @lat: [[connections#Test specifications#Externally managed gateway controls]]
+  it.skipIf(process.platform !== "linux")(
+    "refuses to stop a service-owned multiplex gateway",
+    () => {
+      const stat = readFileSync(`/proc/${process.pid}/stat`, "utf-8");
+      const startTime = Number(
+        stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19],
+      );
+      writeFileSync(
+        join(home, "gateway_state.json"),
+        JSON.stringify({
+          kind: "hermes-gateway",
+          hermes_home: home,
+          gateway_state: "running",
+          pid: process.pid,
+          start_time: startTime,
+          served_profiles: ["default"],
+        }),
+      );
+      expect(stopGateway("default", true)).toBe(false);
+      expect(isGatewayRunning("default")).toBe(true);
+    },
+  );
+
+  // @lat: [[connections#Test specifications#Externally managed API keys]]
+  it.skipIf(process.platform !== "linux")(
+    "identifies a live external default gateway before rotating credentials",
+    () => {
+      const stat = readFileSync(`/proc/${process.pid}/stat`, "utf-8");
+      const startTime = Number(
+        stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19],
+      );
+      writeFileSync(
+        join(home, "gateway_state.json"),
+        JSON.stringify({
+          kind: "hermes-gateway",
+          hermes_home: home,
+          gateway_state: "running",
+          pid: process.pid,
+          start_time: startTime,
+          served_profiles: ["default"],
+        }),
+      );
+      expect(isExternallyManagedMultiplexGateway("default")).toBe(true);
+      expect(isExternallyManagedMultiplexGateway("scout")).toBe(false);
+      expect(() =>
+        assertLocalGatewayKeyMutationAllowed("API_SERVER_KEY", "default"),
+      ).toThrow("managed outside Hermes One");
+      expect(() =>
+        assertLocalGatewayKeyMutationAllowed("api_server.token", "default"),
+      ).toThrow("managed outside Hermes One");
+      expect(() =>
+        assertLocalGatewayKeyMutationAllowed("api_server.extra.key", "default"),
+      ).toThrow("managed outside Hermes One");
+      expect(() =>
+        assertLocalGatewayKeyMutationAllowed(
+          "platforms.api_server.extra.key",
+          "default",
+        ),
+      ).toThrow("managed outside Hermes One");
+      expect(() =>
+        assertLocalGatewayKeyMutationAllowed("model.default", "default"),
+      ).not.toThrow();
+    },
+  );
+
+  it.skipIf(process.platform !== "linux")(
+    "rejects invalid ownership and stale multiplex state",
+    () => {
+      const file = join(home, "gateway_state.json");
+      const stat = readFileSync(`/proc/${process.pid}/stat`, "utf-8");
+      const startTime = Number(
+        stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19],
+      );
+      const state = {
+        kind: "hermes-gateway",
+        hermes_home: home,
+        gateway_state: "running",
+        pid: process.pid,
+        start_time: startTime,
+        served_profiles: ["default", "scout"],
+      };
+      writeFileSync(file, JSON.stringify(state));
+      expect(isGatewayRunning("default")).toBe(true);
+      expect(isGatewayRunning("other")).toBe(false);
+
+      for (const changed of [
+        { kind: "not-a-gateway" },
+        { hermes_home: join(home, "other") },
+        { gateway_state: "stopped" },
+        { served_profiles: ["scout"] },
+      ]) {
+        writeFileSync(file, JSON.stringify({ ...state, ...changed }));
+        expect(isGatewayRunning("default")).toBe(false);
+      }
+
+      writeFileSync(file, JSON.stringify(state));
+      vi.mocked(pidIsAliveAs).mockReturnValue(false);
+      expect(isGatewayRunning("default")).toBe(false);
+
+      writeFileSync(file, "not json");
+      expect(isGatewayRunning("default")).toBe(false);
+    },
+  );
+
+  // @lat: [[connections#Test specifications#Equivalent gateway home paths]]
+  it.skipIf(process.platform !== "linux")(
+    "recognizes the same gateway home through a symlink",
+    () => {
+      const alias = join(home, "alias");
+      symlinkSync(home, alias, "dir");
+      const stat = readFileSync(`/proc/${process.pid}/stat`, "utf-8");
+      const startTime = Number(
+        stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19],
+      );
+      writeFileSync(
+        join(home, "gateway_state.json"),
+        JSON.stringify({
+          kind: "hermes-gateway",
+          hermes_home: home,
+          gateway_state: "running",
+          pid: process.pid,
+          start_time: startTime,
+          served_profiles: ["default"],
+        }),
+      );
+      vi.mocked(profileHome).mockReturnValue(alias);
+      expect(isGatewayRunning("default")).toBe(true);
+      expect(isExternallyManagedMultiplexGateway("default")).toBe(true);
+    },
+  );
+});
 
 describe("chat approval normalization", () => {
   it("preserves an explicit safe choice subset and always includes deny", () => {

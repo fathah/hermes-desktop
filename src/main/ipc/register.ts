@@ -124,6 +124,7 @@ import {
   startGateway,
   startGatewayDetailed,
   stopGateway,
+  assertLocalGatewayKeyMutationAllowed,
   isGatewayRunning,
   testRemoteConnection,
   restartGateway,
@@ -256,6 +257,12 @@ import {
   emptyOAuthProviderStatuses,
   remoteGetOAuthProviderStatuses,
 } from "../remote-provider-statuses";
+import {
+  remoteGatewayStatus,
+  remoteRestartGateway,
+  remoteStartGateway,
+  remoteStopGateway,
+} from "../remote-gateway";
 import {
   listModels,
   addModel,
@@ -1100,6 +1107,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         await sshSetEnvValue(conn.ssh, key, value, profile);
         return true;
       }
+      assertLocalGatewayKeyMutationAllowed(key, profile);
       setEnvValue(key, value, profile);
       // Restart gateway so it picks up the new API key.
       // The earlier condition had a precedence bug —
@@ -1135,6 +1143,7 @@ export function registerIpcHandlers(context: IpcContext): void {
         await sshSetConfigValue(conn.ssh, key, value, profile);
         return true;
       }
+      assertLocalGatewayKeyMutationAllowed(key, profile);
       setConfigValue(key, value, profile);
       return true;
     },
@@ -1338,6 +1347,9 @@ export function registerIpcHandlers(context: IpcContext): void {
   ipcMain.handle(
     "generate-api-server-key",
     async (_event, profile?: string) => {
+      // This action also writes the default home's key for named profiles.
+      // Refuse before either write when a service owns the live gateway.
+      assertLocalGatewayKeyMutationAllowed("API_SERVER_KEY", "default");
       const { randomUUID } = await import("crypto");
       const key = `desk-${randomUUID()}`;
       // Write to both the active profile .env and the default .env so the
@@ -2087,38 +2099,43 @@ export function registerIpcHandlers(context: IpcContext): void {
   );
 
   // Gateway
-  ipcMain.handle("start-gateway", async () => {
+  ipcMain.handle("start-gateway", async (_event, profile?: string) => {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh) {
       await sshStartGateway(conn.ssh);
       return { success: true, running: true };
     }
     if (conn.mode === "remote") {
-      // The remote server runs its own gateway; nothing to start locally.
-      // Without this guard we'd fall through to `startGateway()` and
-      // spawn a non-existent local hermes-agent (issue #266).
+      // The remote server runs its own gateway; ask the dashboard to start it.
+      // Never fall through to `startGateway()` — that would spawn a
+      // non-existent local hermes-agent (issue #266).
+      const result = await remoteStartGateway(profile);
       return {
-        success: false,
+        success: result.success,
         running: false,
-        error:
-          "Remote mode points at an already-running Hermes server. Start or restart the gateway on that remote host.",
+        ...(result.error ? { error: result.error } : {}),
       };
     }
     return startGatewayDetailed();
   });
-  ipcMain.handle("stop-gateway", async () => {
+  ipcMain.handle("stop-gateway", async (_event, profile?: string) => {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh) {
       await sshStopGateway(conn.ssh);
       return true;
     }
     if (conn.mode === "remote") {
-      // No local gateway to stop in pure remote mode.
+      const result = await remoteStopGateway(profile);
+      if (!result.success) throw new Error(result.error);
       return true;
     }
     // No profile argument → stops the active profile's gateway, leaving any
     // other profiles' gateways running.
-    stopGateway(undefined, true);
+    if (!stopGateway(undefined, true)) {
+      throw new Error(
+        "This gateway is managed outside Hermes One. Stop it with the Hermes CLI or its service manager.",
+      );
+    }
     return true;
   });
   ipcMain.handle("restart-gateway", async (_event, profile?: string) => {
@@ -2129,13 +2146,14 @@ export function registerIpcHandlers(context: IpcContext): void {
       return sshGatewayStatus(conn.ssh);
     }
     if (conn.mode === "remote") {
-      return false;
+      return (await remoteRestartGateway(profile)).success;
     }
     return restartGateway(profile);
   });
-  ipcMain.handle("gateway-status", () => {
+  ipcMain.handle("gateway-status", (_event, profile?: string) => {
     const conn = getConnectionConfig();
     if (conn.mode === "ssh" && conn.ssh) return sshGatewayStatus(conn.ssh);
+    if (conn.mode === "remote") return remoteGatewayStatus(profile);
     return isGatewayRunning();
   });
 
@@ -2242,7 +2260,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     async (_event, profile?: string) => {
       const conn = getConnectionConfig();
       if (conn.mode === "remote") {
-        return fetchRemoteMessagingPlatforms();
+        return fetchRemoteMessagingPlatforms(profile);
       }
       if (conn.mode === "ssh" && conn.ssh) {
         const [envData, enabled, running, platformToolsets] = await Promise.all(
@@ -2276,7 +2294,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     async (_event, platform: string, update, profile?: string) => {
       const conn = getConnectionConfig();
       if (conn.mode === "remote") {
-        return updateRemoteMessagingPlatform(platform, update);
+        return updateRemoteMessagingPlatform(platform, update, profile);
       }
       if (conn.mode === "ssh" && conn.ssh) {
         await applyMessagingPlatformUpdate(
@@ -2321,7 +2339,7 @@ export function registerIpcHandlers(context: IpcContext): void {
     async (_event, platform: string, profile?: string) => {
       const conn = getConnectionConfig();
       if (conn.mode === "remote") {
-        return testRemoteMessagingPlatform(platform);
+        return testRemoteMessagingPlatform(platform, profile);
       }
       if (conn.mode === "ssh" && conn.ssh) {
         const [envData, enabled, running, platformToolsets] = await Promise.all(
