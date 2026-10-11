@@ -977,10 +977,13 @@ function Layout({
 
           {visitedViews.has("skills") && (
             <div style={paneStyle("skills")}>
-              {/* Keyed by connection so a Local -> Remote (or server A -> B)
+              {/* Keyed by connection and profile so a target
                   switch remounts it: its cached list and selection belong to
                   the previous target, and Uninstall would hit the new one. */}
-              <Skills key={connectionId} profile={activeProfile} />
+              <Skills
+                key={JSON.stringify([connectionId, activeProfile])}
+                profile={activeProfile}
+              />
             </div>
           )}
 

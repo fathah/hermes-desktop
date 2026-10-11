@@ -612,7 +612,10 @@ async function mcpApi<T>(
   profile?: string,
 ): Promise<T> {
   const conn = getConnectionConfig();
-  if (conn.mode === "remote") {
+  if (
+    conn.mode === "remote" &&
+    !(conn.remoteAuthMode === "token" && !conn.apiKey.trim())
+  ) {
     // Direct Remote: a bare fetch carries no OAuth cookie (401 Unauthorized).
     const method = (init.method || "GET").toUpperCase() as
       | "GET"
@@ -639,10 +642,10 @@ async function mcpApi<T>(
     }
   }
   const headers: Record<string, string> = {
-    ...getRemoteAuthHeader(),
+    ...getRemoteAuthHeader(conn),
     ...((init.headers as Record<string, string>) || {}),
   };
-  if (!isRemoteMode()) {
+  if (!isRemoteMode(conn)) {
     const apiServerKey = getApiServerKey(profile);
     if (apiServerKey && !headers.Authorization) {
       headers.Authorization = `Bearer ${apiServerKey}`;
@@ -651,7 +654,11 @@ async function mcpApi<T>(
   if (init.body && !headers["Content-Type"]) {
     headers["Content-Type"] = "application/json";
   }
-  const response = await fetch(`${getApiUrl(profile)}${path}`, {
+  const url = new URL(`${getApiUrl(profile, conn)}${path}`);
+  if (conn.mode === "remote" && profile && profile !== "default") {
+    url.searchParams.set("profile", profile);
+  }
+  const response = await fetch(url.toString(), {
     ...init,
     headers,
   });

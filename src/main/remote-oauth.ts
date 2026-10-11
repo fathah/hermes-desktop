@@ -437,9 +437,9 @@ export function openRemoteOAuthLogin(
 export async function remoteAuthFetch(
   url: string,
   init: RequestInit = {},
+  connection?: ConnectionConfig,
 ): Promise<Response> {
-  const { getConnectionConfig } = await import("./config");
-  const conn = getConnectionConfig();
+  const conn = connection ?? (await import("./config")).getConnectionConfig();
   if (conn.mode === "remote") {
     const useOAuth =
       conn.remoteAuthMode === "oauth" ||

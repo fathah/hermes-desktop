@@ -1,6 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const request = vi.hoisted(() => vi.fn());
+const { request, connection } = vi.hoisted(() => ({
+  request: vi.fn(),
+  connection: {
+    current: {
+      mode: "remote",
+      remoteUrl: "http://r:9119",
+      remoteAuthMode: "oauth",
+      apiKey: "",
+    },
+  },
+}));
 
 vi.mock("./hermes", () => ({
   getApiUrl: () => "http://r:9119",
@@ -8,7 +18,7 @@ vi.mock("./hermes", () => ({
   isRemoteMode: () => true,
 }));
 vi.mock("./config", () => ({
-  getConnectionConfig: () => ({ mode: "remote", remoteUrl: "http://r:9119" }),
+  getConnectionConfig: () => connection.current,
 }));
 vi.mock("./utils", () => ({
   profilePaths: () => ({ configFile: "config.yaml" }),
@@ -21,6 +31,7 @@ import { listMcpServers, listMcpCatalog } from "./mcp-servers";
 describe("remote MCP requests", () => {
   beforeEach(() => {
     request.mockReset();
+    connection.current.remoteAuthMode = "oauth";
   });
 
   it("lists servers through the authenticated dashboard boundary, not a bare fetch", async () => {
@@ -53,5 +64,27 @@ describe("remote MCP requests", () => {
     });
     const res = await listMcpCatalog();
     expect(JSON.stringify(res)).toMatch(/not available|catalog/i);
+  });
+
+  // @lat: [[remote-dashboard-oauth#Test specifications#Anonymous MCP compatibility]]
+  it("preserves named-profile MCP access to an explicitly keyless token dashboard", async () => {
+    connection.current.remoteAuthMode = "token";
+    const bare = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ servers: [{ name: "linear", url: "https://x" }] }),
+        ),
+      );
+    vi.stubGlobal("fetch", bare);
+
+    expect((await listMcpServers("work")).map((server) => server.name)).toEqual(
+      ["linear"],
+    );
+    expect(bare).toHaveBeenCalledWith(
+      "http://r:9119/api/mcp/servers?profile=work",
+      expect.objectContaining({ headers: {} }),
+    );
+    expect(request).not.toHaveBeenCalled();
   });
 });

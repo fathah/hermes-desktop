@@ -52,6 +52,16 @@ Missing or expired OAuth sessions stop Remote chat and request browser sign-in w
 
 [[src/renderer/src/screens/Chat/hooks/useDashboardChatTransport.ts#useDashboardChatTransport]] marks OAuth login-required errors as dashboard-reachable failures. Settings hides Legacy transport for OAuth and provides Sign in and Sign out actions.
 
+## Auxiliary feature authentication
+
+Remote Skills uses cookie-aware fetch, while MCP uses the authenticated management request boundary. Both retain the selected profile and keep credentials in the main process.
+
+[[src/main/remote-oauth.ts#remoteAuthFetch]] accepts the connection snapshot used to build the Skills URL and headers, preventing an intervening selection change from choosing another target's authentication. Explicit token connections retain the caller's headers.
+
+[[src/renderer/src/screens/Layout/Layout.tsx#Layout]] mounts Skills separately for each connection and profile, discarding the previous target's list and selection before install or uninstall controls become usable.
+
+Explicit token dashboards without a key retain anonymous, profile-scoped MCP access. OAuth connections always use the authenticated management boundary and cannot fall back to anonymous requests.
+
 ## Test specifications
 
 Focused tests protect credential isolation, automatic routing, ticket freshness, no-fallback behavior, and Settings presentation.
@@ -111,3 +121,11 @@ Management requests resolve `auto` before selecting token or OAuth transport, pr
 ### Management failure classification
 
 Token and OAuth HTTP failures expose the same structured status, with `404` identified as an unsupported feature instead of an application-wide connection failure.
+
+### Auxiliary connection snapshot
+
+Cookie-aware auxiliary requests use the caller's captured connection even after the active selection changes, keeping request authentication aligned with the original URL and profile.
+
+### Anonymous MCP compatibility
+
+Explicit token dashboards without configured keys can list MCP servers anonymously for a named profile, preserving open-gateway compatibility without weakening OAuth authentication.

@@ -22,6 +22,7 @@ vi.mock("../src/main/config", () => ({
 }));
 
 import { remoteAuthFetch } from "../src/main/remote-oauth";
+import { getConnectionConfig } from "../src/main/config";
 
 const URL_ = "http://dash:9119/api/skills";
 
@@ -43,6 +44,25 @@ describe("remoteAuthFetch", () => {
     };
     const res = await remoteAuthFetch(URL_, { method: "POST" });
     expect(await res.text()).toBe("oauth");
+    expect(mocks.sessionFetch).toHaveBeenCalledWith(
+      URL_,
+      expect.objectContaining({ method: "POST", credentials: "include" }),
+    );
+    expect(globalFetch).not.toHaveBeenCalled();
+  });
+
+  // @lat: [[remote-dashboard-oauth#Test specifications#Auxiliary connection snapshot]]
+  it("keeps a caller's captured authentication when the active connection changes", async () => {
+    mocks.conn.current = {
+      mode: "remote",
+      remoteAuthMode: "oauth",
+      remoteUrl: "http://dash:9119",
+    };
+    const connection = getConnectionConfig();
+    mocks.conn.current = { mode: "local" };
+
+    await remoteAuthFetch(URL_, { method: "POST" }, connection);
+
     expect(mocks.sessionFetch).toHaveBeenCalledWith(
       URL_,
       expect.objectContaining({ method: "POST", credentials: "include" }),
