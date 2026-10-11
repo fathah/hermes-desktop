@@ -9,6 +9,7 @@ export interface ProfileEditorScope {
 interface MemoryMutationScope {
   revision: number;
   pending: Promise<void> | null;
+  credentialWrite: Promise<void> | null;
 }
 
 // Opaque target identity survives editor remounts; these transient revisions
@@ -17,7 +18,7 @@ const memoryScopes = new Map<string, MemoryMutationScope>();
 function memoryScope(target: ProfileEditorTarget): MemoryMutationScope {
   let scope = memoryScopes.get(target.scopeToken);
   if (!scope) {
-    scope = { revision: 0, pending: null };
+    scope = { revision: 0, pending: null, credentialWrite: null };
     memoryScopes.set(target.scopeToken, scope);
   }
   return scope;
@@ -51,6 +52,39 @@ export function beginProfileMemoryMutation(
     if (scope.pending === pending) scope.pending = null;
     settle();
   };
+}
+
+// Credential writes share target ownership, but never lock positional controls.
+// Keep a failed save until a replacement write confirms the credential instead.
+export function queueProfileMemoryCredential(
+  target: ProfileEditorTarget,
+  write: () => Promise<void>,
+): Promise<void> {
+  const scope = memoryScope(target);
+  const previous = scope.credentialWrite;
+  const pending = (async (): Promise<void> => {
+    if (previous) await previous.catch(() => undefined);
+    await write();
+  })();
+  scope.credentialWrite = pending;
+  void pending.then(
+    () => {
+      if (scope.credentialWrite === pending) scope.credentialWrite = null;
+    },
+    () => {},
+  );
+  return pending;
+}
+
+export async function waitForProfileMemoryCredentials(
+  target: ProfileEditorTarget,
+): Promise<void> {
+  const scope = memoryScope(target);
+  while (scope.credentialWrite) {
+    const pending = scope.credentialWrite;
+    await pending;
+    if (scope.credentialWrite === pending) return;
+  }
 }
 
 export function useProfileEditorLifetime({

@@ -26,6 +26,8 @@ const PROVIDER_URLS: Record<string, string> = {
 
 import {
   useProfileEditorLifetime,
+  queueProfileMemoryCredential,
+  waitForProfileMemoryCredentials,
   type ProfileEditorScope,
 } from "../../hooks/useProfileEditorLifetime";
 
@@ -57,6 +59,7 @@ export function MemoryProviders({
 
   const [error, setError] = useState("");
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const credentialWrite = useRef<Promise<void> | null>(null);
   useEffect(
     () => () => {
       if (savedTimer.current) clearTimeout(savedTimer.current);
@@ -71,6 +74,18 @@ export function MemoryProviders({
     setError("");
     setActivating(name || "deactivate");
     try {
+      // Blur runs before the Activate click. Keep that click deliverable, then
+      // await its captured credential save before changing the provider.
+      if (target) await waitForProfileMemoryCredentials(target);
+      else {
+        while (credentialWrite.current) {
+          const pendingCredentials = credentialWrite.current;
+          await pendingCredentials;
+          if (!writable()) return;
+          if (credentialWrite.current === pendingCredentials) break;
+        }
+      }
+      if (!writable()) return;
       const result = await window.hermesAPI.setConfig(
         "memory.provider",
         name,
@@ -94,19 +109,33 @@ export function MemoryProviders({
   }
 
   async function saveEnvironment(key: string): Promise<void> {
-    if (!writable()) return;
-    const finish = onMutationStart?.();
-    if (onMutationStart && !finish) return;
-    setError("");
-    try {
-      const result = await window.hermesAPI.setEnv(
-        key,
-        providerEnv[key] || "",
-        profile,
-        target,
-      );
-      if (!live()) return;
+    if (!writable() || !Object.hasOwn(providerEnv, key)) return;
+    const value = providerEnv[key] || "";
+    const previous = credentialWrite.current;
+    // Credentials do not change entry positions, so they must not disable the
+    // tab or button receiving the click that caused this input's blur.
+    const write = async (): Promise<void> => {
+      // A blur already admitted this save. Leaving its pane may discard UI,
+      // but only changing the parent target cancels queued backend dispatch.
+      const current = target && isCurrent ? isCurrent(target) : live();
+      if (!current || target?.mode === "remote")
+        throw new Error(t("memory.saveFailed"));
+      const result = await window.hermesAPI.setEnv(key, value, profile, target);
       if (!result) throw new Error(t("memory.saveFailed"));
+    };
+    const pending = target
+      ? queueProfileMemoryCredential(target, write)
+      : (async (): Promise<void> => {
+          if (previous) await previous.catch(() => undefined);
+          await write();
+        })();
+    credentialWrite.current = pending;
+    setError("");
+    let confirmed = false;
+    try {
+      await pending;
+      confirmed = true;
+      if (!live()) return;
       setProviderSavedKey(key);
       if (savedTimer.current) clearTimeout(savedTimer.current);
       savedTimer.current = setTimeout(() => {
@@ -116,7 +145,8 @@ export function MemoryProviders({
       if (live())
         setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
-      finish?.();
+      if (confirmed && credentialWrite.current === pending)
+        credentialWrite.current = null;
     }
   }
 

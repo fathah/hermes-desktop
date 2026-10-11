@@ -1,6 +1,8 @@
 import { vi } from "vitest";
 import type { ProfileEditorTarget } from "../../../shared/profile-editor-target";
 
+let nextRegistry = 0;
+
 export function profileEditorFixture(
   mode: ProfileEditorTarget["mode"] = "local",
 ): {
@@ -14,6 +16,8 @@ export function profileEditorFixture(
   ) => void;
   listeners: Set<() => void>;
 } {
+  // Each fixture owns a registry; scope identity stays stable only within it.
+  const registry = ++nextRegistry;
   let id = "local";
   let currentMode = mode;
   let revision = 0;
@@ -26,7 +30,7 @@ export function profileEditorFixture(
           connectionId: id,
           profile: profile || "default",
           mode: currentMode,
-          scopeToken: `${id}:${profile || "default"}:${revision}`,
+          scopeToken: `${registry}:${id}:${profile || "default"}:${revision}`,
         })),
       onConnectionConfigChanged: vi
         .fn()

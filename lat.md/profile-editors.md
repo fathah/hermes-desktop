@@ -22,6 +22,8 @@ Same-target Memory refresh preserves Soul's independent autosave lifetime. Refre
 
 An admitted Memory write blocks refresh and tab changes until its result is handled. A shared fence keyed by the opaque target survives profile and modal remounts, so new snapshot reads wait for earlier admitted writes.
 
+Credential blur saves stay outside the positional fence so the following Activate or tab click is delivered. The queue survives pane remounts and serializes admitted credential writes. Activation waits for it, retains save failures, and checks its own lifetime and target again before changing configuration.
+
 Each snapshot carries the target mutation revision. A sibling write invalidates old reads and positional edit admission; stale views reload before writing. Successful refresh replaces the snapshot, and target changes still invalidate all UI callbacks.
 
 [[src/renderer/src/hooks/useProfileEditorLifetime.ts#waitForProfileMemoryMutations]] waits for target-owned writes; [[src/renderer/src/hooks/useProfileEditorLifetime.ts#beginProfileMemoryMutation]] admits only mutations from the current snapshot revision.
@@ -161,3 +163,31 @@ A delayed read overtaken by a sibling deletion stays uneditable and waits for th
 ### Modal mutation admission survives profile changes
 
 The global modal can open another profile during an admitted deletion. Reopening the original profile waits for that write and edits the resulting entry at its new position.
+
+### Credential blur preserves activation clicks
+
+Local and SSH credential blur saves leave Activate enabled long enough to receive the click. The admitted activation waits for credential confirmation before changing the provider on the captured target.
+
+### Credential blur preserves tab clicks
+
+A tab click following a credential blur remains deliverable while that save runs. Its late result cannot paint Saved or errors into the other pane.
+
+### Queued activation checks target ownership
+
+An activation waiting for a credential save rechecks its lifetime and target before dispatching configuration changes. Switching connections cancels the old continuation.
+
+### Failed credentials block activation
+
+A rejected credential save blocks activation and preserves its explanation. A new successful blur save replaces the failed promise and permits activation with the replacement value.
+
+### Untouched credential blur keeps saved keys
+
+The password input starts blank because saved credentials are not read into the renderer. Blurring an untouched input must not issue an empty credential write before activation.
+
+### Credential saves survive pane remounts
+
+A pending SSH credential save survives Providers→Entries→Providers. The next save waits for it, and activation waits for the newer key, so late older writes cannot overwrite newer credentials.
+
+### Queued credentials follow the parent target
+
+Leaving Providers does not cancel an already-admitted blur save while its parent target remains current. Connection changes refuse queued dispatch, and unmounted panes never receive late Saved feedback.

@@ -503,3 +503,315 @@ it("discards a read overtaken by a sibling deletion and waits for its new snapsh
     within(second.container).getAllByRole("button", { name: "memory.edit" })[0],
   ).toBeEnabled();
 });
+
+const memoryProvider: MemoryProviderInfo = {
+  name: "mem0",
+  description: "mem0 description",
+  installed: true,
+  active: false,
+  envVars: ["MEM0_API_KEY"],
+};
+
+// @lat: [[profile-editors#Tests#Credential blur preserves activation clicks]]
+it.each(["local", "ssh"] as const)(
+  "delivers the %s provider Activate click after blur and awaits the credential save",
+  async (mode) => {
+    let resolveSave!: (value: boolean) => void;
+    const api = {
+      ...profileEditorFixture(mode).api,
+      readMemory: vi.fn().mockResolvedValue(memoryData("entry A", "entry B")),
+      getConfig: vi.fn().mockResolvedValue(null),
+      discoverMemoryProviders: vi.fn().mockResolvedValue([memoryProvider]),
+      setEnv: vi
+        .fn()
+        .mockReturnValue(new Promise((done) => (resolveSave = done))),
+      setConfig: vi.fn().mockResolvedValue(true),
+    };
+    Object.defineProperty(window, "hermesAPI", {
+      configurable: true,
+      value: api,
+    });
+    render(<Memory profile="work" />);
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    fireEvent.click(
+      screen.getByRole("button", { name: "memory.providersTitle" }),
+    );
+    const input = document.querySelector("input")!;
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "new credential" } });
+    const activate = screen.getByRole("button", { name: "memory.activate" });
+    fireEvent.mouseDown(activate);
+    fireEvent.blur(input);
+    expect(activate).toBeEnabled();
+    fireEvent.mouseUp(activate);
+    fireEvent.click(activate);
+    expect(
+      screen.getByRole("button", { name: "memory.activating" }),
+    ).toBeDisabled();
+    expect(api.setConfig).not.toHaveBeenCalled();
+    await act(async () => resolveSave(true));
+    expect(api.setEnv).toHaveBeenCalledExactlyOnceWith(
+      "MEM0_API_KEY",
+      "new credential",
+      "work",
+      expect.objectContaining({ mode, profile: "work" }),
+    );
+    expect(api.setConfig).toHaveBeenCalledExactlyOnceWith(
+      "memory.provider",
+      "mem0",
+      "work",
+      expect.objectContaining({ mode, profile: "work" }),
+    );
+  },
+);
+
+// @lat: [[profile-editors#Tests#Credential blur preserves tab clicks]]
+it("allows a tab click following credential blur without late save UI in the other pane", async () => {
+  let resolveSave!: (value: boolean) => void;
+  const api = {
+    ...profileEditorFixture("ssh").api,
+    readMemory: vi.fn().mockResolvedValue(memoryData("entry A", "entry B")),
+    getConfig: vi.fn().mockResolvedValue(null),
+    discoverMemoryProviders: vi.fn().mockResolvedValue([memoryProvider]),
+    setEnv: vi
+      .fn()
+      .mockReturnValue(new Promise((done) => (resolveSave = done))),
+  };
+  Object.defineProperty(window, "hermesAPI", {
+    configurable: true,
+    value: api,
+  });
+  render(<Memory profile="work" />);
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  fireEvent.click(
+    screen.getByRole("button", { name: "memory.providersTitle" }),
+  );
+  const input = document.querySelector("input")!;
+  fireEvent.change(input, { target: { value: "new credential" } });
+  const tab = screen.getByRole("button", { name: "memory.agentMemory" });
+  fireEvent.mouseDown(tab);
+  fireEvent.blur(input);
+  expect(tab).toBeEnabled();
+  fireEvent.mouseUp(tab);
+  fireEvent.click(tab);
+  expect(screen.getByText("entry A")).toBeInTheDocument();
+  await act(async () => resolveSave(true));
+  expect(screen.queryByText("common.saved")).toBeNull();
+  expect(screen.getByText("entry A")).toBeInTheDocument();
+});
+
+// @lat: [[profile-editors#Tests#Queued activation checks target ownership]]
+it("refuses activation after its awaited credential save belongs to a superseded target", async () => {
+  let resolveSave!: (value: boolean) => void;
+  const fixture = profileEditorFixture("ssh");
+  const api = {
+    ...fixture.api,
+    readMemory: vi.fn().mockResolvedValue(memoryData("entry A", "entry B")),
+    getConfig: vi.fn().mockResolvedValue(null),
+    discoverMemoryProviders: vi.fn().mockResolvedValue([memoryProvider]),
+    setEnv: vi
+      .fn()
+      .mockReturnValue(new Promise((done) => (resolveSave = done))),
+    setConfig: vi.fn().mockResolvedValue(true),
+  };
+  Object.defineProperty(window, "hermesAPI", {
+    configurable: true,
+    value: api,
+  });
+  render(<Memory profile="work" />);
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  fireEvent.click(
+    screen.getByRole("button", { name: "memory.providersTitle" }),
+  );
+  const input = document.querySelector("input")!;
+  fireEvent.change(input, { target: { value: "old credential" } });
+  fireEvent.blur(input);
+  fireEvent.click(screen.getByRole("button", { name: "memory.activate" }));
+  await act(async () => fixture.change("new-connection", "ssh"));
+  await act(async () => resolveSave(true));
+  expect(api.setConfig).not.toHaveBeenCalled();
+  expect(screen.queryByText("common.saved")).toBeNull();
+  expect(screen.getByText("entry A")).toBeInTheDocument();
+});
+
+// @lat: [[profile-editors#Tests#Failed credentials block activation]]
+it("keeps failed credential saves from activating until a new blur save succeeds", async () => {
+  let rejectSave!: (reason: Error) => void;
+  const api = {
+    ...profileEditorFixture("ssh").api,
+    readMemory: vi.fn().mockResolvedValue(memoryData("entry A", "entry B")),
+    getConfig: vi.fn().mockResolvedValue(null),
+    discoverMemoryProviders: vi.fn().mockResolvedValue([memoryProvider]),
+    setEnv: vi
+      .fn()
+      .mockReturnValueOnce(
+        new Promise((_done, reject) => (rejectSave = reject)),
+      )
+      .mockResolvedValue(true),
+    setConfig: vi.fn().mockResolvedValue(true),
+  };
+  Object.defineProperty(window, "hermesAPI", {
+    configurable: true,
+    value: api,
+  });
+  render(<Memory profile="work" />);
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  fireEvent.click(
+    screen.getByRole("button", { name: "memory.providersTitle" }),
+  );
+  const input = document.querySelector("input")!;
+  fireEvent.change(input, { target: { value: "first credential" } });
+  fireEvent.blur(input);
+  fireEvent.click(screen.getByRole("button", { name: "memory.activate" }));
+  await act(async () => rejectSave(new Error("Credential save rejected")));
+  expect(api.setConfig).not.toHaveBeenCalled();
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "Credential save rejected",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "memory.activate" }));
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  expect(api.setConfig).not.toHaveBeenCalled();
+  fireEvent.change(input, { target: { value: "replacement credential" } });
+  fireEvent.blur(input);
+  fireEvent.click(screen.getByRole("button", { name: "memory.activate" }));
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  expect(api.setConfig).toHaveBeenCalledExactlyOnceWith(
+    "memory.provider",
+    "mem0",
+    "work",
+    expect.objectContaining({ profile: "work" }),
+  );
+  expect(api.setEnv.mock.calls[1][1]).toBe("replacement credential");
+});
+
+// @lat: [[profile-editors#Tests#Untouched credential blur keeps saved keys]]
+it("does not clear an existing credential when an untouched blank input blurs before Activate", async () => {
+  const api = {
+    ...profileEditorFixture("ssh").api,
+    readMemory: vi.fn().mockResolvedValue(memoryData("entry A", "entry B")),
+    getConfig: vi.fn().mockResolvedValue(null),
+    discoverMemoryProviders: vi.fn().mockResolvedValue([memoryProvider]),
+    setEnv: vi.fn().mockResolvedValue(true),
+    setConfig: vi.fn().mockResolvedValue(true),
+  };
+  Object.defineProperty(window, "hermesAPI", {
+    configurable: true,
+    value: api,
+  });
+  render(<Memory profile="work" />);
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  fireEvent.click(
+    screen.getByRole("button", { name: "memory.providersTitle" }),
+  );
+  fireEvent.focus(document.querySelector("input")!);
+  fireEvent.blur(document.querySelector("input")!);
+  fireEvent.click(screen.getByRole("button", { name: "memory.activate" }));
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  expect(api.setEnv).not.toHaveBeenCalled();
+  expect(api.setConfig).toHaveBeenCalledOnce();
+});
+
+// @lat: [[profile-editors#Tests#Credential saves survive pane remounts]]
+it("serializes SSH credential saves across Providers pane remounts and waits for the newest before activation", async () => {
+  let resolveOld!: (value: boolean) => void;
+  let resolveNew!: (value: boolean) => void;
+  const api = {
+    ...profileEditorFixture("ssh").api,
+    readMemory: vi.fn().mockResolvedValue(memoryData("entry A", "entry B")),
+    getConfig: vi.fn().mockResolvedValue(null),
+    discoverMemoryProviders: vi.fn().mockResolvedValue([memoryProvider]),
+    setEnv: vi
+      .fn()
+      .mockReturnValueOnce(new Promise((done) => (resolveOld = done)))
+      .mockReturnValueOnce(new Promise((done) => (resolveNew = done))),
+    setConfig: vi.fn().mockResolvedValue(true),
+  };
+  Object.defineProperty(window, "hermesAPI", {
+    configurable: true,
+    value: api,
+  });
+  render(<Memory profile="work" />);
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  fireEvent.click(
+    screen.getByRole("button", { name: "memory.providersTitle" }),
+  );
+  fireEvent.change(document.querySelector("input")!, {
+    target: { value: "older key" },
+  });
+  fireEvent.blur(document.querySelector("input")!);
+  fireEvent.click(screen.getByRole("button", { name: "memory.agentMemory" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "memory.providersTitle" }),
+  );
+  fireEvent.change(document.querySelector("input")!, {
+    target: { value: "newer key" },
+  });
+  fireEvent.blur(document.querySelector("input")!);
+  fireEvent.click(screen.getByRole("button", { name: "memory.activate" }));
+  expect(api.setEnv).toHaveBeenCalledTimes(1);
+  expect(api.setConfig).not.toHaveBeenCalled();
+  await act(async () => resolveOld(true));
+  expect(api.setEnv.mock.calls.map(([, value]) => value)).toEqual([
+    "older key",
+    "newer key",
+  ]);
+  expect(api.setConfig).not.toHaveBeenCalled();
+  await act(async () => resolveNew(true));
+  expect(api.setConfig).toHaveBeenCalledExactlyOnceWith(
+    "memory.provider",
+    "mem0",
+    "work",
+    expect.objectContaining({ mode: "ssh", profile: "work" }),
+  );
+});
+
+// @lat: [[profile-editors#Tests#Queued credentials follow the parent target]]
+it.each(["pane exit", "connection change"] as const)(
+  "continues admitted credentials after %s only while the parent target remains current",
+  async (transition) => {
+    let resolveOld!: (value: boolean) => void;
+    const fixture = profileEditorFixture("ssh");
+    const api = {
+      ...fixture.api,
+      readMemory: vi.fn().mockResolvedValue(memoryData("entry A", "entry B")),
+      getConfig: vi.fn().mockResolvedValue(null),
+      discoverMemoryProviders: vi.fn().mockResolvedValue([memoryProvider]),
+      setEnv: vi
+        .fn()
+        .mockReturnValueOnce(new Promise((done) => (resolveOld = done)))
+        .mockResolvedValue(true),
+    };
+    Object.defineProperty(window, "hermesAPI", {
+      configurable: true,
+      value: api,
+    });
+    render(<Memory profile="work" />);
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    fireEvent.click(
+      screen.getByRole("button", { name: "memory.providersTitle" }),
+    );
+    fireEvent.change(document.querySelector("input")!, {
+      target: { value: "older key" },
+    });
+    fireEvent.blur(document.querySelector("input")!);
+    fireEvent.click(screen.getByRole("button", { name: "memory.agentMemory" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "memory.providersTitle" }),
+    );
+    fireEvent.change(document.querySelector("input")!, {
+      target: { value: "newer key" },
+    });
+    fireEvent.blur(document.querySelector("input")!);
+    fireEvent.click(screen.getByRole("button", { name: "memory.agentMemory" }));
+    if (transition === "connection change") {
+      await act(async () => fixture.change("other-connection", "ssh"));
+    }
+    expect(api.setEnv).toHaveBeenCalledTimes(1);
+    await act(async () => resolveOld(true));
+    expect(api.setEnv.mock.calls.map(([, value]) => value)).toEqual(
+      transition === "pane exit" ? ["older key", "newer key"] : ["older key"],
+    );
+    expect(screen.queryByText("common.saved")).toBeNull();
+    expect(screen.getByText("entry A")).toBeInTheDocument();
+  },
+);
