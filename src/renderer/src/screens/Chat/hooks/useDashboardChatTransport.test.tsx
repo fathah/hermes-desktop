@@ -1069,6 +1069,41 @@ describe("useDashboardChatTransport approvals", () => {
     );
   });
 
+  // @lat: [[chat-commands#Structured command approvals#Terminal approval replay]]
+  it.each(["resolved", "unavailable"])(
+    "does not queue replayed %s approvals ahead of a new command",
+    async (state) => {
+      const api: HarnessApi = {};
+      render(<Harness api={api} />);
+      const emit = (request_id: string): void => {
+        dashboardMock.onEvent?.({
+          type: "approval.request",
+          session_id: "live-1",
+          payload: { request_id, choices: ["once"] },
+        });
+      };
+      await act(async () => {
+        await api.send?.("hello");
+        emit("old");
+        if (state === "resolved") {
+          expect(await api.respondApproval?.("old", "once")).toBe(true);
+        } else {
+          dashboardMock.onEvent?.({
+            type: "message.complete",
+            session_id: "live-1",
+            payload: { text: "Done" },
+          });
+        }
+        emit("old");
+        emit("new");
+      });
+      await act(async () => {
+        expect(await api.respondApproval?.("new", "once")).toBe(true);
+        expect(await api.respondApproval?.("old", "once")).toBe(false);
+      });
+    },
+  );
+
   it("presents queued approvals in arrival order", async () => {
     const api: HarnessApi = {};
     render(<Harness api={api} />);

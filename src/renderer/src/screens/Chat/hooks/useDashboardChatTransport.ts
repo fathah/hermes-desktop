@@ -1184,6 +1184,19 @@ export function useDashboardChatTransport({
             )
           : undefined;
       if (approvalRequestId) {
+        // Replayed terminal cards must not re-enter the FIFO queue: their UI
+        // cannot be answered again, so they would block every later request.
+        const previous = messagesRef.current.find(
+          (message) =>
+            message.kind === "approval" &&
+            message.responsePath === "dashboard" &&
+            message.requestId === approvalRequestId,
+        );
+        if (
+          previous?.kind === "approval" &&
+          (previous.resolved || previous.unavailable)
+        )
+          return;
         const sessionId = event.session_id || runtimeSessionId;
         if (sessionId) {
           if (
@@ -2023,6 +2036,17 @@ export function useDashboardChatTransport({
           return false;
         }
         pendingApprovalsRef.current = pendingApprovalsRef.current.slice(1);
+        // Record the acknowledgement before a replay can arrive, rather than
+        // waiting for the card's asynchronous onResolved callback.
+        setMessages((current) =>
+          current.map((message) =>
+            message.kind === "approval" &&
+            message.responsePath === "dashboard" &&
+            message.requestId === requestId
+              ? { ...message, choice, resolved: true }
+              : message,
+          ),
+        );
         return true;
       } catch {
         return false;
@@ -2032,7 +2056,7 @@ export function useDashboardChatTransport({
         }
       }
     },
-    [enabled],
+    [enabled, setMessages],
   );
 
   const execSlash = useCallback(
