@@ -263,3 +263,177 @@ it("discards drafts and cached rooms when a connection is edited without changin
   ).not.toBeInTheDocument();
   expect(screen.queryByText("Team one")).not.toBeInTheDocument();
 });
+
+// @lat: [[bot-groups#Recovery regressions#Unconfirmed room creation]]
+it("keeps create identity on an explicit retry after an unconfirmed acknowledgement", async () => {
+  await open();
+  const ordinary = api.getMockImplementation()!;
+  let unconfirmed = true;
+  let created: BotGroupRoom | null = null;
+  api.mockImplementation((connection, op, params) => {
+    if (op === "create") {
+      created ||= {
+        ...room(params.room_id),
+        name: params.name,
+        members: params.members,
+      };
+      if (unconfirmed) {
+        unconfirmed = false;
+        return Promise.reject(new Error("Create acknowledgement lost"));
+      }
+      return Promise.resolve({ room: created });
+    }
+    if (op === "state" && created && params.room_id === created.room_id)
+      return Promise.resolve({
+        room: created,
+        driver_status: {
+          running: true,
+          working: false,
+          blocked: false,
+          pending_actions: [],
+        },
+      });
+    return ordinary(connection, op, params);
+  });
+  fireEvent.click(screen.getByRole("button", { name: "botGroups.create" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "botGroups.name" }), {
+    target: { value: "Team retry" },
+  });
+  fireEvent.click(screen.getByRole("checkbox", { name: "research" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "review" }));
+  fireEvent.click(
+    screen.getAllByRole("button", { name: "botGroups.create" })[1],
+  );
+  await screen.findByText("Create acknowledgement lost");
+  expect(api.mock.calls.filter((call) => call[1] === "create")).toHaveLength(1);
+  fireEvent.click(
+    screen.getAllByRole("button", { name: "botGroups.create" })[1],
+  );
+  await screen.findByRole("heading", { name: "Team retry" });
+  const creates = api.mock.calls.filter((call) => call[1] === "create");
+  expect(creates).toHaveLength(2);
+  expect(creates[0]).toEqual(creates[1]);
+});
+
+// @lat: [[bot-groups#Recovery regressions#Creation preserves navigation]]
+it.each(["two", "one"])(
+  "a late accepted creation preserves the newer deliberate selection of %s",
+  async (selectedRoom) => {
+    await open();
+    const ordinary = api.getMockImplementation()!;
+    let completeCreate!: () => void;
+    let created: BotGroupRoom | null = null;
+    api.mockImplementation((connection, op, params) => {
+      if (op === "create")
+        return new Promise((done) => {
+          completeCreate = () => {
+            created = {
+              ...room(params.room_id),
+              name: params.name,
+              members: params.members,
+            };
+            done({ room: created });
+          };
+        });
+      if (op === "state" && created && params.room_id === created.room_id)
+        return Promise.resolve({
+          room: created,
+          driver_status: {
+            running: true,
+            working: false,
+            blocked: false,
+            pending_actions: [],
+          },
+        });
+      return ordinary(connection, op, params);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "botGroups.create" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "botGroups.name" }), {
+      target: { value: "Slow created room" },
+    });
+    fireEvent.click(screen.getByRole("checkbox", { name: "research" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "review" }));
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "botGroups.create" })[1],
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Team two" }));
+    await screen.findByRole("heading", { name: "Team two" });
+    if (selectedRoom === "one") {
+      fireEvent.click(screen.getByRole("button", { name: "Team one" }));
+      await screen.findByRole("heading", { name: "Team one" });
+    }
+    await act(async () => completeCreate());
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: `Team ${selectedRoom}` }),
+      ).toBeVisible(),
+    );
+  },
+);
+
+// @lat: [[bot-groups#Recovery regressions#Delayed action room isolation]]
+it.each([
+  ["approve", "success"],
+  ["approve", "error"],
+  ["retry", "success"],
+  ["retry", "error"],
+  ["send", "success"],
+  ["send", "error"],
+] as const)(
+  "keeps a delayed %s %s result out of the newer room and draft",
+  async (operation, outcome) => {
+    actions =
+      operation === "approve"
+        ? [
+            {
+              kind: "approval",
+              member_id: "m1",
+              task_id: "t1",
+              request_id: "r1",
+              execution_generation: 4,
+              approval: { command: "echo test", choices: ["once", "deny"] },
+            },
+          ]
+        : operation === "retry"
+          ? [{ kind: "retry", task_id: "t1" }]
+          : [];
+    const ordinary = api.getMockImplementation()!;
+    let settle!: () => void;
+    api.mockImplementation((connection, op, params) => {
+      if (op === operation && params.room_id === "one")
+        return new Promise((resolve, reject) => {
+          settle = () =>
+            outcome === "error"
+              ? reject(new Error("Late old-room failure"))
+              : resolve({ accepted: true, approved: true, retried: true });
+        });
+      return ordinary(connection, op, params);
+    });
+    await open();
+    if (operation === "approve")
+      fireEvent.click(screen.getByRole("button", { name: "botGroups.deny" }));
+    else if (operation === "retry") {
+      fireEvent.click(screen.getByRole("button", { name: "botGroups.retry" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "botGroups.confirmRetry" }),
+      );
+    } else {
+      fireEvent.change(
+        screen.getByRole("textbox", { name: "botGroups.composeHint" }),
+        { target: { value: "old room submitted draft" } },
+      );
+      fireEvent.click(screen.getByRole("button", { name: "botGroups.send" }));
+    }
+    actions = [];
+    fireEvent.click(screen.getByRole("button", { name: "Team two" }));
+    await screen.findByRole("heading", { name: "Team two" });
+    const composer = screen.getByRole("textbox", {
+      name: "botGroups.composeHint",
+    });
+    fireEvent.change(composer, { target: { value: "new room unsent draft" } });
+    await act(async () => settle());
+    expect(screen.getByRole("heading", { name: "Team two" })).toBeVisible();
+    expect(composer).toHaveValue("new room unsent draft");
+    expect(screen.queryByText(/Late old-room failure/)).toBeNull();
+  },
+);

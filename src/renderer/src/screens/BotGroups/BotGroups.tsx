@@ -51,6 +51,7 @@ function BotGroupsView({ connectionId, visible }: Props): React.JSX.Element {
     null,
   );
   const busyRef = useRef(false);
+  const selectionGeneration = useRef(0);
   const current = useRef({ selected, visible });
   current.current = { selected, visible };
   const pollNow = useRef<() => void>(() => {});
@@ -293,6 +294,7 @@ function BotGroupsView({ connectionId, visible }: Props): React.JSX.Element {
       })),
     };
     const signature = JSON.stringify(params);
+    const selectedAtAdmission = selectionGeneration.current;
     if (createAttempt.current?.signature !== signature)
       createAttempt.current = {
         signature,
@@ -315,7 +317,8 @@ function BotGroupsView({ connectionId, visible }: Props): React.JSX.Element {
       setCreating(false);
       setName("");
       setChosen([]);
-      setSelected(result.room.room_id);
+      if (selectionGeneration.current === selectedAtAdmission)
+        setSelected(result.room.room_id);
     } catch (error) {
       setActionError(message(error));
     } finally {
@@ -372,6 +375,7 @@ function BotGroupsView({ connectionId, visible }: Props): React.JSX.Element {
               key={r.room_id}
               aria-pressed={r.room_id === selected}
               onClick={() => {
+                selectionGeneration.current += 1;
                 setCreating(false);
                 setSelected(r.room_id);
                 following.current = true;

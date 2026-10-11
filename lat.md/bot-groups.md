@@ -87,3 +87,15 @@ Missing methods, malformed capabilities and a stopped driver leave groups unavai
 ### Edited connection scope
 
 Editing a connection under the same ID releases the old view, drafts and requests before displaying the new target. Navigation refreshes its flag and the renderer cannot reuse old group state. Covered by [[src/renderer/src/screens/BotGroups/BotGroups.test.tsx]].
+
+### Unconfirmed room creation
+
+An explicit retry after a lost creation acknowledgement retains the submitted room ID and payload, so Hermes can return the same durable room without duplicate creation.
+
+### Creation preserves navigation
+
+A delayed creation adds its accepted room to the list without replacing a newer deliberate room selection, including a selection that returns to the original room.
+
+### Delayed action room isolation
+
+Late approval, retry and send successes or failures preserve the newly selected room and its unsent draft. Old-room errors cannot replace feedback for the newer selection.
