@@ -20,6 +20,12 @@ Modals and pickers use a `--bg-secondary` tint plus `backdrop-filter: blur(30px)
 
 The blur is treated as pure enhancement, not a load-bearing layer. On the transparent vibrancy window above, `backdrop-filter` is unreliable in packaged macOS builds — it silently drops to a no-op even with hardware acceleration on — which left the earlier 85%-opaque panels showing sharp app content bleeding through (the "transparent modal" bug). Raising the tint to 97% in `main.css` makes every shared frosted surface — the settings/profile/models/schedules/gateway/profile-switch modals and the model/reasoning/fast-mode dropdowns — render near-identically for all users regardless of GPU or build type; where the blur *does* paint it adds a faint frost, but its absence is barely perceptible. Keep new glass surfaces at this opacity, not the old 85%, for the same reason.
 
+### Fast-mode icon alignment
+
+The Fast Mode status badge keeps its Zap glyph optically centered without allowing shared popover typography to override the icon's flex alignment.
+
+In `src/renderer/src/assets/main.css`, `.chat-fast-popover-icon` owns flex centering while the description typography selector targets only the popover's direct child `span`. [[tests/chat-fast-popover-css.test.ts]] protects that cascade boundary.
+
 ## Bottom status strip
 
 A native system strip pinned full-width beneath the sidebar+content row surfaces live state that was otherwise hidden: gateway/connection, active model, and skill count, plus real keyboard hints.

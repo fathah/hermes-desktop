@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
 import type { DashboardRpcEvent } from "../dashboardGatewayClient";
 import { useDashboardChatTransport } from "./useDashboardChatTransport";
+import { useTranscriptState } from "./useTranscriptState";
 import type { ActiveTurn, ChatMessage, UsageState } from "../types";
 
 type SetUsageMock = Mock<(value: SetStateAction<UsageState | null>) => void>;
@@ -24,6 +25,7 @@ const dashboardMock = vi.hoisted(() => ({
     connected: boolean;
     request: ReturnType<typeof vi.fn>;
   }>,
+  onClose: null as (() => void) | null,
   onEvent: null as ((event: DashboardRpcEvent) => void) | null,
   request: vi.fn(),
 }));
@@ -36,17 +38,29 @@ vi.mock("../dashboardGatewayClient", () => ({
     request = dashboardMock.request;
 
     constructor(
-      options: { onEvent?: (event: DashboardRpcEvent) => void } = {},
+      options: {
+        onEvent?: (event: DashboardRpcEvent) => void;
+        onClose?: () => void;
+      } = {},
     ) {
       dashboardMock.onEvent = options.onEvent ?? null;
+      dashboardMock.onClose = options.onClose ?? null;
       dashboardMock.instances.push(this);
     }
   },
 }));
 
 interface HarnessApi {
+  isLoading?: boolean;
   activeTurnRef?: MutableRefObject<ActiveTurn | null>;
+  abort?: () => void;
   messages?: ChatMessage[];
+  respondClarify?: ReturnType<
+    typeof useDashboardChatTransport
+  >["respondClarify"];
+  respondApproval?: ReturnType<
+    typeof useDashboardChatTransport
+  >["respondApproval"];
   send?: (text: string) => Promise<boolean>;
   setConnectionMode?: Dispatch<SetStateAction<"local" | "remote" | "ssh">>;
   setMessages?: Dispatch<SetStateAction<ChatMessage[]>>;
@@ -70,18 +84,24 @@ const activeRecoveryTurn: ActiveTurn = {
 
 function Harness({
   api,
+  connectionId,
+  connectionRevision,
   fallbackOnUnavailable = false,
   initialConnectionMode = "local",
   onDashboardUnavailable,
   setUsage = vi.fn() as SetUsageMock,
 }: {
   api: HarnessApi;
+  connectionId?: string;
+  connectionRevision?: number;
   fallbackOnUnavailable?: boolean;
   initialConnectionMode?: "local" | "remote" | "ssh";
   onDashboardUnavailable?: (reason: string) => void;
   setUsage?: SetUsageMock;
 }): null {
-  const [messages, setMessages] = useState<ChatMessage[]>([
+  // Same write-through transcript state Chat.tsx uses — the transport's
+  // coalescing contract requires setMessages and messagesRef to be paired.
+  const { messages, setMessages, messagesRef } = useTranscriptState([
     {
       id: "u-bad",
       role: "user",
@@ -89,6 +109,7 @@ function Harness({
       turnId: "turn-bad",
     },
   ]);
+  const [isLoading, setIsLoading] = useState(false);
   const [model, setModel] = useState("bad-model");
   const [provider, setProvider] = useState("bad-provider");
   const [connectionMode, setConnectionMode] = useState<
@@ -97,17 +118,19 @@ function Harness({
   const activeTurnRef = useRef<ActiveTurn | null>({ ...activeBadTurn });
   const transport = useDashboardChatTransport({
     activeTurnRef,
+    connectionId,
+    connectionRevision,
     contextFolder: null,
     connectionMode,
     enabled: true,
     fallbackOnUnavailable,
     hermesSessionId: null,
-    messages,
+    messagesRef,
     model,
     profile: undefined,
     provider,
     setHermesSessionId: vi.fn(),
-    setIsLoading: vi.fn(),
+    setIsLoading,
     setMessages,
     setToolProgress: vi.fn(),
     setUsage,
@@ -119,8 +142,12 @@ function Harness({
     // object. Object.assign mutates it in place (same reference the test
     // holds) without per-prop assignment, which the immutability rule rejects.
     Object.assign(api, {
+      isLoading,
       activeTurnRef,
+      abort: transport.abort,
       messages,
+      respondApproval: transport.respondApproval,
+      respondClarify: transport.respondClarify,
       send: transport.sendMessage,
       setConnectionMode,
       setMessages,
@@ -128,12 +155,16 @@ function Harness({
       setProvider,
     });
   }, [
+    isLoading,
     activeTurnRef,
     api,
     messages,
     setConnectionMode,
     setMessages,
     transport.sendMessage,
+    transport.respondApproval,
+    transport.respondClarify,
+    transport.abort,
   ]);
 
   return null;
@@ -160,6 +191,349 @@ describe("useDashboardChatTransport recovery", () => {
     });
   });
 
+  async function clarifyHarness(): Promise<HarnessApi> {
+    dashboardMock.request.mockImplementation(async (method) => {
+      if (method === "session.create")
+        return { session_id: "live", stored_session_id: "stored" };
+      if (method === "model.options")
+        return { model: "bad-model", provider: "bad-provider", providers: [] };
+      if (method === "clarify.respond") return { status: "ok" };
+      return {};
+    });
+    const api: HarnessApi = {};
+    render(<Harness api={api} />);
+    await act(async () => {
+      await api.send?.("hello");
+    });
+    await act(async () => {
+      dashboardMock.onEvent?.({
+        type: "clarify.request",
+        session_id: "live",
+        payload: {
+          request_id: "q1",
+          question: "Where?",
+          choices: ["staging", "production"],
+        },
+      });
+    });
+    return api;
+  }
+
+  // @lat: [[dashboard-clarify#Gateway answer delivery]]
+  it.each(["staging", "custom answer", ""])(
+    "delivers a dashboard clarification answer %j",
+    async (answer) => {
+      const api = await clarifyHarness();
+      expect(api.messages?.find((m) => m.kind === "clarify")).toMatchObject({
+        choices: ["staging", "production"],
+      });
+      await act(async () => {
+        expect(await api.respondClarify?.("q1", answer)).toBe(true);
+      });
+      expect(dashboardMock.request).toHaveBeenCalledWith("clarify.respond", {
+        request_id: "q1",
+        answer,
+      });
+      expect(api.messages?.find((m) => m.kind === "clarify")).toMatchObject({
+        resolved: true,
+        answer,
+      });
+    },
+  );
+
+  // @lat: [[dashboard-clarify#Consecutive questions]]
+  it("preserves the next question when the prior reply acknowledgement arrives late", async () => {
+    const api = await clarifyHarness();
+    let finish!: (value: { status: string }) => void;
+    dashboardMock.request.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    let reply!: Promise<boolean>;
+    await act(async () => {
+      reply = api.respondClarify!("q1", "staging");
+    });
+    await act(async () => {
+      dashboardMock.onEvent?.({
+        type: "clarify.request",
+        session_id: "live",
+        payload: {
+          request_id: "q2",
+          question: "Region?",
+          choices: ["EU", "US"],
+        },
+      });
+    });
+    await act(async () => {
+      finish({ status: "ok" });
+      expect(await reply).toBe(true);
+    });
+    expect(
+      api.messages?.find((m) => m.kind === "clarify" && m.requestId === "q1"),
+    ).toMatchObject({ resolved: true, unavailable: false });
+    await act(async () => {
+      expect(await api.respondClarify!("q2", "EU")).toBe(true);
+    });
+    expect(dashboardMock.request).toHaveBeenLastCalledWith("clarify.respond", {
+      request_id: "q2",
+      answer: "EU",
+    });
+  });
+
+  // @lat: [[dashboard-clarify#Disconnect during answer]]
+  it("releases the busy turn when the socket closes before clarify RPC rejects", async () => {
+    const api = await clarifyHarness();
+    let reject!: (reason: Error) => void;
+    dashboardMock.request.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, fail) => {
+          reject = fail;
+        }),
+    );
+    let answer!: Promise<boolean>;
+    act(() => {
+      answer = api.respondClarify!("q1", "yes");
+    });
+    expect(api.isLoading).toBe(true);
+    await act(async () => {
+      dashboardMock.onClose?.();
+      reject(new Error("socket closed"));
+      await answer;
+    });
+    expect(api.isLoading).toBe(false);
+    expect(api.activeTurnRef?.current).toBeNull();
+    expect(api.messages?.find((m) => m.kind === "clarify")).toMatchObject({
+      unavailable: true,
+    });
+    await act(async () => {
+      expect(await api.send?.("retry after disconnect")).toBe(true);
+    });
+  });
+
+  // @lat: [[dashboard-clarify#Stale request isolation]]
+  it.each(["answered", "completed"])(
+    "preserves the next question when an %s question is replayed",
+    async (state) => {
+      const api = await clarifyHarness();
+      await act(async () => {
+        if (state === "answered") await api.respondClarify!("q1", "staging");
+        else
+          dashboardMock.onEvent?.({
+            type: "message.complete",
+            session_id: "live",
+            payload: { text: "Done" },
+          });
+        dashboardMock.onEvent?.({
+          type: "clarify.request",
+          session_id: "live",
+          payload: { request_id: "q2", question: "Region?", choices: ["EU"] },
+        });
+        dashboardMock.onEvent?.({
+          type: "clarify.request",
+          session_id: "live",
+          payload: {
+            request_id: "q1",
+            question: "Where?",
+            choices: ["staging"],
+          },
+        });
+      });
+      expect(
+        api.messages?.find((m) => m.kind === "clarify" && m.requestId === "q2"),
+      ).toMatchObject({ unavailable: false });
+      await act(async () => {
+        expect(await api.respondClarify!("q2", "EU")).toBe(true);
+      });
+    },
+  );
+
+  // @lat: [[dashboard-clarify#In-flight request replay]]
+  it("keeps a resumed turn busy when its question is replayed during delivery", async () => {
+    const api = await clarifyHarness();
+    let finish!: (value: { status: string }) => void;
+    dashboardMock.request.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    let reply!: Promise<boolean>;
+    act(() => {
+      reply = api.respondClarify!("q1", "staging");
+    });
+    const resumedTurn = api.activeTurnRef?.current;
+    act(() => {
+      dashboardMock.onEvent?.({
+        type: "clarify.request",
+        session_id: "live",
+        payload: { request_id: "q1", question: "Where?", choices: ["staging"] },
+      });
+    });
+    expect(api.isLoading).toBe(true);
+    expect(api.activeTurnRef?.current).toBe(resumedTurn);
+    await act(async () => {
+      finish({ status: "ok" });
+      await reply;
+    });
+  });
+
+  // @lat: [[dashboard-clarify#Gateway expiration]]
+  it("expires only the matching question and tracks the agent resuming after timeout", async () => {
+    const api = await clarifyHarness();
+    act(() => {
+      dashboardMock.onEvent?.({
+        type: "clarify.expire",
+        session_id: "live",
+        payload: { request_id: "old" },
+      });
+    });
+    expect(api.messages?.find((m) => m.kind === "clarify")).toMatchObject({
+      unavailable: false,
+    });
+    act(() => {
+      dashboardMock.onEvent?.({
+        type: "clarify.expire",
+        session_id: "other",
+        payload: { request_id: "q1" },
+      });
+    });
+    expect(api.messages?.find((m) => m.kind === "clarify")).toMatchObject({
+      unavailable: false,
+    });
+    act(() => {
+      dashboardMock.onEvent?.({
+        type: "clarify.expire",
+        session_id: "live",
+        payload: { request_id: "q1" },
+      });
+    });
+    expect(api.messages?.find((m) => m.kind === "clarify")).toMatchObject({
+      unavailable: true,
+    });
+    expect(api.isLoading).toBe(true);
+    expect(api.activeTurnRef?.current?.turnId).toBe("turn-bad");
+    await act(async () => {
+      expect(await api.respondClarify!("q1", "staging")).toBe(false);
+    });
+    expect(
+      dashboardMock.request.mock.calls.some(
+        ([method]) => method === "clarify.respond",
+      ),
+    ).toBe(false);
+    act(() => {
+      dashboardMock.onEvent?.({
+        type: "message.complete",
+        session_id: "live",
+        payload: { text: "Continued after timeout" },
+      });
+    });
+    expect(api.isLoading).toBe(false);
+    expect(api.activeTurnRef?.current).toBeNull();
+  });
+
+  // @lat: [[dashboard-clarify#Composer fallback]]
+  it("uses the same delivery path when answering through the composer", async () => {
+    const api = await clarifyHarness();
+    await act(async () => {
+      await api.send?.("production");
+    });
+    expect(api.messages?.find((m) => m.kind === "clarify")).toMatchObject({
+      resolved: true,
+      answer: "production",
+    });
+    expect(
+      dashboardMock.request.mock.calls.filter(
+        ([method]) => method === "clarify.respond",
+      ),
+    ).toHaveLength(1);
+  });
+
+  // @lat: [[dashboard-clarify#Retry and duplicate answers]]
+  it("keeps a failed answer retryable and blocks concurrent card/composer replies", async () => {
+    const api = await clarifyHarness();
+    let reject!: (reason: Error) => void;
+    dashboardMock.request.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, fail) => {
+          reject = fail;
+        }),
+    );
+    let first!: Promise<boolean>;
+    await act(async () => {
+      first = api.respondClarify!("q1", "staging");
+      expect(await api.respondClarify!("q1", "production")).toBe(false);
+    });
+    await act(async () => {
+      reject(new Error("offline"));
+      expect(await first).toBe(false);
+    });
+    expect(api.messages?.find((m) => m.kind === "clarify")).not.toHaveProperty(
+      "resolved",
+      true,
+    );
+    await act(async () => {
+      expect(await api.respondClarify!("q1", "production")).toBe(true);
+    });
+  });
+
+  // @lat: [[dashboard-clarify#Expired answers]]
+  it("does not report an expired RPC as a successfully delivered answer", async () => {
+    const api = await clarifyHarness();
+    dashboardMock.request.mockResolvedValueOnce({ status: "expired" });
+    await act(async () => {
+      expect(await api.respondClarify!("q1", "staging")).toBe(false);
+    });
+    expect(api.messages?.find((m) => m.kind === "clarify")).toMatchObject({
+      unavailable: true,
+    });
+  });
+
+  // @lat: [[dashboard-clarify#Connection isolation]]
+  it("invalidates pending clarification cards when the connection changes", async () => {
+    const api = await clarifyHarness();
+    await act(async () => {
+      api.setConnectionMode?.("remote");
+    });
+    expect(api.messages?.find((m) => m.kind === "clarify")).toMatchObject({
+      unavailable: true,
+    });
+    await act(async () => {
+      expect(await api.respondClarify!("q1", "staging")).toBe(false);
+    });
+    expect(
+      dashboardMock.request.mock.calls.filter(
+        ([method]) => method === "clarify.respond",
+      ),
+    ).toHaveLength(0);
+  });
+
+  // @lat: [[dashboard-clarify#Completed turns and replay]]
+  it("does not reopen a completed turn's question when the request is replayed", async () => {
+    const api = await clarifyHarness();
+    await act(async () => {
+      dashboardMock.onEvent?.({
+        type: "message.complete",
+        session_id: "live",
+        payload: { text: "Done" },
+      });
+    });
+    await act(async () => {
+      dashboardMock.onEvent?.({
+        type: "clarify.request",
+        session_id: "live",
+        payload: { request_id: "q1", question: "Where?", choices: ["staging"] },
+      });
+    });
+    expect(api.messages?.find((m) => m.kind === "clarify")).toMatchObject({
+      unavailable: true,
+    });
+    await act(async () => {
+      expect(await api.respondClarify!("q1", "staging")).toBe(false);
+    });
+  });
+
   it("requests a fresh WebSocket URL immediately before connecting", async () => {
     dashboardMock.request.mockImplementation(async (method) => {
       if (method === "session.create") {
@@ -168,13 +542,27 @@ describe("useDashboardChatTransport recovery", () => {
       return {};
     });
     const api: HarnessApi = {};
-    render(<Harness api={api} initialConnectionMode="remote" />);
+    render(
+      <Harness
+        api={api}
+        connectionId="connection-two"
+        initialConnectionMode="remote"
+      />,
+    );
 
     await act(async () => {
       await api.send?.("hello");
     });
 
     expect(window.hermesAPI.freshDashboardWsUrl).toHaveBeenCalledTimes(1);
+    expect(window.hermesAPI.startDashboard).toHaveBeenCalledWith(
+      undefined,
+      "connection-two",
+    );
+    expect(window.hermesAPI.freshDashboardWsUrl).toHaveBeenCalledWith(
+      undefined,
+      "connection-two",
+    );
     expect(dashboardMock.connect).toHaveBeenCalledWith("ws://fresh-dashboard");
   });
 
@@ -446,6 +834,425 @@ describe("useDashboardChatTransport recovery", () => {
   });
 });
 
+describe("useDashboardChatTransport approvals", () => {
+  beforeEach(() => {
+    dashboardMock.close.mockClear();
+    dashboardMock.connect.mockClear();
+    dashboardMock.instances.length = 0;
+    dashboardMock.onEvent = null;
+    dashboardMock.request.mockReset();
+    dashboardMock.request.mockImplementation(async (method: string) => {
+      if (method === "session.create") {
+        return { session_id: "live-1", stored_session_id: "stored-1" };
+      }
+      if (method === "model.options")
+        return { provider: "bad-provider", model: "bad-model" };
+      if (method === "approval.respond") return { resolved: 1 };
+      return {};
+    });
+    Object.defineProperty(window, "hermesAPI", {
+      configurable: true,
+      value: {
+        recordSessionContinuation: vi.fn(async () => true),
+        recordSessionLocalError: vi.fn(async () => true),
+        startDashboard: vi.fn(async () => ({
+          connection: { wsUrl: "ws://127.0.0.1:12345" },
+          running: true,
+        })),
+      },
+    });
+  });
+
+  afterEach(() => vi.clearAllMocks());
+
+  it("responds only to the pending offered choice and clears after ack", async () => {
+    const api: HarnessApi = {};
+    render(<Harness api={api} />);
+    await act(async () => {
+      await api.send?.("hello");
+      dashboardMock.onEvent?.({
+        type: "approval.request",
+        session_id: "live-1",
+        payload: {
+          request_id: "approval-1",
+          command: "npm publish",
+          choices: ["once"],
+        },
+      });
+    });
+
+    await expect(api.respondApproval?.("approval-1", "always")).resolves.toBe(
+      false,
+    );
+    await expect(api.respondApproval?.("approval-1", "once")).resolves.toBe(
+      true,
+    );
+    expect(dashboardMock.request).toHaveBeenCalledWith("approval.respond", {
+      session_id: "live-1",
+      request_id: "approval-1",
+      choice: "once",
+      all: false,
+    });
+    await expect(api.respondApproval?.("approval-1", "once")).resolves.toBe(
+      false,
+    );
+  });
+
+  it("keeps a failed response pending for retry", async () => {
+    const api: HarnessApi = {};
+    render(<Harness api={api} />);
+    await act(async () => {
+      await api.send?.("hello");
+      dashboardMock.onEvent?.({
+        type: "approval.request",
+        session_id: "live-1",
+        payload: { request_id: "approval-2", choices: ["deny"] },
+      });
+    });
+    dashboardMock.request.mockRejectedValueOnce(new Error("offline"));
+
+    await expect(api.respondApproval?.("approval-2", "deny")).resolves.toBe(
+      false,
+    );
+    dashboardMock.request.mockResolvedValueOnce({ resolved: 1 });
+    await expect(api.respondApproval?.("approval-2", "deny")).resolves.toBe(
+      true,
+    );
+  });
+
+  // @lat: [[chat-commands#Structured command approvals#Stale approval isolation]]
+  it.each(["expired", "lost acknowledgement"])(
+    "never applies a %s approval to the next queued command",
+    async (failure) => {
+      const api: HarnessApi = {};
+      const serverPending = new Set(["first", "second"]);
+      const approved: string[] = [];
+      let loseAck = failure === "lost acknowledgement";
+      render(<Harness api={api} />);
+      await act(async () => {
+        await api.send?.("hello");
+        for (const request_id of serverPending) {
+          dashboardMock.onEvent?.({
+            type: "approval.request",
+            session_id: "live-1",
+            payload: { request_id, choices: ["once"] },
+          });
+        }
+      });
+      if (failure === "expired") serverPending.delete("first");
+      dashboardMock.request.mockImplementation(
+        async (method: string, params: Record<string, unknown>) => {
+          if (method !== "approval.respond") return {};
+          // Match the upstream resolver: omitting request_id consumes the FIFO head.
+          const target = String(
+            params.request_id ?? serverPending.values().next().value,
+          );
+          if (!serverPending.delete(target)) return { resolved: 0 };
+          approved.push(target);
+          if (loseAck) {
+            loseAck = false;
+            throw new Error("acknowledgement lost");
+          }
+          return { resolved: 1 };
+        },
+      );
+      await act(async () => {
+        expect(await api.respondApproval?.("first", "once")).toBe(false);
+        if (failure === "lost acknowledgement")
+          expect(await api.respondApproval?.("first", "once")).toBe(false);
+      });
+      expect(serverPending.has("second")).toBe(true);
+      expect(approved).not.toContain("second");
+      expect(dashboardMock.request).toHaveBeenCalledWith("session.interrupt", {
+        session_id: "live-1",
+      });
+      expect(await api.respondApproval?.("second", "once")).toBe(false);
+      expect(
+        api.messages
+          ?.filter((msg) => msg.kind === "approval")
+          .every((msg) => msg.kind === "approval" && msg.unavailable),
+      ).toBe(true);
+    },
+  );
+
+  it("stops an approval that has no gateway-issued request ID", async () => {
+    const api: HarnessApi = {};
+    render(<Harness api={api} />);
+    await act(async () => {
+      await api.send?.("hello");
+      dashboardMock.onEvent?.({
+        type: "approval.request",
+        session_id: "live-1",
+        payload: { id: "display-only", command: "npm publish" },
+      });
+    });
+    expect(await api.respondApproval?.("display-only", "once")).toBe(false);
+    expect(dashboardMock.request).toHaveBeenCalledWith("session.interrupt", {
+      session_id: "live-1",
+    });
+    expect(
+      dashboardMock.request.mock.calls.some(
+        ([method]) => method === "approval.respond",
+      ),
+    ).toBe(false);
+  });
+
+  it("does not recover and replay after an approval precedes a missing-session error", async () => {
+    const api: HarnessApi = {};
+    render(<Harness api={api} />);
+    dashboardMock.request.mockImplementation(async (method: string) => {
+      if (method === "session.create")
+        return { session_id: "live-1", stored_session_id: "stored-1" };
+      if (method === "model.options")
+        return { provider: "bad-provider", model: "bad-model" };
+      if (method === "prompt.submit") {
+        dashboardMock.onEvent?.({
+          type: "approval.request",
+          session_id: "live-1",
+          payload: { request_id: "before-ack", choices: ["once"] },
+        });
+        throw new Error("session not found");
+      }
+      return {};
+    });
+    await act(async () => {
+      await api.send?.("hello");
+    });
+    expect(
+      dashboardMock.request.mock.calls.filter(
+        ([method]) => method === "prompt.submit",
+      ),
+    ).toHaveLength(1);
+    expect(
+      dashboardMock.request.mock.calls.some(
+        ([method]) => method === "session.resume",
+      ),
+    ).toBe(false);
+  });
+
+  // @lat: [[approval-completion#Confirmed decisions]]
+  it.each(["once", "deny"] as const)(
+    "accepts a confirmed %s decision when completion arrives before its acknowledgement",
+    async (choice) => {
+      const api: HarnessApi = {};
+      render(<Harness api={api} />);
+      await act(async () => {
+        await api.send?.("hello");
+        dashboardMock.onEvent?.({
+          type: "approval.request",
+          session_id: "live-1",
+          payload: { request_id: "in-flight", choices: ["once", "deny"] },
+        });
+        dashboardMock.onEvent?.({
+          type: "approval.request",
+          session_id: "live-1",
+          payload: { request_id: "unanswered", choices: ["once"] },
+        });
+      });
+      let acknowledge!: (value: { resolved: number }) => void;
+      dashboardMock.request.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            acknowledge = resolve;
+          }),
+      );
+      let response!: Promise<boolean>;
+      act(() => {
+        response = api.respondApproval!("in-flight", choice);
+      });
+      await act(async () => {
+        dashboardMock.onEvent?.({
+          type: "message.complete",
+          session_id: "live-1",
+          payload: { text: "Done" },
+        });
+      });
+      expect(
+        api.messages?.find(
+          (m) => m.kind === "approval" && m.requestId === "in-flight",
+        ),
+      ).not.toMatchObject({ unavailable: true });
+      expect(
+        api.messages?.find(
+          (m) => m.kind === "approval" && m.requestId === "unanswered",
+        ),
+      ).toMatchObject({ unavailable: true });
+      await act(async () => {
+        acknowledge({ resolved: 1 });
+        expect(await response).toBe(true);
+      });
+      expect(await api.respondApproval!("unanswered", "once")).toBe(false);
+      expect(await api.respondApproval!("in-flight", choice)).toBe(false);
+    },
+  );
+
+  // @lat: [[approval-completion#Failed and obsolete decisions]]
+  it.each([
+    "reject",
+    "unresolved",
+    "abort",
+    "disconnect",
+    "connection",
+    "new turn",
+  ])("does not revive completed approvals after %s", async (outcome) => {
+    const api: HarnessApi = {};
+    const view = render(<Harness api={api} connectionId="original" />);
+    await act(async () => {
+      await api.send?.("hello");
+      dashboardMock.onEvent?.({
+        type: "approval.request",
+        session_id: "live-1",
+        payload: { request_id: "late", choices: ["once"] },
+      });
+    });
+    let acknowledge!: (value: { resolved: number }) => void;
+    let reject!: (reason: Error) => void;
+    dashboardMock.request.mockImplementationOnce(
+      () =>
+        new Promise((resolve, fail) => {
+          acknowledge = resolve;
+          reject = fail;
+        }),
+    );
+    let response!: Promise<boolean>;
+    act(() => {
+      response = api.respondApproval!("late", "once");
+    });
+    await act(async () => {
+      dashboardMock.onEvent?.({
+        type: "message.complete",
+        session_id: "live-1",
+        payload: { text: "Done" },
+      });
+    });
+    await act(async () => {
+      if (outcome === "abort") api.abort?.();
+      if (outcome === "disconnect") dashboardMock.onClose?.();
+      if (outcome === "new turn") await api.send?.("next turn");
+    });
+    if (outcome === "connection")
+      view.rerender(<Harness api={api} connectionId="other" />);
+    const loadingBeforeAck = api.isLoading;
+    await act(async () => {
+      if (outcome === "reject") reject(new Error("acknowledgement lost"));
+      else
+        acknowledge({
+          resolved: outcome === "unresolved" || outcome === "new turn" ? 0 : 1,
+        });
+      expect(await response).toBe(false);
+    });
+    expect(
+      api.messages?.find(
+        (m) => m.kind === "approval" && m.requestId === "late",
+      ),
+    ).toMatchObject({ unavailable: true });
+    expect(await api.respondApproval!("late", "once")).toBe(false);
+    if (outcome === "new turn") expect(api.isLoading).toBe(loadingBeforeAck);
+  });
+
+  it("clears pending approval on completion and abort", async () => {
+    const api: HarnessApi = {};
+    render(<Harness api={api} />);
+    await act(async () => {
+      await api.send?.("hello");
+      dashboardMock.onEvent?.({
+        type: "approval.request",
+        session_id: "live-1",
+        payload: { request_id: "approval-3", choices: ["once"] },
+      });
+      dashboardMock.onEvent?.({
+        type: "message.complete",
+        session_id: "live-1",
+        payload: { text: "complete" },
+      });
+    });
+
+    expect(
+      api.messages?.find(
+        (msg) => msg.kind === "approval" && msg.requestId === "approval-3",
+      ),
+    ).toMatchObject({ unavailable: true });
+    await expect(api.respondApproval?.("approval-3", "once")).resolves.toBe(
+      false,
+    );
+
+    await act(async () => {
+      dashboardMock.onEvent?.({
+        type: "approval.request",
+        session_id: "live-1",
+        payload: { request_id: "approval-4", choices: ["once"] },
+      });
+      api.abort?.();
+    });
+    await expect(api.respondApproval?.("approval-4", "once")).resolves.toBe(
+      false,
+    );
+  });
+
+  // @lat: [[chat-commands#Structured command approvals#Terminal approval replay]]
+  it.each(["resolved", "unavailable"])(
+    "does not queue replayed %s approvals ahead of a new command",
+    async (state) => {
+      const api: HarnessApi = {};
+      render(<Harness api={api} />);
+      const emit = (request_id: string): void => {
+        dashboardMock.onEvent?.({
+          type: "approval.request",
+          session_id: "live-1",
+          payload: { request_id, choices: ["once"] },
+        });
+      };
+      await act(async () => {
+        await api.send?.("hello");
+        emit("old");
+        if (state === "resolved") {
+          expect(await api.respondApproval?.("old", "once")).toBe(true);
+        } else {
+          dashboardMock.onEvent?.({
+            type: "message.complete",
+            session_id: "live-1",
+            payload: { text: "Done" },
+          });
+        }
+        emit("old");
+        emit("new");
+      });
+      await act(async () => {
+        expect(await api.respondApproval?.("new", "once")).toBe(true);
+        expect(await api.respondApproval?.("old", "once")).toBe(false);
+      });
+    },
+  );
+
+  it("presents queued approvals in arrival order", async () => {
+    const api: HarnessApi = {};
+    render(<Harness api={api} />);
+    await act(async () => {
+      await api.send?.("hello");
+      dashboardMock.onEvent?.({
+        type: "approval.request",
+        session_id: "live-1",
+        payload: { request_id: "approval-first", choices: ["deny"] },
+      });
+      dashboardMock.onEvent?.({
+        type: "approval.request",
+        session_id: "live-1",
+        payload: { request_id: "approval-second", choices: ["once"] },
+      });
+    });
+
+    await expect(
+      api.respondApproval?.("approval-second", "once"),
+    ).resolves.toBe(false);
+    await expect(api.respondApproval?.("approval-first", "deny")).resolves.toBe(
+      true,
+    );
+    await expect(
+      api.respondApproval?.("approval-second", "once"),
+    ).resolves.toBe(true);
+  });
+});
+
 describe("useDashboardChatTransport unavailable fallback (issue #667)", () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -517,6 +1324,39 @@ describe("useDashboardChatTransport unavailable fallback (issue #667)", () => {
     });
     await act(async () => {
       await api.send?.("after change");
+    });
+    expect(startDashboard).toHaveBeenCalledTimes(2);
+  });
+
+  it("re-probes after the selected connection is edited in place", async () => {
+    const startDashboard = mockStartDashboard();
+    const api: HarnessApi = {};
+    const { rerender } = render(
+      <Harness
+        api={api}
+        connectionId="connection-a"
+        connectionRevision={0}
+        initialConnectionMode="ssh"
+        fallbackOnUnavailable
+      />,
+    );
+
+    await act(async () => {
+      await api.send?.("hello");
+    });
+    expect(startDashboard).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <Harness
+        api={api}
+        connectionId="connection-a"
+        connectionRevision={1}
+        initialConnectionMode="ssh"
+        fallbackOnUnavailable
+      />,
+    );
+    await act(async () => {
+      await api.send?.("after edit");
     });
     expect(startDashboard).toHaveBeenCalledTimes(2);
   });
@@ -731,5 +1571,197 @@ describe("useDashboardChatTransport context gauge estimate (no usage payload)", 
     });
 
     expect(setUsage).not.toHaveBeenCalled();
+  });
+});
+
+describe("useDashboardChatTransport delta coalescing", () => {
+  beforeEach(() => {
+    dashboardMock.close.mockClear();
+    dashboardMock.connect.mockClear();
+    dashboardMock.instances.length = 0;
+    dashboardMock.onEvent = null;
+    dashboardMock.request.mockReset();
+    dashboardMock.request.mockImplementation(async (method: string) => {
+      if (method === "session.create") {
+        return { session_id: "live-1", stored_session_id: "stored-1" };
+      }
+      return {};
+    });
+    Object.defineProperty(window, "hermesAPI", {
+      configurable: true,
+      value: {
+        recordSessionContinuation: vi.fn(async () => true),
+        recordSessionLocalError: vi.fn(async () => true),
+        startDashboard: vi.fn(async () => ({
+          connection: { wsUrl: "ws://127.0.0.1:12345" },
+          running: true,
+        })),
+      },
+    });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("coalesces a burst of message.delta into one commit without losing text", async () => {
+    // Capture rAF callbacks so the frame boundary is under test control.
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      frames.push(cb);
+      return frames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => undefined);
+
+    const api: HarnessApi = {};
+    render(<Harness api={api} />);
+    await act(async () => {
+      await api.send?.("hello");
+    });
+
+    // A burst of deltas inside one frame: transcript state must not commit yet
+    // (schedule exactly one frame callback), but no delta text may be lost.
+    await act(async () => {
+      dashboardMock.onEvent?.({
+        payload: {},
+        session_id: "live-1",
+        type: "message.start",
+      });
+      for (const chunk of ["a", "b", "c", "d", "e"]) {
+        dashboardMock.onEvent?.({
+          payload: { text: chunk },
+          session_id: "live-1",
+          type: "message.delta",
+        });
+      }
+    });
+    expect(frames).toHaveLength(1);
+
+    // Frame fires → exactly one commit carrying the full accumulated text.
+    await act(async () => {
+      frames[0](0);
+    });
+    // The streamed bubble is the trailing message (the harness may add a
+    // model-mismatch error bubble before it — unrelated to coalescing).
+    const last = api.messages?.[api.messages.length - 1] as
+      | { role?: string; content?: string }
+      | undefined;
+    expect(last?.role).toBe("agent");
+    expect(last?.content).toBe("abcde");
+  });
+
+  it("message.complete flushes immediately, superseding a pending frame", async () => {
+    const frames: FrameRequestCallback[] = [];
+    const cancelled: number[] = [];
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      frames.push(cb);
+      return frames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", (h: number) => {
+      cancelled.push(h);
+    });
+
+    const api: HarnessApi = {};
+    render(<Harness api={api} />);
+    await act(async () => {
+      await api.send?.("hello");
+    });
+
+    await act(async () => {
+      dashboardMock.onEvent?.({
+        payload: {},
+        session_id: "live-1",
+        type: "message.start",
+      });
+      dashboardMock.onEvent?.({
+        payload: { text: "partial" },
+        session_id: "live-1",
+        type: "message.delta",
+      });
+      // Terminal event arrives before the frame: it must commit synchronously
+      // and cancel the queued flush.
+      dashboardMock.onEvent?.({
+        payload: { text: "partial and done" },
+        session_id: "live-1",
+        type: "message.complete",
+      });
+    });
+
+    expect(cancelled).toHaveLength(1);
+    const last = api.messages?.[api.messages.length - 1] as
+      | { role?: string; content?: string }
+      | undefined;
+    expect(last?.role).toBe("agent");
+    expect(last?.content).toBe("partial and done");
+
+    // A stale frame firing later must not resurrect the pre-complete state.
+    await act(async () => {
+      frames.forEach((cb) => cb(0));
+    });
+    const lastAfter = api.messages?.[api.messages.length - 1] as
+      | { content?: string }
+      | undefined;
+    expect(lastAfter?.content).toBe("partial and done");
+  });
+
+  it("keeps pending deltas when a functional writer lands mid-frame", async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      frames.push(cb);
+      return frames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => undefined);
+
+    const api: HarnessApi = {};
+    render(<Harness api={api} />);
+    await act(async () => {
+      await api.send?.("hello");
+    });
+
+    await act(async () => {
+      dashboardMock.onEvent?.({
+        payload: {},
+        session_id: "live-1",
+        type: "message.start",
+      });
+      dashboardMock.onEvent?.({
+        payload: { text: "alpha" },
+        session_id: "live-1",
+        type: "message.delta",
+      });
+      dashboardMock.onEvent?.({
+        payload: { text: "beta" },
+        session_id: "live-1",
+        type: "message.delta",
+      });
+    });
+
+    // Before the coalesced frame commits, a functional writer (the `/btw`
+    // side-question path) appends a bubble. It must build on the streamed
+    // deltas held in the transcript ref — not fork from the stale committed
+    // state and drop them.
+    await act(async () => {
+      api.setMessages?.((prev) => [
+        ...prev,
+        { id: "side-q", role: "user", content: "btw question" } as ChatMessage,
+      ]);
+    });
+    const afterAppend = api.messages ?? [];
+    expect(afterAppend[afterAppend.length - 1]?.id).toBe("side-q");
+    expect(
+      (afterAppend[afterAppend.length - 2] as { content?: string }).content,
+    ).toBe("alphabeta");
+
+    // The pending frame then fires: it republishes the newest transcript and
+    // must never resurrect the pre-append snapshot.
+    await act(async () => {
+      frames.forEach((cb) => cb(0));
+    });
+    const afterFlush = api.messages ?? [];
+    expect(afterFlush[afterFlush.length - 1]?.id).toBe("side-q");
+    expect(
+      (afterFlush[afterFlush.length - 2] as { content?: string }).content,
+    ).toBe("alphabeta");
   });
 });

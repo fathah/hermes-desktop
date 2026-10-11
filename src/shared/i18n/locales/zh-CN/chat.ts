@@ -1,4 +1,5 @@
 export default {
+  showEarlierMessages: "显示更早的 {{count}} 条消息",
   title: "新聊天",
   sessionTitle: "会话 {{id}}",
   noModel: "未设置模型",

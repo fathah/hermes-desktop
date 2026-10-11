@@ -88,6 +88,13 @@ describe("Database connection caching", () => {
     expect(mockDatabaseConstructor).toHaveBeenCalledTimes(1);
   });
 
+  it("resolves an explicitly requested profile instead of active profile state", () => {
+    vi.mocked(activeStateDbPath).mockReturnValue(dbPath1);
+
+    expect(getDbConnection(true, "work")).not.toBeNull();
+    expect(activeStateDbPath).toHaveBeenCalledWith("work");
+  });
+
   it("re-creates connection if database path changes (e.g. profile switch)", () => {
     mockExistsSync.mockReturnValue(true);
 

@@ -1,4 +1,5 @@
 export default {
+  showEarlierMessages: "Tampilkan {{count}} pesan sebelumnya",
   title: "Chat Baru",
   sessionTitle: "Sesi {{id}}",
   noModel: "Model belum diatur",

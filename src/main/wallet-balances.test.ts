@@ -106,6 +106,20 @@ describe("formatTokenBalanceFull", () => {
   it("formats fractions with 4 significant digits", () => {
     expect(formatTokenBalanceFull("123400000000000000", 18)).toBe("0.1234");
   });
+
+  it("trims zeros exposed by the 4-digit cut", () => {
+    // 1.20001 tokens → "1.2" not "1.2000"
+    expect(formatTokenBalanceFull("1200010000000000000", 18)).toBe("1.2");
+  });
+
+  it("drops the fraction when the cut leaves only zeros", () => {
+    expect(formatTokenBalanceFull("1000010000000000000", 18)).toBe("1");
+  });
+
+  it("trims zeros exposed by the cut below 1", () => {
+    // 0.0001200005 tokens → "0.00012"
+    expect(formatTokenBalanceFull("120000500000000", 18)).toBe("0.00012");
+  });
 });
 
 describe("formatTokenBalance precision for huge balances", () => {

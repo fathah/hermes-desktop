@@ -2,6 +2,15 @@ import { Download, Upload } from "lucide-react";
 import { useI18n } from "../useI18n";
 import { useSettings } from "./SettingsDataContext";
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 /**
  * Export / import a full Hermes backup archive, plus the OpenClaw → Hermes
  * migration (which imports config, keys, sessions, and skills — a data import,
@@ -81,7 +90,7 @@ export default function DataPane(): React.JSX.Element {
                 className="settings-migration-desc"
                 dangerouslySetInnerHTML={{
                   __html: t("settings.migrationDesc", {
-                    path: openclawPath || "",
+                    path: escapeHtml(openclawPath || ""),
                   }),
                 }}
               />

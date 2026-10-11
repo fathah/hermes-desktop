@@ -230,9 +230,9 @@ export function parseSshHermesTargetInspection(
   raw: string,
   selectedDockerContainerName: string,
 ): SshHermesTargetInspection {
-  const parsed = JSON.parse(raw.trim() || "{}") as Partial<
-    SshHermesTargetInspection
-  >;
+  const parsed = JSON.parse(
+    raw.trim() || "{}",
+  ) as Partial<SshHermesTargetInspection>;
   const dockerContainers = Array.isArray(parsed.dockerContainers)
     ? parsed.dockerContainers
     : [];
@@ -294,7 +294,9 @@ export async function sshInspectHermesTarget(
  * the CLI lives. Read-only — writes happen in the apply step. Exported for
  * unit tests.
  */
-export function buildProbeSshDockerTargetCommand(containerName: string): string {
+export function buildProbeSshDockerTargetCommand(
+  containerName: string,
+): string {
   if (!isValidDockerContainerName(containerName)) {
     throw new Error(`Invalid Docker container name: ${containerName}`);
   }
@@ -566,7 +568,12 @@ export async function sshProvisionDockerTarget(
     // window and fail.
     const warnings = Array.isArray(applied.warnings) ? applied.warnings : [];
     if (!(await sshWaitGatewayApiReady(config, config.remotePort, 5000))) {
-      await sshExec(config, `docker restart ${shellQuote(name)}`, undefined, 90000);
+      await sshExec(
+        config,
+        `docker restart ${shellQuote(name)}`,
+        undefined,
+        90000,
+      );
       if (await sshWaitGatewayApiReady(config, config.remotePort, 120000)) {
         warnings.push(
           "Restarted the container so the gateway loads the API server settings.",

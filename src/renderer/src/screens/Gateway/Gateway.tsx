@@ -16,6 +16,11 @@ import {
 } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import BrandLogo from "../../components/common/BrandLogo";
+import { useConnectionTargetRevision } from "../../hooks/useConnectionTargetRevision";
+import type {
+  RemoteGatewayAction,
+  RemoteGatewayCommandStatus,
+} from "../../../../shared/gateway";
 import type {
   MessagingEnvVarInfo,
   MessagingPlatformInfo,
@@ -27,10 +32,16 @@ import type {
 type DraftValues = Record<string, Record<string, string>>;
 type PlatformMessage = Record<string, MessagingPlatformTestResponse | null>;
 
-function Gateway({ profile }: { profile?: string }): React.JSX.Element {
+type GatewayProps = { profile?: string; remoteMode?: boolean };
+
+function GatewayContent({
+  profile,
+  remoteMode = false,
+}: GatewayProps): React.JSX.Element {
   const { t } = useI18n();
   const [gatewayRunning, setGatewayRunning] = useState(false);
   const [gatewayBusy, setGatewayBusy] = useState(false);
+  const [remoteCommandPending, setRemoteCommandPending] = useState(remoteMode);
   const [gatewayError, setGatewayError] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<MessagingPlatformsResponse | null>(
     null,
@@ -50,27 +61,90 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
     null,
   );
 
+  const mountedRef = useRef(false);
+  const gatewayErrorUnconfirmedRef = useRef(false);
+  const gatewayErrorTerminalRef = useRef(false);
+  const commandRevisionRef = useRef(0);
+
+  // A pending "check again in 5 s" must not outlive the screen (or the profile
+  // it was started for): it would write that profile's status into a page that
+  // has moved on.
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (gatewayStatusTimeoutRef.current) {
+        clearTimeout(gatewayStatusTimeoutRef.current);
+        gatewayStatusTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
   const loadConfig = useCallback(async (): Promise<void> => {
+    if (!mountedRef.current) return;
+    const commandRevision = commandRevisionRef.current;
     setLoadError(null);
     try {
-      const [gwStatus, platforms] = await Promise.all([
-        window.hermesAPI.gatewayStatus(),
-        window.hermesAPI.getMessagingPlatforms(profile),
-      ]);
-      setGatewayRunning(gwStatus);
-      // Clear stale start-failure banners once the gateway is confirmed up,
-      // but keep an explicit restart failure visible: a failed recovery can
-      // leave the old gateway running while still needing user attention.
-      if (gwStatus) {
-        setGatewayError((current) =>
-          current === t("gateway.restartFailed") ? current : null,
+      // Independent requests: a failing platform list must not discard a
+      // successful status (the page would stay "stopped" with no controls).
+      const [statusResult, platformsResult, pendingResult] =
+        await Promise.allSettled([
+          window.hermesAPI.gatewayStatus(profile),
+          window.hermesAPI.getMessagingPlatforms(profile),
+          remoteMode
+            ? window.hermesAPI.gatewayCommandStatus(profile)
+            : Promise.resolve({ pending: false }),
+        ]);
+      if (!mountedRef.current || commandRevisionRef.current !== commandRevision)
+        return;
+      const commandStatus: RemoteGatewayCommandStatus =
+        pendingResult.status === "fulfilled"
+          ? pendingResult.value
+          : { pending: remoteMode };
+      const commandPending = commandStatus.pending;
+      setRemoteCommandPending(commandPending);
+      if (commandStatus.failure) {
+        gatewayErrorUnconfirmedRef.current = false;
+        gatewayErrorTerminalRef.current = true;
+        setGatewayError(commandStatus.failure.error);
+      }
+      if (statusResult.status === "fulfilled") {
+        const gwStatus = statusResult.value;
+        setGatewayRunning(gwStatus);
+        // Completed uncertainty clears even after Stop leaves the gateway down.
+        // A healthy gateway clears stale Start errors, while terminal Remote
+        // Stop/Restart failures remain visible until the next explicit action.
+        if (
+          !commandPending &&
+          (gatewayErrorUnconfirmedRef.current ||
+            (gwStatus && !gatewayErrorTerminalRef.current))
+        ) {
+          setGatewayError((current) =>
+            current === t("gateway.restartFailed") ? current : null,
+          );
+          gatewayErrorUnconfirmedRef.current = false;
+        }
+      }
+      if (platformsResult.status === "fulfilled") {
+        setCatalog(platformsResult.value);
+      }
+      const failure =
+        platformsResult.status === "rejected"
+          ? platformsResult.reason
+          : statusResult.status === "rejected"
+            ? statusResult.reason
+            : pendingResult.status === "rejected"
+              ? pendingResult.reason
+              : null;
+      if (failure) {
+        setLoadError(
+          failure instanceof Error ? failure.message : String(failure),
         );
       }
-      setCatalog(platforms);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err));
     }
-  }, [profile, t]);
+  }, [profile, remoteMode, t]);
 
   useEffect(() => {
     void loadConfig();
@@ -84,6 +158,12 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
   }, [loadConfig]);
 
   useEffect(() => {
+    // The API server key lives in the LOCAL .env; it says nothing about a
+    // remote server, so don't show (or regenerate) it in remote mode.
+    if (remoteMode) {
+      setApiKeyStatus(null);
+      return;
+    }
     let cancelled = false;
     window.hermesAPI
       .getApiServerKeyStatus(profile)
@@ -96,9 +176,9 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [profile]);
+  }, [profile, remoteMode]);
 
-  const platforms = catalog?.platforms ?? [];
+  const platforms = useMemo(() => catalog?.platforms ?? [], [catalog]);
   const filteredPlatforms = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return platforms;
@@ -120,26 +200,37 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
   }, [platforms, query]);
 
   async function toggleGateway(): Promise<void> {
+    commandRevisionRef.current += 1;
     if (gatewayStatusTimeoutRef.current) {
       clearTimeout(gatewayStatusTimeoutRef.current);
       gatewayStatusTimeoutRef.current = null;
     }
     setGatewayBusy(true);
     setGatewayError(null);
+    gatewayErrorUnconfirmedRef.current = false;
+    gatewayErrorTerminalRef.current = false;
+    if (remoteMode) {
+      await runRemoteGatewayAction(gatewayRunning ? "stop" : "start");
+      return;
+    }
     if (gatewayRunning) {
       try {
-        await window.hermesAPI.stopGateway();
+        await window.hermesAPI.stopGateway(profile);
+        if (!mountedRef.current) return;
         setGatewayRunning(false);
       } catch (err) {
-        setGatewayError(
+        if (!mountedRef.current) return;
+        reportGatewayActionError(
           err instanceof Error ? err.message : t("gateway.stopFailed"),
         );
       } finally {
-        setGatewayBusy(false);
+        await refreshPendingCommand();
+        if (mountedRef.current) setGatewayBusy(false);
       }
     } else {
       try {
-        const result = await window.hermesAPI.startGateway();
+        const result = await window.hermesAPI.startGateway(profile);
+        if (!mountedRef.current) return;
         setGatewayRunning(result.running);
         if (!result.success) {
           setGatewayError(
@@ -152,7 +243,8 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
         gatewayStatusTimeoutRef.current = setTimeout(() => {
           // Refresh status + platform catalog once the adapters have had a
           // moment to come up; surface an error if it exited immediately.
-          void window.hermesAPI.gatewayStatus().then((status) => {
+          void window.hermesAPI.gatewayStatus(profile).then((status) => {
+            if (!mountedRef.current) return;
             setGatewayRunning(status);
             if (status) {
               void loadConfig();
@@ -167,32 +259,44 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
           gatewayStatusTimeoutRef.current = null;
         }, 5000);
       } catch (err) {
+        if (!mountedRef.current) return;
         setGatewayRunning(false);
         setGatewayError(
           err instanceof Error ? err.message : t("gateway.startFailed"),
         );
       } finally {
-        setGatewayBusy(false);
+        await refreshPendingCommand();
+        if (mountedRef.current) setGatewayBusy(false);
       }
     }
   }
 
   async function restartGateway(): Promise<void> {
+    commandRevisionRef.current += 1;
     if (gatewayStatusTimeoutRef.current) {
       clearTimeout(gatewayStatusTimeoutRef.current);
       gatewayStatusTimeoutRef.current = null;
     }
     setGatewayBusy(true);
     setGatewayError(null);
+    gatewayErrorUnconfirmedRef.current = false;
+    gatewayErrorTerminalRef.current = false;
+    if (remoteMode) {
+      await runRemoteGatewayAction("restart");
+      return;
+    }
     try {
       const restarted = await window.hermesAPI.restartGateway(profile);
+      if (!mountedRef.current) return;
       setGatewayRunning(restarted);
       if (!restarted) {
         await loadConfig();
-        setGatewayError(t("gateway.restartFailed"));
+        if (!mountedRef.current) return;
+        reportGatewayActionError(t("gateway.restartFailed"));
       } else {
         gatewayStatusTimeoutRef.current = setTimeout(async () => {
-          const status = await window.hermesAPI.gatewayStatus();
+          const status = await window.hermesAPI.gatewayStatus(profile);
+          if (!mountedRef.current) return;
           setGatewayRunning(status);
           if (status) {
             void loadConfig();
@@ -200,11 +304,103 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
           gatewayStatusTimeoutRef.current = null;
         }, 5000);
       }
-    } catch {
+    } catch (_err) {
+      if (!mountedRef.current) return;
       await loadConfig();
-      setGatewayError(t("gateway.restartFailed"));
+      if (!mountedRef.current) return;
+      reportGatewayActionError(t("gateway.restartFailed"));
     } finally {
-      setGatewayBusy(false);
+      await refreshPendingCommand();
+      if (mountedRef.current) setGatewayBusy(false);
+    }
+  }
+
+  async function runRemoteGatewayAction(
+    action: RemoteGatewayAction,
+  ): Promise<void> {
+    const commandRevision = commandRevisionRef.current;
+    try {
+      const result = await window.hermesAPI.remoteGatewayAction(
+        action,
+        profile,
+      );
+      if (!mountedRef.current || commandRevisionRef.current !== commandRevision)
+        return;
+      if (!result.success) {
+        reportGatewayActionError(result.error, result.failureKind);
+        return;
+      }
+      setGatewayRunning(action !== "stop");
+      if (action !== "stop") {
+        gatewayStatusTimeoutRef.current = setTimeout(async () => {
+          const status = await window.hermesAPI.gatewayStatus(profile);
+          if (
+            !mountedRef.current ||
+            commandRevisionRef.current !== commandRevision
+          )
+            return;
+          setGatewayRunning(status);
+          if (status) {
+            void loadConfig();
+          } else if (action === "start") {
+            setGatewayError(t("gateway.startExited"));
+          }
+          gatewayStatusTimeoutRef.current = null;
+        }, 5000);
+      }
+    } catch (error) {
+      if (!mountedRef.current || commandRevisionRef.current !== commandRevision)
+        return;
+      // An IPC transport failure cannot prove whether main admitted the action.
+      reportGatewayActionError(
+        error instanceof Error ? error.message : String(error),
+        "unconfirmed",
+      );
+    } finally {
+      if (
+        mountedRef.current &&
+        commandRevisionRef.current === commandRevision
+      ) {
+        await refreshPendingCommand();
+        if (
+          mountedRef.current &&
+          commandRevisionRef.current === commandRevision
+        )
+          setGatewayBusy(false);
+      }
+    }
+  }
+
+  function reportGatewayActionError(
+    message: string,
+    failureKind?: "failed" | "unconfirmed",
+  ): void {
+    // Command outcome and control availability are independent wire results.
+    gatewayErrorUnconfirmedRef.current = failureKind === "unconfirmed";
+    gatewayErrorTerminalRef.current = failureKind === "failed";
+    setGatewayError(message);
+  }
+
+  async function refreshPendingCommand(): Promise<void> {
+    if (!remoteMode || !mountedRef.current) return;
+    const commandRevision = commandRevisionRef.current;
+    try {
+      const status = await window.hermesAPI.gatewayCommandStatus(profile);
+      if (
+        mountedRef.current &&
+        commandRevisionRef.current === commandRevision
+      ) {
+        setRemoteCommandPending(status.pending);
+        if (status.failure)
+          reportGatewayActionError(status.failure.error, "failed");
+      }
+    } catch {
+      if (
+        mountedRef.current &&
+        commandRevisionRef.current === commandRevision
+      ) {
+        setRemoteCommandPending(true);
+      }
     }
   }
 
@@ -371,7 +567,7 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
             <button
               className="btn btn-secondary btn-sm"
               onClick={() => void toggleGateway()}
-              disabled={gatewayBusy}
+              disabled={gatewayBusy || remoteCommandPending}
             >
               {gatewayBusy
                 ? t("gateway.working")
@@ -383,7 +579,7 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
               <button
                 className="btn btn-secondary btn-sm"
                 onClick={() => void restartGateway()}
-                disabled={gatewayBusy}
+                disabled={gatewayBusy || remoteCommandPending}
               >
                 {t("gateway.restart")}
               </button>
@@ -971,4 +1167,12 @@ function platformStateLabel(
   return { icon: "ok", label: t("gateway.states.configured"), tone: "ok" };
 }
 
-export default Gateway;
+export default function Gateway(props: GatewayProps): React.JSX.Element {
+  const revision = useConnectionTargetRevision();
+  return (
+    <GatewayContent
+      key={`${props.profile || "default"}:${revision}:${!!props.remoteMode}`}
+      {...props}
+    />
+  );
+}

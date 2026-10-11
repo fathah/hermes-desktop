@@ -350,9 +350,8 @@ export async function processFiles(
     MAX_ATTACHMENTS_PER_MESSAGE - existingCount,
   );
 
-  for (let i = 0; i < list.length; i++) {
-    const file = list[i];
-    if (i >= slotsRemaining) {
+  for (const file of list) {
+    if (attachments.length >= slotsRemaining) {
       errors.push({ code: "too-many", filename: file.name });
       continue;
     }

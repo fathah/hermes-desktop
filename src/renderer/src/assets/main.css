@@ -4378,7 +4378,7 @@ body:has(.shell-vibrant),
   color: var(--accent-text);
 }
 
-/* File icon wrapper for react-file-icon */
+/* Browser-safe Lucide file-type icons in the worktree. */
 .worktree-file-icon-wrapper {
   width: 18px;
   height: 18px;
@@ -4763,7 +4763,7 @@ body:has(.shell-vibrant),
   color: var(--text-primary);
 }
 
-.chat-fast-popover span {
+.chat-fast-popover > span {
   display: block;
   font-size: 11px;
   line-height: 1.5;
@@ -4831,6 +4831,30 @@ body:has(.shell-vibrant),
      `scrollHeight` — which would also break the auto-scroll math in
      useChatScroll. Inter-row spacing that the flex `gap` used to provide now
      comes from each row's own bottom margin/padding. */
+}
+
+/* "Show N earlier messages" — collapses the transcript head in long sessions
+   (windowing, the React-tree half of the #748 input-lag fix). */
+.chat-transcript-earlier {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0 16px;
+}
+
+.chat-transcript-earlier-btn {
+  border: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border-radius: 14px;
+  padding: 5px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.chat-transcript-earlier-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
 /* Empty state */
@@ -5465,6 +5489,70 @@ body:has(.shell-vibrant),
   margin-top: 2px;
 }
 
+.chat-approval-card {
+  border-left-color: var(--warning, #d97706);
+}
+
+.chat-approval-heading {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.chat-approval-command {
+  max-height: 180px;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-approval-choice--deny {
+  color: var(--danger, #ef4444);
+}
+
+.chat-approval-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--warning, #d97706);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.chat-approval-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.chat-approval-confirm-actions .chat-clarify-choice,
+.chat-approval-confirm-actions .chat-clarify-send {
+  width: auto;
+  align-self: auto;
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .chat-approval-card {
+    margin-left: 0;
+  }
+}
+
 /* Override Tailwind preflight spacing inside agent bubbles */
 .chat-bubble-agent p {
   margin: 0 0 0.85em !important;
@@ -5563,6 +5651,7 @@ body:has(.shell-vibrant),
   border: 1px solid var(--border-bright);
   padding: 6px 10px;
   text-align: left;
+  overflow-wrap: anywhere;
 }
 
 .chat-bubble-agent th {
@@ -5715,6 +5804,12 @@ body:has(.shell-vibrant),
   flex-shrink: 0;
 }
 
+.chat-input-shell {
+  position: relative;
+  width: 100%;
+  overflow: visible;
+}
+
 .chat-input-wrapper {
   display: flex;
   flex-direction: column;
@@ -5729,17 +5824,39 @@ body:has(.shell-vibrant),
     box-shadow var(--transition);
 }
 
+.chat-input-shell > .chat-input-beam {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  pointer-events: none;
+  transition: box-shadow var(--transition);
+}
+
+.chat-input-beam-surface {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-lg);
+}
+
+.chat-input-shell:focus-within > .chat-input-beam {
+  box-shadow: 0 0 0 3px var(--accent-subtle);
+}
+
 .chat-input-wrapper:focus-within {
   /* Soft accent glow on focus instead of a saturated electric-blue stroke. */
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border-bright));
-  box-shadow: 0 0 0 3px var(--accent-subtle);
+  box-shadow: none;
 }
 
 .chat-input {
   width: 100%;
   background: none;
   border: none;
+  box-shadow: none;
   color: var(--text-primary);
+  filter: none;
   font-size: 14px;
   font-family: var(--font-sans);
   padding: 4px 6px;
@@ -10497,6 +10614,8 @@ body:has(.shell-vibrant),
 /* Profiles list — a table-style layout with a shared column grid so the
    header and every row align. The active row is marked by a left green bar. */
 .agents-table {
+  /* Keep all rows in the page's scrollable content instead of clipping them. */
+  flex-shrink: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
@@ -11529,6 +11648,16 @@ body:has(.shell-vibrant),
   align-items: center;
   justify-content: center;
   gap: 7px;
+}
+
+.settings-connection-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-connection-row .input {
+  flex: 1 1 220px;
 }
 
 /* Subsection within a pane — a divider + icon'd label grouping related
@@ -15082,7 +15211,105 @@ body:has(.shell-vibrant),
   }
 }
 
-/* Toggle switch */
+/* Shared settings toggle — adapted from Transitions.dev. The interaction gate
+   prevents the off animation from playing during initial settings hydration. */
+.app-toggle {
+  --toggle-duration: 350ms;
+  --toggle-travel: 18px;
+  --toggle-overshoot: 1px;
+  --toggle-settle: 0px;
+  --toggle-track-duration: 0ms;
+  --toggle-ease: cubic-bezier(0.34, 1.35, 0.64, 1);
+  appearance: none;
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  width: 40px;
+  height: 22px;
+  padding: 3px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text-primary) 16%, transparent);
+  cursor: pointer;
+  transition: background var(--toggle-track-duration) var(--toggle-ease);
+}
+
+.app-toggle:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-primary) 24%, transparent);
+}
+
+.app-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.app-toggle-thumb {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: currentColor;
+  translate: 0 0;
+  will-change: translate;
+}
+
+.app-toggle[data-on="true"] {
+  color: #fff;
+  background: var(--accent);
+}
+
+.app-toggle[data-on="true"] .app-toggle-thumb {
+  translate: var(--toggle-travel) 0;
+}
+
+.app-toggle.is-init[data-on="true"] .app-toggle-thumb {
+  animation: app-toggle-on var(--toggle-duration) var(--toggle-ease) both;
+}
+
+.app-toggle.is-init[data-on="false"] .app-toggle-thumb {
+  animation: app-toggle-off var(--toggle-duration) var(--toggle-ease) both;
+}
+
+@keyframes app-toggle-on {
+  0% {
+    translate: 0 0;
+  }
+  55% {
+    translate: calc(var(--toggle-travel) + var(--toggle-overshoot)) 0;
+  }
+  80% {
+    translate: calc(var(--toggle-travel) - var(--toggle-settle)) 0;
+  }
+  100% {
+    translate: var(--toggle-travel) 0;
+  }
+}
+
+@keyframes app-toggle-off {
+  0% {
+    translate: var(--toggle-travel) 0;
+  }
+  55% {
+    translate: calc(0px - var(--toggle-overshoot)) 0;
+  }
+  80% {
+    translate: var(--toggle-settle) 0;
+  }
+  100% {
+    translate: 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-toggle-thumb {
+    animation: none !important;
+    will-change: auto;
+  }
+}
+
+/* Legacy switch markup used outside the Settings modal. */
 .tools-toggle {
   position: relative;
   display: inline-flex;

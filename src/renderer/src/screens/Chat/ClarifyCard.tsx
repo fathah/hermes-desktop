@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useRef, useState } from "react";
 import { useI18n } from "../../components/useI18n";
 import type { ClarifyMessage } from "./types";
 
@@ -12,6 +12,7 @@ const SKIP_ANSWER = "";
 interface ClarifyCardProps {
   msg: ClarifyMessage;
   /** Mark the card resolved in parent state once the user answers/skips. */
+  onRespond?: (msg: ClarifyMessage, answer: string) => Promise<boolean>;
   onResolved: (requestId: string, answer: string) => void;
 }
 
@@ -24,20 +25,28 @@ interface ClarifyCardProps {
 export const ClarifyCard = memo(function ClarifyCard({
   msg,
   onResolved,
+  onRespond,
 }: ClarifyCardProps): React.JSX.Element {
   const { t } = useI18n();
   const [text, setText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(false);
 
+  const inFlight = useRef(false);
   const resolved = !!msg.resolved;
+  const unavailable = !!msg.unavailable;
 
   const submit = async (answer: string): Promise<void> => {
-    if (resolved || submitting) return;
+    if (resolved || unavailable || inFlight.current) return;
+    inFlight.current = true;
     setSubmitting(true);
     setError(false);
     try {
-      const ok = await window.hermesAPI.respondClarify(msg.requestId, answer);
+      const ok = onRespond
+        ? await onRespond(msg, answer)
+        : msg.responsePath === "dashboard"
+          ? false
+          : await window.hermesAPI.respondClarify(msg.requestId, answer);
       // The IPC handler returns false when no pending request matched (e.g. the
       // turn already ended). Only flip the card to resolved on a confirmed
       // delivery; otherwise surface an error and let the user retry.
@@ -49,6 +58,7 @@ export const ClarifyCard = memo(function ClarifyCard({
     } catch {
       setError(true);
     } finally {
+      inFlight.current = false;
       setSubmitting(false);
     }
   };
@@ -80,7 +90,7 @@ export const ClarifyCard = memo(function ClarifyCard({
             <button
               key={`${msg.requestId}-${i}`}
               className="chat-clarify-choice"
-              disabled={submitting}
+              disabled={submitting || unavailable}
               onClick={() => void submit(choice)}
             >
               {choice}
@@ -94,7 +104,7 @@ export const ClarifyCard = memo(function ClarifyCard({
             rows={3}
             value={text}
             placeholder={t("chat.clarify.placeholder")}
-            disabled={submitting}
+            disabled={submitting || unavailable}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
@@ -104,7 +114,7 @@ export const ClarifyCard = memo(function ClarifyCard({
           />
           <button
             className="chat-clarify-send"
-            disabled={submitting || !text.trim()}
+            disabled={submitting || unavailable || !text.trim()}
             onClick={() => void submit(text)}
           >
             {t("chat.clarify.send")}
@@ -114,15 +124,15 @@ export const ClarifyCard = memo(function ClarifyCard({
 
       <button
         className="chat-clarify-skip"
-        disabled={submitting}
+        disabled={submitting || unavailable}
         onClick={() => void submit(SKIP_ANSWER)}
       >
         {t("chat.clarify.skip")}
       </button>
 
-      {error && (
+      {(error || unavailable) && (
         <div className="chat-clarify-error" role="alert">
-          {t("chat.clarify.error")}
+          {t(unavailable ? "chat.clarify.unavailable" : "chat.clarify.error")}
         </div>
       )}
     </div>

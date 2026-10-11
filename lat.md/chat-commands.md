@@ -30,7 +30,6 @@ Because no global loading state is set, the slash branch shows its own feedback:
 
 ## Transport connection lifecycle
 
-
 Every dashboard turn first connects a JSON-RPC WebSocket to the gateway; that handshake must be time-bounded or a stalled socket wedges the whole transport with no error and no fallback (issue #718).
 
 [[src/renderer/src/screens/Chat/dashboardGatewayClient.ts#DashboardGatewayClient#connect]] resolves on `open`, rejects on `error` or an early `close`, **and** rejects on a connect-timeout (default 10s). A WebSocket stuck in `CONNECTING` — TCP accepted but the upgrade never completing, e.g. when a busy renderer starves the handshake — fires none of those events on its own, so without the timer the connect promise never settles. When it never settles, `ensureClient` in [[src/renderer/src/screens/Chat/hooks/useDashboardChatTransport.ts#useDashboardChatTransport]] never resolves, its cached `connectingRef` promise poisons every later send, `setIsLoading(false)` never runs, and the user sees a permanent loading spinner. The timeout makes the promise reject so auto mode falls back to the legacy HTTP transport (and explicit-dashboard mode surfaces a real error) instead of hanging. Per-request calls are separately bounded by their own 30s timeout.
@@ -47,13 +46,21 @@ So `ensureClient` distinguishes two failures: a **genuinely absent** dashboard (
 
 On `message.complete` the desktop reconciles the text streamed via `message.delta` with the turn's `final_response`, because a last-turn-only final would otherwise clobber text streamed before a tool call (#746).
 
-[[src/renderer/src/screens/Chat/dashboardEventAdapter.ts#completeAssistantWithFinalText]] rewrites the last assistant bubble through [[src/renderer/src/screens/Chat/dashboardEventAdapter.ts#mergeStreamedWithFinal]], which compares whitespace-insensitively and: uses the final text when it already contains the streamed text; keeps the streamed text when it contains the final (preserving pre-tool-call content); replaces a **lossy chunk-dropped stream** with the final text when [[src/renderer/src/screens/Chat/lossyText.ts#isLossyChunkCopy]] recognises the streamed content as a chunk-dropped copy of the final (the upstream tagging alternate chunks as `reasoning` leaves the content stream a garbled subset like "! What are we working on?" for "Hey! What are we working on today?"; concatenating stacked the partial above the clean answer in one bubble — the matcher requires contiguous runs of ≥3 chars plus ≥12-char / ≥30%-coverage guards, so a pre-tool-call segment whose characters merely embed as scattered fragments still stacks); stitches a re-streamed boundary by dropping the duplicated word-aligned seam (rejecting coincidental mid-word overlaps); replaces a garbled re-stream with the final text when the two converge on a substantial common suffix (a corrupted-prefix delta — e.g. a mangled CJK stream — that ends the same sentence as the clean final, rather than the disjoint pre-tool-call + answer pair); and otherwise concatenates the two with a blank-line separator so segments never run together. On the remote/SSH path deltas are not rendered (`renderAssistantDeltas: false`), so the bubble starts empty and the final text is used verbatim.
+[[src/renderer/src/screens/Chat/dashboardEventAdapter.ts#completeAssistantWithFinalText]] rewrites the last assistant bubble through [[src/renderer/src/screens/Chat/dashboardEventAdapter.ts#mergeStreamedWithFinal]], which compares whitespace-insensitively and: uses the final text when it already contains the streamed text; keeps the streamed text when it contains the final (preserving pre-tool-call content); replaces a **lossy chunk-dropped stream** with the final text when [[src/renderer/src/screens/Chat/lossyText.ts#isLossyChunkCopy]] recognises the streamed content as a chunk-dropped copy of the final (the upstream tagging alternate chunks as `reasoning` leaves the content stream a garbled subset like "! What are we working on?" for "Hey! What are we working on today?"; concatenating stacked the partial above the clean answer in one bubble: the matcher requires contiguous runs of ≥3 chars (≥6 for CJK/Japanese/Korean text, where a run this short is much weaker evidence of continuity) plus ≥12-char / ≥30%-coverage guards, so a pre-tool-call segment whose characters merely embed as scattered fragments still stacks); stitches a re-streamed boundary by dropping the duplicated word-aligned seam (rejecting coincidental mid-word overlaps); replaces a garbled re-stream with the final text when the two converge on a substantial common suffix (a corrupted-prefix delta, e.g. a mangled CJK stream, that ends the same sentence as the clean final, rather than the disjoint pre-tool-call + answer pair); and otherwise concatenates the two with a blank-line separator so segments never run together. On the remote/SSH path deltas are not rendered (`renderAssistantDeltas: false`), so the bubble starts empty and the final text is used verbatim.
+
+### Unicode length and coverage guards
+
+Lossy-copy admission and run matching count Unicode code points consistently. Supplementary-plane characters cannot bypass the minimum 12-character length or 30% coverage by occupying two UTF-16 code units.
+
+[[src/renderer/src/screens/Chat/lossyText.test.ts]] rejects an 11-character partial and a 12-character partial covering less than 30%, while retaining acceptance at the exact 12-character/30% boundary. This protects distinct streamed completion and reasoning text from false deduplication.
 
 ## Streaming source-of-truth ref
 
 `handleGatewayEvent` in [[src/renderer/src/screens/Chat/hooks/useDashboardChatTransport.ts#useDashboardChatTransport]] applies stream events against a synchronous `messagesRef`, not React state, because state lags a render behind and each successive delta must build on the previous one.
 
-The handler reads the ref, applies a delta, writes the ref back, then calls `setMessages`. An effect mirrors `messages` back into `messagesRef`, and its guard is a correctness invariant. Every `setMessages` in the hook stores the exact same array in the ref, so when React commits the hook's own push, `messages === messagesRef.current` and the effect must skip: re-adopting that snapshot let a second `message.delta` land on a pre-delta array and silently drop a chunk (#757). The effect therefore syncs only when the identity differs (`messages !== messagesRef.current`), which happens only when Chat state changes underneath the hook — a new user turn, `handleClear` emptying the list, or a clarify card resolving in place. A length comparison is wrong here: it misses the shrink and the same-length replacement.
+The ref is the write-through transcript ref owned by [[src/renderer/src/screens/Chat/hooks/useTranscriptState.ts#useTranscriptState]] and shared with every transcript writer through its wrapped `setMessages`: the wrapper resolves functional updaters against the ref _at dispatch time_ and writes the result back before dispatching the value to React. This is the correctness invariant that replaced the old adopt-back effect. Committed React state can be up to a frame behind the ref while deltas coalesce, so a writer resolved against committed state (a `/btw` user turn, `handleClear`, a clarify card resolving, failure marking) would fork from a pre-delta snapshot and silently drop the in-flight chunks — the coalesced twin of #757. With the write-through wrapper, every writer builds on the newest transcript and the ref always equals the newest dispatched-or-streamed array.
+
+Delta commits are coalesced: high-frequency events (`message.delta`, `thinking.delta`, `reasoning.delta`, `tool.progress`, `tool.generating`) update the ref and schedule one `setMessages(messagesRef.current)` per animation frame, while lifecycle events (start/complete/clarify/tool boundaries) cancel any pending frame and commit immediately, so `isLoading`/approval state never observes a stale transcript. Because the flush publishes the ref rather than a pinned snapshot, a frame that fires after another writer took over republishes (or advances to) that newer state — it can never resurrect an older transcript. Nothing may call the raw state setter or re-adopt committed state into the ref. Specified by the delta-coalescing tests in [[src/renderer/src/screens/Chat/hooks/useDashboardChatTransport.test.tsx]].
 
 ## Reasoning & tool activity rows
 
@@ -67,7 +74,7 @@ The live reasoning stream is best-effort — dropped delta chunks leave the stre
 
 The observed symptom: a Thought block showing "moon-k3 … ous" (lossy live preview) above "moonshotai/kimi-k3 … nous" (canonical DB row) for the same thought.
 
-Because the garbled text can't match the DB row's text-based reconciliation key, [[src/renderer/src/screens/Chat/sessionHistory.ts#reconcileStreamedWithDb]] ends with [[src/renderer/src/screens/Chat/sessionHistory.ts#dropLossyStreamedReasoning]]: a streamed reasoning row is dropped when [[src/renderer/src/screens/Chat/lossyText.ts#isLossyChunkCopy]] recognises it as a chunk-dropped copy of a DB reasoning row (`db-r-…`) in the **same turn**. A dropped-chunks preview is by construction a concatenation of contiguous runs of the canonical text; the matcher's run (≥3 chars) and length/coverage (≥12 chars, ≥30%) guards separate "same thought, chunks missing" from a genuinely distinct short segment whose characters merely embed as scattered fragments.
+Because the garbled text can't match the DB row's text-based reconciliation key, [[src/renderer/src/screens/Chat/sessionHistory.ts#reconcileStreamedWithDb]] ends with [[src/renderer/src/screens/Chat/sessionHistory.ts#dropLossyStreamedReasoning]]: a streamed reasoning row is dropped when [[src/renderer/src/screens/Chat/lossyText.ts#isLossyChunkCopy]] recognises it as a chunk-dropped copy of a DB reasoning row (`db-r-<id>`) in the **same turn**. A dropped-chunks preview is by construction a concatenation of contiguous runs of the canonical text; the matcher's run (≥3 chars, ≥6 for CJK/Japanese/Korean text) and length/coverage (≥12 chars, ≥30%) guards separate "same thought, chunks missing" from a genuinely distinct short segment whose characters merely embed as scattered fragments.
 
 #### Lossy live preview collapses into the DB row
 
@@ -91,7 +98,35 @@ The canonical time comes from state.db: [[src/renderer/src/screens/Chat/sessionH
 
 A few non-local commands have dedicated desktop handling and must NOT be diverted to the gateway slash pipeline, or they'd lose their behaviour.
 
-The approval responses `/approve` and `/deny` (the `RENDERER_NATIVE_SLASH` set) are excluded from the pipeline and sent as prompt-level input, matching their dedicated button handlers — `slash.exec` rejects pending-input commands anyway.
+The legacy approval responses `/approve` and `/deny` (the `RENDERER_NATIVE_SLASH` set) are excluded from the pipeline and sent as prompt-level input. They remain a compatibility path for text-only backends; structured gateway approvals use the flow below.
+
+## Structured command approvals
+
+Dangerous commands pause the current turn until the user explicitly allows or denies them; the desktop never auto-approves or replays a prompt after an approval request.
+
+Response acknowledgements may follow turn completion; lifecycle regression coverage is documented in [[approval-completion]].
+
+[[src/shared/chat-approval.ts#normalizeApprovalRequest]] limits choices to the gateway's offered permissions and preserves a deny path. Dashboard chat renders [[src/renderer/src/screens/Chat/ApprovalCard.tsx#ApprovalCard]] from `approval.request`. Responses include the gateway-issued `request_id` and runtime session ID through [[src/renderer/src/screens/Chat/hooks/useDashboardChatTransport.ts#useDashboardChatTransport]]. Cards queue in arrival order, with an in-flight guard. Only an acknowledgment resolving exactly one request succeeds. Network failures can retry the same ID; a missing ID or unresolved acknowledgment invalidates the cards and interrupts the turn.
+
+Gateway-only WebSocket chat registers opaque renderer IDs through [[src/main/hermes.ts#registerPendingApproval]], bound to the originating renderer and run by [[src/main/ipc/register.ts#registerIpcHandlers]]. These IDs map to the upstream request IDs; they never substitute for them. Completion, cancellation, renderer destruction, or connection loss clears pending requests. Run cleanup retains the originating connection key; cancelled IPC calls settle, and runs that finish before their handle arrives are not registered as active. A transport failure after any approval request cannot replay the prompt. Callers without an approval UI fail closed. `Always allow` requires a second confirmation because the gateway persists that permission.
+
+The current upstream `/v1/runs/{run_id}/approval` handler ignores request IDs and resolves the queue head. Desktop therefore stops Runs API turns that request approval, using the original connection's credentials, and directs users to Dashboard chat. Ordinary Runs streaming remains available; manual Runs approvals require an upstream contract change first.
+
+### Stale approval isolation
+
+Dashboard regression tests simulate expired requests and lost acknowledgments with a queued second command, ensuring retries cannot approve that next command and unresolved responses stop the turn.
+
+### Gateway approval correlation
+
+WebSocket transport tests verify opaque renderer IDs map to gateway IDs, and missing IDs, disconnects, or lost prompt acknowledgments stop the turn without replaying it.
+
+### Terminal approval replay
+
+Renderer transport tests replay answered and expired approvals before a fresh request. Terminal cards never re-enter the pending FIFO, and successful acknowledgements mark cards resolved before another event can arrive.
+
+### Runs approval fail-closed
+
+Runs transport tests verify approval events stop the original run with its captured credentials, never POST an approval, and never replay through chat completions.
 
 ## Side questions (`/btw`)
 
@@ -106,6 +141,8 @@ The central slash command architecture in [[src/renderer/src/screens/Chat/slash/
 The router's attachment guard rejects a command run with staged attachments unless it declares `supportsAttachments`, but `target: "desktop"` commands are exempt — they are local UI actions / info displays that never consume attachments (the files stay in the composer for the next message), matching the pre-router behavior where local commands ran unconditionally. Only `agent`/`model` commands, which route content upstream, are gated.
 
 The command palette and executor share a catalog built by [[src/renderer/src/screens/Chat/slash/commandCatalog.ts#createSlashCatalog]]. Hermes Agent metadata comes from `commands.catalog`; Desktop commands are merged after collision validation, and upstream names/aliases are normalized from `/name` to the router's canonical `name`.
+
+The same successful catalog read is recorded through the bounded compatibility bridge described by [[agent-capabilities#Bounded command inventory]]. Only normalized names reach the main-process cache; a failed read clears prior command evidence so capability gates become unknown rather than stale.
 
 [[src/renderer/src/screens/Chat/slash/commandCatalog.ts#reconcileSlashCatalog]] merges the backend catalog with the in-repo desktop commands into a conflict-free catalog before it reaches `createSlashCatalog`. Desktop commands are authored in-repo and win deterministically; the backend catalog is untrusted runtime data, so a collision there must never crash the app. Any backend command whose name equals a desktop command **name or alias** is dropped (missing the alias check let a backend `/commands` command squat `help`'s `commands` alias and crash startup — #813), and a `canon` alias that targets a desktop command becomes an agent-visible alias entry instead.
 
@@ -140,3 +177,11 @@ Typing `/` opens a centered command palette in [[src/renderer/src/screens/Chat/C
 Escape is captured at the document level while the palette is open, so it closes even if focus has moved from the composer into a command row. Dismissal preserves the slash draft and returns focus to the composer.
 
 The palette pre-normalizes searchable command metadata and virtualizes its grouped rows through [[src/renderer/src/screens/Chat/slash/virtualSlashCommands.ts#createSlashCommandVirtualLayout]]. Only visible rows plus a small overscan are mounted, while keyboard selection uses calculated offsets.
+
+## Dashboard clarification cards
+
+Dashboard clarify requests preserve structured choices. Answers and skips must return through the originating dashboard client, while local cards retain IPC delivery.
+
+[[src/renderer/src/screens/Chat/dashboardEventAdapter.ts#appendClarifyRequest]] creates a dashboard-tagged card. [[src/renderer/src/screens/Chat/Chat.tsx#Chat]] supplies the transport responder to [[src/renderer/src/screens/Chat/ClarifyCard.tsx]]. [[src/renderer/src/screens/Chat/hooks/useDashboardChatTransport.ts#useDashboardChatTransport]] shares delivery with the composer, accepts only a confirmed `status: ok`, and invalidates pending questions on connection/session changes, completion, abort or teardown. Disconnects expire cards rather than sending an old answer through a new runtime. The card retains retry feedback on delivery failure. Tests: [[dashboard-clarify]].
+
+Agent `clarify.expire` notifications disable only the matching pending card and restore tracking of the turn that resumes after timeout. Replays of answered, expired or currently responding questions cannot invalidate a newer question or reset the resumed turn's busy state.

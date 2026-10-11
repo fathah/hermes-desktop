@@ -6,13 +6,26 @@ let cachedDb: Database.Database | null = null;
 let cachedDbPath: string | null = null;
 let cachedDbReadonly: boolean | null = null;
 
+/** Older Agent databases predate native archiving; keep their lists readable. */
+export function sessionVisibilityPredicate(db: Database.Database): string {
+  const columns = db.prepare("PRAGMA table_info(sessions)").all() as Array<{
+    name: string;
+  }>;
+  return columns.some((column) => column.name === "archived")
+    ? "s.archived = 0"
+    : "1 = 1";
+}
+
 /**
  * Return a cached database connection for the active profile state DB.
  * If the active profile database path or readonly status changes,
  * the old database connection is cleanly closed and a new one is established.
  */
-export function getDbConnection(readonly = true): Database.Database | null {
-  const dbPath = activeStateDbPath();
+export function getDbConnection(
+  readonly = true,
+  profile?: unknown,
+): Database.Database | null {
+  const dbPath = activeStateDbPath(profile);
   if (!existsSync(dbPath)) {
     closeDbConnection();
     return null;

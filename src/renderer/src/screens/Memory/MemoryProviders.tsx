@@ -3,6 +3,18 @@ import { Check, ExternalLink } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import type { MemoryProviderInfo } from "./types";
 
+// [SECURITY 2026-07-03] Escape a runtime value before it is interpolated into a
+// translation string rendered via dangerouslySetInnerHTML. The translation
+// markup itself is trusted; only the runtime provider value must be escaped.
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 const PROVIDER_URLS: Record<string, string> = {
   honcho: "https://app.honcho.dev",
   hindsight: "https://ui.hindsight.vectorize.io",
@@ -60,7 +72,7 @@ export function MemoryProviders({
           <span
             dangerouslySetInnerHTML={{
               __html: t("memory.providersHintActive", {
-                provider: currentProvider,
+                provider: escapeHtml(currentProvider),
               }),
             }}
           />

@@ -1,4 +1,5 @@
 export default {
+  showEarlierMessages: "הצג {{count}} הודעות קודמות",
   title: "צ'אט חדש",
   sessionTitle: "סשן {{id}}",
   noModel: "לא הוגדר מודל",

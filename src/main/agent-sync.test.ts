@@ -12,6 +12,11 @@ import type { ProfileInfo } from "./profiles";
 
 const mockState = vi.hoisted(() => ({
   home: "",
+  failHistoryWrite: false,
+  deleteFailure: false,
+  deletedProfiles: [] as string[],
+  colorPending: null as Promise<void> | null,
+  colorFailure: false,
   profiles: [] as unknown[],
   souls: new Map<string, string>(),
   memories: new Map<string, string>(),
@@ -19,7 +24,7 @@ const mockState = vi.hoisted(() => ({
     string,
     { model: string; provider: string; baseUrl: string }
   >(),
-  account: null as { apiUrl: string; token: string } | null,
+  account: null as { apiUrl: string; token: string; userId?: string } | null,
   createdProfiles: [] as string[],
   writtenSouls: [] as Array<{ profile: string; content: string }>,
   writtenMemories: [] as Array<{ profile: string; content: string }>,
@@ -32,11 +37,15 @@ const mockState = vi.hoisted(() => ({
 }));
 
 vi.mock("./utils", () => ({
+  isValidNamedProfileName: (name: unknown) =>
+    typeof name === "string" && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(name),
   profileHome: (profile?: string) =>
     !profile || profile === "default"
       ? mockState.home
       : join(mockState.home, "profiles", profile),
   safeWriteFile: (path: string, content: string) => {
+    if (mockState.failHistoryWrite && path.endsWith("cloud-sync-deleted.json"))
+      throw new Error("disk full");
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, content, "utf-8");
   },
@@ -48,7 +57,12 @@ vi.mock("./account-store", () => ({
     mockState.account
       ? {
           apiUrl: mockState.account.apiUrl,
-          user: { id: "u1", email: "a@b.com", name: null, avatarUrl: null },
+          user: {
+            id: mockState.account.userId ?? "u1",
+            email: "a@b.com",
+            name: null,
+            avatarUrl: null,
+          },
         }
       : null,
   getAccessToken: () => mockState.account?.token ?? null,
@@ -56,6 +70,19 @@ vi.mock("./account-store", () => ({
 
 vi.mock("./profiles", () => ({
   listProfiles: async () => mockState.profiles,
+  deleteProfile: (name: string) => {
+    mockState.deletedProfiles.push(name);
+    if (mockState.deleteFailure)
+      return { success: false, error: "profile is busy" };
+    rmSync(join(mockState.home, "profiles", name), {
+      recursive: true,
+      force: true,
+    });
+    mockState.profiles = (mockState.profiles as ProfileInfo[]).filter(
+      (p) => p.id !== name,
+    );
+    return { success: true };
+  },
   // Mirror the real createProfile: derive a slug id from the display name and
   // return it; on-disk sync keys off that id, not the name.
   createProfile: (name: string) => {
@@ -69,7 +96,12 @@ vi.mock("./profiles", () => ({
 }));
 
 vi.mock("./profile-meta", () => ({
+  readProfileMeta: async () => ({}),
+  defaultColorForName: () => "#123456",
   setProfileColor: async (profile: string, color: string) => {
+    if (mockState.colorPending) await mockState.colorPending;
+    if (mockState.colorFailure)
+      return { success: false, error: "color write failed" };
     mockState.writtenColors.push({ profile, color });
     return { success: true };
   },
@@ -195,6 +227,11 @@ async function engine(): Promise<typeof import("./agent-sync")> {
 beforeEach(() => {
   mockState.home = mkdtempSync(join(tmpdir(), "hermes-sync-"));
   mockState.profiles = [];
+  mockState.deletedProfiles = [];
+  mockState.failHistoryWrite = false;
+  mockState.deleteFailure = false;
+  mockState.colorPending = null;
+  mockState.colorFailure = false;
   mockState.souls = new Map();
   mockState.memories = new Map();
   mockState.models = new Map();
@@ -561,4 +598,445 @@ describe("syncAgents", () => {
     const state = JSON.parse(readFileSync(stateFile, "utf-8"));
     expect(state.accountId).toBe("u1");
   });
+});
+
+function linkedProfile(overrides: Record<string, unknown> = {}): string {
+  mockState.profiles = [fakeProfile("Renamed Agent", "#123456", "alpha")];
+  const file = join(mockState.home, "profiles", "alpha", "cloud-sync.json");
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(
+    file,
+    JSON.stringify({
+      version: 1,
+      agentId: "a1",
+      accountId: "u1",
+      apiUrl: "http://localhost:3002",
+      remoteName: "old-name",
+      base: {},
+      ...overrides,
+    }),
+  );
+  return file;
+}
+
+describe("local deletion and cloud sync", () => {
+  // @lat: [[agent-sync#Tests#Keeps deleted profiles deleted after restart]]
+  it("persists exclusion outside the renamed profile and skips recreation after restart", async () => {
+    const file = linkedProfile();
+    const calls = stubFetch([
+      remoteAgent({ id: "a1", name: "new-cloud-name" }),
+    ]);
+    const { deleteProfileWithSync } = await engine();
+    expect(await deleteProfileWithSync("alpha")).toEqual({ success: true });
+    expect(existsSync(file)).toBe(false);
+    vi.resetModules();
+    const { syncAgents } = await engine();
+    expect((await syncAgents()).status).toBe("ok");
+    expect(mockState.createdProfiles).toEqual([]);
+    expect(calls.map((c) => c.method)).toEqual(["GET"]);
+  });
+
+  it("excludes only the deleted identity and never matches its old name to a fresh profile", async () => {
+    linkedProfile();
+    const e = await engine();
+    await e.deleteProfileWithSync("alpha");
+    mockState.profiles = [fakeProfile("old-name")];
+    const calls = stubFetch([
+      remoteAgent({ id: "a1", name: "old-name" }),
+      remoteAgent({ id: "another", name: "another" }),
+    ]);
+    await e.syncAgents();
+    expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({
+      name: "old-name",
+    });
+    expect(mockState.createdProfiles).toEqual(["another"]);
+  });
+
+  // @lat: [[agent-sync#Tests#Preserves deletion ownership]]
+  it.each([
+    { userId: "u2", apiUrl: "http://localhost:3002" },
+    { userId: "u1", apiUrl: "http://localhost:9999" },
+  ])(
+    "does not suppress the same id in a different account/backend: %j",
+    async (account) => {
+      linkedProfile();
+      const e = await engine();
+      await e.deleteProfileWithSync("alpha");
+      mockState.account = { ...account, token: "tok" };
+      stubFetch([remoteAgent({ id: "a1", name: "alpha" })]);
+      await e.syncAgents();
+      expect(mockState.createdProfiles).toEqual(["alpha"]);
+    },
+  );
+
+  it("can delete offline without assigning a foreign link to the current account", async () => {
+    linkedProfile({ accountId: "u2" });
+    mockState.account = null;
+    const calls = stubFetch([remoteAgent({ id: "a1", name: "alpha" })]);
+    const e = await engine();
+    expect((await e.deleteProfileWithSync("alpha")).success).toBe(true);
+    expect(calls).toEqual([]);
+    mockState.account = {
+      userId: "u2",
+      apiUrl: "http://localhost:3002",
+      token: "tok",
+    };
+    await e.syncAgents();
+    expect(mockState.createdProfiles).toEqual([]);
+  });
+
+  it("retains exact-id exclusions for legacy links without inventing an owner", async () => {
+    linkedProfile({ accountId: undefined, apiUrl: undefined });
+    const e = await engine();
+    await e.deleteProfileWithSync("alpha");
+    const history = JSON.parse(
+      readFileSync(join(mockState.home, "cloud-sync-deleted.json"), "utf-8"),
+    );
+    expect(history.links).toEqual([{ agentId: "a1" }]);
+    stubFetch([
+      remoteAgent({ id: "a1", name: "alpha" }),
+      remoteAgent({ id: "fresh-id", name: "beta" }),
+    ]);
+    await e.syncAgents();
+    expect(mockState.createdProfiles).toEqual(["beta"]);
+  });
+
+  // @lat: [[agent-sync#Tests#Fails safely when deletion persistence fails]]
+  it("does not invoke the CLI when exclusion persistence fails, and can retry", async () => {
+    const file = linkedProfile();
+    const e = await engine();
+    mockState.failHistoryWrite = true;
+    expect(await e.deleteProfileWithSync("alpha")).toMatchObject({
+      success: false,
+      error: "disk full",
+    });
+    expect(mockState.deletedProfiles).toEqual([]);
+    expect(existsSync(file)).toBe(true);
+    mockState.failHistoryWrite = false;
+    expect((await e.deleteProfileWithSync("alpha")).success).toBe(true);
+  });
+
+  it.each([
+    "{",
+    JSON.stringify({ version: 2, links: [] }),
+    JSON.stringify({ version: 1, links: [{ agentId: "" }] }),
+  ])(
+    "refuses a corrupt deletion history without recreating or deleting profiles",
+    async (content) => {
+      linkedProfile();
+      const path = join(mockState.home, "cloud-sync-deleted.json");
+      writeFileSync(path, content);
+      const calls = stubFetch([remoteAgent({ id: "a1", name: "alpha" })]);
+      const e = await engine();
+      expect((await e.deleteProfileWithSync("alpha")).success).toBe(false);
+      expect((await e.syncAgents()).status).toBe("error");
+      expect(mockState.deletedProfiles).toEqual([]);
+      expect(mockState.createdProfiles).toEqual([]);
+      expect(calls).toEqual([]);
+      expect(readFileSync(path, "utf-8")).toBe(content);
+    },
+  );
+
+  it("refuses unreadable or corrupt profile links before invoking the CLI", async () => {
+    const file = linkedProfile();
+    writeFileSync(file, "{");
+    const e = await engine();
+    expect((await e.deleteProfileWithSync("alpha")).success).toBe(false);
+    expect(mockState.deletedProfiles).toEqual([]);
+  });
+
+  it("retains the exclusion on CLI failure and a subsequent retry succeeds", async () => {
+    linkedProfile();
+    mockState.deleteFailure = true;
+    const e = await engine();
+    expect(await e.deleteProfileWithSync("alpha")).toMatchObject({
+      success: false,
+      error: "profile is busy",
+    });
+    expect(existsSync(join(mockState.home, "cloud-sync-deleted.json"))).toBe(
+      true,
+    );
+    mockState.deleteFailure = false;
+    expect((await e.deleteProfileWithSync("alpha")).success).toBe(true);
+    stubFetch([remoteAgent({ id: "a1", name: "alpha" })]);
+    await e.syncAgents();
+    expect(mockState.createdProfiles).toEqual([]);
+  });
+
+  it.each(["default", "../escape", "", undefined])(
+    "refuses invalid deletion target %j before accessing files",
+    async (name) => {
+      const e = await engine();
+      expect((await e.deleteProfileWithSync(name as string)).success).toBe(
+        false,
+      );
+      expect(mockState.deletedProfiles).toEqual([]);
+    },
+  );
+
+  // @lat: [[agent-sync#Tests#Serializes deletion with in-flight sync]]
+  it("waits for an async metadata pull before deleting and prevents subsequent restore", async () => {
+    linkedProfile();
+    let release!: () => void;
+    mockState.colorPending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    stubFetch([remoteAgent({ id: "a1", name: "alpha", color: "#abcdef" })]);
+    const e = await engine();
+    const sync = e.syncAgents();
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
+    const deletion = e.deleteProfileWithSync("alpha");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(mockState.deletedProfiles).toEqual([]);
+    release();
+    await sync;
+    expect((await deletion).success).toBe(true);
+    expect(mockState.writtenColors).toEqual([
+      { profile: "alpha", color: "#abcdef" },
+    ]);
+    mockState.colorPending = null;
+    await e.syncAgents();
+    expect(mockState.createdProfiles).toEqual([]);
+    expect(existsSync(join(mockState.home, "profiles", "alpha"))).toBe(false);
+  });
+
+  it("keeps consecutive deletion records when requests overlap", async () => {
+    linkedProfile();
+    const otherFile = join(
+      mockState.home,
+      "profiles",
+      "beta",
+      "cloud-sync.json",
+    );
+    mkdirSync(dirname(otherFile), { recursive: true });
+    writeFileSync(
+      otherFile,
+      JSON.stringify({ version: 1, agentId: "a2", accountId: "u1", base: {} }),
+    );
+    const e = await engine();
+    await Promise.all([
+      e.deleteProfileWithSync("alpha"),
+      e.deleteProfileWithSync("beta"),
+    ]);
+    const history = JSON.parse(
+      readFileSync(join(mockState.home, "cloud-sync-deleted.json"), "utf-8"),
+    );
+    expect(history.links.map((l: { agentId: string }) => l.agentId)).toEqual([
+      "a1",
+      "a2",
+    ]);
+  });
+});
+
+describe("sync failures during deletion coordination", () => {
+  // @lat: [[agent-sync#Tests#Does not infer deletion from invalid responses]]
+  it.each([null, {}, { agents: null }, { agents: [{ name: "alpha" }] }])(
+    "does not unlink profiles on malformed successful list %j",
+    async (data) => {
+      const stateFile = linkedProfile();
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn()
+          .mockResolvedValue({ ok: true, status: 200, json: async () => data }),
+      );
+      const e = await engine();
+      expect((await e.syncAgents()).status).toBe("error");
+      expect(existsSync(stateFile)).toBe(true);
+      expect(mockState.createdProfiles).toEqual([]);
+      expect(fetch).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("releases a queued deletion when reading a successful response is interrupted", async () => {
+    linkedProfile();
+    let reject!: (reason: Error) => void;
+    const body = new Promise<never>((_resolve, rejectBody) => {
+      reject = rejectBody;
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, status: 200, json: () => body }),
+    );
+    const e = await engine();
+    const sync = e.syncAgents();
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
+    const deletion = e.deleteProfileWithSync("alpha");
+    reject(new Error("response timed out"));
+    expect((await sync).status).toBe("error");
+    expect((await deletion).success).toBe(true);
+    stubFetch([remoteAgent({ id: "a1", name: "alpha" })]);
+    await e.syncAgents();
+    expect(mockState.createdProfiles).toEqual([]);
+  });
+
+  it("retries a failed initial pull without uploading empty local defaults", async () => {
+    mockState.colorFailure = true;
+    const calls = stubFetch([
+      remoteAgent({
+        id: "a1",
+        name: "alpha",
+        color: "#abcdef",
+        systemPrompt: "cloud persona",
+        memory: "cloud memory",
+      }),
+    ]);
+    const e = await engine();
+    await e.syncAgents();
+    mockState.profiles = [fakeProfile("alpha")];
+    mockState.colorFailure = false;
+    const result = await e.syncAgents();
+    expect(result.outcomes[0]).toMatchObject({
+      action: "pulled",
+      agentId: "a1",
+    });
+    expect(calls.map((call) => call.method)).toEqual(["GET", "GET"]);
+    expect(mockState.writtenSouls).toContainEqual({
+      profile: "alpha",
+      content: "cloud persona",
+    });
+    expect(mockState.writtenMemories).toContainEqual({
+      profile: "alpha",
+      content: "cloud memory",
+    });
+  });
+
+  // @lat: [[agent-sync#Tests#Retains the identity after a failed import]]
+  it("retains a new cloud import's identity when metadata fails so deletion stays permanent", async () => {
+    mockState.colorFailure = true;
+    stubFetch([remoteAgent({ id: "a1", name: "alpha" })]);
+    const e = await engine();
+    const result = await e.syncAgents();
+    expect(result.outcomes[0]).toMatchObject({
+      action: "error",
+      warnings: ["color write failed"],
+    });
+    expect(e.getLinkedAgentId("alpha")).toBe("a1");
+    expect((await e.deleteProfileWithSync("alpha")).success).toBe(true);
+    mockState.createdProfiles = [];
+    mockState.colorFailure = false;
+    await e.syncAgents();
+    expect(mockState.createdProfiles).toEqual([]);
+  });
+});
+
+describe("complete cloud agent validation", () => {
+  // @lat: [[agent-sync#Tests#Validates all reconciliation fields]]
+  it.each([
+    "id",
+    "name",
+    "color",
+    "systemPrompt",
+    "memory",
+    "model",
+    "provider",
+    "updatedAt",
+  ])(
+    "rejects an agent missing %s before changing any linked profile",
+    async (field) => {
+      const file = linkedProfile();
+      const original = readFileSync(file, "utf-8");
+      const agent = remoteAgent({
+        id: "a1",
+        name: "alpha",
+      }) as unknown as Record<string, unknown>;
+      delete agent[field];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: async () => ({ agents: [agent] }),
+        }),
+      );
+      const result = await (await engine()).syncAgents();
+      expect(result.status).toBe("error");
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(readFileSync(file, "utf-8")).toBe(original);
+      expect(mockState.writtenSouls).toEqual([]);
+      expect(mockState.writtenColors).toEqual([]);
+    },
+  );
+
+  it.each([
+    { updatedAt: "not a date" },
+    { color: "invalid" },
+    { systemPrompt: 42 },
+    { memory: {} },
+    { model: 42 },
+    { provider: null },
+  ])("rejects invalid reconciliation values %j", async (invalid) => {
+    const file = linkedProfile();
+    const agent = { ...remoteAgent({ id: "a1", name: "alpha" }), ...invalid };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ agents: [agent] }),
+      }),
+    );
+    expect((await (await engine()).syncAgents()).status).toBe("error");
+    expect(existsSync(file)).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+it("accepts backend-supported empty model/provider values without clearing the local model", async () => {
+  linkedProfile();
+  mockState.models.set("alpha", {
+    model: "local-model",
+    provider: "auto",
+    baseUrl: "",
+  });
+  stubFetch([
+    remoteAgent({ id: "a1", name: "alpha", model: "", provider: "" }),
+  ]);
+  expect((await (await engine()).syncAgents()).status).toBe("ok");
+  expect(mockState.writtenModels).toEqual([]);
+});
+
+// @lat: [[agent-sync#Tests#Waits for ownership adoption already in progress]]
+it("waits for the active sync before resolving a legacy wallet link", async () => {
+  linkedProfile({ apiUrl: undefined });
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => {
+      await pending;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          agents: [remoteAgent({ id: "a1", name: "alpha" })],
+        }),
+      };
+    }),
+  );
+  const e = await engine();
+  const pass = e.syncAgents();
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
+  const { resolveLinkedAgent } = await import("./wallet-sync");
+  let settled = false;
+  const wallet = resolveLinkedAgent("alpha").then((result) => {
+    settled = true;
+    return result;
+  });
+  // Flush promise reactions while the list response is still pending.
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  const settledEarly = settled;
+  release();
+  await pass;
+  const result = await wallet;
+  expect(settledEarly).toBe(false);
+  expect(result).toMatchObject({
+    status: "ok",
+    apiUrl: "http://localhost:3002",
+    agentId: "a1",
+  });
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(e.getAgentSyncStatus().running).toBe(false);
 });

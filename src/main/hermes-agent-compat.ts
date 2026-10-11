@@ -14,7 +14,7 @@ import { HERMES_HOME, HERMES_REPO } from "./installer";
 import { sshExec } from "./ssh-remote";
 
 export const HERMES_AGENT_COMPAT_VERSION =
-  "2026-06-11.dashboard-chat-model-library.v2";
+  "2026-09-07.dashboard-chat-model-library.v3";
 
 export interface HermesAgentCompatResult {
   ok: boolean;
@@ -60,8 +60,25 @@ const MODEL_LIBRARY_COMPAT_SOURCE = `
 # deliberately stored in this agent's HERMES_HOME so remote shortcuts stay on
 # the remote host and survive desktop restarts without changing upstream model
 # assignment semantics.
-def _hermes_one_model_library_path():
-    return get_hermes_home() / "models.json"
+def _hermes_one_profile_home(profile=None):
+    requested = str(profile or "").strip()
+    if not requested or requested.lower() == "current":
+        return get_hermes_home()
+    if requested.lower() == "default":
+        current_home = get_hermes_home()
+        return current_home.parent.parent if current_home.parent.name == "profiles" else current_home
+    from hermes_cli import profiles as profiles_mod
+    try:
+        profiles_mod.validate_profile_name(requested)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if not profiles_mod.profile_exists(requested):
+        raise HTTPException(status_code=404, detail=f"Profile '{requested}' does not exist.")
+    return profiles_mod.get_profile_dir(requested)
+
+
+def _hermes_one_model_library_path(profile=None):
+    return _hermes_one_profile_home(profile) / "models.json"
 
 
 def _hermes_one_short_model_label(model):
@@ -69,11 +86,57 @@ def _hermes_one_short_model_label(model):
     return (text.rsplit("/", 1)[-1] if text else "") or text
 
 
+def _hermes_one_normalize_url_path(path):
+    # Match the WHATWG URL path shortening used by the desktop's new URL().
+    # Percent-encoded dot segments are structural, but every other encoded
+    # segment and repeated slash remains part of the endpoint identity.
+    segments = str(path or "").split("/")
+    normalized = []
+    for segment in segments:
+        folded = segment.lower()
+        if folded in (".", "%2e"):
+            continue
+        if folded in ("..", ".%2e", "%2e.", "%2e%2e"):
+            if len(normalized) > 1:
+                normalized.pop()
+            continue
+        normalized.append(segment)
+    return "/".join(normalized)
+
+
+def _hermes_one_normalize_base_url(value):
+    from urllib.parse import urlsplit, urlunsplit
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        parsed = urlsplit(text)
+        if not parsed.scheme or not parsed.hostname:
+            return text.rstrip("/")
+        scheme = parsed.scheme.lower()
+        hostname = parsed.hostname.lower()
+        if ":" in hostname:
+            hostname = f"[{hostname}]"
+        credentials = ""
+        if parsed.username is not None:
+            credentials = parsed.username
+            if parsed.password is not None:
+                credentials += f":{parsed.password}"
+            credentials += "@"
+        port = parsed.port
+        default_port = (scheme == "http" and port == 80) or (scheme == "https" and port == 443)
+        netloc = credentials + hostname + (f":{port}" if port is not None and not default_port else "")
+        path = _hermes_one_normalize_url_path(parsed.path).rstrip("/")
+        return urlunsplit((scheme, netloc, path, parsed.query, parsed.fragment))
+    except ValueError:
+        return text.rstrip("/")
+
+
 def _hermes_one_model_key(row):
     return (
         str(row.get("provider", "")).strip().lower(),
         str(row.get("model", "")).strip().lower(),
-        str(row.get("baseUrl", row.get("base_url", ""))).strip().rstrip("/").lower(),
+        _hermes_one_normalize_base_url(row.get("baseUrl", row.get("base_url", ""))),
     )
 
 
@@ -95,8 +158,8 @@ def _hermes_one_normalize_model_row(row, index=0):
     }
 
 
-def _hermes_one_read_model_library():
-    path = _hermes_one_model_library_path()
+def _hermes_one_read_model_library(profile=None):
+    path = _hermes_one_model_library_path(profile)
     try:
         raw = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
     except Exception:
@@ -115,31 +178,51 @@ def _hermes_one_read_model_library():
     return rows
 
 
-def _hermes_one_write_model_library(rows):
-    path = _hermes_one_model_library_path()
+def _hermes_one_write_model_library(rows, profile=None):
+    path = _hermes_one_model_library_path(profile)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(rows, indent=2), encoding="utf-8")
     tmp.replace(path)
 
 
-def _hermes_one_current_model_row():
+def _hermes_one_current_model_row(profile=None):
+    requested = str(profile or "").strip().lower()
+    if not requested or requested == "current":
+        try:
+            cfg = load_config()
+        except Exception:
+            return None
+        return _hermes_one_model_row_from_config(cfg)
+    from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+    token = set_hermes_home_override(_hermes_one_profile_home(profile))
     try:
         cfg = load_config()
     except Exception:
         return None
+    finally:
+        reset_hermes_home_override(token)
+    return _hermes_one_model_row_from_config(cfg)
+
+
+def _hermes_one_model_row_from_config(cfg):
     model_cfg = cfg.get("model", {})
     if isinstance(model_cfg, dict):
         provider = str(model_cfg.get("provider", "") or "").strip()
         model = str(model_cfg.get("default", model_cfg.get("name", "")) or "").strip()
         base_url = str(model_cfg.get("base_url", "") or "").strip()
+        try:
+            context_length = int(model_cfg.get("context_length") or 0)
+        except (TypeError, ValueError):
+            context_length = 0
     else:
         provider = ""
         model = str(model_cfg or "").strip()
         base_url = ""
+        context_length = 0
     if not provider or not model:
         return None
-    return {
+    row = {
         "id": f"remote:active:{provider}:{model}",
         "name": _hermes_one_short_model_label(model) or provider,
         "provider": provider,
@@ -147,12 +230,15 @@ def _hermes_one_current_model_row():
         "baseUrl": base_url,
         "createdAt": 0,
     }
+    if context_length > 0:
+        row["contextLength"] = context_length
+    return row
 
 
 @app.get("/api/model/library")
-def hermes_one_get_model_library():
-    rows = _hermes_one_read_model_library()
-    current = _hermes_one_current_model_row()
+def hermes_one_get_model_library(profile: Optional[str] = None):
+    rows = _hermes_one_read_model_library(profile)
+    current = _hermes_one_current_model_row(profile)
     if current:
         current_key = _hermes_one_model_key(current)
         rows = [current] + [row for row in rows if _hermes_one_model_key(row) != current_key]
@@ -160,15 +246,15 @@ def hermes_one_get_model_library():
 
 
 @app.post("/api/model/library")
-def hermes_one_add_model_library_row(body: Dict[str, Any]):
+def hermes_one_add_model_library_row(body: Dict[str, Any], profile: Optional[str] = None):
     provider = str(body.get("provider", "") or "").strip()
     model = str(body.get("model", "") or "").strip()
     if not provider or not model:
         raise HTTPException(status_code=400, detail="provider and model required")
     base_url = str(body.get("baseUrl", body.get("base_url", "")) or "").strip()
     name = str(body.get("name", "") or "").strip() or _hermes_one_short_model_label(model) or provider
-    rows = _hermes_one_read_model_library()
-    key = (provider.lower(), model.lower(), base_url.rstrip("/").lower())
+    rows = _hermes_one_read_model_library(profile)
+    key = (provider.lower(), model.lower(), _hermes_one_normalize_base_url(base_url))
     for row in rows:
         if _hermes_one_model_key(row) == key:
             return row
@@ -181,13 +267,13 @@ def hermes_one_add_model_library_row(body: Dict[str, Any]):
         "createdAt": int(time.time() * 1000),
     }
     rows.append(row)
-    _hermes_one_write_model_library(rows)
+    _hermes_one_write_model_library(rows, profile)
     return row
 
 
 @app.patch("/api/model/library/{model_id:path}")
-def hermes_one_update_model_library_row(model_id: str, body: Dict[str, Any]):
-    rows = _hermes_one_read_model_library()
+def hermes_one_update_model_library_row(model_id: str, body: Dict[str, Any], profile: Optional[str] = None):
+    rows = _hermes_one_read_model_library(profile)
     for index, row in enumerate(rows):
         if row.get("id") != model_id:
             continue
@@ -201,18 +287,18 @@ def hermes_one_update_model_library_row(model_id: str, body: Dict[str, Any]):
         if not normalized:
             raise HTTPException(status_code=400, detail="provider and model required")
         rows[index] = normalized
-        _hermes_one_write_model_library(rows)
+        _hermes_one_write_model_library(rows, profile)
         return {"ok": True, "model": normalized}
     raise HTTPException(status_code=404, detail="model not found")
 
 
 @app.delete("/api/model/library/{model_id:path}")
-def hermes_one_delete_model_library_row(model_id: str):
-    rows = _hermes_one_read_model_library()
+def hermes_one_delete_model_library_row(model_id: str, profile: Optional[str] = None):
+    rows = _hermes_one_read_model_library(profile)
     filtered = [row for row in rows if row.get("id") != model_id]
     if len(filtered) == len(rows):
         raise HTTPException(status_code=404, detail="model not found")
-    _hermes_one_write_model_library(filtered)
+    _hermes_one_write_model_library(filtered, profile)
     return {"ok": True}
 # --- /HERMES_ONE_MODEL_LIBRARY_COMPAT_V1 ------------------------------------
 `;
@@ -459,7 +545,7 @@ export async function ensureSshDashboardCompatibility(
   ).toString("base64");
   const script = String.raw`
 import base64, json, os, re, sys
-version = "2026-06-11.dashboard-chat-model-library.v2"
+version = "2026-09-07.dashboard-chat-model-library.v3"
 model_library_compat_source = base64.b64decode("__MODEL_LIBRARY_COMPAT_BASE64__").decode("utf-8")
 candidates = []
 try:

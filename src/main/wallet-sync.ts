@@ -7,9 +7,11 @@ import {
 import { apiHeaders } from "./hermes-account";
 import {
   getLinkedAgentAccountId,
+  getLinkedAgentApiUrl,
   getLinkedAgentId,
   syncAgents,
 } from "./agent-sync";
+import { normalizeApiUrl } from "./api-url";
 import { BASE_NETWORK_ID } from "../shared/wallets";
 import type {
   CloudWalletRaw,
@@ -74,9 +76,17 @@ export async function resolveLinkedAgent(
   if (!agentId) return { status: "unlinked" };
 
   let owner = getLinkedAgentAccountId(name);
-  if (!owner) {
-    // Legacy link with no recorded owner. Run one sync pass: it stamps the
-    // current account onto links whose agent belongs to this account and
+  let backend = getLinkedAgentApiUrl(name);
+  const apiUrl = normalizeApiUrl(account.apiUrl);
+  if (
+    (owner && owner !== account.user.id) ||
+    (backend && normalizeApiUrl(backend) !== apiUrl)
+  ) {
+    return { status: "foreign" };
+  }
+  if (!owner || !backend) {
+    // Legacy link with incomplete ownership. Run one sync pass: it stamps
+    // the account and backend onto links whose agent belongs here and
     // leaves foreign/ambiguous ones untagged. Without this, a stale agent id
     // from a previously signed-in account would be sent under the new
     // account's token and surface as a generic error.
@@ -84,9 +94,16 @@ export async function resolveLinkedAgent(
     agentId = getLinkedAgentId(name);
     if (!agentId) return { status: "unlinked" };
     owner = getLinkedAgentAccountId(name);
+    backend = getLinkedAgentApiUrl(name);
   }
-  if (owner !== account.user.id) return { status: "foreign" };
-  return { status: "ok", apiUrl: account.apiUrl, token, agentId };
+  if (
+    owner !== account.user.id ||
+    !backend ||
+    normalizeApiUrl(backend) !== apiUrl
+  ) {
+    return { status: "foreign" };
+  }
+  return { status: "ok", apiUrl, token, agentId };
 }
 
 /**

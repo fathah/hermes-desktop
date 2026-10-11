@@ -157,3 +157,50 @@ describe("ClarifyCard", () => {
     expect(onResolved).not.toHaveBeenCalled();
   });
 });
+
+// @lat: [[dashboard-clarify#Card transport routing]]
+it("renders gateway choices and submits through the supplied transport instead of IPC", async () => {
+  const { applyDashboardStreamEvent } = await import("./dashboardEventAdapter");
+  const state = applyDashboardStreamEvent(
+    { messages: [], reasoningSegmentClosed: false },
+    {
+      type: "clarify.request",
+      payload: {
+        request_id: "ws-1",
+        question: "Which environment?",
+        choices: ["staging", "production"],
+      },
+    },
+  );
+  const msg = state.messages[0];
+  if (msg.kind !== "clarify")
+    throw new Error("Expected an interactive clarification");
+  const ipc = stubRespond();
+  const respond = vi.fn().mockResolvedValue(true);
+  const resolved = vi.fn();
+  render(<ClarifyCard msg={msg} onRespond={respond} onResolved={resolved} />);
+  fireEvent.click(screen.getByRole("button", { name: "production" }));
+  await vi.waitFor(() =>
+    expect(resolved).toHaveBeenCalledWith("ws-1", "production"),
+  );
+  expect(respond).toHaveBeenCalledWith(msg, "production");
+  expect(ipc).not.toHaveBeenCalled();
+});
+
+// @lat: [[dashboard-clarify#Unavailable card feedback]]
+it("disables expired questions and explains that they no longer accept answers", () => {
+  const respond = vi.fn();
+  render(
+    <ClarifyCard
+      msg={baseMsg({ unavailable: true, choices: ["staging"] })}
+      onRespond={respond}
+      onResolved={vi.fn()}
+    />,
+  );
+  expect(screen.getByRole("button", { name: "staging" })).toBeDisabled();
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "chat.clarify.unavailable",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "staging" }));
+  expect(respond).not.toHaveBeenCalled();
+});

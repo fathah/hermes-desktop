@@ -4,6 +4,8 @@ The in-chat (bottom) model picker selects a model for the **current conversation
 
 The override is held in renderer state on each `<Chat>` run ([[src/renderer/src/screens/Chat/Chat.tsx]]), persisted by session id, and sent with every message; it is cleared when the conversation is cleared/reset and is absent on a fresh chat, so new conversations start on the global default. This is distinct from the persisted [[model-context]] default that non-chat surfaces read.
 
+Pre-send readiness uses the same active override. [[src/renderer/src/screens/Chat/Chat.tsx#Chat]] passes the current picker `{provider, model, baseUrl}` into [[src/main/validation.ts#validateChatReadiness]], so a session-scoped pick does not keep showing "No model selected" just because the global `config.yaml` default is empty.
+
 ## Two-pane picker grouped by display brand
 
 The bottom [[src/renderer/src/screens/Chat/ModelPicker.tsx]] dropdown is a two-pane layout: a left **provider rail** filters a right **flat model list**, with a top search box (leading magnifier icon) narrowing both.
@@ -17,6 +19,16 @@ Models are grouped by **display brand**, not the raw stored provider, so OpenAI-
 Crucially, each model row keeps its **raw** `provider`/`baseUrl` for selection — only the rail grouping/label is branded — so routing and the active-model check (`currentModel === m.model && currentProvider === m.provider`) are unchanged. The rail brand filter is display-only React state; picking "All models" or a brand never rewrites config. The rail logo is the brand's [[src/renderer/src/components/common/BrandLogo.tsx]] (`matchTheme`), with a generic fallback for unknown brands.
 
 A **Configure** button is pinned at the bottom of the provider rail (below the scrollable brand list), replacing the old free-text model input: it closes the picker and dispatches the `navigation:goto` window event (detail `"providers"`) that [[src/renderer/src/screens/Layout/Layout.tsx]] listens for, taking the user to the Providers screen to manage keys and the model library.
+
+## Remote picker catalog
+
+Remote and SSH pickers combine the profile's saved model library with the current provider's models from `/api/model/options`, keeping saved labels first and deduplicating by routing identity.
+
+This matters for fresh named profiles: `/api/model/library` may contain only the active model until shortcuts are saved, while the provider options still advertise every model that the CLI can select. If options discovery is unavailable, the saved library remains usable. When saved rows already exist, options enrichment is limited to 5 seconds so stalled discovery cannot hide those rows for the normal 60-second discovery window. Providers that are merely authenticated but neither current nor user-defined stay hidden, preserving the configured-only picker policy.
+
+### Named profiles keep the current provider catalog
+
+A named remote profile whose saved library contains only its active model still lists the other models advertised by that active provider, and both dashboard requests retain the profile query parameter.
 
 ## Full identity, not just the model name
 
@@ -41,3 +53,17 @@ The upstream desktop model applies the session switch on the active gateway sess
 Attachment turns must not be forced through the CLI override fallback because the CLI path cannot carry multimodal input.
 
 [[src/main/hermes.ts#sendMessageViaCli]] can inline text-file attachments but ignores images, while the gateway/API path preserves image parts and path refs through [[src/main/hermes.ts#buildUserContent]]. When a session override is active and the user sends attachments, [[src/main/hermes.ts#shouldForceCliForSessionOverride]] leaves the turn eligible for the dashboard/gateway or API transport instead of silently dropping media.
+
+## Readiness follows chat routing
+
+Pre-send validation uses the chat’s effective model and connection, so a valid picker selection is not blocked by unrelated local defaults or credentials.
+
+[[src/main/validation.ts#validateChatReadiness]] uses a nonempty picker selection as a complete model identity. An empty selection falls back to the local profile only in Local mode. Remote and SSH validation never reads local model defaults, environment keys, or OAuth credentials; their server owns credential validation. The IPC call carries the chat connection ID and reruns when its mode changes.
+
+### Picker identity and empty selections
+
+A selected model replaces the local default without inheriting another provider’s URL. An empty local picker uses the persisted profile’s model and credentials.
+
+### Remote credential boundary
+
+Remote and SSH selections remain usable without local provider secrets. Missing remote model selections cannot be filled from an unrelated local default.

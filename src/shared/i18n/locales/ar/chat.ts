@@ -1,4 +1,5 @@
 export default {
+  showEarlierMessages: "عرض {{count}} رسالة سابقة",
   title: "محادثة جديدة",
   sessionTitle: "الجلسة {{id}}",
   noModel: "لم يتم تعيين نموذج",

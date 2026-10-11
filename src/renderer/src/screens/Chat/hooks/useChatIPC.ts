@@ -16,6 +16,8 @@ interface UseChatIPCArgs {
   /** This conversation's run id. Events tagged with a different runId belong
    *  to another mounted/background chat and are ignored. */
   runId: string;
+  connectionId: string;
+  profile?: string;
   /** The session currently visible in this Chat, if already known. */
   sessionScopeId: string | null;
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
@@ -44,6 +46,8 @@ export function eventMatchesRun(eventRunId: string, ownRunId: string): boolean {
  */
 export function useChatIPC({
   runId,
+  connectionId,
+  profile,
   sessionScopeId,
   setMessages,
   setHermesSessionId,
@@ -89,6 +93,8 @@ export function useChatIPC({
       try {
         const items = (await window.hermesAPI.getSessionMessages(
           sessionId,
+          connectionId,
+          profile,
         )) as DbHistoryItem[];
         if (
           disposed ||
@@ -189,6 +195,15 @@ export function useChatIPC({
         if (sessionId && !acceptedSessionId && !activeTurn) {
           return;
         }
+        setMessages((current) =>
+          current.map((message) =>
+            message.kind === "approval" &&
+            message.responsePath === "ipc" &&
+            !message.resolved
+              ? { ...message, unavailable: true }
+              : message,
+          ),
+        );
         if (sessionId) {
           acceptedSessionIdRef.current = sessionId;
           setHermesSessionId(sessionId);
@@ -202,6 +217,8 @@ export function useChatIPC({
         try {
           const items = (await window.hermesAPI.getSessionMessages(
             sessionId,
+            connectionId,
+            profile,
           )) as DbHistoryItem[];
           const dbMessages = dbItemsToChatMessages(items);
           if (dbMessages.length > 0) {
@@ -227,9 +244,16 @@ export function useChatIPC({
       reasoningSegmentClosedRef.current = false;
       stopDbPolling();
       const activeTurn = activeTurnRef.current;
-      if (!activeTurn) return;
-      activeTurn.status = "failed";
-      setMessages((prev) => markActiveTurnFailed(prev, error, activeTurn));
+      if (activeTurn) activeTurn.status = "failed";
+      setMessages((prev) =>
+        markActiveTurnFailed(prev, error, activeTurn).map((message) =>
+          message.kind === "approval" &&
+          message.responsePath === "ipc" &&
+          !message.resolved
+            ? { ...message, unavailable: true }
+            : message,
+        ),
+      );
       setToolProgress(null);
       setIsLoading(false);
     });
@@ -257,6 +281,38 @@ export function useChatIPC({
               requestId: req.requestId,
               question: req.question,
               choices: Array.isArray(req.choices) ? req.choices : [],
+            },
+          ];
+        });
+      },
+    );
+
+    const cleanupApproval = window.hermesAPI.onApprovalRequest(
+      (eventRunId, req) => {
+        if (!eventMatchesRun(eventRunId, runId)) return;
+        reasoningSegmentClosedRef.current = true;
+        setToolProgress(null);
+        setIsLoading(true);
+        setMessages((prev) => {
+          if (
+            prev.some(
+              (message) =>
+                message.kind === "approval" &&
+                message.responsePath === "ipc" &&
+                message.requestId === req.requestId,
+            )
+          ) {
+            return prev;
+          }
+          return [
+            ...prev,
+            {
+              id: `approval-ipc-${req.requestId}`,
+              kind: "approval",
+              role: "agent",
+              responsePath: "ipc",
+              runId,
+              ...req,
             },
           ];
         });
@@ -353,12 +409,15 @@ export function useChatIPC({
       cleanupDone();
       cleanupError();
       cleanupClarify();
+      cleanupApproval();
       cleanupToolProgress();
       cleanupToolEvent();
       cleanupUsage();
     };
   }, [
     runId,
+    connectionId,
+    profile,
     setMessages,
     setHermesSessionId,
     setToolProgress,

@@ -114,6 +114,7 @@ import {
   sendMessage,
   stopHealthPolling as realStopHealthPolling,
 } from "../src/main/hermes";
+import type { ConnectionConfig } from "../src/main/config";
 
 describe("sendMessageViaApi forwards resumeSessionId", () => {
   beforeEach(() => {
@@ -273,5 +274,56 @@ describe("sendMessageViaApi forwards resumeSessionId", () => {
     expect(ids[0]).toBeTruthy();
     expect(ids[1]).toBeTruthy();
     expect(ids[0]).not.toBe(ids[1]);
+  });
+
+  // @lat: [[connections#Test specifications#Concurrent legacy Remote routes]]
+  it("keeps simultaneous legacy sends on their own Remote URL and credential", async () => {
+    const secondConnection: ConnectionConfig = {
+      mode: "remote",
+      remoteUrl: "https://second-api.example.com",
+      apiKey: "second-key",
+      remoteAuthMode: "token",
+      remoteChatTransport: "legacy",
+      sshChatTransport: "auto",
+      ssh: {
+        host: "",
+        port: 22,
+        username: "",
+        keyPath: "",
+        remotePort: 8642,
+        localPort: 18642,
+      },
+    };
+    const callbacks = { onChunk: vi.fn(), onDone: vi.fn(), onError: vi.fn() };
+
+    await Promise.all([
+      sendMessage("active", callbacks, "default"),
+      sendMessage(
+        "second",
+        callbacks,
+        "default",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        secondConnection,
+      ),
+    ]);
+
+    const active = capturedRequests.find((request) =>
+      request.url.startsWith("http://test-api.example.com/v1/chat/completions"),
+    );
+    const second = capturedRequests.find((request) =>
+      request.url.startsWith(
+        "https://second-api.example.com/v1/chat/completions",
+      ),
+    );
+    expect(active?.options.headers).toMatchObject({
+      Authorization: "Bearer test-key",
+    });
+    expect(second?.options.headers).toMatchObject({
+      Authorization: "Bearer second-key",
+    });
   });
 });

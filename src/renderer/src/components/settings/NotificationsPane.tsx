@@ -1,4 +1,5 @@
 import { useChatPreferences } from "../ChatPreferencesProvider";
+import { Toggle } from "../common/Toggle";
 import { useI18n } from "../useI18n";
 
 /** Desktop response notification preferences. */
@@ -18,17 +19,11 @@ export default function NotificationsPane(): React.JSX.Element {
             {t("settings.notifications.completionSoundHint")}
           </div>
         </div>
-        <label className="tools-toggle">
-          <input
-            type="checkbox"
-            aria-label={t("settings.notifications.completionSound")}
-            checked={completionSoundEnabled}
-            onChange={(event) =>
-              setCompletionSoundEnabled(event.target.checked)
-            }
-          />
-          <span className="tools-toggle-track" />
-        </label>
+        <Toggle
+          checked={completionSoundEnabled}
+          label={t("settings.notifications.completionSound")}
+          onCheckedChange={setCompletionSoundEnabled}
+        />
       </div>
     </div>
   );

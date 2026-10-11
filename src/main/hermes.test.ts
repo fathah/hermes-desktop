@@ -1,4 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 
 // hermes.ts pulls in the full main-process import graph; mock the modules with
 // import-time side effects (installer → electron) and the two seams under
@@ -13,6 +22,11 @@ vi.mock("./installer", () => ({
 }));
 vi.mock("./config", () => ({
   getApiServerKey: vi.fn(() => ""),
+  getActiveConnection: vi.fn(() => ({
+    connectionId: "connection-test",
+    name: "Test",
+    config: {},
+  })),
   getConnectionConfig: vi.fn(() => ({
     mode: "local",
     remoteUrl: "",
@@ -50,29 +64,361 @@ vi.mock("child_process", () => {
 });
 
 import { spawn } from "child_process";
+import { readModels } from "./models";
 import {
   getApiServerKey,
+  getActiveConnection,
   getConnectionConfig,
   getModelConfig,
   readEnv,
 } from "./config";
 import type { ConnectionConfig } from "./config";
 import { providerListSafe } from "./secrets";
+import { pidIsAliveAs, profileHome } from "./utils";
 import {
+  assertLocalGatewayKeyMutationAllowed,
+  clearAgentCapabilityEvidence,
+  getAgentCapabilityEvidence,
+  getCachedAgentCapabilityEvidence,
   getRemoteAuthHeader,
+  isExternallyManagedMultiplexGateway,
+  isGatewayRunning,
+  stopGateway,
+  bindPendingApproval,
+  clearAllPendingApprovals,
+  registerPendingApproval,
+  resolvePendingApproval,
+  recordAgentCommandInventory,
+  recordAgentRuntimeInfo,
   sendMessage,
   shouldForceCliForSessionOverride,
   stopHealthPolling,
   transcribeAudio,
 } from "./hermes";
 import type { ChatCallbacks } from "./hermes";
+import { normalizeApprovalRequest } from "../shared/chat-approval";
 
 const mockedGetModelConfig = vi.mocked(getModelConfig);
 const mockedGetApiServerKey = vi.mocked(getApiServerKey);
+const mockedGetActiveConnection = vi.mocked(getActiveConnection);
 const mockedGetConnectionConfig = vi.mocked(getConnectionConfig);
 const mockedReadEnv = vi.mocked(readEnv);
 const mockedProviderListSafe = vi.mocked(providerListSafe);
 const mockedSpawn = vi.mocked(spawn);
+
+describe("local gateway status", () => {
+  let home: string;
+
+  beforeEach(() => {
+    home = mkdtempSync(join(tmpdir(), "hermes-one-gateway-status-"));
+    vi.mocked(profileHome).mockImplementation((profile) =>
+      profile ? join(home, "profiles", String(profile)) : home,
+    );
+    vi.mocked(pidIsAliveAs).mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    vi.mocked(profileHome).mockReset();
+    vi.mocked(pidIsAliveAs).mockReset();
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  // @lat: [[connections#Test specifications#Local multiplex gateway status]]
+  it.skipIf(process.platform !== "linux")(
+    "recognizes a live default-home multiplex gateway without gateway.pid",
+    () => {
+      const stat = readFileSync(`/proc/${process.pid}/stat`, "utf-8");
+      const startTime = Number(
+        stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19],
+      );
+      writeFileSync(
+        join(home, "gateway_state.json"),
+        JSON.stringify({
+          gateway_state: "running",
+          kind: "hermes-gateway",
+          hermes_home: home,
+          pid: process.pid,
+          start_time: startTime,
+          served_profiles: ["default", "scout"],
+        }),
+      );
+
+      expect(isGatewayRunning("default")).toBe(true);
+      expect(isGatewayRunning("scout")).toBe(false);
+      expect(pidIsAliveAs).toHaveBeenCalledWith(process.pid, [
+        "python",
+        "pythonw",
+      ]);
+    },
+  );
+
+  it.skipIf(process.platform !== "linux")(
+    "rejects a reused PID with a different process start fingerprint",
+    () => {
+      const stat = readFileSync(`/proc/${process.pid}/stat`, "utf-8");
+      const startTime = Number(
+        stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19],
+      );
+      writeFileSync(
+        join(home, "gateway_state.json"),
+        JSON.stringify({
+          gateway_state: "running",
+          kind: "hermes-gateway",
+          hermes_home: home,
+          pid: process.pid,
+          start_time: startTime + 1,
+          served_profiles: ["default"],
+        }),
+      );
+      expect(isGatewayRunning("default")).toBe(false);
+    },
+  );
+
+  // @lat: [[connections#Test specifications#Externally managed gateway controls]]
+  it.skipIf(process.platform !== "linux")(
+    "refuses to stop a service-owned multiplex gateway",
+    () => {
+      const stat = readFileSync(`/proc/${process.pid}/stat`, "utf-8");
+      const startTime = Number(
+        stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19],
+      );
+      writeFileSync(
+        join(home, "gateway_state.json"),
+        JSON.stringify({
+          kind: "hermes-gateway",
+          hermes_home: home,
+          gateway_state: "running",
+          pid: process.pid,
+          start_time: startTime,
+          served_profiles: ["default"],
+        }),
+      );
+      expect(stopGateway("default", true)).toBe(false);
+      expect(isGatewayRunning("default")).toBe(true);
+    },
+  );
+
+  // @lat: [[connections#Test specifications#Externally managed API keys]]
+  it.skipIf(process.platform !== "linux")(
+    "identifies a live external default gateway before rotating credentials",
+    () => {
+      const stat = readFileSync(`/proc/${process.pid}/stat`, "utf-8");
+      const startTime = Number(
+        stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19],
+      );
+      writeFileSync(
+        join(home, "gateway_state.json"),
+        JSON.stringify({
+          kind: "hermes-gateway",
+          hermes_home: home,
+          gateway_state: "running",
+          pid: process.pid,
+          start_time: startTime,
+          served_profiles: ["default"],
+        }),
+      );
+      expect(isExternallyManagedMultiplexGateway("default")).toBe(true);
+      expect(isExternallyManagedMultiplexGateway("scout")).toBe(false);
+      expect(() =>
+        assertLocalGatewayKeyMutationAllowed("API_SERVER_KEY", "default"),
+      ).toThrow("managed outside Hermes One");
+      expect(() =>
+        assertLocalGatewayKeyMutationAllowed("api_server.token", "default"),
+      ).toThrow("managed outside Hermes One");
+      expect(() =>
+        assertLocalGatewayKeyMutationAllowed("api_server.extra.key", "default"),
+      ).toThrow("managed outside Hermes One");
+      expect(() =>
+        assertLocalGatewayKeyMutationAllowed(
+          "platforms.api_server.extra.key",
+          "default",
+        ),
+      ).toThrow("managed outside Hermes One");
+      expect(() =>
+        assertLocalGatewayKeyMutationAllowed("model.default", "default"),
+      ).not.toThrow();
+    },
+  );
+
+  it.skipIf(process.platform !== "linux")(
+    "rejects invalid ownership and stale multiplex state",
+    () => {
+      const file = join(home, "gateway_state.json");
+      const stat = readFileSync(`/proc/${process.pid}/stat`, "utf-8");
+      const startTime = Number(
+        stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19],
+      );
+      const state = {
+        kind: "hermes-gateway",
+        hermes_home: home,
+        gateway_state: "running",
+        pid: process.pid,
+        start_time: startTime,
+        served_profiles: ["default", "scout"],
+      };
+      writeFileSync(file, JSON.stringify(state));
+      expect(isGatewayRunning("default")).toBe(true);
+      expect(isGatewayRunning("other")).toBe(false);
+
+      for (const changed of [
+        { kind: "not-a-gateway" },
+        { hermes_home: join(home, "other") },
+        { gateway_state: "stopped" },
+        { served_profiles: ["scout"] },
+      ]) {
+        writeFileSync(file, JSON.stringify({ ...state, ...changed }));
+        expect(isGatewayRunning("default")).toBe(false);
+      }
+
+      writeFileSync(file, JSON.stringify(state));
+      vi.mocked(pidIsAliveAs).mockReturnValue(false);
+      expect(isGatewayRunning("default")).toBe(false);
+
+      writeFileSync(file, "not json");
+      expect(isGatewayRunning("default")).toBe(false);
+    },
+  );
+
+  // @lat: [[connections#Test specifications#Equivalent gateway home paths]]
+  it.skipIf(process.platform !== "linux")(
+    "recognizes the same gateway home through a symlink",
+    () => {
+      const alias = join(home, "alias");
+      symlinkSync(home, alias, "dir");
+      const stat = readFileSync(`/proc/${process.pid}/stat`, "utf-8");
+      const startTime = Number(
+        stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19],
+      );
+      writeFileSync(
+        join(home, "gateway_state.json"),
+        JSON.stringify({
+          kind: "hermes-gateway",
+          hermes_home: home,
+          gateway_state: "running",
+          pid: process.pid,
+          start_time: startTime,
+          served_profiles: ["default"],
+        }),
+      );
+      vi.mocked(profileHome).mockReturnValue(alias);
+      expect(isGatewayRunning("default")).toBe(true);
+      expect(isExternallyManagedMultiplexGateway("default")).toBe(true);
+    },
+  );
+});
+
+describe("chat approval normalization", () => {
+  it("preserves an explicit safe choice subset and always includes deny", () => {
+    expect(
+      normalizeApprovalRequest(
+        {
+          command: "rm -rf build",
+          reason: "recursive delete",
+          choices: ["session", "bogus", "session"],
+        },
+        "opaque-id",
+      ),
+    ).toEqual({
+      requestId: "opaque-id",
+      command: "rm -rf build",
+      description: "recursive delete",
+      choices: ["session", "deny"],
+    });
+  });
+
+  it("does not expose permanent approval when the payload forbids it", () => {
+    expect(
+      normalizeApprovalRequest(
+        {
+          cmd: "chmod 777 file",
+          choices: ["once", "always"],
+          allow_permanent: false,
+        },
+        "opaque-id",
+      ).choices,
+    ).toEqual(["once", "deny"]);
+  });
+});
+
+describe("pending chat approvals", () => {
+  afterEach(() => clearAllPendingApprovals());
+
+  it("validates offered choices and removes only an acknowledged response", async () => {
+    const responder = vi
+      .fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    const requestId = registerPendingApproval(["once", "deny"], responder);
+
+    await expect(resolvePendingApproval(requestId, "always")).resolves.toBe(
+      false,
+    );
+    await expect(resolvePendingApproval(requestId, "once")).resolves.toBe(
+      false,
+    );
+    await expect(resolvePendingApproval(requestId, "deny")).resolves.toBe(true);
+    await expect(resolvePendingApproval(requestId, "deny")).resolves.toBe(
+      false,
+    );
+    expect(responder).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects a duplicate response while acknowledgement is in flight", async () => {
+    let acknowledge!: (value: boolean) => void;
+    const responder = vi.fn(
+      () => new Promise<boolean>((resolve) => (acknowledge = resolve)),
+    );
+    const requestId = registerPendingApproval(["once"], responder);
+    const first = resolvePendingApproval(requestId, "once");
+
+    await expect(resolvePendingApproval(requestId, "once")).resolves.toBe(
+      false,
+    );
+    acknowledge(true);
+    await expect(first).resolves.toBe(true);
+    expect(responder).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not report success after a pending request is cleared", async () => {
+    let acknowledge!: (value: boolean) => void;
+    const requestId = registerPendingApproval(
+      ["once"],
+      () => new Promise<boolean>((resolve) => (acknowledge = resolve)),
+    );
+    const response = resolvePendingApproval(requestId, "once");
+
+    clearAllPendingApprovals();
+    acknowledge(true);
+    await expect(response).resolves.toBe(false);
+  });
+
+  it("scopes an approval response to its renderer and run", async () => {
+    const responder = vi.fn().mockResolvedValue(true);
+    const requestId = registerPendingApproval(["deny"], responder);
+    expect(bindPendingApproval(requestId, { ownerId: 7, runId: "run-1" })).toBe(
+      true,
+    );
+
+    await expect(
+      resolvePendingApproval(requestId, "deny", {
+        ownerId: 8,
+        runId: "run-1",
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      resolvePendingApproval(requestId, "deny", {
+        ownerId: 7,
+        runId: "run-2",
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      resolvePendingApproval(requestId, "deny", {
+        ownerId: 7,
+        runId: "run-1",
+      }),
+    ).resolves.toBe(true);
+  });
+});
 
 function testConnection(
   fields: Partial<ConnectionConfig> = {},
@@ -95,6 +441,59 @@ function testConnection(
     ...fields,
   };
 }
+
+describe("Agent capability evidence cache", () => {
+  // @lat: [[agent-capabilities#Test specifications#Evidence invalidation]]
+  it("drops command evidence after catalog failure or Agent contract changes", async () => {
+    clearAgentCapabilityEvidence();
+    recordAgentRuntimeInfo({ desktop_contract: 5, version: "0.19.0" });
+    expect(recordAgentCommandInventory({ pairs: [["/queue", "Queue"]] })).toBe(
+      true,
+    );
+    expect((await getAgentCapabilityEvidence()).commandNames).toEqual([
+      "queue",
+    ]);
+
+    recordAgentRuntimeInfo({ desktop_contract: 6, version: "0.20.0" });
+    expect((await getAgentCapabilityEvidence()).commandNames).toBeNull();
+
+    recordAgentCommandInventory({ pairs: [["/steer", "Steer"]] });
+    expect(recordAgentCommandInventory(undefined)).toBe(false);
+    expect((await getAgentCapabilityEvidence()).commandNames).toBeNull();
+
+    expect(recordAgentRuntimeInfo(undefined)).toBe(false);
+    expect((await getAgentCapabilityEvidence()).runtimeInfo).toBeNull();
+    clearAgentCapabilityEvidence();
+  });
+
+  it("keeps evidence attached to a stable connection identity", () => {
+    clearAgentCapabilityEvidence();
+    mockedGetActiveConnection.mockReturnValue({
+      connectionId: "connection-a",
+      name: "A",
+      config: testConnection(),
+    });
+    recordAgentRuntimeInfo(
+      { desktop_contract: 6, version: "0.20.0" },
+      undefined,
+      "connection-a",
+    );
+
+    mockedGetActiveConnection.mockReturnValue({
+      connectionId: "connection-b",
+      name: "B",
+      config: testConnection(),
+    });
+
+    expect(
+      getCachedAgentCapabilityEvidence("connection-a").runtimeInfo,
+    ).toEqual({ desktop_contract: 6, version: "0.20.0" });
+    expect(
+      getCachedAgentCapabilityEvidence("connection-b").runtimeInfo,
+    ).toBeNull();
+    clearAgentCapabilityEvidence();
+  });
+});
 
 describe("remote authentication headers", () => {
   // @lat: [[remote-dashboard-oauth#Test specifications#OAuth bearer suppression]]
@@ -238,6 +637,7 @@ describe("sendMessage session model override routing", () => {
   }
 
   beforeEach(() => {
+    vi.mocked(readModels).mockReset().mockReturnValue([]);
     mockedGetApiServerKey.mockReset();
     mockedGetApiServerKey.mockReturnValue("");
     mockedGetConnectionConfig.mockReset();
@@ -266,6 +666,139 @@ describe("sendMessage session model override routing", () => {
   afterEach(() => {
     stopHealthPolling();
   });
+
+  // @lat: [[provider-setup#Provider setup#LLM-provider keys are configured-only, via modals#Named custom providers#Runtime credential parity]]
+  it.each(["env", "vault"])(
+    "passes a named custom provider's %s key to the CLI for equivalent URLs",
+    async (source) => {
+      const key = "CUSTOM_PROVIDER_TEST_LABEL_KEY";
+      vi.mocked(readModels).mockReturnValue([
+        {
+          id: "first",
+          name: "No key",
+          provider: "custom",
+          providerLabel: "Absent Label",
+          model: "test",
+          baseUrl: "https://example.com/Api",
+          createdAt: 1,
+        },
+        {
+          id: "test",
+          name: "Test",
+          provider: "custom",
+          providerLabel: "Test Label",
+          model: "test",
+          baseUrl: "https://EXAMPLE.com:443/Api/",
+          createdAt: 1,
+        },
+      ]);
+      if (source === "env")
+        mockedReadEnv.mockReturnValue({ [key]: "profile-secret" });
+      else mockedProviderListSafe.mockReturnValue({ [key]: "profile-secret" });
+      await sendMessage(
+        "hello",
+        noopCallbacks,
+        "default",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          provider: "custom",
+          model: "test",
+          baseUrl: "https://example.com/Api",
+        },
+      );
+      const options = mockedSpawn.mock.calls[0][2];
+      expect(options?.env?.OPENAI_API_KEY).toBe("profile-secret");
+      expect(options?.env?.OPENAI_BASE_URL).toBe("https://example.com/Api");
+    },
+  );
+
+  // @lat: [[provider-setup#Requesty provider preset#Vault credentials reach CLI]]
+  it.each([
+    ["https://router.requesty.ai/v1", "vault"],
+    ["https://router.eu.requesty.ai/v1", "vault"],
+    ["https://openai.com:password@router.requesty.ai/v1", "vault"],
+    ["https://router.requesty.ai/api.deepseek.com/v1", "vault"],
+    ["https://router.requesty.ai/v1", "profile"],
+    ["https://router.requesty.ai/v1", "process"],
+  ])(
+    "passes Requesty CLI credentials for %s from %s",
+    async (baseUrl, source) => {
+      vi.stubEnv("REQUESTY_API_KEY", "");
+      vi.stubEnv("OPENAI_API_KEY", "");
+      vi.stubEnv("CUSTOM_API_KEY", "");
+      mockedProviderListSafe.mockReturnValue({ REQUESTY_API_KEY: "vault-key" });
+      if (source === "profile")
+        mockedReadEnv.mockReturnValue({ REQUESTY_API_KEY: "profile-key" });
+      if (source === "process") vi.stubEnv("REQUESTY_API_KEY", "process-key");
+      try {
+        await sendMessage(
+          "hello",
+          noopCallbacks,
+          "work",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          { provider: "custom", model: "openai/gpt-4o-mini", baseUrl },
+        );
+        const env = mockedSpawn.mock.calls[0][2]?.env;
+        expect(env?.REQUESTY_API_KEY).toBe(`${source}-key`);
+        expect(env?.OPENAI_API_KEY).toBe(`${source}-key`);
+        expect(env?.OPENAI_BASE_URL).toBe(baseUrl);
+        expect(mockedProviderListSafe).toHaveBeenCalledExactlyOnceWith("work");
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
+  // @lat: [[provider-setup#Cheaper Inference provider preset#Vault credentials reach CLI]]
+  it.each([
+    ["https://api.cheaperinference.com/v1", "vault"],
+    ["https://user:pass@api.cheaperinference.com:443/v1", "vault"],
+    ["https://openai.com:password@api.cheaperinference.com/v1", "vault"],
+    ["https://api.cheaperinference.com/api.deepseek.com/v1", "vault"],
+    ["https://api.cheaperinference.com/v1", "profile"],
+    ["https://api.cheaperinference.com/v1", "process"],
+  ])(
+    "passes Cheaper Inference CLI credentials for %s from %s",
+    async (baseUrl, source) => {
+      vi.stubEnv("CHEAPERINFERENCE_API_KEY", "");
+      vi.stubEnv("OPENAI_API_KEY", "");
+      vi.stubEnv("CUSTOM_API_KEY", "");
+      mockedProviderListSafe.mockReturnValue({
+        CHEAPERINFERENCE_API_KEY: "vault-key",
+      });
+      if (source === "profile")
+        mockedReadEnv.mockReturnValue({
+          CHEAPERINFERENCE_API_KEY: "profile-key",
+        });
+      if (source === "process")
+        vi.stubEnv("CHEAPERINFERENCE_API_KEY", "process-key");
+      try {
+        await sendMessage(
+          "hello",
+          noopCallbacks,
+          "work",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          { provider: "custom", model: "gpt-4o-mini", baseUrl },
+        );
+        const env = mockedSpawn.mock.calls[0][2]?.env;
+        expect(env?.CHEAPERINFERENCE_API_KEY).toBe(`${source}-key`);
+        expect(env?.OPENAI_API_KEY).toBe(`${source}-key`);
+        expect(env?.OPENAI_BASE_URL).toBe(baseUrl);
+        expect(mockedProviderListSafe).toHaveBeenCalledExactlyOnceWith("work");
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
 
   // @lat: [[model-selection#Session model override#Text-only legacy fallback routes via CLI]]
   it("routes a cross-provider override through the CLI with its provider + model", async () => {

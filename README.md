@@ -2,7 +2,6 @@
 
 <br/>
 <p align="center">
-  <a href="https://x.com/HermesOneApp"><img src="https://img.shields.io/badge/Follow Us-000000?style=for-the-badge&logo=x" alt="Twitter"></a>
   <a href="https://discord.gg/Fqu72h8z"><img src="https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
   <a href="https://github.com/fathah/hermes-desktop/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License: MIT"></a>
   <a href="https://hermesone.org"><img src="https://img.shields.io/badge/Download-Releases-FF6600?style=for-the-badge" alt="Releases"></a>
@@ -12,9 +11,7 @@
   <a href="https://github.com/fathah/hermes-desktop/releases/">
   <img src="https://img.shields.io/github/downloads/fathah/hermes-desktop/total?style=for-the-badge&color=00B496&label=Total%20Downloads" alt="Downloads">
 </a>
-   <a href="https://bankr.bot/launches/0xfda75f77a22b4f4b783bbbb21915ef64d149bba3">
-  <img src="https://img.shields.io/badge/Token-$HD-purple?style=for-the-badge&logo=ethereum" alt="Downloads">
-</a>
+  
   
 </p>
 
@@ -55,11 +52,6 @@ Instead of managing the CLI by hand, the app walks through install, provider set
 <summary>Click to collapse</summary>
 <br/>
 <table>
-
-<tr>
-<td width="180"><a href="ttps://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=hermes-desktop"><img src="assets/partners/atlascloud.webp" alt="Atlas Cloud" width=""></a></td>
-<td> <a href="https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=hermes-desktop">Atlas Cloud</a> is a full-modal, OpenAI-compatible AI inference platform. Use it in Hermes One by selecting <b>Atlas Cloud</b> as your provider. The base URL is pre-configured automatically. </td>
-</tr>
 
 <tr>
 <td width="180"><a href="https://www.greptile.com/?utm_source=hermes-desktop"><img src="assets/partners/greptile.webp" alt="Greptile" width=""></a></td>

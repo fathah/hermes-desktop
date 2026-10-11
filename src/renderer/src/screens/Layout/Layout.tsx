@@ -11,13 +11,15 @@ import {
   isScratchRun,
   openSessionRunTransition,
   selectProfileRunTransition,
-  findRunBySession,
+  findRunByLocation,
   cycleRunId,
   runIdAtOrdinal,
   loadingSessionIds as deriveLoadingSessionIds,
+  createdSessionIds as deriveCreatedSessionIds,
 } from "./chatRuns";
 import { ActiveSessionsBar } from "./ActiveSessionsBar";
 import { StatusBar } from "./StatusBar";
+import { useRemoteOnlyMode } from "./useRemoteOnlyMode";
 import Sessions from "../Sessions/Sessions";
 import Agents from "../Agents/Agents";
 import Discover from "../Discover/Discover";
@@ -29,6 +31,7 @@ import Tools from "../Tools/Tools";
 import Gateway from "../Gateway/Gateway";
 import Office from "../Office/Office";
 import Providers from "../Providers/Providers";
+import RemoteProviders from "../Providers/RemoteProviders";
 import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
 import RemoteNotice from "../../components/RemoteNotice";
@@ -87,16 +90,18 @@ const SIDEBAR_COLLAPSED_KEY = "hermes.sidebar.collapsed";
 const SIDEBAR_SCROLLBAR_HIDE_MS = 700;
 
 interface LayoutProps {
+  connectionId: string;
   verifyWarning?: boolean;
   onReinstall?: () => void;
   onDismissVerifyWarning?: () => void;
 }
 
 function Layout({
+  connectionId,
   verifyWarning,
   onReinstall,
   onDismissVerifyWarning,
-}: LayoutProps = {}): React.JSX.Element {
+}: LayoutProps): React.JSX.Element {
   const { t } = useI18n();
   const { openSettings } = useSettingsModal();
   const [view, setView] = useState<View>("chat");
@@ -105,7 +110,9 @@ function Layout({
   // preserve existing conversations and activate a scratch run for the selected
   // agent so `activeProfile` stays aligned with the visible chat transport.
   const [activeProfile, setActiveProfile] = useState("default");
-  const [runs, setRuns] = useState<ChatRun[]>(() => [mintRun("default")]);
+  const [runs, setRuns] = useState<ChatRun[]>(() => [
+    mintRun(connectionId, "default"),
+  ]);
   const [activeRunId, setActiveRunId] = useState<string>(() => runs[0].runId);
   // While a resume's history is loading, show its spinner immediately.
   const [resumingSessionId, setResumingSessionId] = useState<string | null>(
@@ -132,6 +139,10 @@ function Layout({
   const loadingSessionIds = useMemo(
     () => deriveLoadingSessionIds(runs),
     [runs],
+  );
+  const createdSessionIds = useMemo(
+    () => deriveCreatedSessionIds(runs, connectionId, activeProfile),
+    [runs, connectionId, activeProfile],
   );
 
   const updateSidebarScrollbar = useCallback((visible: boolean) => {
@@ -265,7 +276,7 @@ function Layout({
     () => new Set<View>(["chat"]),
   );
   // Remote-only mode — SSH tunnel has full access; only pure HTTP remote mode restricts screens
-  const [remoteMode, setRemoteMode] = useState(false);
+  const remoteMode = useRemoteOnlyMode(connectionId, view);
   // Set by the Capabilities screen's "Browse" actions to focus a Discover tab
   // (Skills → Community, or MCPs). The nonce re-fires Discover's effect.
   const [discoverFocus, setDiscoverFocus] = useState<{
@@ -315,11 +326,6 @@ function Layout({
     },
     [goTo],
   );
-
-  // Re-check remote mode on tab switch (picks up Settings changes)
-  useEffect(() => {
-    window.hermesAPI.isRemoteOnlyMode().then(setRemoteMode);
-  }, [view]);
 
   // Restore the last-activated profile on launch. The main process persists it
   // in ~/.hermes/active_profile (via `hermes profile use`), so the desktop
@@ -432,15 +438,20 @@ function Layout({
     // current chat is already a blank scratch, reuse it instead of stacking
     // another empty tab.
     const active = runs.find((r) => r.runId === activeRunId);
-    if (active && !active.sessionId && !active.loading && !active.title) {
+    if (
+      active?.connectionId === connectionId &&
+      !active.sessionId &&
+      !active.loading &&
+      !active.title
+    ) {
       goTo("chat");
       return;
     }
-    const run = mintRun(activeProfile);
+    const run = mintRun(connectionId, activeProfile);
     setRuns((prev) => [...prev, run]);
     setActiveRunId(run.runId);
     goTo("chat");
-  }, [runs, activeRunId, activeProfile, goTo]);
+  }, [runs, activeRunId, connectionId, activeProfile, goTo]);
 
   // Listen for menu IPC events (Cmd+N, Cmd+K from app menu)
   useEffect(() => {
@@ -474,11 +485,16 @@ function Layout({
       // to a scratch run for the selected profile so the footer and transport
       // never point at different agents.
       setActiveProfile(name);
-      const next = selectProfileRunTransition(runs, activeRunId, name);
+      const next = selectProfileRunTransition(
+        runs,
+        activeRunId,
+        connectionId,
+        name,
+      );
       setRuns(next.runs);
       setActiveRunId(next.activeRunId);
     },
-    [runs, activeRunId],
+    [runs, activeRunId, connectionId],
   );
 
   // The "Chat" affordance: start (or reuse a blank) conversation with an agent
@@ -487,20 +503,20 @@ function Layout({
     (name: string) => {
       setActiveProfile(name);
       const active = runs.find((r) => r.runId === activeRunId);
-      if (active && isScratchRun(active)) {
+      if (active?.connectionId === connectionId && isScratchRun(active)) {
         setRuns((prev) =>
           prev.map((r) =>
             r.runId === active.runId ? { ...r, profile: name } : r,
           ),
         );
       } else {
-        const run = mintRun(name);
+        const run = mintRun(connectionId, name);
         setRuns((prev) => [...prev, run]);
         setActiveRunId(run.runId);
       }
       goTo("chat");
     },
-    [runs, activeRunId, goTo],
+    [runs, activeRunId, connectionId, goTo],
   );
 
   // Jump to an already-open run (e.g. from the active-sessions bar), switching
@@ -521,11 +537,11 @@ function Layout({
   // open so the chat view is never empty.
   const handleCloseRun = useCallback(
     (runId: string) => {
-      window.hermesAPI.abortChat(runId);
       const idx = runs.findIndex((r) => r.runId === runId);
+      window.hermesAPI.abortChat(runId, runs[idx]?.connectionId);
       const remaining = runs.filter((r) => r.runId !== runId);
       if (remaining.length === 0) {
-        const fresh = mintRun(activeProfile);
+        const fresh = mintRun(connectionId, activeProfile);
         setRuns([fresh]);
         setActiveRunId(fresh.runId);
         return;
@@ -537,7 +553,7 @@ function Layout({
         setActiveProfile(neighbour.profile);
       }
     },
-    [runs, activeRunId, activeProfile],
+    [runs, activeRunId, connectionId, activeProfile],
   );
 
   // Chrome/iTerm-style tab shortcuts for the conversation tabs: Ctrl+Tab /
@@ -613,7 +629,11 @@ function Layout({
   const handleResumeSession = useCallback(
     async (sessionId: string) => {
       // Already open as a live run? Re-attach to it (keeps live streaming).
-      const live = findRunBySession(runs, sessionId);
+      const live = findRunByLocation(runs, {
+        connectionId,
+        profile: activeProfile,
+        sessionId,
+      });
       if (live) {
         handleActivateRun(live.runId);
         return;
@@ -627,8 +647,14 @@ function Layout({
       try {
         const items = (await window.hermesAPI.getSessionMessages(
           sessionId,
+          connectionId,
+          activeProfile,
         )) as DbHistoryItem[];
-        const run = mintRun(activeProfile, dbItemsToChatMessages(items));
+        const run = mintRun(
+          connectionId,
+          activeProfile,
+          dbItemsToChatMessages(items),
+        );
         run.sessionId = sessionId;
         setRuns(
           (prev) => openSessionRunTransition(prev, activeRunId, run).runs,
@@ -640,7 +666,7 @@ function Layout({
         setResumingSessionId(null);
       }
     },
-    [runs, activeRunId, handleActivateRun, activeProfile, goTo],
+    [runs, activeRunId, handleActivateRun, connectionId, activeProfile, goTo],
   );
 
   const toggleSidebar = useCallback(() => {
@@ -724,9 +750,11 @@ function Layout({
               <div className="sidebar-chat-scroll" ref={sidebarChatScrollRef}>
                 <SidebarRecentSessions
                   open={!sidebarCollapsed}
+                  connectionId={connectionId}
                   activeProfile={activeProfile}
                   currentSessionId={currentSessionId}
                   loadingSessionIds={loadingSessionIds}
+                  createdSessionIds={createdSessionIds}
                   resumingSessionId={resumingSessionId}
                   onSelect={handleResumeSession}
                   onSessionDeleted={(id) => {
@@ -858,6 +886,7 @@ function Layout({
               >
                 <Chat
                   runId={run.runId}
+                  connectionId={run.connectionId}
                   initialMessages={run.seed}
                   initialSessionId={run.sessionId}
                   active={run.runId === activeRunId}
@@ -885,6 +914,8 @@ function Layout({
                 onClick={(e) => e.stopPropagation()}
               >
                 <Sessions
+                  connectionId={connectionId}
+                  profile={activeProfile}
                   onResumeSession={(id) => {
                     setSessionsModalOpen(false);
                     void handleResumeSession(id);
@@ -902,15 +933,13 @@ function Layout({
 
           {visitedViews.has("discover") && (
             <div style={paneStyle("discover")}>
-              {remoteMode ? (
-                <RemoteNotice feature="Discover" />
-              ) : (
-                <Discover
-                  profile={activeProfile}
-                  visible={view === "discover"}
-                  focusKind={discoverFocus ?? undefined}
-                />
-              )}
+              <Discover
+                key={connectionId}
+                browseOnly={remoteMode}
+                profile={activeProfile}
+                visible={view === "discover"}
+                focusKind={discoverFocus ?? undefined}
+              />
             </div>
           )}
 
@@ -937,9 +966,13 @@ function Layout({
           {visitedViews.has("providers") && (
             <div style={paneStyle("providers")}>
               {remoteMode ? (
-                <RemoteNotice feature="Providers" />
+                <RemoteProviders
+                  connectionId={connectionId}
+                  profile={activeProfile}
+                />
               ) : (
                 <Providers
+                  key={JSON.stringify([connectionId, activeProfile])}
                   profile={activeProfile}
                   visible={view === "providers"}
                 />
@@ -949,11 +982,13 @@ function Layout({
 
           {visitedViews.has("skills") && (
             <div style={paneStyle("skills")}>
-              {remoteMode ? (
-                <RemoteNotice feature="Skills" />
-              ) : (
-                <Skills profile={activeProfile} />
-              )}
+              {/* Keyed by connection and profile so a target
+                  switch remounts it: its cached list and selection belong to
+                  the previous target, and Uninstall would hit the new one. */}
+              <Skills
+                key={JSON.stringify([connectionId, activeProfile])}
+                profile={activeProfile}
+              />
             </div>
           )}
 
@@ -988,21 +1023,22 @@ function Layout({
 
           {visitedViews.has("kanban") && (
             <div style={paneStyle("kanban")}>
-              {remoteMode ? (
-                <RemoteNotice feature="Kanban" />
-              ) : (
-                <Kanban profile={activeProfile} visible={view === "kanban"} />
-              )}
+              <Kanban
+                key={connectionId}
+                profile={activeProfile}
+                visible={view === "kanban"}
+                remoteMode={remoteMode}
+              />
             </div>
           )}
 
           {visitedViews.has("gateway") && (
             <div style={paneStyle("gateway")}>
-              {remoteMode ? (
-                <RemoteNotice feature="Gateway" />
-              ) : (
-                <Gateway profile={activeProfile} />
-              )}
+              <Gateway
+                key={`${connectionId}::${activeProfile}`}
+                profile={activeProfile}
+                remoteMode={remoteMode}
+              />
             </div>
           )}
         </main>

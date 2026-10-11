@@ -10,6 +10,8 @@ const mockState = vi.hoisted(() => ({
   linkedAgentId: null as string | null,
   /** Owner recorded in the profile's sync state (null = legacy/untagged). */
   linkedAccountId: null as string | null,
+  linkedApiUrl: null as string | null,
+  apiUrlAfterSync: null as string | null,
   syncAgentsCalls: 0,
   // A value the auto-sync "creates" — returned by getLinkedAgentId after sync.
   linkAfterSync: null as string | null,
@@ -37,12 +39,14 @@ vi.mock("./hermes-account", () => ({
 vi.mock("./agent-sync", () => ({
   getLinkedAgentId: () => mockState.linkedAgentId,
   getLinkedAgentAccountId: () => mockState.linkedAccountId,
+  getLinkedAgentApiUrl: () => mockState.linkedApiUrl,
   syncAgents: vi.fn(async () => {
     mockState.syncAgentsCalls++;
     if (mockState.linkAfterSync) {
       mockState.linkedAgentId = mockState.linkAfterSync;
     }
     mockState.linkedAccountId = mockState.ownerAfterSync;
+    mockState.linkedApiUrl = mockState.apiUrlAfterSync;
     return { status: "ok", outcomes: [], finishedAt: Date.now() };
   }),
 }));
@@ -83,6 +87,8 @@ async function engine(): Promise<typeof import("./wallet-sync")> {
 beforeEach(() => {
   mockState.account = { apiUrl: "http://localhost:3002", token: "tok" };
   mockState.linkedAgentId = null;
+  mockState.linkedApiUrl = "http://localhost:3002";
+  mockState.apiUrlAfterSync = "http://localhost:3002";
   mockState.linkedAccountId = null;
   mockState.linkAfterSync = null;
   mockState.ownerAfterSync = null;
@@ -223,4 +229,45 @@ describe("syncWalletsForProfile", () => {
     expect(result.status).toBe("foreign");
     expect(calls).toHaveLength(0);
   });
+});
+
+describe("wallet backend ownership", () => {
+  // @lat: [[agent-sync#Tests#Enforces backend ownership for wallets]]
+  it("refuses a link from another backend even when the user id matches", async () => {
+    mockState.linkedAgentId = "agent-1";
+    mockState.linkedAccountId = "u1";
+    mockState.linkedApiUrl = "http://localhost:9999";
+    const calls = stubFetch([]);
+    const e = await engine();
+    expect((await e.syncWalletsForProfile("alpha")).status).toBe("foreign");
+    expect(mockState.syncAgentsCalls).toBe(0);
+    expect(calls).toEqual([]);
+  });
+
+  it("normalizes equivalent backend URLs", async () => {
+    mockState.linkedAgentId = "agent-1";
+    mockState.linkedAccountId = "u1";
+    mockState.linkedApiUrl = "http://localhost:3002/";
+    stubFetch([]);
+    expect((await (await engine()).syncWalletsForProfile("alpha")).status).toBe(
+      "ok",
+    );
+  });
+
+  it.each(["http://localhost:3002", "http://localhost:9999", null])(
+    "requires legacy backend adoption before wallet calls: %j",
+    async (backend) => {
+      mockState.linkedAgentId = "agent-1";
+      mockState.linkedAccountId = "u1";
+      mockState.linkedApiUrl = null;
+      mockState.ownerAfterSync = "u1";
+      mockState.apiUrlAfterSync = backend;
+      const calls = stubFetch([]);
+      const result = await (await engine()).syncWalletsForProfile("alpha");
+      const allowed = backend === "http://localhost:3002";
+      expect(result.status).toBe(allowed ? "ok" : "foreign");
+      expect(calls).toHaveLength(allowed ? 1 : 0);
+      expect(mockState.syncAgentsCalls).toBe(1);
+    },
+  );
 });

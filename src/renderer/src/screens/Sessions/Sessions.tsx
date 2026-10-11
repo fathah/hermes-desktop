@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo, memo } from "react";
 import { Plus, Search, X, ChatBubble, Trash, Pencil } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
+import { confirmSessionRename } from "./confirmSessionRename";
 import { OrbLoader } from "../../components/OrbLoader";
 
 interface CachedSession {
@@ -87,6 +88,8 @@ interface SessionsProps {
   onNewChat: () => void;
   currentSessionId: string | null;
   visible: boolean;
+  connectionId: string;
+  profile: string;
 }
 
 function formatTime(ts: number): string {
@@ -194,6 +197,7 @@ const SessionCard = memo(function SessionCard({
   onRenameConfirm,
   onRenameCancel,
   renameInputRef,
+  renameSaving,
   selectionMode = false,
   selected = false,
   onToggleSelected,
@@ -214,6 +218,7 @@ const SessionCard = memo(function SessionCard({
   onRenameConfirm?: () => void;
   onRenameCancel?: () => void;
   renameInputRef?: React.RefObject<HTMLInputElement | null>;
+  renameSaving?: boolean;
   selectionMode?: boolean;
   selected?: boolean;
   onToggleSelected?: (id: string) => void;
@@ -263,6 +268,7 @@ const SessionCard = memo(function SessionCard({
         {isRenaming ? (
           <input
             ref={renameInputRef}
+            disabled={renameSaving}
             className="sessions-card-rename-input"
             type="text"
             value={renameValue}
@@ -348,11 +354,24 @@ const SessionCard = memo(function SessionCard({
 // device) surface without the user navigating away and back. (refs #322)
 export const SESSIONS_REFRESH_MS = 30_000;
 
-function Sessions({
+// A pending confirmation or request belongs to one immutable browsing scope.
+// Remount the stateful view when that identity changes, including A → B → A.
+function Sessions(props: SessionsProps): React.JSX.Element {
+  return (
+    <ScopedSessions
+      key={JSON.stringify([props.connectionId, props.profile])}
+      {...props}
+    />
+  );
+}
+
+function ScopedSessions({
   onResumeSession,
   onNewChat,
   currentSessionId,
   visible,
+  connectionId,
+  profile,
 }: SessionsProps): React.JSX.Element {
   const { t } = useI18n();
   const [sessions, setSessions] = useState<CachedSession[]>([]);
@@ -380,11 +399,36 @@ function Sessions({
     string[] | null
   >(null);
   const [deletingBulk, setDeletingBulk] = useState(false);
+  const [deleteError, setDeleteError] = useState(false);
+  const deleteOperation = useRef({ epoch: 0, busy: false });
+  useEffect(() => {
+    const operation = deleteOperation.current;
+    setDeleteError(false);
+    setDeletingSessionId(null);
+    setDeletingBulk(false);
+    setPendingDeleteSessionId(null);
+    setPendingBulkDeleteIds(null);
+    setSelectedSessionIds(new Set());
+    setIsSelectionMode(false);
+    return () => {
+      ++operation.epoch;
+      operation.busy = false;
+    };
+  }, [connectionId, profile]);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchRequestId = useRef(0);
   const loadRequestId = useRef(0);
   const searchRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const [renameSaving, setRenameSaving] = useState(false);
+  const renameContext = `${connectionId}\0${profile}`;
+  const renameContextRef = useRef<string | null>(renameContext);
+  useEffect(() => {
+    renameContextRef.current = renameContext;
+    return () => {
+      renameContextRef.current = null;
+    };
+  }, [renameContext]);
 
   useEffect(() => {
     try {
@@ -417,27 +461,50 @@ function Sessions({
   // loading state, so it can run on a timer or on focus with no spinner flash.
   const refreshSessions = useCallback(async (): Promise<void> => {
     const requestId = ++loadRequestId.current;
-    const synced = await window.hermesAPI.syncSessionCache();
-    if (loadRequestId.current !== requestId) return;
-    setSessions((prev) => {
-      if (synced.length === 0 && prev.length > 0) {
-        return prev;
+    try {
+      const synced = await window.hermesAPI.syncSessionCache(
+        connectionId,
+        profile,
+      );
+      if (loadRequestId.current !== requestId) return;
+      if (synced.length === 0) {
+        // Local sync reconciles the complete visible set, including an empty
+        // set after the last session is archived. Keep the transient-empty
+        // guard for network-backed lists, whose failure can look like [].
+        const config = await window.hermesAPI.getConnectionConfig(connectionId);
+        if (config.mode !== "local") return;
       }
-      return synced.slice(0, 50);
-    });
-  }, []);
+      if (loadRequestId.current !== requestId) return;
+      setSessions(synced.slice(0, 50));
+    } catch (error) {
+      // Preserve the last visible list; the next focus/timer tick can retry.
+      console.error("Failed to refresh sessions", error);
+    } finally {
+      // A quiet refresh can supersede a visible load; the latest request
+      // owns its spinner as well as its result, including on failure.
+      if (loadRequestId.current === requestId) setLoading(false);
+    }
+  }, [connectionId, profile]);
 
   const loadSessions = useCallback(async (): Promise<void> => {
     const requestId = ++loadRequestId.current;
     setLoading(true);
     try {
-      const synced = await window.hermesAPI.syncSessionCache();
+      const synced = await window.hermesAPI.syncSessionCache(
+        connectionId,
+        profile,
+      );
       if (loadRequestId.current !== requestId) return;
       setSessions(synced.slice(0, 50));
     } catch (error) {
       console.error("Failed to load sessions", error);
       try {
-        const cached = await window.hermesAPI.listCachedSessions(50);
+        const cached = await window.hermesAPI.listCachedSessions(
+          50,
+          0,
+          connectionId,
+          profile,
+        );
         if (loadRequestId.current === requestId) {
           setSessions(cached);
         }
@@ -449,7 +516,7 @@ function Sessions({
         setLoading(false);
       }
     }
-  }, []);
+  }, [connectionId, profile]);
 
   useEffect(() => {
     loadSessions();
@@ -461,6 +528,7 @@ function Sessions({
 
   const startRename = useCallback(
     (sessionId: string, currentTitle: string): void => {
+      if (renameSaving) return;
       setEditingSessionId(sessionId);
       setEditingTitle(currentTitle || "");
       // Focus the input on the next tick after render
@@ -469,7 +537,7 @@ function Sessions({
         renameInputRef.current?.select();
       }, 0);
     },
-    [],
+    [renameSaving],
   );
 
   const cancelRename = useCallback((): void => {
@@ -479,54 +547,55 @@ function Sessions({
 
   const confirmRename = useCallback(
     async (sessionId: string, newTitle: string): Promise<void> => {
-      const trimmed = newTitle.trim();
-      if (!trimmed) {
-        cancelRename();
-        return;
-      }
-      // Capture old titles so we can roll back on failure.
-      let oldSessionTitle = "";
-      let oldSearchResultTitle = "";
-      // Optimistic update
-      setSessions((prev) => {
-        oldSessionTitle = prev.find((s) => s.id === sessionId)?.title ?? "";
-        return prev.map((s) =>
-          s.id === sessionId ? { ...s, title: trimmed } : s,
-        );
+      const oldSessionTitle =
+        sessions.find((s) => s.id === sessionId)?.title ?? "";
+      const oldSearchResultTitle =
+        searchResults.find((r) => r.sessionId === sessionId)?.title ?? "";
+      await confirmSessionRename({
+        sessionId,
+        value: newTitle,
+        currentTitle: oldSessionTitle,
+        isCurrentContext: () => renameContextRef.current === renameContext,
+        setSaving: setRenameSaving,
+        isStillEditing: () => editingSessionIdRef.current === sessionId,
+        applyOptimistic: (title) => {
+          setSessions((prev) =>
+            prev.map((s) => (s.id === sessionId ? { ...s, title } : s)),
+          );
+          setSearchResults((prev) =>
+            prev.map((r) => (r.sessionId === sessionId ? { ...r, title } : r)),
+          );
+        },
+        rollback: () => {
+          setSessions((prev) =>
+            prev.map((s) =>
+              s.id === sessionId ? { ...s, title: oldSessionTitle } : s,
+            ),
+          );
+          setSearchResults((prev) =>
+            prev.map((r) =>
+              r.sessionId === sessionId
+                ? { ...r, title: oldSearchResultTitle }
+                : r,
+            ),
+          );
+        },
+        clearEditing: cancelRename,
+        inputRef: renameInputRef,
+        fallbackErrorMessage: t("sessions.renameFailed"),
+        persist: (id, title) =>
+          window.hermesAPI.updateSessionTitle(id, title, connectionId, profile),
       });
-      setSearchResults((prev) => {
-        oldSearchResultTitle =
-          prev.find((r) => r.sessionId === sessionId)?.title ?? "";
-        return prev.map((r) =>
-          r.sessionId === sessionId ? { ...r, title: trimmed } : r,
-        );
-      });
-      try {
-        await window.hermesAPI.updateSessionTitle(sessionId, trimmed);
-      } catch (err) {
-        console.error("Failed to rename session", sessionId, err);
-        // Rollback optimistic update
-        setSessions((prev) =>
-          prev.map((s) =>
-            s.id === sessionId ? { ...s, title: oldSessionTitle } : s,
-          ),
-        );
-        setSearchResults((prev) =>
-          prev.map((r) =>
-            r.sessionId === sessionId
-              ? { ...r, title: oldSearchResultTitle }
-              : r,
-          ),
-        );
-      }
-      // Guard: only clear editing state if the user hasn't started editing
-      // a different session while this request was in flight.
-      if (editingSessionIdRef.current === sessionId) {
-        setEditingSessionId(null);
-        setEditingTitle("");
-      }
     },
-    [cancelRename],
+    [
+      cancelRename,
+      searchResults,
+      sessions,
+      t,
+      connectionId,
+      profile,
+      renameContext,
+    ],
   );
 
   const cancelDelete = useCallback((): void => {
@@ -534,27 +603,60 @@ function Sessions({
     setPendingDeleteSessionId(null);
   }, [deletingSessionId]);
 
-  const confirmDelete = useCallback(
-    async (sessionId: string): Promise<void> => {
-      // Optimistic UI update: drop the row from both the main list and
-      // any active search results so the user sees instant feedback even
-      // if the SQLite write or cache rewrite has any latency.  The
-      // subsequent refresh re-syncs from state.db so we recover if the
-      // backend deletion failed.
-      setDeletingSessionId(sessionId);
-      setSessions((prev) => prev.filter((s) => s.id !== sessionId));
-      setSearchResults((prev) => prev.filter((r) => r.sessionId !== sessionId));
+  const performDelete = useCallback(
+    async (ids: string[], bulk: boolean): Promise<void> => {
+      const operation = deleteOperation.current;
+      if (operation.busy) return;
+      operation.busy = true;
+      const epoch = ++operation.epoch;
+      setDeleteError(false);
+      if (bulk) setDeletingBulk(true);
+      else setDeletingSessionId(ids[0]);
       try {
-        await window.hermesAPI.deleteSession(sessionId);
-      } catch (err) {
-        console.error("Failed to delete session", sessionId, err);
+        if (bulk)
+          await window.hermesAPI.deleteSessions(ids, connectionId, profile);
+        else
+          await window.hermesAPI.deleteSession(ids[0], connectionId, profile);
+        if (operation.epoch !== epoch) return;
+        // Keep rows until deletion is confirmed. A failed SSH request followed
+        // by a failed refresh must never make undeleted history disappear.
+        ++loadRequestId.current;
+        ++searchRequestId.current;
+        setIsSearching(false);
+        const selected = new Set(ids);
+        setSessions((prev) =>
+          prev.filter((session) => !selected.has(session.id)),
+        );
+        setSearchResults((prev) =>
+          prev.filter((result) => !selected.has(result.sessionId)),
+        );
+      } catch (error) {
+        if (operation.epoch !== epoch) return;
+        console.error("Failed to delete sessions", error);
+        setDeleteError(true);
       } finally {
-        await refreshSessions();
-        setDeletingSessionId(null);
-        setPendingDeleteSessionId(null);
+        if (operation.epoch === epoch) {
+          await refreshSessions();
+          if (operation.epoch === epoch) {
+            operation.busy = false;
+            setDeletingSessionId(null);
+            setDeletingBulk(false);
+            setPendingDeleteSessionId(null);
+            setPendingBulkDeleteIds(null);
+            if (bulk) {
+              setSelectedSessionIds(new Set());
+              setIsSelectionMode(false);
+            }
+          }
+        }
       }
     },
-    [refreshSessions],
+    [connectionId, profile, refreshSessions],
+  );
+
+  const confirmDelete = useCallback(
+    (sessionId: string): Promise<void> => performDelete([sessionId], false),
+    [performDelete],
   );
 
   const toggleSelectionMode = useCallback((): void => {
@@ -592,24 +694,9 @@ function Sessions({
         setPendingBulkDeleteIds(null);
         return;
       }
-
-      const idSet = new Set(ids);
-      setDeletingBulk(true);
-      setSessions((prev) => prev.filter((s) => !idSet.has(s.id)));
-      setSearchResults((prev) => prev.filter((r) => !idSet.has(r.sessionId)));
-      try {
-        await window.hermesAPI.deleteSessions(ids);
-      } catch (err) {
-        console.error("Failed to delete selected sessions", ids, err);
-      } finally {
-        await refreshSessions();
-        setDeletingBulk(false);
-        setPendingBulkDeleteIds(null);
-        setSelectedSessionIds(new Set());
-        setIsSelectionMode(false);
-      }
+      await performDelete(ids, true);
     },
-    [refreshSessions],
+    [performDelete],
   );
 
   useEffect(() => {
@@ -647,6 +734,13 @@ function Sessions({
 
   useEffect(() => {
     const unsubscribe = window.hermesAPI.onConnectionConfigChanged(() => {
+      ++deleteOperation.current.epoch;
+      deleteOperation.current.busy = false;
+      setDeleteError(false);
+      setDeletingSessionId(null);
+      setDeletingBulk(false);
+      setPendingDeleteSessionId(null);
+      setPendingBulkDeleteIds(null);
       setSessions([]);
       setSearchResults([]);
       setSearchQuery("");
@@ -691,9 +785,16 @@ function Sessions({
     setIsSearching(true);
     searchTimer.current = setTimeout(async () => {
       try {
-        await window.hermesAPI.syncSessionCache().catch(() => []);
+        await window.hermesAPI
+          .syncSessionCache(connectionId, profile)
+          .catch(() => []);
         if (searchRequestId.current !== requestId) return;
-        const results = await window.hermesAPI.searchSessions(query);
+        const results = await window.hermesAPI.searchSessions(
+          query,
+          undefined,
+          connectionId,
+          profile,
+        );
         if (searchRequestId.current !== requestId) return;
         setSearchResults(results);
       } finally {
@@ -705,7 +806,7 @@ function Sessions({
     return () => {
       if (searchTimer.current) clearTimeout(searchTimer.current);
     };
-  }, [searchQuery]);
+  }, [connectionId, profile, searchQuery]);
 
   const isShowingSearch = searchQuery.trim().length > 0;
   const sourceOptions = useMemo(
@@ -771,6 +872,7 @@ function Sessions({
 
   return (
     <div className="sessions-container">
+      {deleteError && <p role="alert">{t("sessions.deleteFailed")}</p>}
       {/* Header with integrated search */}
       <div className="sessions-header">
         <div className="sessions-header-top">
@@ -973,6 +1075,7 @@ function Sessions({
                     {editingSessionId === r.sessionId ? (
                       <input
                         ref={renameInputRef}
+                        disabled={renameSaving}
                         className="sessions-card-rename-input"
                         type="text"
                         value={editingTitle}
@@ -1096,6 +1199,7 @@ function Sessions({
                   onRenameConfirm={() => confirmRename(s.id, editingTitle)}
                   onRenameCancel={cancelRename}
                   renameInputRef={renameInputRef}
+                  renameSaving={renameSaving}
                   selectionMode={isSelectionMode}
                   selected={selectedSessionIds.has(s.id)}
                   onToggleSelected={toggleSessionSelected}

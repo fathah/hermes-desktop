@@ -1,6 +1,6 @@
 // @lat: [[agent-sync#Sync engine]]
 import { createHash } from "crypto";
-import { existsSync, readFileSync, statSync, unlinkSync } from "fs";
+import { readFileSync, statSync, unlinkSync } from "fs";
 import { join } from "path";
 import {
   findAccountProfile,
@@ -8,12 +8,22 @@ import {
   getAccessToken,
 } from "./account-store";
 import { apiHeaders } from "./hermes-account";
-import { listProfiles, createProfile, type ProfileInfo } from "./profiles";
-import { setProfileColor } from "./profile-meta";
+import {
+  listProfiles,
+  createProfile,
+  deleteProfile,
+  type ProfileInfo,
+} from "./profiles";
+import {
+  setProfileColor,
+  readProfileMeta,
+  defaultColorForName,
+} from "./profile-meta";
 import { readSoul, writeSoul } from "./soul";
 import { readMemoryRaw, writeMemoryRaw } from "./memory";
 import { getModelConfig, setModelConfig } from "./config";
-import { profileHome, safeWriteFile } from "./utils";
+import { isValidNamedProfileName, profileHome, safeWriteFile } from "./utils";
+import { normalizeApiUrl } from "./api-url";
 import type {
   AgentSyncOutcome,
   AgentSyncResult,
@@ -55,6 +65,8 @@ interface SyncState {
    * before account switching was handled.
    */
   accountId?: string;
+  /** Backend that owns the link; absent in older state files. */
+  apiUrl?: string;
   /** Cloud-side name at last sync — display/diagnostics only; linkage is by id. */
   remoteName: string;
   /** Content hash per part at the last successful sync (the common base). */
@@ -71,6 +83,25 @@ interface RemoteAgent {
   model: string;
   provider: string;
   updatedAt: string;
+}
+
+function isRemoteAgent(value: unknown): value is RemoteAgent {
+  if (!value || typeof value !== "object") return false;
+  const agent = value as Partial<RemoteAgent>;
+  return (
+    typeof agent.id === "string" &&
+    agent.id.length > 0 &&
+    typeof agent.name === "string" &&
+    agent.name.trim().length > 0 &&
+    typeof agent.color === "string" &&
+    /^#[0-9a-fA-F]{6}$/.test(agent.color) &&
+    (agent.systemPrompt === null || typeof agent.systemPrompt === "string") &&
+    (agent.memory === null || typeof agent.memory === "string") &&
+    typeof agent.model === "string" &&
+    typeof agent.provider === "string" &&
+    typeof agent.updatedAt === "string" &&
+    Number.isFinite(Date.parse(agent.updatedAt))
+  );
 }
 
 interface PartValues {
@@ -165,9 +196,8 @@ function statePath(profile: string): string {
   return join(profileHome(profile), STATE_FILE);
 }
 
-function readSyncState(profile: string): SyncState | null {
+function readSyncState(profile: string, strict = false): SyncState | null {
   const file = statePath(profile);
-  if (!existsSync(file)) return null;
   try {
     const parsed = JSON.parse(
       readFileSync(file, "utf-8"),
@@ -176,22 +206,39 @@ function readSyncState(profile: string): SyncState | null {
       parsed &&
       parsed.version === 1 &&
       typeof parsed.agentId === "string" &&
+      parsed.agentId.length > 0 &&
       parsed.base &&
-      typeof parsed.base === "object"
+      typeof parsed.base === "object" &&
+      !Array.isArray(parsed.base) &&
+      (parsed.accountId === undefined ||
+        (typeof parsed.accountId === "string" &&
+          parsed.accountId.length > 0)) &&
+      (parsed.apiUrl === undefined ||
+        (typeof parsed.apiUrl === "string" && parsed.apiUrl.length > 0))
     ) {
       return {
         version: 1,
         agentId: parsed.agentId,
         accountId:
           typeof parsed.accountId === "string" ? parsed.accountId : undefined,
+        apiUrl:
+          typeof parsed.apiUrl === "string"
+            ? normalizeApiUrl(parsed.apiUrl)
+            : undefined,
         remoteName:
           typeof parsed.remoteName === "string" ? parsed.remoteName : "",
         base: parsed.base,
       };
     }
-  } catch {
-    // Corrupt state: treat as unlinked; the next sync re-links by name.
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    if (strict)
+      throw new Error(
+        "Could not read this profile's cloud link; profile was not deleted.",
+      );
+    // Normal sync retains its legacy recovery by name.
   }
+  if (strict) throw new Error("Invalid cloud link; profile was not deleted.");
   return null;
 }
 
@@ -217,6 +264,11 @@ export function getLinkedAgentAccountId(profile: string): string | null {
   return readSyncState(profile)?.accountId ?? null;
 }
 
+/** Backend ownership used by wallet reads and mutations as well as sync. */
+export function getLinkedAgentApiUrl(profile: string): string | null {
+  return readSyncState(profile)?.apiUrl ?? null;
+}
+
 function clearSyncState(profile: string): void {
   try {
     unlinkSync(statePath(profile));
@@ -233,7 +285,9 @@ function mtimeMs(path: string): number {
   }
 }
 
-function localPartValues(profile: ProfileInfo): PartValues {
+function localPartValues(
+  profile: Pick<ProfileInfo, "id" | "color">,
+): PartValues {
   // On-disk lookups key off the stable id (the directory slug), not the
   // editable display name — a renamed profile keeps the same id/directory.
   const cfg = getModelConfig(profile.id);
@@ -289,16 +343,125 @@ async function api(
       authorization: `Bearer ${token}`,
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(30_000),
   });
-  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const data = (await res.json().catch((error) => {
+    if (res.ok) throw error;
+    return {};
+  })) as Record<string, unknown>;
   return { ok: res.ok, status: res.status, data };
+}
+
+// @lat: [[agent-sync#Local deletion exclusions]]
+type DeletedLink = Pick<SyncState, "agentId" | "accountId" | "apiUrl">;
+
+function deletedLinksPath(): string {
+  // Must outlive any named profile, including the profile holding the login.
+  return join(profileHome("default"), "cloud-sync-deleted.json");
+}
+
+function readDeletedLinks(): DeletedLink[] {
+  try {
+    const data = JSON.parse(readFileSync(deletedLinksPath(), "utf-8"));
+    if (
+      data?.version !== 1 ||
+      !Array.isArray(data.links) ||
+      !data.links.every(
+        (link: DeletedLink) =>
+          link &&
+          typeof link.agentId === "string" &&
+          link.agentId.length > 0 &&
+          (link.accountId === undefined ||
+            (typeof link.accountId === "string" &&
+              link.accountId.length > 0)) &&
+          (link.apiUrl === undefined ||
+            (typeof link.apiUrl === "string" && link.apiUrl.length > 0)),
+      )
+    ) {
+      throw new Error("Invalid deletion history");
+    }
+    return data.links;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw new Error(
+      "Could not read cloud sync deletion history. Repair cloud-sync-deleted.json before syncing or deleting profiles.",
+    );
+  }
+}
+
+function excludesAgent(
+  links: DeletedLink[],
+  agentId: string,
+  accountId: string,
+  apiUrl: string,
+): boolean {
+  return links.some(
+    (link) =>
+      link.agentId === agentId &&
+      (!link.accountId || link.accountId === accountId) &&
+      (!link.apiUrl ||
+        normalizeApiUrl(link.apiUrl) === normalizeApiUrl(apiUrl)),
+  );
+}
+
+// All local sync writes and deletion run in order. In particular a PATCH or
+// async metadata pull must finish before the CLI removes its profile directory.
+let profileOperations: Promise<unknown> = Promise.resolve();
+function withProfileOperation<T>(operation: () => T | Promise<T>): Promise<T> {
+  const result = profileOperations.then(operation);
+  profileOperations = result.catch(() => undefined);
+  return result;
+}
+
+export async function deleteProfileWithSync(
+  name: string,
+): Promise<{ success: boolean; error?: string }> {
+  if (name === "default" || !isValidNamedProfileName(name)) {
+    return {
+      success: false,
+      error: "Only a valid named profile can be deleted.",
+    };
+  }
+  return withProfileOperation(() => {
+    try {
+      const state = readSyncState(name, true);
+      if (state) {
+        const links = readDeletedLinks();
+        const link: DeletedLink = {
+          agentId: state.agentId,
+          accountId: state.accountId,
+          apiUrl: state.apiUrl,
+        };
+        if (
+          !links.some(
+            (entry) =>
+              entry.agentId === link.agentId &&
+              entry.accountId === link.accountId &&
+              entry.apiUrl === link.apiUrl,
+          )
+        ) {
+          // Persist before invoking the CLI, so failure cannot lose the only
+          // mapping. On a partial CLI failure keep the exclusion for retry.
+          safeWriteFile(
+            deletedLinksPath(),
+            JSON.stringify({ version: 1, links: [...links, link] }, null, 2),
+          );
+        }
+      }
+      return deleteProfile(name);
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  });
 }
 
 // ── Sync pass ───────────────────────────────────────────────────────────────
 
 // Single-flight: overlapping runs (auto-on-mount + manual click) would race on
-// the state files, so a second request just reports the pass already running.
+// the state files. All callers await the same pass, including wallet flows
+// that need its newly persisted ownership fields before proceeding.
 let running = false;
+let activeSync: Promise<AgentSyncResult> | null = null;
 let lastResult: AgentSyncResult | null = null;
 
 export function getAgentSyncStatus(): AgentSyncStatus {
@@ -314,21 +477,28 @@ export function getAgentSyncStatus(): AgentSyncStatus {
   };
 }
 
-function applyPull(
+async function applyPull(
   profileName: string,
   part: SyncPart,
   remote: PartValues,
-): void {
+): Promise<void> {
   switch (part) {
-    case "color":
-      void setProfileColor(profileName, remote.color);
+    case "color": {
+      const result = await setProfileColor(profileName, remote.color);
+      if (!result.success)
+        throw new Error(result.error || "Could not sync profile color.");
       break;
+    }
     case "soul":
-      writeSoul(remote.soul, profileName);
+      if (!writeSoul(remote.soul, profileName))
+        throw new Error("Could not sync profile persona.");
       break;
-    case "memory":
-      writeMemoryRaw(remote.memory, profileName);
+    case "memory": {
+      const result = writeMemoryRaw(remote.memory, profileName);
+      if (!result.success)
+        throw new Error(result.error || "Could not sync profile memory.");
       break;
+    }
     case "config": {
       if (!remote.config.model) break;
       // Only model/provider sync; keep whatever base URL is configured locally.
@@ -350,25 +520,19 @@ function applyPull(
  * and local profiles for cloud-only agents, and unlink mappings whose cloud
  * agent disappeared. Never deletes anything on either side.
  */
-export async function syncAgents(): Promise<AgentSyncResult> {
-  if (running) {
-    return (
-      lastResult ?? {
-        status: "error",
-        error: "A sync is already running.",
-        outcomes: [],
-        finishedAt: Date.now(),
-      }
-    );
-  }
+export function syncAgents(): Promise<AgentSyncResult> {
+  if (activeSync) return activeSync;
   running = true;
-  try {
-    const result = await runSyncPass();
-    lastResult = result;
-    return result;
-  } finally {
-    running = false;
-  }
+  activeSync = withProfileOperation(runSyncPass)
+    .then((result) => {
+      lastResult = result;
+      return result;
+    })
+    .finally(() => {
+      running = false;
+      activeSync = null;
+    });
+  return activeSync;
 }
 
 async function runSyncPass(): Promise<AgentSyncResult> {
@@ -386,6 +550,16 @@ async function runSyncPass(): Promise<AgentSyncResult> {
     return finished({ status: "signed-out", outcomes: [] });
   }
 
+  let deletedLinks: DeletedLink[];
+  try {
+    deletedLinks = readDeletedLinks();
+  } catch (error) {
+    return finished({
+      status: "error",
+      error: (error as Error).message,
+      outcomes: [],
+    });
+  }
   let remotes: RemoteAgent[];
   try {
     const res = await api(account.apiUrl, token, "GET", "/api/agents");
@@ -398,7 +572,18 @@ async function runSyncPass(): Promise<AgentSyncResult> {
         outcomes: [],
       });
     }
-    remotes = (res.data.agents as RemoteAgent[]) ?? [];
+    if (
+      !Array.isArray(res.data?.agents) ||
+      !res.data.agents.every(isRemoteAgent)
+    ) {
+      return finished({
+        status: "error",
+        error:
+          "Cloud agents returned an invalid list; profiles were left untouched.",
+        outcomes: [],
+      });
+    }
+    remotes = res.data.agents as RemoteAgent[];
   } catch (err) {
     return finished({
       status: "error",
@@ -425,7 +610,10 @@ async function runSyncPass(): Promise<AgentSyncResult> {
       // Linked to a different account: leave it completely alone. Unlinking
       // here would make the profile look never-synced and push the other
       // account's persona/memory to this one on the next pass.
-      if (state.accountId && state.accountId !== userId) {
+      if (
+        (state.accountId && state.accountId !== userId) ||
+        (state.apiUrl && state.apiUrl !== normalizeApiUrl(account.apiUrl))
+      ) {
         outcomes.push({
           profile: profile.id,
           agentId: state.agentId,
@@ -474,7 +662,10 @@ async function runSyncPass(): Promise<AgentSyncResult> {
   // Link never-synced locals to unclaimed cloud agents by exact name.
   for (const profile of unlinkedLocals.slice()) {
     const match = remotes.find(
-      (a) => !claimed.has(a.id) && a.name === profile.name,
+      (a) =>
+        !claimed.has(a.id) &&
+        !excludesAgent(deletedLinks, a.id, userId, account.apiUrl) &&
+        a.name === profile.name,
     );
     if (match) {
       claimed.add(match.id);
@@ -484,6 +675,7 @@ async function runSyncPass(): Promise<AgentSyncResult> {
           version: 1,
           agentId: match.id,
           accountId: userId,
+          apiUrl: normalizeApiUrl(account.apiUrl),
           remoteName: match.name,
           base: {},
         },
@@ -542,7 +734,7 @@ async function runSyncPass(): Promise<AgentSyncResult> {
           }
         }
       }
-      for (const part of toPull) applyPull(profile.id, part, remote);
+      for (const part of toPull) await applyPull(profile.id, part, remote);
 
       // New base per part: whichever side won is now common ground. Parts
       // that failed to push (or were skipped as oversize) keep their old base
@@ -559,6 +751,7 @@ async function runSyncPass(): Promise<AgentSyncResult> {
         version: 1,
         agentId: agent.id,
         accountId: userId,
+        apiUrl: normalizeApiUrl(account.apiUrl),
         remoteName: agent.name,
         base,
       });
@@ -615,6 +808,7 @@ async function runSyncPass(): Promise<AgentSyncResult> {
         version: 1,
         agentId: created.id,
         accountId: userId,
+        apiUrl: normalizeApiUrl(account.apiUrl),
         remoteName: created.name,
         base,
       });
@@ -637,7 +831,11 @@ async function runSyncPass(): Promise<AgentSyncResult> {
   // valid, collision-free id from the agent's display name and returns it; all
   // on-disk writes below key off that id.
   for (const agent of remotes) {
-    if (claimed.has(agent.id)) continue;
+    if (
+      claimed.has(agent.id) ||
+      excludesAgent(deletedLinks, agent.id, userId, account.apiUrl)
+    )
+      continue;
     const warnings: string[] = [];
     const createRes = createProfile(agent.name, null);
     if (!createRes.success || !createRes.id) {
@@ -650,21 +848,43 @@ async function runSyncPass(): Promise<AgentSyncResult> {
       continue;
     }
     const id = createRes.id;
-    const remote = remotePartValues(agent);
-    for (const part of PARTS) applyPull(id, part, remote);
-    writeSyncState(id, {
-      version: 1,
-      agentId: agent.id,
-      accountId: userId,
-      remoteName: agent.name,
-      base: partHashes(remote),
-    });
-    outcomes.push({
-      profile: id,
-      agentId: agent.id,
-      action: "created-local",
-      warnings,
-    });
+    try {
+      const remote = remotePartValues(agent);
+      const meta = await readProfileMeta(id);
+      // Save the identity before an asynchronous pull. If a pull fails,
+      // deletion can still exclude this agent and retries retain the true
+      // local baseline instead of pushing partially imported defaults.
+      const state: SyncState = {
+        version: 1,
+        agentId: agent.id,
+        accountId: userId,
+        apiUrl: normalizeApiUrl(account.apiUrl),
+        remoteName: agent.name,
+        base: partHashes(
+          localPartValues({ id, color: meta.color || defaultColorForName(id) }),
+        ),
+      };
+      writeSyncState(id, state);
+      const hashes = partHashes(remote);
+      for (const part of PARTS) {
+        await applyPull(id, part, remote);
+        state.base[part] = hashes[part];
+        writeSyncState(id, state);
+      }
+      outcomes.push({
+        profile: id,
+        agentId: agent.id,
+        action: "created-local",
+        warnings,
+      });
+    } catch (error) {
+      outcomes.push({
+        profile: id,
+        agentId: agent.id,
+        action: "error",
+        warnings: [(error as Error).message],
+      });
+    }
   }
 
   return finished({ status: "ok", outcomes });

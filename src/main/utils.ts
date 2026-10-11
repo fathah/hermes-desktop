@@ -194,8 +194,11 @@ export function getActiveProfileNameSync(): string {
  * used to read the root state.db unconditionally, so named-profile users
  * saw an empty or wrong session list (issue #311).
  */
-export function activeStateDbPath(): string {
-  return join(profileHome(getActiveProfileNameSync()), "state.db");
+export function activeStateDbPath(profile?: unknown): string {
+  return join(
+    profileHome(profile === undefined ? getActiveProfileNameSync() : profile),
+    "state.db",
+  );
 }
 
 /**

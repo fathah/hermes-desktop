@@ -5,6 +5,7 @@ import nousLogo from "../../assets/logos/nousresearch.svg";
 import hermesoneLogo from "../../assets/hermes-icon.svg";
 import openaiLogo from "../../assets/logos/openai.svg";
 import openrouterLogo from "../../assets/logos/openrouter.svg";
+import requestyLogo from "../../assets/logos/requesty.svg";
 import moonshotLogo from "../../assets/logos/moonshot.svg";
 import metaLogo from "../../assets/logos/meta-color.svg";
 import nvidiaLogo from "../../assets/logos/nvidia-color.svg";
@@ -54,6 +55,7 @@ type BrandKey =
   | "nous"
   | "openai"
   | "openrouter"
+  | "requesty"
   | "moonshot"
   | "meta"
   | "nvidia"
@@ -104,6 +106,7 @@ const LOGOS: Record<Exclude<BrandKey, "unknown">, string> = {
   nous: nousLogo,
   openai: openaiLogo,
   openrouter: openrouterLogo,
+  requesty: requestyLogo,
   moonshot: moonshotLogo,
   meta: metaLogo,
   nvidia: nvidiaLogo,
@@ -205,6 +208,7 @@ function detectBrand(provider?: string, modelId?: string): BrandKey {
   if (/email/.test(haystack)) return "email";
   if (/sms/.test(haystack)) return "sms";
   if (/openrouter/.test(haystack)) return "openrouter";
+  if (/requesty/.test(haystack)) return "requesty";
   // Lowest priority: a bare "local" provider (custom local server) gets the
   // generic API mark rather than the unknown-robot fallback.
   if (/\blocal\b/.test(haystack)) return "api_server";

@@ -1,5 +1,14 @@
 appId: com.nousresearch.hermes
-productName: Hermes One
+# productName is now space-free so the Linux .deb installs to
+# /opt/HermesOne/hermes-agent instead of `/opt/Hermes One/hermes-agent`.
+# The previous path crashed Chromium's zygote on launch because
+# argv[0] containing whitespace is forwarded verbatim into execvp and
+# fails with EINVAL (SIGTRAP). See issue #877.
+#
+# The user-facing display name "Hermes One" is restored through
+# `linux.desktop.entry.Name`, `nsis.shortcutName`, `nsis.uninstallDisplayName`,
+# and `mac.extendInfo.CFBundleDisplayName` so end users see no change.
+productName: HermesOne
 directories:
   buildResources: build
 files:
@@ -11,7 +20,7 @@ files:
   - "!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}"
 asarUnpack:
   - resources/**
-  - node_modules/better-sqlite3/build/Release/*.node
+  - node_modules/better-sqlite3/prebuilds/*.node
 win:
   executableName: hermes-agent
   target:
@@ -21,12 +30,16 @@ portable:
   artifactName: ${name}-${version}-portable.${ext}
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
-  shortcutName: ${productName}
-  uninstallDisplayName: ${productName}
+  # Restore user-facing installer / shortcut name now that productName is
+  # space-free.
+  shortcutName: Hermes One
+  uninstallDisplayName: Hermes One
   createDesktopShortcut: always
   oneClick: true
   perMachine: false
 mac:
+  # Keep the existing bundle/executable name used by updates and release checks.
+  executableName: Hermes One
   artifactName: ${name}-${version}-${arch}-${os}.${ext}
   icon: build/icon.icns
   entitlements: build/entitlements.mac.plist
@@ -36,6 +49,7 @@ mac:
     - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
     - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
     - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+    - CFBundleDisplayName: Hermes One
   hardenedRuntime: true
   gatekeeperAssess: false
   notarize: true
@@ -55,6 +69,12 @@ linux:
     Hermes One is a native desktop app for installing, configuring, and chatting
     with Hermes Agent — a self-improving AI assistant with tool use, multi-platform
     messaging, and a closed learning loop.
+  # Override the user-facing .desktop display name (default would now be
+  # "HermesOne" since productName is space-free). See issue #877.
+  desktop:
+    entry:
+      Name: Hermes One
+      Comment: Hermes One — self-improving AI assistant desktop app
 appImage:
   artifactName: ${name}-${version}-${arch}.${ext}
 deb:

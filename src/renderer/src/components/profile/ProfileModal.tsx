@@ -110,6 +110,7 @@ export default function ProfileModal({
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [memoryError, setMemoryError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [nameEditing, setNameEditing] = useState(false);
   const [nameSaving, setNameSaving] = useState(false);
@@ -250,15 +251,23 @@ export default function ProfileModal({
   }
 
   async function handleDelete(): Promise<void> {
+    if (deleting) return;
+    setDeleting(true);
     setConfirmDelete(false);
     setError("");
-    const result = await window.hermesAPI.deleteProfile(id);
-    if (result.success) {
-      onDeleted?.(id);
-      onChanged?.();
-      onClose();
-    } else {
-      setError(result.error || t("agents.deleteFailed"));
+    try {
+      const result = await window.hermesAPI.deleteProfile(id);
+      if (result.success) {
+        onDeleted?.(id);
+        onChanged?.();
+        onClose();
+      } else {
+        setError(result.error || t("agents.deleteFailed"));
+      }
+    } catch {
+      setError(t("agents.deleteFailed"));
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -543,6 +552,7 @@ export default function ProfileModal({
                           <button
                             className="btn btn-danger btn-sm"
                             onClick={handleDelete}
+                            disabled={deleting}
                           >
                             {t("agents.deleteProfile")}
                           </button>
@@ -558,6 +568,7 @@ export default function ProfileModal({
                       <button
                         className="btn btn-danger-ghost btn-sm"
                         onClick={() => setConfirmDelete(true)}
+                        disabled={deleting}
                       >
                         <Trash size={13} />
                         {t("agents.deleteProfile")}

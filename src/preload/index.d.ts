@@ -1,5 +1,11 @@
+import type { ProviderRequestTarget } from "../shared/provider-target";
 import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
+import type {
+  RemoteGatewayAction,
+  RemoteGatewayActionResult,
+  RemoteGatewayCommandStatus,
+} from "../shared/gateway";
 import type { SessionModelOverride } from "../shared/model-override";
 import type { DesktopSessionContinuationItem } from "../shared/session-continuation";
 import type { DesktopSessionLocalError } from "../shared/session-continuation";
@@ -21,6 +27,7 @@ import type {
   HermesOneCreditsResult,
 } from "../shared/account";
 import type { AgentSyncResult, AgentSyncStatus } from "../shared/agent-sync";
+import type { ConnectionStatusSnapshot } from "../shared/connection-status";
 import type {
   RegistryKind,
   RegistryItem,
@@ -34,7 +41,13 @@ import type {
   MessagingPlatformUpdate,
 } from "../shared/messaging-platforms";
 import type { ChatToolEvent } from "../shared/chat-stream";
+import type {
+  ApprovalChoice,
+  ChatApprovalRequest,
+} from "../shared/chat-approval";
 import type { GpuPreferenceMode, GpuStatus } from "../shared/gpu";
+import type { AgentCapabilitySnapshot } from "../shared/agent-capabilities";
+import type { SessionLocation } from "../shared/session-location";
 
 interface ElectronAPI {
   process: {
@@ -91,6 +104,33 @@ interface ConfigFixLogEntry {
   profile?: string;
   valueMasked?: string;
   detail?: string;
+}
+
+interface PublicConnectionConfig {
+  connectionId: string;
+  name: string;
+  mode: "local" | "remote" | "ssh";
+  remoteUrl: string;
+  remoteAuthMode: "auto" | "token" | "oauth";
+  remoteChatTransport: "auto" | "dashboard" | "legacy";
+  sshChatTransport: "auto" | "dashboard" | "legacy";
+  hasApiKey: boolean;
+  apiKeyLength: number;
+  ssh: {
+    host: string;
+    port: number;
+    username: string;
+    keyPath: string;
+    remotePort: number;
+    localPort: number;
+    dockerContainerName?: string;
+  };
+}
+
+interface PublicConnectionRegistry {
+  version: 1;
+  activeConnectionId: string;
+  connections: PublicConnectionConfig[];
 }
 
 interface GatewayStartResult {
@@ -250,8 +290,19 @@ interface HermesAPI {
   ) => () => void;
 
   // Hermes engine info
-  getHermesVersion: () => Promise<string | null>;
-  refreshHermesVersion: () => Promise<string | null>;
+  getHermesVersion: (profile?: string) => Promise<string | null>;
+  refreshHermesVersion: (profile?: string) => Promise<string | null>;
+  getAgentCapabilities: (profile?: string) => Promise<AgentCapabilitySnapshot>;
+  recordAgentRuntimeInfo: (
+    info: unknown,
+    profile?: string,
+    connectionId?: string,
+  ) => Promise<boolean>;
+  recordAgentCommandInventory: (
+    catalog: unknown,
+    profile?: string,
+    connectionId?: string,
+  ) => Promise<boolean>;
   runHermesDoctor: () => Promise<string>;
   runHermesUpdate: () => Promise<{ success: boolean; error?: string }>;
 
@@ -294,9 +345,24 @@ interface HermesAPI {
   setLocale: (locale: AppLocale) => Promise<AppLocale>;
 
   // Configuration (profile-aware)
-  getEnv: (profile?: string) => Promise<Record<string, string>>;
-  setEnv: (key: string, value: string, profile?: string) => Promise<boolean>;
-  validateChatReadiness: (profile?: string) => Promise<{
+  getProviderRequestTarget: (
+    connectionId: string,
+  ) => Promise<ProviderRequestTarget>;
+  getEnv: (
+    profile?: string,
+    target?: ProviderRequestTarget,
+  ) => Promise<Record<string, string>>;
+  setEnv: (
+    key: string,
+    value: string,
+    profile?: string,
+    target?: ProviderRequestTarget,
+  ) => Promise<boolean>;
+  validateChatReadiness: (
+    profile?: string,
+    override?: { provider?: string; model?: string; baseUrl?: string },
+    connectionId?: string,
+  ) => Promise<{
     ok: boolean;
     code?:
       | "NO_ACTIVE_MODEL"
@@ -345,24 +411,17 @@ interface HermesAPI {
   // Connection mode (local / remote / ssh)
   isRemoteMode: () => Promise<boolean>;
   isRemoteOnlyMode: () => Promise<boolean>;
-  getConnectionConfig: () => Promise<{
-    mode: "local" | "remote" | "ssh";
-    remoteUrl: string;
-    remoteAuthMode: "auto" | "token" | "oauth";
-    remoteChatTransport: "auto" | "dashboard" | "legacy";
-    sshChatTransport: "auto" | "dashboard" | "legacy";
-    hasApiKey: boolean;
-    apiKeyLength: number;
-    ssh: {
-      host: string;
-      port: number;
-      username: string;
-      keyPath: string;
-      remotePort: number;
-      localPort: number;
-      dockerContainerName?: string;
-    };
-  }>;
+  getConnectionConfig: (
+    connectionId?: string,
+  ) => Promise<PublicConnectionConfig>;
+  getConnectionRegistry: () => Promise<PublicConnectionRegistry>;
+  getConnectionStatuses: (
+    profile?: string,
+  ) => Promise<ConnectionStatusSnapshot[]>;
+  createConnection: () => Promise<boolean>;
+  renameConnection: (connectionId: string, name: string) => Promise<boolean>;
+  selectConnection: (connectionId: string) => Promise<boolean>;
+  removeConnection: (connectionId: string) => Promise<boolean>;
   setConnectionConfig: (
     mode: "local" | "remote" | "ssh",
     remoteUrl: string,
@@ -373,24 +432,7 @@ interface HermesAPI {
     sshChatTransport: "auto" | "dashboard" | "legacy",
   ) => Promise<boolean>;
   onConnectionConfigChanged: (
-    callback: (config: {
-      mode: "local" | "remote" | "ssh";
-      remoteUrl: string;
-      remoteAuthMode: "auto" | "token" | "oauth";
-      remoteChatTransport: "auto" | "dashboard" | "legacy";
-      sshChatTransport: "auto" | "dashboard" | "legacy";
-      hasApiKey: boolean;
-      apiKeyLength: number;
-      ssh: {
-        host: string;
-        port: number;
-        username: string;
-        keyPath: string;
-        remotePort: number;
-        localPort: number;
-        dockerContainerName?: string;
-      };
-    }) => void,
+    callback: (config: PublicConnectionConfig) => void,
   ) => () => void;
   setSshConfig: (
     host: string,
@@ -424,6 +466,7 @@ interface HermesAPI {
   ) => Promise<{ connected: boolean; authMode: "token" | "oauth" }>;
   probeRemoteAuthMode: (
     url: string,
+    connectionId?: string,
   ) => Promise<{ authMode: "token" | "oauth"; version: string | null }>;
   remoteOAuthLogin: () => Promise<{ signedIn: true }>;
   remoteOAuthLogout: () => Promise<{ signedIn: false }>;
@@ -449,8 +492,10 @@ interface HermesAPI {
     contextFolder?: string,
     runId?: string,
     modelOverride?: SessionModelOverride,
+    connectionId?: string,
   ) => Promise<{ response: string; sessionId?: string }>;
-  abortChat: (runId?: string) => Promise<void>;
+  abortChat: (runId?: string, connectionId?: string) => Promise<void>;
+  recordSessionLocation: (location: SessionLocation) => Promise<boolean>;
   transcribeAudio: (
     audio: Uint8Array,
     mimeType: string,
@@ -492,6 +537,7 @@ interface HermesAPI {
     baseUrl?: string,
     apiKey?: string,
     profile?: string,
+    target?: ProviderRequestTarget,
   ) => Promise<{
     models: string[];
     status: "ok" | "no-key" | "error" | "unsupported" | "unknown-host";
@@ -548,12 +594,28 @@ interface HermesAPI {
     ) => void,
   ) => () => void;
   respondClarify: (requestId: string, answer: string) => Promise<boolean>;
+  onApprovalRequest: (
+    callback: (runId: string, req: ChatApprovalRequest) => void,
+  ) => () => void;
+  respondApproval: (
+    requestId: string,
+    choice: ApprovalChoice,
+    runId: string,
+  ) => Promise<boolean>;
 
   // Gateway
-  startGateway: () => Promise<GatewayStartResult>;
-  stopGateway: () => Promise<boolean>;
+  remoteGatewayAction: (
+    action: RemoteGatewayAction,
+    profile?: string,
+  ) => Promise<RemoteGatewayActionResult>;
+  startGateway: (profile?: string) => Promise<GatewayStartResult>;
+  stopGateway: (profile?: string) => Promise<boolean>;
   restartGateway: (profile?: string) => Promise<boolean>;
-  gatewayStatus: () => Promise<boolean>;
+  gatewayStatus: (profile?: string) => Promise<boolean>;
+  gatewayCommandPending: (profile?: string) => Promise<boolean>;
+  gatewayCommandStatus: (
+    profile?: string,
+  ) => Promise<RemoteGatewayCommandStatus>;
   setNativeAppearance: (source: "dark" | "light" | "system") => Promise<void>;
   getSpellCheckerInfo: () => Promise<{
     available: string[];
@@ -561,9 +623,18 @@ interface HermesAPI {
     system: string[];
   }>;
   setSpellCheckerLanguages: (languages: string[]) => Promise<string[]>;
-  dashboardStatus: (profile?: string) => Promise<DashboardStatus>;
-  freshDashboardWsUrl: (profile?: string) => Promise<string>;
-  startDashboard: (profile?: string) => Promise<DashboardStatus>;
+  dashboardStatus: (
+    profile?: string,
+    connectionId?: string,
+  ) => Promise<DashboardStatus>;
+  freshDashboardWsUrl: (
+    profile?: string,
+    connectionId?: string,
+  ) => Promise<string>;
+  startDashboard: (
+    profile?: string,
+    connectionId?: string,
+  ) => Promise<DashboardStatus>;
   stopDashboard: (profile?: string) => Promise<boolean>;
 
   // Platform toggles
@@ -590,6 +661,8 @@ interface HermesAPI {
   listSessions: (
     limit?: number,
     offset?: number,
+    connectionId?: string,
+    profile?: string,
   ) => Promise<
     Array<{
       id: string;
@@ -602,7 +675,11 @@ interface HermesAPI {
       preview: string;
     }>
   >;
-  getSessionMessages: (sessionId: string) => Promise<
+  getSessionMessages: (
+    sessionId: string,
+    connectionId?: string,
+    profile?: string,
+  ) => Promise<
     Array<
       | {
           kind: "user";
@@ -813,6 +890,8 @@ interface HermesAPI {
   listCachedSessions: (
     limit?: number,
     offset?: number,
+    connectionId?: string,
+    profile?: string,
   ) => Promise<
     Array<{
       id: string;
@@ -824,7 +903,10 @@ interface HermesAPI {
       contextFolder: string | null;
     }>
   >;
-  syncSessionCache: () => Promise<
+  syncSessionCache: (
+    connectionId?: string,
+    profile?: string,
+  ) => Promise<
     Array<{
       id: string;
       title: string;
@@ -835,16 +917,29 @@ interface HermesAPI {
       contextFolder: string | null;
     }>
   >;
-  updateSessionTitle: (sessionId: string, title: string) => Promise<void>;
-  deleteSession: (sessionId: string) => Promise<void>;
+  updateSessionTitle: (
+    sessionId: string,
+    title: string,
+    connectionId?: string,
+    profile?: string,
+  ) => Promise<void>;
+  deleteSession: (
+    sessionId: string,
+    connectionId?: string,
+    profile?: string,
+  ) => Promise<void>;
   deleteSessions: (
     sessionIds: string[],
+    connectionId?: string,
+    profile?: string,
   ) => Promise<{ requested: number; deleted: number }>;
 
   // Session search
   searchSessions: (
     query: string,
     limit?: number,
+    connectionId?: string,
+    profile?: string,
   ) => Promise<
     Array<{
       sessionId: string;
@@ -861,17 +956,20 @@ interface HermesAPI {
   // engine schema (issue #367). See `CredentialPoolEntry` below.
   getCredentialPool: (
     profile?: string,
+    target?: ProviderRequestTarget,
   ) => Promise<Record<string, Array<CredentialPoolEntry>>>;
   setCredentialPool: (
     provider: string,
     entries: Array<CredentialPoolEntry>,
     profile?: string,
+    target?: ProviderRequestTarget,
   ) => Promise<boolean>;
   addCredentialPoolEntry: (
     provider: string,
     apiKey: string,
     label: string,
     profile?: string,
+    target?: ProviderRequestTarget,
   ) => Promise<Array<CredentialPoolEntry>>;
   invalidateSecretsCache: () => Promise<void>;
 

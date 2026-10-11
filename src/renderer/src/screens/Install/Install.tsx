@@ -71,6 +71,11 @@ function Install({
   const [failed, setFailed] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
+  const translateRef = useRef(t);
+
+  useEffect(() => {
+    translateRef.current = t;
+  }, [t]);
 
   // Inspect what the installer will do to the target directory, so the
   // confirmation can say exactly what to expect (fresh / update / replace).
@@ -104,12 +109,17 @@ function Install({
         if (result.success) {
           setDone(true);
         } else {
-          setFailed(result.error || t("install.installationFailedHint"));
+          setFailed(
+            result.error ||
+              translateRef.current("install.installationFailedHint"),
+          );
         }
       })
       .catch((err) => {
         if (!isMounted) return;
-        setFailed(err.message || t("install.installationFailedHint"));
+        setFailed(
+          err.message || translateRef.current("install.installationFailedHint"),
+        );
       });
 
     return () => {

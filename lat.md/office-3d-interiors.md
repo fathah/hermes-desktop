@@ -46,6 +46,28 @@ Ambient people live on the streets, not in one building: [[src/renderer/src/scre
 
 Each pedestrian tracks a `place` ("outside" | "bank" | "showroom") from its current waypoint, so interior views show exactly the people actually in that building and the city view shows everyone on the streets. Walk/idle clips crossfade at dwell stops. The layer is mounted in every location (like AgentsLayer) so interiors are already populated when entered; it replaced the old `BankFakePeople`, whose eight walkers were confined to the bank floor.
 
+## Gateway presence
+
+Office keeps gateway connectivity and Kanban activity separate so an online idle agent remains chat-ready without being presented as actively working.
+
+`gatewayRunning` drives the nameplate dot/pulse and One Chat availability. Kanban-derived `status` remains the Working/Idle activity signal that drives desk/rest placement and trips.
+
+### Online without running cards
+
+A profile with `gatewayRunning: true` stays gateway-present and gets the green nameplate cue even when it has no running Kanban cards and its activity status is Idle.
+
+### Explicit gateway-down overrides working status
+
+An explicit `gatewayRunning: false` keeps the gateway cue offline even if a running card makes the activity status Working, preventing stale work from faking connectivity.
+
+### Undefined falls back to activity status
+
+Older Office-agent callers without gateway metadata retain the legacy fallback: Working implies gateway presence, while Idle and Error do not.
+
+### Gateway-only live refresh
+
+Polling can change `gatewayRunning` without changing activity or position. Render reconciliation includes gateway presence so nameplate materials receive fresh metadata without resetting agent animation.
+
 ## Collision
 
 People never pass through walls, furniture, or each other: a crowd registry separates overlapping people, and per-place static colliders (wall boxes with door gaps, furniture circles) push walkers out. Buildings are entered through doorways only.
@@ -66,6 +88,6 @@ Idle agents occasionally walk out of the office to the bank or showroom, wander 
 
 The canvas↔world mapping ([[src/renderer/src/screens/Office/office3d/core/geometry.ts#worldToCanvas]]) is linear, so waypoints far outside the office's 0..1800 rectangle work unchanged — no second coordinate system.
 
-The controller in [[src/renderer/src/screens/Office/office3d/objects/AgentsLayer.tsx#AgentsLayer]] adds a "trip" mode (phases out → wander → back) beside toSeat/seated. Only idle (non-working) seated agents start trips, capped at `TRIP_MAX_TRAVELLERS`; if an agent's gateway starts mid-trip it walks the route home in reverse rather than teleporting. Each agent's `place` ("office" | "bank" | "showroom" | "outside") is derived from route progress. Trips can also be commanded from the office chat — a mission replaces the wander with a "visit" at a named interaction stop; see [[office-world-actions#Office World Actions#Commanded trips]].
+The controller in [[src/renderer/src/screens/Office/office3d/objects/AgentsLayer.tsx#AgentsLayer]] adds a "trip" mode (phases out → wander → back) beside toSeat/seated. Only idle (non-working) seated agents start trips, capped at `TRIP_MAX_TRAVELLERS`; if a running Kanban assignment arrives mid-trip, the agent walks the route home in reverse rather than teleporting. Each agent's `place` ("office" | "bank" | "showroom" | "outside") is derived from route progress. Trips can also be commanded from the office chat — a mission replaces the wander with a "visit" at a named interaction stop; see [[office-world-actions#Office World Actions#Commanded trips]].
 
 The simulation always runs for every agent; the `visiblePlace` prop only toggles per-agent wrapper-group visibility each frame, so each interior view shows exactly the agents actually in that building and the city view shows everyone, including walkers on the street.

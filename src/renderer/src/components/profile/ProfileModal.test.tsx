@@ -143,3 +143,57 @@ describe("ProfileModal name editor", () => {
     });
   });
 });
+
+describe("ProfileModal deletion failures", () => {
+  // @lat: [[agent-sync#Tests#Surfaces deletion failures in the modal]]
+  it("disables deletion while pending and allows retry after an IPC rejection", async () => {
+    installHermesAPI([
+      { ...profile("Agent Alpha"), id: "alpha", isDefault: false },
+    ]);
+    let reject!: (reason: Error) => void;
+    const request = new Promise<never>((_resolve, rejectPromise) => {
+      reject = rejectPromise;
+    });
+    const deleteProfile = vi
+      .fn()
+      .mockReturnValueOnce(request)
+      .mockResolvedValue({ success: false, error: "profile is busy" });
+    window.hermesAPI.deleteProfile = deleteProfile;
+    const onClose = vi.fn();
+    const onDeleted = vi.fn();
+    render(
+      <ProfileModal
+        name="alpha"
+        open
+        initialSection="advanced"
+        onClose={onClose}
+        onDeleted={onDeleted}
+      />,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "agents.deleteProfile" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "agents.deleteProfile" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "agents.deleteProfile" }),
+    ).toBeDisabled();
+    reject(new Error("IPC failed"));
+    expect(await screen.findByText("agents.deleteFailed")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "agents.deleteProfile" }),
+    ).not.toBeDisabled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onDeleted).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "agents.deleteProfile" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "agents.deleteProfile" }),
+    );
+    expect(await screen.findByText("profile is busy")).toBeInTheDocument();
+    expect(deleteProfile).toHaveBeenCalledTimes(2);
+    expect(deleteProfile).toHaveBeenLastCalledWith("alpha");
+  });
+});

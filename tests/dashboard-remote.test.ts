@@ -16,17 +16,20 @@ const oauthMocks = vi.hoisted(() => ({
 }));
 
 const configMocks = vi.hoisted(() => ({
+  getActiveConnection: vi.fn(() => ({ connectionId: "connection-active" })),
   getConnectionConfig: vi.fn(),
 }));
 
 vi.mock("../src/main/remote-oauth", () => oauthMocks);
 vi.mock("../src/main/config", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/main/config")>()),
+  getActiveConnection: configMocks.getActiveConnection,
   getConnectionConfig: configMocks.getConnectionConfig,
 }));
 
 import {
   freshDashboardWebSocketUrl,
+  getDashboardStatus,
   getRemoteDashboardStatusForConfig,
   probeDashboardWebSocket,
   remoteDashboardConnectionFromConfig,
@@ -210,6 +213,29 @@ describe("OAuth remote dashboard status", () => {
 });
 
 describe("freshDashboardWebSocketUrl", () => {
+  // @lat: [[connections#Test specifications#Connection-explicit dashboard routing]]
+  it("resolves the requested saved connection instead of the active one", async () => {
+    configMocks.getConnectionConfig.mockImplementation((connectionId) =>
+      remoteConnection({
+        remoteUrl:
+          connectionId === "connection-two"
+            ? "https://second.example"
+            : "https://active.example",
+      }),
+    );
+    oauthMocks.probeRemoteAuthMode.mockResolvedValue({
+      authMode: "token",
+      version: null,
+    });
+
+    await expect(
+      freshDashboardWebSocketUrl("work", "connection-two"),
+    ).resolves.toBe("wss://second.example/api/ws?token=dashboard-token");
+    expect(configMocks.getConnectionConfig).toHaveBeenCalledWith(
+      "connection-two",
+    );
+  });
+
   // @lat: [[remote-dashboard-oauth#Test specifications#Fresh ticket per connection]]
   it("mints a new OAuth ticket for every connection attempt", async () => {
     configMocks.getConnectionConfig.mockReturnValue(
@@ -262,6 +288,22 @@ describe("freshDashboardWebSocketUrl", () => {
     expect(result).toMatch(/^ws:\/\/127\.0\.0\.1:\d+\/[a-f0-9]{64}$/);
     expect(result).not.toContain("gateway.lan");
     expect(result).not.toContain("private-dashboard-token");
+  });
+});
+
+describe("connection-scoped dashboard status", () => {
+  it("does not let an inactive SSH chat retarget the singleton tunnel", async () => {
+    configMocks.getConnectionConfig.mockReturnValue(
+      remoteConnection({ mode: "ssh" }),
+    );
+
+    await expect(
+      getDashboardStatus(undefined, "connection-inactive"),
+    ).resolves.toMatchObject({
+      supported: true,
+      running: false,
+      error: expect.stringContaining("one SSH tunnel"),
+    });
   });
 });
 
