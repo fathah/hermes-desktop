@@ -87,6 +87,7 @@ export default {
   listen: "Listen",
   listenLoading: "Generating speech…",
   listenStop: "Stop speech",
+  listenFailed: "Speech unavailable:",
   contextWindow: "Context window",
   contextUsed: "{{pct}}% used ({{left}}% left)",
   contextTokens: "{{used}} / {{total}} tokens used",

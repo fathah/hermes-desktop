@@ -47,3 +47,7 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[approval-completion]] — In-flight approval replies remain valid across early turn completion, with failure and lifecycle isolation.
 
 - [[remote-providers]] — Remote provider credential ownership and supported dashboard operations.
+
+- [[speech-playback]] — selected Local speech authority, bounded MiniMax synthesis and shared playback lifecycle.
+
+- [[speech-playback-tests]] — actual speech IPC and message lifecycle regressions.

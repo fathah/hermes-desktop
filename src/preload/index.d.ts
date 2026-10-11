@@ -1,3 +1,9 @@
+import type {
+  SpeechRequest,
+  SpeechSettings,
+  SpeechConfigSetting,
+  SynthesizedSpeech,
+} from "../shared/minimax-speech";
 import type { ProviderRequestTarget } from "../shared/provider-target";
 import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
@@ -501,10 +507,18 @@ interface HermesAPI {
     mimeType: string,
     profile?: string,
   ) => Promise<string>;
-  synthesizeSpeech: (
-    text: string,
-    profile?: string,
-  ) => Promise<{ audio: Uint8Array; mimeType: string }>;
+  synthesizeSpeech: (request: SpeechRequest) => Promise<SynthesizedSpeech>;
+  cancelSpeech: (requestId: string) => Promise<boolean>;
+  getSpeechConfig: (
+    profile: string,
+    target: ProviderRequestTarget,
+  ) => Promise<SpeechSettings>;
+  setSpeechConfig: (
+    setting: SpeechConfigSetting,
+    value: string,
+    profile: string,
+    target: ProviderRequestTarget,
+  ) => Promise<boolean>;
   getApiServerKeyStatus: (
     profile?: string,
   ) => Promise<{ hasKey: boolean; providerId?: string; checkedAt?: number }>;

@@ -146,6 +146,7 @@ export default {
   minimaxSpeechModelHint: "Model used for text-to-speech generation",
   minimaxSpeechRegion: "MiniMax speech endpoint",
   minimaxSpeechRegionHint: "Keep the endpoint and API key in the same region",
+  minimaxSpeechAutomatic: "Automatic (global key, then China key)",
   minimaxSpeechGlobal: "Global",
   minimaxSpeechChina: "China",
   tinkerApiKey: "Tinker API Key",

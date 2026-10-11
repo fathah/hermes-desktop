@@ -144,7 +144,16 @@ import {
   recordAgentCommandInventory,
   recordAgentRuntimeInfo,
 } from "../hermes";
-import { synthesizeMiniMaxSpeech } from "../minimax-speech";
+import {
+  runSpeechRequest,
+  cancelSpeechRequest,
+  getSpeechConfig,
+  setSpeechConfig,
+} from "../speech";
+import type {
+  SpeechRequest,
+  SpeechConfigSetting,
+} from "../../shared/minimax-speech";
 import {
   freshDashboardWebSocketUrl,
   getDashboardStatus,
@@ -1772,10 +1781,27 @@ export function registerIpcHandlers(context: IpcContext): void {
     ): Promise<string> => transcribeAudio(audio, mimeType, profile),
   );
 
+  ipcMain.handle("synthesize-speech", (event, request: SpeechRequest) =>
+    runSpeechRequest(event.sender, request),
+  );
+
+  ipcMain.handle("cancel-speech", (event, requestId: string) =>
+    cancelSpeechRequest(event.sender.id, requestId),
+  );
   ipcMain.handle(
-    "synthesize-speech",
-    async (_event, text: string, profile?: string) =>
-      synthesizeMiniMaxSpeech(text, profile),
+    "get-speech-config",
+    (_event, profile: string, target: ProviderRequestTarget) =>
+      getSpeechConfig(profile, target),
+  );
+  ipcMain.handle(
+    "set-speech-config",
+    (
+      _event,
+      setting: SpeechConfigSetting,
+      value: string,
+      profile: string,
+      target: ProviderRequestTarget,
+    ) => setSpeechConfig(setting, value, profile, target),
   );
 
   ipcMain.handle(

@@ -1,3 +1,5 @@
+import type { ProviderRequestTarget } from "./provider-target";
+
 export const MINIMAX_SPEECH_MODELS = [
   "speech-2.8-hd",
   "speech-2.8-turbo",
@@ -11,7 +13,7 @@ export const MINIMAX_SPEECH_MODELS = [
 
 export type MiniMaxSpeechModel = (typeof MINIMAX_SPEECH_MODELS)[number];
 export type MiniMaxSpeechRegion = "global" | "cn";
-export type MiniMaxSpeechFormat = "mp3" | "wav" | "flac" | "pcm";
+export type MiniMaxSpeechFormat = "mp3" | "wav" | "flac";
 
 export const DEFAULT_MINIMAX_SPEECH_MODEL: MiniMaxSpeechModel = "speech-2.8-hd";
 
@@ -19,3 +21,19 @@ export const MINIMAX_SPEECH_ENDPOINTS: Record<MiniMaxSpeechRegion, string> = {
   global: "https://api.minimax.io/v1/t2a_v2",
   cn: "https://api.minimaxi.com/v1/t2a_v2",
 };
+
+export interface SynthesizedSpeech {
+  audio: Uint8Array;
+  mimeType: string;
+}
+export interface SpeechRequest {
+  requestId: string;
+  text: string;
+  profile: string;
+  target: ProviderRequestTarget;
+}
+export interface SpeechSettings {
+  model: MiniMaxSpeechModel;
+  region: MiniMaxSpeechRegion | "";
+}
+export type SpeechConfigSetting = "model" | "region";

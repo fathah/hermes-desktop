@@ -1,6 +1,6 @@
-import { memo, useMemo, useState, useCallback, useEffect, useRef } from "react";
+import { memo, useMemo, useState, useCallback } from "react";
 import { formatDistanceToNowStrict } from "date-fns";
-import { Copy, Check, LoaderCircle, Square, Volume2 } from "lucide-react";
+import { Copy, Check } from "lucide-react";
 import ProfileAvatar from "../../components/common/ProfileAvatar";
 import { OrbLoader } from "../../components/OrbLoader";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
@@ -8,6 +8,7 @@ import { AttachmentChip } from "../../components/AttachmentChip";
 import { MediaSegmentView } from "../../components/MediaImage";
 import { useI18n } from "../../components/useI18n";
 import { parseMediaTokens, cleanLeakedToolTags } from "./mediaUtils";
+import { SpeechButton } from "./SpeechButton";
 import type { ChatBubbleMessage, ChatMessage } from "./types";
 
 export const APPROVAL_RE =
@@ -167,6 +168,8 @@ interface MessageRowProps {
   /** Appearance of the chatting agent, shown once the avatar goes idle. */
   agent?: AgentAvatarInfo;
   profile?: string;
+  connectionId?: string;
+  speechEnabled?: boolean;
 }
 
 export const MessageRow = memo(function MessageRow({
@@ -178,27 +181,11 @@ export const MessageRow = memo(function MessageRow({
   showAvatar = true,
   agent,
   profile,
+  connectionId,
+  speechEnabled,
 }: MessageRowProps): React.JSX.Element {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
-  const [speechState, setSpeechState] = useState<
-    "idle" | "loading" | "playing"
-  >("idle");
-  const speechAudio = useRef<HTMLAudioElement | null>(null);
-  const speechUrl = useRef<string | null>(null);
-  const speechRequest = useRef(0);
-
-  const stopSpeech = useCallback(() => {
-    speechRequest.current += 1;
-    speechAudio.current?.pause();
-    speechAudio.current = null;
-    if (speechUrl.current) URL.revokeObjectURL(speechUrl.current);
-    speechUrl.current = null;
-    setSpeechState("idle");
-  }, []);
-
-  useEffect(() => stopSpeech, [stopSpeech]);
-
   // MessageRow is wrapped in memo() but still re-renders on any prop change
   // (e.g. isLoading toggling at the end of a stream), and `parseMediaTokens`
   // runs a full regex pipeline. Cache the result against the message content
@@ -229,36 +216,6 @@ export const MessageRow = memo(function MessageRow({
       // Fallback: clipboard write may fail in some environments
     }
   }, [bubbleContent]);
-
-  const handleSpeech = useCallback(async () => {
-    if (!bubbleContent) return;
-    if (speechState !== "idle") {
-      stopSpeech();
-      return;
-    }
-    setSpeechState("loading");
-    const request = ++speechRequest.current;
-    try {
-      const result = await window.hermesAPI.synthesizeSpeech(
-        bubbleContent,
-        profile,
-      );
-      if (request !== speechRequest.current) return;
-      const bytes = new Uint8Array(result.audio);
-      const url = URL.createObjectURL(
-        new Blob([bytes.buffer], { type: result.mimeType }),
-      );
-      const audio = new Audio(url);
-      speechUrl.current = url;
-      speechAudio.current = audio;
-      audio.onended = stopSpeech;
-      audio.onerror = stopSpeech;
-      await audio.play();
-      setSpeechState("playing");
-    } catch {
-      if (request === speechRequest.current) stopSpeech();
-    }
-  }, [bubbleContent, profile, speechState, stopSpeech]);
 
   // Only chat bubble messages have content/attachments
   if (!isChatBubbleMessage(msg)) {
@@ -307,34 +264,12 @@ export const MessageRow = memo(function MessageRow({
       >
         {msg.content && !isLoading && !msg.isSlashLoader && (
           <div className="chat-bubble-actions">
-            {msg.role === "agent" && (
-              <button
-                type="button"
-                className={`chat-bubble-speech${speechState === "loading" ? " is-loading" : ""}`}
-                onClick={handleSpeech}
-                title={
-                  speechState === "loading"
-                    ? t("chat.listenLoading")
-                    : speechState === "playing"
-                      ? t("chat.listenStop")
-                      : t("chat.listen")
-                }
-                aria-label={
-                  speechState === "loading"
-                    ? t("chat.listenLoading")
-                    : speechState === "playing"
-                      ? t("chat.listenStop")
-                      : t("chat.listen")
-                }
-              >
-                {speechState === "loading" ? (
-                  <LoaderCircle size={14} />
-                ) : speechState === "playing" ? (
-                  <Square size={13} />
-                ) : (
-                  <Volume2 size={14} />
-                )}
-              </button>
+            {msg.role === "agent" && speechEnabled && connectionId && (
+              <SpeechButton
+                text={msg.content}
+                profile={profile || "default"}
+                connectionId={connectionId}
+              />
             )}
             <button
               type="button"

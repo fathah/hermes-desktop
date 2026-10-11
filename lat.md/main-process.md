@@ -210,11 +210,10 @@ Speech-to-text IPC sends recorded desktop audio through the Hermes API server, n
 
 ## MiniMax speech synthesis
 
-Agent message actions can request spoken audio without exposing speech credentials to the renderer.
+Local agent message actions can request spoken audio without exposing speech credentials to the renderer.
 
-[[src/main/ipc/register.ts#registerIpcHandlers]] exposes the context-isolated `synthesize-speech` boundary. [[src/main/minimax-speech.ts#synthesizeMiniMaxSpeech]] selects the configured global or China endpoint and matching credential, validates the selected speech model and audio format, sends the synchronous `t2a_v2` request, and decodes successful hex audio responses.
+[[speech-playback]] defines selected Local target authority, one playback owner, request cancellation, bounded encoded synthesis and scoped speech settings. [[speech-playback-tests]] documents actual IPC and rendered lifecycle regressions.
 
-The Providers screen exposes the existing regional keys plus `tts.minimax.model` and `tts.minimax.region`; changing either selector also makes MiniMax the configured TTS tool provider. [[tests/minimax-speech.test.ts]] protects the default model, regional credential binding, request shape, and response/error parsing.
 ## SSH credential persistence
 
 Every Desktop SSH `.env` update uses a remote-side locked transaction, so overlapping dashboard, API-server, and provider writes preserve unrelated credentials.

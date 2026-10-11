@@ -5114,6 +5114,8 @@ body:has(.shell-vibrant),
   transition: opacity 0.15s ease;
 }
 
+.chat-bubble-actions:has(.chat-bubble-speech.is-loading),
+.chat-bubble-actions:has(.chat-bubble-speech.is-playing),
 .chat-bubble:hover .chat-bubble-actions {
   opacity: 1;
 }
@@ -5170,6 +5172,23 @@ body:has(.shell-vibrant),
   background: var(--bg-hover);
   color: var(--text-primary);
   border-color: var(--border-focus, var(--accent));
+}
+
+.chat-bubble-actions:has(.chat-speech-error) {
+  position: relative;
+  top: auto;
+  right: auto;
+  flex-wrap: wrap;
+  opacity: 1;
+  margin-bottom: 8px;
+}
+
+.chat-speech-error {
+  flex-basis: 100%;
+  order: 1;
+  color: var(--error);
+  font-size: 12px;
+  white-space: normal;
 }
 
 .chat-bubble-speech.is-loading svg {

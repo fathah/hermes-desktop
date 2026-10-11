@@ -57,6 +57,8 @@ interface MessageListProps {
    *  the agent's profile picture instead of the loading gif. */
   agentAvatar?: AgentAvatarInfo;
   profile?: string;
+  connectionId?: string;
+  speechEnabled?: boolean;
 }
 
 function TypingIndicator({
@@ -108,6 +110,8 @@ export const MessageList = memo(function MessageList({
   onApprovalResolved,
   agentAvatar,
   profile,
+  connectionId,
+  speechEnabled,
 }: MessageListProps): React.JSX.Element {
   const { t } = useI18n();
   // Extra rows bound the tree while following the latest output. When the
@@ -430,6 +434,8 @@ export const MessageList = memo(function MessageList({
         showAvatar={showAvatar}
         agent={agentAvatar}
         profile={profile}
+        connectionId={connectionId}
+        speechEnabled={speechEnabled}
       />,
     );
   }
