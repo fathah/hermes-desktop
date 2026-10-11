@@ -109,3 +109,11 @@ Memory metadata read before an OAuth account change cannot start file reads or h
 ### OAuth account changes invalidate queued targets
 
 A captured main-process editor target rejects after same-origin cookie changes, and capture stays blocked while sign-in is pending.
+
+### Same target refresh preserves Soul drafts
+
+Refreshing Memory within the captured target keeps its real Soul editor and pending autosave mounted. Only target changes clear the lifetime; memory controls wait for the refreshed data.
+
+### Unavailable modal memory is not empty
+
+The global profile modal explains unavailable Remote contents and does not render an empty entry list or zero-memory message.

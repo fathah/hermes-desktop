@@ -606,17 +606,18 @@ function ProfileModalEditor({
                   <div className="profile-modal-loading">
                     <OrbLoader state="searching" size={64} />
                   </div>
+                ) : memoryData?.contentUnavailable ? (
+                  <div role="note" className="memory-error">
+                    Memory contents are unavailable from this server. View
+                    memories on the server.
+                  </div>
                 ) : memoryData ? (
                   <fieldset
                     disabled={target.mode === "remote"}
                     style={{ border: 0, padding: 0 }}
                   >
                     <MemoryEntries
-                      entries={
-                        memoryData.contentUnavailable
-                          ? []
-                          : memoryData.memory.entries
-                      }
+                      entries={memoryData.memory.entries}
                       profile={profile.id}
                       target={target}
                       isCurrent={isCurrent}

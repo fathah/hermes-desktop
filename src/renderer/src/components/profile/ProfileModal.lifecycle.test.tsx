@@ -205,3 +205,27 @@ it("does not restore old modal entries when the next profile memory read fails",
   expect(screen.queryByText("memory.addMemory")).toBeNull();
   expect(api.readMemory).toHaveBeenCalledTimes(2);
 });
+// @lat: [[profile-editors#Tests#Unavailable modal memory is not empty]]
+it("shows unavailable Remote memory without mounting empty entry controls", async () => {
+  const api = {
+    ...profileEditorFixture("remote").api,
+    readMemory: vi.fn().mockResolvedValue({
+      contentUnavailable: true,
+      memory: { entries: [], charCount: 0, charLimit: 2000 },
+    }),
+  };
+  Object.defineProperty(window, "hermesAPI", {
+    configurable: true,
+    value: api,
+  });
+  render(
+    <ProfileModalProvider>
+      <Openers section="agentMemory" />
+    </ProfileModalProvider>,
+  );
+  fireEvent.click(screen.getByText("Open a"));
+  await flush();
+  expect(screen.getByRole("note")).toHaveTextContent("unavailable");
+  expect(screen.queryByText("memory.noMemoriesYet")).toBeNull();
+  expect(document.querySelector(".memory-empty")).toBeNull();
+});

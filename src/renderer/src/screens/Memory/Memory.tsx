@@ -71,7 +71,6 @@ function MemoryEditor({
     if (!live()) return;
     const request = ++generation.current;
     setLoading(true);
-    setData(null);
     setError("");
     try {
       const [d, provider, provs] = await Promise.all([
@@ -122,7 +121,7 @@ function MemoryEditor({
     );
   }
 
-  if (loading || !data) {
+  if (!data) {
     return (
       <div className="settings-container">
         <h1 className="settings-header">{t("memory.title")}</h1>
@@ -142,7 +141,11 @@ function MemoryEditor({
           </h1>
           <p className="memory-subtitle">{t("memory.subtitle")}</p>
         </div>
-        <button className="btn btn-secondary btn-sm" onClick={loadData}>
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={loadData}
+          disabled={loading}
+        >
           <Refresh size={13} />
         </button>
       </div>
@@ -150,7 +153,11 @@ function MemoryEditor({
       <CapacityCards data={data} />
       <MemoryTabs activeTab={tab} onTabChange={setTab} />
 
-      {error && <div className="memory-error">{error}</div>}
+      {error && (
+        <div className="memory-error" role="alert">
+          {error}
+        </div>
+      )}
 
       {readOnly && tab !== "soul" && (
         <div className="memory-error" role="note">
@@ -162,7 +169,7 @@ function MemoryEditor({
 
       {/* A disabled fieldset natively disables every button/input inside it. */}
       <fieldset
-        disabled={readOnly}
+        disabled={readOnly || loading}
         style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
       >
         {tab === "entries" && !data.contentUnavailable && (
