@@ -291,9 +291,64 @@ function Chat({
     chatTransportPreference,
   );
 
+  const connectionAuthorityRef = useRef<{
+    pending: Promise<string | null | undefined>;
+    supersede: () => void;
+  } | null>(null);
+  const setConnectionAuthority = useCallback(
+    (read: Promise<string | null>): void => {
+      let supersede!: () => void;
+      const obsolete = new Promise<undefined>((resolve) => {
+        supersede = () => resolve(undefined);
+      });
+      const previous = connectionAuthorityRef.current;
+      connectionAuthorityRef.current = {
+        pending: Promise.race([read, obsolete]),
+        supersede,
+      };
+      previous?.supersede();
+    },
+    [],
+  );
+  const [acceptedAuthority, setAcceptedAuthority] = useState<string | null>(
+    null,
+  );
+  const getConnectionAuthority = useCallback(async (): Promise<
+    string | null
+  > => {
+    for (;;) {
+      const pending = connectionAuthorityRef.current;
+      if (!pending) return null;
+      const revision = await pending.pending;
+      if (pending === connectionAuthorityRef.current) return revision ?? null;
+    }
+  }, []);
+  const authorizeSend = useCallback(async (): Promise<boolean> => {
+    const revision = await getConnectionAuthority();
+    return !!revision && revision === acceptedAuthority;
+  }, [acceptedAuthority, getConnectionAuthority]);
+
   useEffect(() => {
     let cancelled = false;
+    let readGeneration = 0;
+    let authorityRevision: string | null = null;
+    const readAuthorityRevision = async (): Promise<string | null> => {
+      if (!connectionId) return null;
+      try {
+        const target =
+          await window.hermesAPI.getProviderRequestTarget(connectionId);
+        return target?.connectionId === connectionId && target.revision
+          ? target.revision
+          : null;
+      } catch {
+        // An unknown or changing account must still invalidate old transport.
+        return null;
+      }
+    };
     const loadConnectionConfig = async (): Promise<void> => {
+      const generation = ++readGeneration;
+      const revisionRead = readAuthorityRevision();
+      setConnectionAuthority(revisionRead);
       try {
         const conn = await window.hermesAPI.getConnectionConfig(connectionId);
         let remoteAuthMode = conn.remoteAuthMode ?? "auto";
@@ -309,7 +364,10 @@ function Chat({
             // Keep stored transport choice when public status is unreachable.
           }
         }
-        if (!cancelled) {
+        const revision = await revisionRead;
+        if (!cancelled && generation === readGeneration) {
+          authorityRevision = revision;
+          setAcceptedAuthority(revision);
           setConnectionMode(conn.mode);
           setRemoteMode(conn.mode !== "local");
           setChatTransportPreference(
@@ -323,37 +381,65 @@ function Chat({
           );
         }
       } catch {
-        if (!cancelled) {
+        if (!cancelled && generation === readGeneration) {
           setConnectionMode("ssh");
           setRemoteMode(true);
           setChatTransportPreference("legacy");
         }
       } finally {
-        if (!cancelled) setConnectionModeLoaded(true);
+        if (!cancelled && generation === readGeneration)
+          setConnectionModeLoaded(true);
       }
     };
     void loadConnectionConfig();
     const unsubscribe = window.hermesAPI.onConnectionConfigChanged((conn) => {
-      if (conn.connectionId !== connectionId) return;
-      setConnectionRevision((revision) => revision + 1);
-      setConnectionModeLoaded(true);
-      setConnectionMode(conn.mode);
-      setRemoteMode(conn.mode !== "local");
-      setChatTransportPreference(
-        conn.mode === "local"
-          ? "auto"
-          : conn.mode === "ssh"
-            ? (conn.sshChatTransport ?? "auto")
-            : conn.remoteAuthMode === "oauth"
-              ? "dashboard"
-              : (conn.remoteChatTransport ?? "auto"),
-      );
+      const generation = ++readGeneration;
+      const revisionRead = readAuthorityRevision();
+      setConnectionAuthority(revisionRead);
+      void revisionRead.then(async (revision) => {
+        if (cancelled || generation !== readGeneration) return;
+        // Display names are outside the main-issued config/auth revision.
+        // Public fields alone cannot detect same-length keys or cookie changes.
+        if (revision && revision === authorityRevision) return;
+        // Registry notifications describe the selected connection; a retained
+        // tab must read its own public settings when a different target changed.
+        let ownConfig: typeof conn | null =
+          conn.connectionId === connectionId ? conn : null;
+        if (conn.connectionId !== connectionId) {
+          try {
+            ownConfig =
+              await window.hermesAPI.getConnectionConfig(connectionId);
+          } catch {
+            revision = null;
+            if (!cancelled && generation === readGeneration)
+              setConnectionAuthority(Promise.resolve(null));
+          }
+          if (cancelled || generation !== readGeneration) return;
+        }
+        authorityRevision = revision;
+        setAcceptedAuthority(revision);
+        setConnectionRevision((current) => current + 1);
+        setConnectionModeLoaded(true);
+        if (!ownConfig) return;
+        setConnectionMode(ownConfig.mode);
+        setRemoteMode(ownConfig.mode !== "local");
+        setChatTransportPreference(
+          ownConfig.mode === "local"
+            ? "auto"
+            : ownConfig.mode === "ssh"
+              ? (ownConfig.sshChatTransport ?? "auto")
+              : ownConfig.remoteAuthMode === "oauth"
+                ? "dashboard"
+                : (ownConfig.remoteChatTransport ?? "auto"),
+        );
+      });
     });
     return (): void => {
       cancelled = true;
+      setConnectionAuthority(Promise.resolve(null));
       unsubscribe();
     };
-  }, [connectionId]);
+  }, [connectionId, setConnectionAuthority]);
 
   const { containerRef, bottomRef } = useChatScroll(messages);
   const modelConfig = useModelConfig(profile);
@@ -663,6 +749,7 @@ function Chat({
 
   const dashboardTransport = useDashboardChatTransport({
     activeTurnRef,
+    getConnectionAuthority,
     connectionId,
     connectionRevision,
     contextFolder,
@@ -814,6 +901,7 @@ function Chat({
   );
 
   const actions = useChatActions({
+    authorizeSend,
     runId,
     connectionId,
     profile,

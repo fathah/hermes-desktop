@@ -35,6 +35,8 @@ interface LocalCommands {
 }
 
 interface UseChatActionsArgs {
+  /** Captured connection authority must still match before prompt admission. */
+  authorizeSend?: () => Promise<boolean>;
   /** This conversation's run id — threaded to the main process so its events
    *  are tagged and its abort targets only this run. */
   runId: string;
@@ -108,6 +110,7 @@ interface UseChatActionsResult {
  */
 // @lat: [[chat-commands#Slash command execution#Local vs gateway commands]]
 export function useChatActions({
+  authorizeSend,
   runId,
   connectionId,
   profile,
@@ -165,6 +168,7 @@ export function useChatActions({
           const handled = await sendViaDashboard(text, attachments);
           if (handled) return;
         }
+        if (authorizeSend && !(await authorizeSend())) return;
         await window.hermesAPI.sendMessage(
           text,
           profile,
@@ -190,6 +194,7 @@ export function useChatActions({
       hermesSessionId,
       contextFolder,
       sendViaDashboard,
+      authorizeSend,
     ],
   );
 
@@ -199,6 +204,7 @@ export function useChatActions({
   const runQuickAsk = useCallback(
     async (question: string, attachments?: Attachment[]): Promise<void> => {
       if (!question) return;
+      if (authorizeSend && !(await authorizeSend())) return;
       setIsLoading(true);
       const turn = pushUser(`💭 ${question}`, "user-btw", attachments);
       activeTurnRef.current = {
@@ -208,7 +214,7 @@ export function useChatActions({
       };
       await sendToAgent(`/btw ${question}`, attachments);
     },
-    [activeTurnRef, pushUser, sendToAgent, setIsLoading],
+    [activeTurnRef, authorizeSend, pushUser, sendToAgent, setIsLoading],
   );
 
   // Side question (`/btw` and the 💭 button). On the dashboard transport it runs
@@ -219,6 +225,7 @@ export function useChatActions({
   const runBackground = useCallback(
     async (question: string, attachments?: Attachment[]): Promise<void> => {
       if (!question) return;
+      if (authorizeSend && !(await authorizeSend())) return;
       // `prompt.background` is text-only — it can't carry attachments. When the
       // side question has attachments, fall back to the (blocking) quick-ask
       // path, which sends them via `prompt.submit` and shows them in the bubble,
@@ -233,7 +240,13 @@ export function useChatActions({
       }
       if (!isLoadingRef.current) await runQuickAsk(question, attachments);
     },
-    [runBackgroundViaDashboard, pushUser, addAgentMessage, runQuickAsk],
+    [
+      authorizeSend,
+      runBackgroundViaDashboard,
+      pushUser,
+      addAgentMessage,
+      runQuickAsk,
+    ],
   );
 
   const handleSend = useCallback(
@@ -244,6 +257,7 @@ export function useChatActions({
     ): Promise<void> => {
       const hasPayload = text.length > 0 || (attachments?.length ?? 0) > 0;
       if (!hasPayload) return;
+      if (authorizeSend && !(await authorizeSend())) return;
       if (!skipLoadingCheck && isLoadingRef.current) return;
 
       const cmdName = text.startsWith("/")
@@ -384,6 +398,7 @@ export function useChatActions({
     },
     [
       activeTurnRef,
+      authorizeSend,
       hermesSessionId,
       localCommands,
       profile,

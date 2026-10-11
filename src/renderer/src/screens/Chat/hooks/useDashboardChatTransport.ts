@@ -98,6 +98,8 @@ interface UseDashboardChatTransportArgs {
   activeTurnRef: React.MutableRefObject<ActiveTurn | null>;
   connectionId?: string;
   connectionRevision?: number;
+  /** Waits for pending private-authority classification without closing an equal client. */
+  getConnectionAuthority?: () => Promise<string | null>;
   contextFolder: string | null;
   connectionMode: DashboardConnectionMode;
   enabled: boolean;
@@ -961,6 +963,7 @@ export function useDashboardChatTransport({
   activeTurnRef,
   connectionId,
   connectionRevision,
+  getConnectionAuthority,
   contextFolder,
   connectionMode,
   enabled,
@@ -1491,6 +1494,29 @@ export function useDashboardChatTransport({
 
       const generation = clientGenerationRef.current;
       const pending = (async () => {
+        const authority = getConnectionAuthority
+          ? await getConnectionAuthority()
+          : null;
+        const assertAuthority = async (
+          isClosed?: () => boolean,
+        ): Promise<void> => {
+          const currentAuthority = getConnectionAuthority
+            ? await getConnectionAuthority()
+            : null;
+          if (
+            clientGenerationRef.current !== generation ||
+            isClosed?.() ||
+            (getConnectionAuthority &&
+              (!authority || currentAuthority !== authority))
+          ) {
+            const error = new Error(
+              "Hermes dashboard connection authority changed. Retry on the current chat.",
+            ) as Error & { dashboardWasReachable?: boolean };
+            error.dashboardWasReachable = true;
+            throw error;
+          }
+        };
+        if (getConnectionAuthority) await assertAuthority();
         // The dashboard `/api/ws` is the ONLY chat transport when a dashboard is
         // available (matching apps/desktop, which has no /v1 chat path). A WS
         // drop / "socket hang up" — e.g. a momentary SSH tunnel blip — is
@@ -1532,9 +1558,27 @@ export function useDashboardChatTransport({
               status.error || "Hermes dashboard transport is unavailable",
             );
           }
+          let clientClosed = false;
+          let eventTail = Promise.resolve();
           const client: DashboardGatewayClient = new DashboardGatewayClient({
-            onEvent: handleGatewayEvent,
+            onEvent: (event) => {
+              if (!getConnectionAuthority) {
+                handleGatewayEvent(event);
+                return;
+              }
+              eventTail = eventTail
+                .then(async () => {
+                  await assertAuthority(() => clientClosed);
+                  if (
+                    !clientClosed &&
+                    clientGenerationRef.current === generation
+                  )
+                    handleGatewayEvent(event);
+                })
+                .catch(() => undefined);
+            },
             onClose: () => {
+              clientClosed = true;
               if (clientRef.current === client) {
                 expirePendingClarifyRef.current(true);
                 expirePendingApprovalsRef.current(true);
@@ -1542,7 +1586,21 @@ export function useDashboardChatTransport({
               }
             },
           });
+          if (getConnectionAuthority) {
+            const nativeRequest = client.request.bind(client);
+            client.request = async <T>(
+              method: string,
+              params: Record<string, unknown> = {},
+            ): Promise<T> => {
+              await assertAuthority(() => clientClosed);
+              const result = await nativeRequest<T>(method, params);
+              await assertAuthority(() => clientClosed);
+              return result;
+            };
+          }
           try {
+            if (getConnectionAuthority)
+              await assertAuthority(() => clientClosed);
             const freshUrl = window.hermesAPI.freshDashboardWsUrl
               ? await window.hermesAPI.freshDashboardWsUrl(
                   profile,
@@ -1552,8 +1610,21 @@ export function useDashboardChatTransport({
             if (!freshUrl) {
               throw new Error("Hermes dashboard WebSocket URL is unavailable");
             }
+            if (getConnectionAuthority)
+              await assertAuthority(() => clientClosed);
             await client.connect(freshUrl);
+            if (getConnectionAuthority) {
+              await assertAuthority(() => clientClosed);
+              // connect() begins with close() to clean up a prior socket. Only
+              // intercept explicit teardown after this new socket is admitted.
+              const nativeClose = client.close.bind(client);
+              client.close = () => {
+                clientClosed = true;
+                nativeClose();
+              };
+            }
           } catch (err) {
+            clientClosed = true;
             lastConnectErr = err;
             client.close();
             if (clientGenerationRef.current !== generation) {
@@ -1593,6 +1664,7 @@ export function useDashboardChatTransport({
       }
     }, [
       handleGatewayEvent,
+      getConnectionAuthority,
       profile,
       connectionId,
       connectionMode,
