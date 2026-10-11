@@ -27,6 +27,11 @@ vi.mock("child_process", () => ({
   default: { execFile: execFileSpy },
 }));
 
+vi.mock("../src/main/config", () => ({
+  getConnectionConfig: () => ({ mode: "local" }),
+  readDesktopConfig: () => ({}),
+}));
+
 vi.mock("../src/main/utils", () => ({
   profileHome: () => profileHomeRef.value,
 }));

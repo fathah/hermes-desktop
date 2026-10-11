@@ -1,5 +1,5 @@
 import http from "http";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   remoteAddModel,
   remoteGetModelConfig,
@@ -30,6 +30,7 @@ function startServer(
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   if (server) {
     await new Promise<void>((resolve) => server!.close(() => resolve()));
     server = null;
@@ -37,30 +38,102 @@ afterEach(async () => {
 });
 
 describe("remote dashboard models", () => {
-  it("reads configured rows from /api/model/library", async () => {
+  // @lat: [[model-selection#Session model override#Remote picker catalog#Named profiles keep the current provider catalog]]
+  it("merges current-provider options into a named profile's library", async () => {
+    const timeoutSpy = vi.spyOn(http.ClientRequest.prototype, "setTimeout");
     const { url } = await startServer((req, res) => {
       expect(req.headers["x-hermes-session-token"]).toBe("token");
-      expect(req.url).toBe("/api/model/library");
       res.setHeader("Content-Type", "application/json");
-      res.end(
-        JSON.stringify({
-          models: [
-            {
-              id: "remote:active:custom:deepseek-v4-pro",
-              name: "DeepSeek V4 Pro",
-              provider: "custom",
-              model: "deepseek-v4-pro",
-              baseUrl: "https://api.deepseek.com/v1",
-              createdAt: 0,
-            },
-            {
-              id: "bad",
-              provider: "",
-              model: "ignored",
-            },
-          ],
-        }),
-      );
+      if (req.url === "/api/model/library?profile=james") {
+        res.end(
+          JSON.stringify({
+            models: [
+              {
+                id: "remote:active:openai-codex:gpt-6.1",
+                name: "GPT-6.1",
+                provider: "openai-codex",
+                model: "gpt-6.1",
+                baseUrl: "",
+                createdAt: 0,
+              },
+            ],
+          }),
+        );
+        return;
+      }
+      if (req.url === "/api/model/options?profile=james") {
+        res.end(
+          JSON.stringify({
+            provider: "openai-codex",
+            model: "gpt-6.1",
+            providers: [
+              {
+                slug: "openai-codex",
+                name: "OpenAI Codex",
+                is_current: true,
+                models: ["gpt-6.1", "gpt-5.3-codex", "gpt-5.2-codex"],
+              },
+              {
+                slug: "anthropic",
+                name: "Anthropic",
+                is_current: false,
+                models: ["claude-opus-5.5"],
+              },
+            ],
+          }),
+        );
+        return;
+      }
+      throw new Error(`unexpected request ${req.url}`);
+    });
+
+    const models = await remoteListModels({
+      remoteUrl: url,
+      apiKey: "token",
+      profile: "james",
+    });
+    expect(models.map((model) => `${model.provider}/${model.model}`)).toEqual([
+      "openai-codex/gpt-6.1",
+      "openai-codex/gpt-5.3-codex",
+      "openai-codex/gpt-5.2-codex",
+    ]);
+    expect(models[0]).toMatchObject({
+      id: "remote:active:openai-codex:gpt-6.1",
+      name: "GPT-6.1",
+    });
+    expect(models.some((model) => model.provider === "anthropic")).toBe(false);
+    expect(timeoutSpy).toHaveBeenNthCalledWith(1, 20_000, expect.any(Function));
+    expect(timeoutSpy).toHaveBeenNthCalledWith(2, 5_000, expect.any(Function));
+  });
+
+  it("keeps configured rows when model options are unavailable", async () => {
+    const { url } = await startServer((req, res) => {
+      if (req.url === "/api/model/library") {
+        res.setHeader("Content-Type", "application/json");
+        res.end(
+          JSON.stringify({
+            models: [
+              {
+                id: "remote:active:custom:deepseek-v4-pro",
+                name: "DeepSeek V4 Pro",
+                provider: "custom",
+                model: "deepseek-v4-pro",
+                baseUrl: "https://api.deepseek.com/v1",
+                createdAt: 0,
+              },
+              {
+                id: "bad",
+                provider: "",
+                model: "ignored",
+              },
+            ],
+          }),
+        );
+        return;
+      }
+      expect(req.url).toBe("/api/model/options");
+      res.statusCode = 503;
+      res.end("unavailable");
     });
 
     const models = await remoteListModels({ remoteUrl: url, apiKey: "token" });

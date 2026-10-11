@@ -5,6 +5,19 @@ vi.mock("./hermes", () => ({
   getRemoteAuthHeader: () => ({ Authorization: "Bearer tok" }),
 }));
 
+vi.mock("./config", () => ({
+  getConnectionConfig: () => ({
+    mode: "remote",
+    remoteUrl: "http://remote.example:9119",
+    remoteAuthMode: "token",
+    apiKey: "tok",
+  }),
+}));
+
+vi.mock("./remote-oauth", () => ({
+  remoteAuthFetch: (url: string, init?: RequestInit) => fetch(url, init),
+}));
+
 import {
   REMOTE_SKILL_PREFIX,
   remoteGetSkillContent,

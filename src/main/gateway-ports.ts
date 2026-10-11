@@ -85,7 +85,7 @@ function allocateFreePort(profile: string): number {
  * Resolve the api_server port the desktop should bind `profile`'s gateway to.
  *
  * config.yaml is the single source of truth:
- *  - default profile → pinned to {@link DEFAULT_API_SERVER_PORT}.
+ *  - default profile → its explicitly configured port, else {@link DEFAULT_API_SERVER_PORT}.
  *  - named profile with no configured port → allocate a free port and persist
  *    it (the api_server block is written by ensureApiServerConfig).
  *  - named profile whose configured port collides with the default or another
@@ -97,7 +97,7 @@ function allocateFreePort(profile: string): number {
  */
 export function getProfilePort(profile?: string): number {
   const name = normalizeProfileName(profile); // undefined => default
-  if (!name) return DEFAULT_API_SERVER_PORT;
+  if (!name) return readConfiguredPort(undefined) ?? DEFAULT_API_SERVER_PORT;
 
   const configured = readConfiguredPort(name);
   if (configured !== null) {

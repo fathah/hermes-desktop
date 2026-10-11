@@ -22,6 +22,14 @@ const { connectionRef, fetchSpy, sshConfig, sshRunCronSpy } = vi.hoisted(() => {
   };
 });
 
+vi.mock("../src/main/remote-api", () => ({
+  remoteDashboardRequestJson: vi.fn(),
+}));
+
+vi.mock("../src/main/remote-oauth", () => ({
+  RemoteOAuthError: class RemoteOAuthError extends Error {},
+}));
+
 vi.mock("../src/main/config", () => ({
   getConnectionConfig: () => connectionRef.value,
 }));

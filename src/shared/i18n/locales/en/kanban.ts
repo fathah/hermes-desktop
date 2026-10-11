@@ -62,6 +62,7 @@ export default {
   workspaceWorktree: "Worktree (current repo)",
   workspaceChoose: "Choose folder…",
   workspaceNoFolder: "No folder selected",
+  workspaceServerPath: "Absolute path on the server",
   browse: "Browse…",
   triageCheckbox:
     "Park in triage (a specifier expands the spec before promoting to to-do)",

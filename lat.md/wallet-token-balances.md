@@ -34,6 +34,8 @@ Token metadata (contract address, symbol, decimals) lives in [[src/shared/tokens
 
 [[src/shared/tokens.ts#formatTokenBalance]] converts raw BigInt strings to compact form: zero → "0", ≥1M → "1.5M", ≥1K → "10.5K", tiny non-zero → "< 0.0001", otherwise up to 4 significant digits. [[src/shared/tokens.ts#formatTokenBalanceFull]] produces the same without K/M suffixes — used for tooltip display of exact amounts.
 
+Full balance tooltips trim trailing zeros after the four-digit cut: `1.20001` displays as `1.2`, and `1.00001` as `1`. [[src/main/wallet-balances.test.ts]] covers both fractional branches and cuts leaving an integer-only result.
+
 ### IPC & UI
 
 The `get-token-balances` IPC channel exposes balance reads to the renderer. Balances auto-fetch when the wallet pane loads; previously cached balances display immediately while fresh ones load, then update in place.

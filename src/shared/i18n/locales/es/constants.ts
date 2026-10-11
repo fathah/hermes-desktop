@@ -43,6 +43,7 @@ export default {
   together: "Together AI",
   fireworks: "Fireworks",
   cerebras: "Cerebras",
+  requesty: "Requesty",
   mistral: "Mistral",
   // Theme
   themeSystem: "Sistema",
@@ -95,6 +96,8 @@ export default {
   fireworksHint: "Inferencia rápida para modelos abiertos",
   cerebrasApiKey: "API key de Cerebras",
   cerebrasHint: "Inferencia ultrarrápida en hardware de Cerebras",
+  requestyApiKey: "API key de Requesty",
+  requestyHint: "Gateway multimodelo compatible con OpenAI",
   mistralApiKey: "API key de Mistral",
   mistralHint: "Modelos Mistral y Codestral",
   perplexityApiKey: "API key de Perplexity",

@@ -6,6 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import toast from "react-hot-toast";
 
 // useI18n needs an I18nProvider; the Sessions tab only uses `t` for labels,
 // so a pass-through mock keeps these tests focused on the refresh behaviour.
@@ -16,6 +17,8 @@ vi.mock("../../components/useI18n", () => ({
     setLocale: () => {},
   }),
 }));
+
+vi.mock("react-hot-toast", () => ({ default: { error: vi.fn() } }));
 
 import Sessions, { SESSIONS_REFRESH_MS } from "./Sessions";
 
@@ -871,4 +874,359 @@ describe("Sessions tab — bulk delete selection (#490)", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(api.deleteSessions).not.toHaveBeenCalled();
   });
+});
+
+// @lat: [[connections#Connections#Session locations#Session browser scope isolation]]
+describe("Sessions scope isolation", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.useRealTimers();
+    vi.mocked(toast.error).mockClear();
+  });
+
+  const row = (
+    title: string,
+  ): {
+    id: string;
+    title: string;
+    startedAt: number;
+    source: string;
+    messageCount: number;
+    model: string;
+  } => ({
+    id: "shared-id",
+    title,
+    startedAt: Date.now() / 1000,
+    source: "desktop",
+    messageCount: 1,
+    model: "test",
+  });
+
+  it.each([
+    { connectionId: "connection-two", profile: "work" },
+    { connectionId: "connection-one", profile: "personal" },
+  ])(
+    "drops a previous scope's delete confirmation on switching to %j",
+    async (scope) => {
+      const api = installHermesAPI([row("Old scope")]);
+      const view = render(<Sessions {...baseProps} visible />);
+      await screen.findByText("Old scope");
+      fireEvent.click(screen.getByRole("button", { name: "sessions.delete" }));
+      expect(screen.getByRole("dialog")).toBeTruthy();
+      api.syncSessionCache.mockResolvedValue([row("New scope")]);
+      view.rerender(<Sessions {...baseProps} {...scope} visible />);
+      await screen.findByText("New scope");
+      const staleConfirm = screen.queryByRole("button", {
+        name: "sessions.deleteConfirmAction",
+      });
+      if (staleConfirm) fireEvent.click(staleConfirm);
+      expect(api.deleteSession).not.toHaveBeenCalled();
+      expect(screen.queryByRole("dialog")).toBeNull();
+    },
+  );
+
+  it("does not let a completed old deletion refresh the new scope's list", async () => {
+    const api = installHermesAPI([row("Old scope")]);
+    let finish!: () => void;
+    api.deleteSession.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const view = render(<Sessions {...baseProps} visible />);
+    await screen.findByText("Old scope");
+    fireEvent.click(screen.getByRole("button", { name: "sessions.delete" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "sessions.deleteConfirmAction" }),
+    );
+    api.syncSessionCache.mockImplementation(
+      (_connection: string, profile: string) =>
+        Promise.resolve([
+          row(profile === "personal" ? "New scope" : "Old scope"),
+        ]),
+    );
+    view.rerender(<Sessions {...baseProps} profile="personal" visible />);
+    await screen.findByText("New scope");
+    await act(async () => {
+      finish();
+    });
+    expect(screen.queryByText("Old scope")).toBeNull();
+    expect(screen.getByText("New scope")).toBeTruthy();
+  });
+  it("clears bulk selection and its confirmation across scopes", async () => {
+    const api = installHermesAPI([row("Old scope")]);
+    const view = render(<Sessions {...baseProps} visible />);
+    await screen.findByText("Old scope");
+    fireEvent.click(
+      screen.getByRole("button", { name: "sessions.selectMode" }),
+    );
+    fireEvent.click(screen.getByText("Old scope"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "sessions.deleteSelected" }),
+    );
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    api.syncSessionCache.mockResolvedValue([row("New scope")]);
+    view.rerender(<Sessions {...baseProps} profile="personal" visible />);
+    await screen.findByText("New scope");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "sessions.deleteSelected" }),
+    ).toBeNull();
+    expect(api.deleteSessions).not.toHaveBeenCalled();
+  });
+
+  // @lat: [[connections#Connections#Test specifications#Connection-explicit session browsing#Suppresses stale rename failures]]
+  it.each([
+    { connectionId: "connection-two", profile: "work" },
+    { connectionId: "connection-one", profile: "personal" },
+  ])(
+    "suppresses failed rename notifications after switching to %j",
+    async (scope) => {
+      const api = installHermesAPI([row("Old scope")]);
+      let rejectRename!: (error: Error) => void;
+      api.updateSessionTitle.mockImplementation(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            rejectRename = reject;
+          }),
+      );
+      const view = render(<Sessions {...baseProps} visible />);
+      await screen.findByText("Old scope");
+      fireEvent.click(screen.getByRole("button", { name: "sessions.rename" }));
+      const renameInput = screen.getAllByRole("textbox")[1];
+      fireEvent.change(renameInput, { target: { value: "Pending rename" } });
+      fireEvent.keyDown(renameInput, { key: "Enter" });
+      expect(api.updateSessionTitle).toHaveBeenCalledExactlyOnceWith(
+        "shared-id",
+        "Pending rename",
+        "connection-one",
+        "work",
+      );
+
+      api.syncSessionCache.mockResolvedValue([row("New scope")]);
+      view.rerender(<Sessions {...baseProps} {...scope} visible />);
+      await screen.findByText("New scope");
+      await act(async () => {
+        rejectRename(new Error("Old scope rename failed"));
+      });
+
+      expect(toast.error).not.toHaveBeenCalled();
+      expect(screen.getByText("New scope")).toBeTruthy();
+      expect(screen.queryByText("Pending rename")).toBeNull();
+    },
+  );
+
+  it("preserves a confirmation for ordinary rerenders in the same scope", async () => {
+    const api = installHermesAPI([row("Original")]);
+    const view = render(<Sessions {...baseProps} visible />);
+    await screen.findByText("Original");
+    fireEvent.click(screen.getByRole("button", { name: "sessions.delete" }));
+    view.rerender(
+      <Sessions {...baseProps} currentSessionId="another-session" visible />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "sessions.deleteConfirmAction" }),
+    );
+    await act(async () => {});
+    expect(api.deleteSession).toHaveBeenCalledExactlyOnceWith(
+      "shared-id",
+      "connection-one",
+      "work",
+    );
+  });
+});
+
+// @lat: [[ssh-session-delete#Visible deletion failure]]
+it("keeps a failed deletion visible even when the subsequent list refresh is offline", async () => {
+  vi.useRealTimers();
+  localStorage.clear();
+  const api = installHermesAPI([
+    {
+      id: "keep",
+      title: "Keep this chat",
+      startedAt: Date.now() / 1000,
+      source: "desktop",
+      messageCount: 1,
+      model: "test",
+    },
+  ]);
+  render(<Sessions {...baseProps} visible />);
+  await screen.findByText("Keep this chat");
+  api.deleteSession.mockRejectedValue(new Error("SSH offline"));
+  api.syncSessionCache.mockRejectedValue(new Error("SSH offline"));
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    fireEvent.click(screen.getByRole("button", { name: "sessions.delete" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "sessions.deleteConfirmAction" }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "sessions.deleteFailed",
+    );
+    expect(screen.getByText("Keep this chat")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "sessions.delete" }),
+    ).toBeEnabled();
+  } finally {
+    log.mockRestore();
+  }
+});
+
+// @lat: [[ssh-session-delete#Pending deletion and duplicate clicks]]
+it("keeps history until acknowledgement and ignores repeated delete confirmations", async () => {
+  vi.useRealTimers();
+  localStorage.clear();
+  const api = installHermesAPI([
+    {
+      id: "pending",
+      title: "Pending chat",
+      startedAt: Date.now() / 1000,
+      source: "desktop",
+      messageCount: 1,
+      model: "test",
+    },
+  ]);
+  let finish!: () => void;
+  api.deleteSession.mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  render(<Sessions {...baseProps} visible />);
+  await screen.findByText("Pending chat");
+  fireEvent.click(screen.getByRole("button", { name: "sessions.delete" }));
+  const confirm = screen.getByRole("button", {
+    name: "sessions.deleteConfirmAction",
+  });
+  fireEvent.click(confirm);
+  fireEvent.click(confirm);
+  expect(api.deleteSession).toHaveBeenCalledTimes(1);
+  expect(screen.getByText("Pending chat")).toBeVisible();
+  api.syncSessionCache.mockResolvedValue([]);
+  await act(async () => finish());
+  await waitFor(() => expect(screen.queryByText("Pending chat")).toBeNull());
+});
+
+// @lat: [[ssh-session-delete#Late response isolation]]
+it("does not apply a previous profile's deletion result to the newly selected profile", async () => {
+  vi.useRealTimers();
+  localStorage.clear();
+  const row = {
+    id: "same-id",
+    title: "Old profile chat",
+    startedAt: Date.now() / 1000,
+    source: "desktop",
+    messageCount: 1,
+    model: "test",
+  };
+  const api = installHermesAPI([row]);
+  let finish!: () => void;
+  api.deleteSession.mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const view = render(<Sessions {...baseProps} visible />);
+  await screen.findByText("Old profile chat");
+  fireEvent.click(screen.getByRole("button", { name: "sessions.delete" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "sessions.deleteConfirmAction" }),
+  );
+  api.syncSessionCache.mockResolvedValue([
+    { ...row, title: "New profile chat" },
+  ]);
+  view.rerender(<Sessions {...baseProps} profile="new-profile" visible />);
+  await screen.findByText("New profile chat");
+  await act(async () => finish());
+  expect(screen.getByText("New profile chat")).toBeVisible();
+  expect(api.deleteSession).toHaveBeenCalledWith(
+    "same-id",
+    "connection-one",
+    "work",
+  );
+});
+
+// @lat: [[ssh-session-delete#Visible batch failure]]
+it("keeps selected history and reports a failed batch deletion", async () => {
+  vi.useRealTimers();
+  localStorage.clear();
+  const api = installHermesAPI([
+    {
+      id: "keep-batch",
+      title: "Batch chat",
+      startedAt: Date.now() / 1000,
+      source: "desktop",
+      messageCount: 1,
+      model: "test",
+    },
+  ]);
+  api.deleteSessions.mockRejectedValue(new Error("locked database"));
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    render(<Sessions {...baseProps} visible />);
+    await screen.findByText("Batch chat");
+    fireEvent.click(
+      screen.getByRole("button", { name: "sessions.selectMode" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "sessions.selectVisible" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "sessions.deleteSelected" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "sessions.deleteConfirmAction",
+      }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "sessions.deleteFailed",
+    );
+    expect(screen.getByText("Batch chat")).toBeVisible();
+  } finally {
+    log.mockRestore();
+  }
+});
+
+// @lat: [[ssh-session-delete#Deletion supersedes visible loading]]
+it("releases loading when deletion supersedes a visibility reload", async () => {
+  vi.useRealTimers();
+  localStorage.clear();
+  const api = installHermesAPI([
+    {
+      id: "pending",
+      title: "Pending chat",
+      startedAt: Date.now() / 1000,
+      source: "desktop",
+      messageCount: 1,
+      model: "test",
+    },
+  ]);
+  const view = render(<Sessions {...baseProps} visible />);
+  await screen.findByText("Pending chat");
+  fireEvent.click(screen.getByRole("button", { name: "sessions.delete" }));
+  view.rerender(<Sessions {...baseProps} visible={false} />);
+  let finish!: (items: []) => void;
+  api.syncSessionCache.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  view.rerender(<Sessions {...baseProps} visible />);
+  expect(view.container.querySelector(".sessions-loading")).not.toBeNull();
+  api.syncSessionCache.mockResolvedValue([]);
+  fireEvent.click(
+    screen.getByRole("button", { name: "sessions.deleteConfirmAction" }),
+  );
+  await waitFor(() => expect(api.deleteSession).toHaveBeenCalled());
+  await act(async () => {
+    finish([]);
+  });
+  await waitFor(() =>
+    expect(view.container.querySelector(".sessions-loading")).toBeNull(),
+  );
 });

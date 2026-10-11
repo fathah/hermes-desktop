@@ -21,6 +21,7 @@ import { getActiveProfileNameSync, profileHome, stripAnsi } from "./utils";
 import { setupAskpass, AskpassHandle } from "./askpass";
 import { precacheSudoCredentials } from "./sudoCreds";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
+import { matchesProviderUrl } from "../shared/url-key-map";
 import {
   INSTALLER_VERIFICATION_FAILED,
   verifiedInstallerCommand,
@@ -391,7 +392,10 @@ const PROVIDER_ENV_KEYS: Record<string, string> = {
 // When provider is "custom" or "auto", the desktop's setup flow falls
 // back to recognizing the endpoint by base URL. Same patterns hermes.ts
 // uses for runtime header injection.
-const URL_TO_ENV_KEY: Array<[RegExp, string]> = [
+const URL_TO_ENV_KEY: Array<[RegExp, string, boolean?]> = [
+  // Strict hosts take precedence over legacy URL-substring mappings.
+  [/(?:^|\.)requesty\.ai$/i, "REQUESTY_API_KEY", true],
+  [/^api\.cheaperinference\.com$/i, "CHEAPERINFERENCE_API_KEY", true],
   [/openrouter\.ai/i, "OPENROUTER_API_KEY"],
   [/anthropic\.com/i, "ANTHROPIC_API_KEY"],
   [/openai\.com/i, "OPENAI_API_KEY"],
@@ -425,8 +429,8 @@ export function expectedEnvKeyForModel(
 ): string | null {
   const direct = PROVIDER_ENV_KEYS[provider.trim().toLowerCase()];
   if (direct) return direct;
-  for (const [pattern, envKey] of URL_TO_ENV_KEY) {
-    if (pattern.test(baseUrl)) return envKey;
+  for (const [pattern, envKey, matchHostname] of URL_TO_ENV_KEY) {
+    if (matchesProviderUrl(baseUrl, pattern, matchHostname)) return envKey;
   }
   return null;
 }

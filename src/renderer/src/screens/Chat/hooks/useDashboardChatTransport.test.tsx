@@ -1030,6 +1030,126 @@ describe("useDashboardChatTransport approvals", () => {
     ).toBe(false);
   });
 
+  // @lat: [[approval-completion#Confirmed decisions]]
+  it.each(["once", "deny"] as const)(
+    "accepts a confirmed %s decision when completion arrives before its acknowledgement",
+    async (choice) => {
+      const api: HarnessApi = {};
+      render(<Harness api={api} />);
+      await act(async () => {
+        await api.send?.("hello");
+        dashboardMock.onEvent?.({
+          type: "approval.request",
+          session_id: "live-1",
+          payload: { request_id: "in-flight", choices: ["once", "deny"] },
+        });
+        dashboardMock.onEvent?.({
+          type: "approval.request",
+          session_id: "live-1",
+          payload: { request_id: "unanswered", choices: ["once"] },
+        });
+      });
+      let acknowledge!: (value: { resolved: number }) => void;
+      dashboardMock.request.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            acknowledge = resolve;
+          }),
+      );
+      let response!: Promise<boolean>;
+      act(() => {
+        response = api.respondApproval!("in-flight", choice);
+      });
+      await act(async () => {
+        dashboardMock.onEvent?.({
+          type: "message.complete",
+          session_id: "live-1",
+          payload: { text: "Done" },
+        });
+      });
+      expect(
+        api.messages?.find(
+          (m) => m.kind === "approval" && m.requestId === "in-flight",
+        ),
+      ).not.toMatchObject({ unavailable: true });
+      expect(
+        api.messages?.find(
+          (m) => m.kind === "approval" && m.requestId === "unanswered",
+        ),
+      ).toMatchObject({ unavailable: true });
+      await act(async () => {
+        acknowledge({ resolved: 1 });
+        expect(await response).toBe(true);
+      });
+      expect(await api.respondApproval!("unanswered", "once")).toBe(false);
+      expect(await api.respondApproval!("in-flight", choice)).toBe(false);
+    },
+  );
+
+  // @lat: [[approval-completion#Failed and obsolete decisions]]
+  it.each([
+    "reject",
+    "unresolved",
+    "abort",
+    "disconnect",
+    "connection",
+    "new turn",
+  ])("does not revive completed approvals after %s", async (outcome) => {
+    const api: HarnessApi = {};
+    const view = render(<Harness api={api} connectionId="original" />);
+    await act(async () => {
+      await api.send?.("hello");
+      dashboardMock.onEvent?.({
+        type: "approval.request",
+        session_id: "live-1",
+        payload: { request_id: "late", choices: ["once"] },
+      });
+    });
+    let acknowledge!: (value: { resolved: number }) => void;
+    let reject!: (reason: Error) => void;
+    dashboardMock.request.mockImplementationOnce(
+      () =>
+        new Promise((resolve, fail) => {
+          acknowledge = resolve;
+          reject = fail;
+        }),
+    );
+    let response!: Promise<boolean>;
+    act(() => {
+      response = api.respondApproval!("late", "once");
+    });
+    await act(async () => {
+      dashboardMock.onEvent?.({
+        type: "message.complete",
+        session_id: "live-1",
+        payload: { text: "Done" },
+      });
+    });
+    await act(async () => {
+      if (outcome === "abort") api.abort?.();
+      if (outcome === "disconnect") dashboardMock.onClose?.();
+      if (outcome === "new turn") await api.send?.("next turn");
+    });
+    if (outcome === "connection")
+      view.rerender(<Harness api={api} connectionId="other" />);
+    const loadingBeforeAck = api.isLoading;
+    await act(async () => {
+      if (outcome === "reject") reject(new Error("acknowledgement lost"));
+      else
+        acknowledge({
+          resolved: outcome === "unresolved" || outcome === "new turn" ? 0 : 1,
+        });
+      expect(await response).toBe(false);
+    });
+    expect(
+      api.messages?.find(
+        (m) => m.kind === "approval" && m.requestId === "late",
+      ),
+    ).toMatchObject({ unavailable: true });
+    expect(await api.respondApproval!("late", "once")).toBe(false);
+    if (outcome === "new turn") expect(api.isLoading).toBe(loadingBeforeAck);
+  });
+
   it("clears pending approval on completion and abort", async () => {
     const api: HarnessApi = {};
     render(<Harness api={api} />);
@@ -1068,6 +1188,41 @@ describe("useDashboardChatTransport approvals", () => {
       false,
     );
   });
+
+  // @lat: [[chat-commands#Structured command approvals#Terminal approval replay]]
+  it.each(["resolved", "unavailable"])(
+    "does not queue replayed %s approvals ahead of a new command",
+    async (state) => {
+      const api: HarnessApi = {};
+      render(<Harness api={api} />);
+      const emit = (request_id: string): void => {
+        dashboardMock.onEvent?.({
+          type: "approval.request",
+          session_id: "live-1",
+          payload: { request_id, choices: ["once"] },
+        });
+      };
+      await act(async () => {
+        await api.send?.("hello");
+        emit("old");
+        if (state === "resolved") {
+          expect(await api.respondApproval?.("old", "once")).toBe(true);
+        } else {
+          dashboardMock.onEvent?.({
+            type: "message.complete",
+            session_id: "live-1",
+            payload: { text: "Done" },
+          });
+        }
+        emit("old");
+        emit("new");
+      });
+      await act(async () => {
+        expect(await api.respondApproval?.("new", "once")).toBe(true);
+        expect(await api.respondApproval?.("old", "once")).toBe(false);
+      });
+    },
+  );
 
   it("presents queued approvals in arrival order", async () => {
     const api: HarnessApi = {};

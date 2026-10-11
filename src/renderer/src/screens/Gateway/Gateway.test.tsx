@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { RemoteGatewayCommandStatus } from "../../../../shared/gateway";
 
 vi.mock("../../components/useI18n", () => ({
   useI18n: () => ({
@@ -26,6 +27,10 @@ describe("Gateway screen recovery controls", () => {
           message: null,
         }),
         gatewayStatus: vi.fn().mockResolvedValue(true),
+        gatewayCommandPending: vi.fn().mockResolvedValue(false),
+        gatewayCommandStatus: vi.fn().mockResolvedValue({
+          pending: false,
+        } satisfies RemoteGatewayCommandStatus),
         getPlatformEnabled: vi.fn().mockResolvedValue({}),
         restartGateway: vi.fn().mockResolvedValue(false),
         startGateway: vi.fn().mockResolvedValue(false),
@@ -45,6 +50,7 @@ describe("Gateway screen recovery controls", () => {
           message: null,
         }),
         openExternal: vi.fn().mockResolvedValue(true),
+        onConnectionConfigChanged: vi.fn().mockReturnValue(() => {}),
       },
     });
   });
@@ -105,5 +111,31 @@ describe("Gateway screen recovery controls", () => {
 
     expect(screen.getByText("gateway.restartFailed")).toBeTruthy();
     expect(screen.getByText("gateway.stopped")).toBeTruthy();
+  });
+
+  // @lat: [[main-process#Main Process#Remote Gateway management#Healthy Remote Gateway load]]
+  it("loads the healthy Remote screen without local key controls or a load error", async () => {
+    const { container } = render(<Gateway remoteMode />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(window.hermesAPI.gatewayCommandStatus).toHaveBeenCalled();
+    expect(screen.getByText("gateway.running")).toBeTruthy();
+    expect(
+      (screen.getByText("common.stop").closest("button") as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+    expect(container.querySelector(".gateway-inline-warning")).toBeNull();
+    expect(window.hermesAPI.getApiServerKeyStatus).not.toHaveBeenCalled();
+    expect(screen.queryByText("gateway.apiServerKey.title")).toBeNull();
+  });
+
+  it("still reads and shows the API server key in local mode", async () => {
+    render(<Gateway />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(window.hermesAPI.getApiServerKeyStatus).toHaveBeenCalled();
+    expect(screen.getByText("gateway.apiServerKey.title")).toBeTruthy();
   });
 });

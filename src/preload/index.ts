@@ -1,6 +1,11 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { AppLocale } from "../shared/i18n/types";
 import type { Attachment } from "../shared/attachments";
+import type {
+  RemoteGatewayAction,
+  RemoteGatewayActionResult,
+  RemoteGatewayCommandStatus,
+} from "../shared/gateway";
 import type { SessionModelOverride } from "../shared/model-override";
 import type { DesktopSessionContinuationItem } from "../shared/session-continuation";
 import type { DesktopSessionLocalError } from "../shared/session-continuation";
@@ -849,12 +854,25 @@ const hermesAPI = {
     ipcRenderer.invoke("approval-respond", { requestId, choice, runId }),
 
   // Gateway
-  startGateway: (): Promise<GatewayStartResult> =>
-    ipcRenderer.invoke("start-gateway"),
-  stopGateway: (): Promise<boolean> => ipcRenderer.invoke("stop-gateway"),
+  remoteGatewayAction: (
+    action: RemoteGatewayAction,
+    profile?: string,
+  ): Promise<RemoteGatewayActionResult> =>
+    ipcRenderer.invoke("remote-gateway-action", action, profile),
+  startGateway: (profile?: string): Promise<GatewayStartResult> =>
+    ipcRenderer.invoke("start-gateway", profile),
+  stopGateway: (profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("stop-gateway", profile),
   restartGateway: (profile?: string): Promise<boolean> =>
     ipcRenderer.invoke("restart-gateway", profile),
-  gatewayStatus: (): Promise<boolean> => ipcRenderer.invoke("gateway-status"),
+  gatewayStatus: (profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("gateway-status", profile),
+  gatewayCommandPending: (profile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("gateway-command-pending", profile),
+  gatewayCommandStatus: (
+    profile?: string,
+  ): Promise<RemoteGatewayCommandStatus> =>
+    ipcRenderer.invoke("gateway-command-status", profile),
   setNativeAppearance: (source: "dark" | "light" | "system"): Promise<void> =>
     ipcRenderer.invoke("set-native-appearance", source),
 

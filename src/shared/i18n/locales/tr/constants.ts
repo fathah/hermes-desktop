@@ -37,6 +37,7 @@ export default {
   together: "Together AI",
   fireworks: "Fireworks",
   cerebras: "Cerebras",
+  requesty: "Requesty",
   mistral: "Mistral",
   // Theme
   themeSystem: "Sistem",
@@ -90,6 +91,8 @@ export default {
   fireworksHint: "Açık modeller için hızlı inference",
   cerebrasApiKey: "Cerebras API Anahtarı",
   cerebrasHint: "Cerebras donanımında ultra hızlı inference",
+  requestyApiKey: "Requesty API Anahtarı",
+  requestyHint: "OpenAI uyumlu çok modelli ağ geçidi",
   mistralApiKey: "Mistral API Anahtarı",
   mistralHint: "Mistral ve Codestral modelleri",
   perplexityApiKey: "Perplexity API Anahtarı",

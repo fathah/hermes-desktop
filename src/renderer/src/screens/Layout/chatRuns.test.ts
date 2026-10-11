@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   cycleRunId,
+  createdSessionIds,
   isScratchRun,
   mintRun,
   openSessionRunTransition,
@@ -167,6 +168,26 @@ describe("chat run profile transitions", () => {
     expect(next.activeRunId).toBe("run-saved");
     expect(next.runs).toEqual([active, saved]);
   });
+});
+
+// @lat: [[sidebar-navigation#Provisional fresh sessions#Created-session scope]]
+it("retains completed created sessions only in their connection and profile", () => {
+  expect(
+    createdSessionIds(
+      [
+        run("new", "work", { sessionId: "new-session", loading: false }),
+        run("resumed", "work", { sessionId: "old-session", seed: [] }),
+        run("other-profile", "other", { sessionId: "other-session" }),
+        run("other-connection", "work", {
+          connectionId: "connection-other",
+          sessionId: "elsewhere",
+        }),
+        run("scratch", "work"),
+      ],
+      "connection-main",
+      "work",
+    ),
+  ).toEqual(new Set(["new-session"]));
 });
 
 describe("chrome-style tab shortcuts", () => {
