@@ -57,6 +57,11 @@ export const URL_KEY_MAP: ReadonlyArray<UrlKeyMapping> = [
   { pattern: /atlascloud\.ai/i, envKey: "ATLASCLOUD_API_KEY" },
   { pattern: /api\.novita\.ai/i, envKey: "NOVITA_API_KEY" },
   {
+    pattern: /(?:^|\.)requesty\.ai$/i,
+    envKey: "REQUESTY_API_KEY",
+    matchHostname: true,
+  },
+  {
     pattern: /^api\.cheaperinference\.com$/i,
     envKey: "CHEAPERINFERENCE_API_KEY",
     matchHostname: true,
@@ -155,6 +160,7 @@ export const OPENAI_COMPAT_PROVIDERS: ReadonlySet<string> = new Set([
   "cerebras",
   "atlascloud",
   "novita",
+  "requesty",
   "cheaperinference",
   "mistral",
 ]);

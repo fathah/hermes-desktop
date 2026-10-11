@@ -24,6 +24,7 @@ export default {
     cerebras: "Cerebras",
     atlascloud: "AtlasCloud",
     novita: "NovitaAI",
+    requesty: "Requesty",
     cheaperinference: "Cheaper Inference",
     mistral: "Mistral",
     aimlapi: "AIML API",

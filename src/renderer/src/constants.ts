@@ -90,6 +90,7 @@ export const PROVIDERS = {
     hermesone: "Hermes One",
     atlascloud: "AtlasCloud",
     novita: "NovitaAI",
+    requesty: "Requesty",
     cheaperinference: "Cheaper Inference",
     openrouter: "constants.openrouterName",
     aimlapi: "constants.aimlapiName",
@@ -389,6 +390,7 @@ export const OPENAI_COMPATIBLE_BASE_URLS: Record<string, string> = {
   cerebras: "https://api.cerebras.ai/v1",
   atlascloud: "https://api.atlascloud.ai/v1",
   novita: "https://api.novita.ai/openai/v1",
+  requesty: "https://router.requesty.ai/v1",
   cheaperinference: "https://api.cheaperinference.com/v1",
   perplexity: "https://api.perplexity.ai",
   lmstudio: "http://localhost:1234/v1",
@@ -508,6 +510,13 @@ export const LOCAL_PRESETS: LocalPreset[] = [
     baseUrl: "https://api.novita.ai/openai/v1",
     group: "remote",
     envKey: "NOVITA_API_KEY",
+  },
+  {
+    id: "requesty",
+    name: "constants.requesty",
+    baseUrl: "https://router.requesty.ai/v1",
+    group: "remote",
+    envKey: "REQUESTY_API_KEY",
   },
   {
     id: "cheaperinference",
@@ -889,6 +898,12 @@ export const SETTINGS_SECTIONS: SectionDef[] = [
         label: "constants.novitaApiKey",
         type: "password",
         hint: "constants.novitaHint",
+      },
+      {
+        key: "REQUESTY_API_KEY",
+        label: "constants.requestyApiKey",
+        type: "password",
+        hint: "constants.requestyHint",
       },
       {
         key: "CHEAPERINFERENCE_API_KEY",

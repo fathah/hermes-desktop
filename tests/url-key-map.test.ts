@@ -42,6 +42,29 @@ describe("URL_KEY_MAP", () => {
       );
     },
   );
+
+  // @lat: [[provider-setup#Requesty provider preset#Credential host boundary]]
+  it.each([
+    ["https://user:pass@router.requesty.ai:443/v1", true],
+    ["https://ROUTER.EU.REQUESTY.AI:443/v1", true],
+    ["router.requesty.ai/v1", true],
+    ["https://router.requesty.ai.:443/v1", true],
+    ["https://router.requesty.ai:443@evil.example/v1", false],
+    ["https://user:pass@requesty.ai.attacker.example/v1", false],
+    ["https://evil.example/requesty.ai/v1", false],
+    ["ftp://router.requesty.ai/v1", false],
+  ])(
+    "resolves Requesty credentials only for the parsed HTTP host %s",
+    (url, known) => {
+      expect(expectedEnvKeyForUrl(url)).toBe(
+        known ? "REQUESTY_API_KEY" : CUSTOM_API_KEY_ENV,
+      );
+      expect(isKnownProviderUrl(url)).toBe(known);
+      expect(hostDerivedEnvKeyForUrl(url)).toBe(
+        known ? "REQUESTY_API_KEY" : null,
+      );
+    },
+  );
   it("covers each known commercial OpenAI-compatible host", () => {
     const expected: Record<string, string> = {
       "https://openrouter.ai/api/v1": "OPENROUTER_API_KEY",
@@ -58,6 +81,8 @@ describe("URL_KEY_MAP", () => {
       "https://api.perplexity.ai": "PERPLEXITY_API_KEY",
       "https://api.atlascloud.ai/v1": "ATLASCLOUD_API_KEY",
       "https://api.novita.ai/openai/v1": "NOVITA_API_KEY",
+      "https://router.requesty.ai/v1": "REQUESTY_API_KEY",
+      "https://router.eu.requesty.ai/v1": "REQUESTY_API_KEY",
       "https://api.cheaperinference.com/v1": "CHEAPERINFERENCE_API_KEY",
     };
     for (const [url, envKey] of Object.entries(expected)) {
@@ -74,19 +99,6 @@ describe("URL_KEY_MAP", () => {
     );
   });
 
-  it("does not map lookalike Cheaper Inference hosts to its key", () => {
-    for (const url of [
-      "https://api.cheaperinference.com.attacker.example/v1",
-      "https://evil.example/api.cheaperinference.com/v1",
-      "https://xapi.cheaperinference.com/v1",
-    ]) {
-      expect(expectedEnvKeyForUrl(url)).toBe(CUSTOM_API_KEY_ENV);
-    }
-    expect(
-      expectedEnvKeyForUrl("https://API.CheaperInference.com:443/v1"),
-    ).toBe("CHEAPERINFERENCE_API_KEY");
-  });
-
   it("falls back to CUSTOM_API_KEY for unknown hosts", () => {
     expect(expectedEnvKeyForUrl("https://www.arccodex.com/api/codex/v1")).toBe(
       CUSTOM_API_KEY_ENV,
@@ -97,6 +109,24 @@ describe("URL_KEY_MAP", () => {
     expect(expectedEnvKeyForUrl("http://192.168.1.50:1234/v1")).toBe(
       CUSTOM_API_KEY_ENV,
     );
+  });
+
+  it("only gives the Requesty key to requesty.ai and its subdomains", () => {
+    expect(expectedEnvKeyForUrl("https://requesty.ai/v1")).toBe(
+      "REQUESTY_API_KEY",
+    );
+    expect(expectedEnvKeyForUrl("https://router.requesty.ai:443/v1")).toBe(
+      "REQUESTY_API_KEY",
+    );
+    for (const url of [
+      "https://requesty.ai.attacker.example/v1",
+      "https://notrequesty.ai/v1",
+      "https://attacker.example/requesty.ai/v1",
+      "https://attacker.example/v1?host=router.requesty.ai",
+      "https://router.requesty.ai@attacker.example/v1",
+    ]) {
+      expect(expectedEnvKeyForUrl(url)).toBe(CUSTOM_API_KEY_ENV);
+    }
   });
 
   it("treats empty / null / undefined URL as CUSTOM_API_KEY", () => {

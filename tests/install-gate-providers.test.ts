@@ -70,6 +70,18 @@ describe("expectedEnvKeyForModel — URL fallback for custom/auto providers", ()
       expect(expectedEnvKeyForModel("custom", url)).toBe(expected);
     },
   );
+
+  it.each([
+    ["https://user:pass@router.requesty.ai:443/v1", "REQUESTY_API_KEY"],
+    ["https://ROUTER.EU.REQUESTY.AI:443/v1", "REQUESTY_API_KEY"],
+    ["https://router.requesty.ai:443@evil.example/v1", null],
+    ["https://user:pass@requesty.ai.attacker.example/v1", null],
+  ])(
+    "uses the parsed Requesty hostname for installer readiness %s",
+    (url, expected) => {
+      expect(expectedEnvKeyForModel("custom", url)).toBe(expected);
+    },
+  );
   it("recognizes a known endpoint when provider is 'custom'", () => {
     expect(
       expectedEnvKeyForModel("custom", "https://api.deepseek.com/v1"),
@@ -95,6 +107,18 @@ describe("expectedEnvKeyForModel — URL fallback for custom/auto providers", ()
     expect(expectedEnvKeyForModel("auto", "https://api.mistral.ai/v1")).toBe(
       "MISTRAL_API_KEY",
     );
+  });
+
+  it("only maps requesty.ai hosts to the Requesty key", () => {
+    expect(
+      expectedEnvKeyForModel("custom", "https://router.requesty.ai/v1"),
+    ).toBe("REQUESTY_API_KEY");
+    expect(
+      expectedEnvKeyForModel(
+        "custom",
+        "https://requesty.ai.attacker.example/v1",
+      ),
+    ).toBeNull();
   });
 
   it("returns null for unknown provider with unknown URL", () => {

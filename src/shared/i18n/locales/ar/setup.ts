@@ -27,6 +27,7 @@ export default {
     fireworks: "Fireworks",
     cerebras: "Cerebras",
     atlascloud: "AtlasCloud",
+    requesty: "Requesty",
     mistral: "Mistral",
     aimlapi: "AIML API",
   },
