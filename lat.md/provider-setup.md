@@ -274,3 +274,9 @@ The desktop stores the model as `custom` at `https://router.requesty.ai/v1` beca
 Requesty key lookup matches the parsed HTTP(S) hostname, including regional subdomains. URL credentials, ports and paths never identify the provider, so unrelated hosts cannot select its saved key by embedding the provider name in userinfo.
 
 [[src/shared/url-key-map.ts#matchesProviderUrl]] applies this boundary to shared lookup, runtime environment hydration and installer readiness. Tests retain valid credential-bearing URLs and default ports while rejecting lookalikes and userinfo spoofs.
+
+### Vault credentials reach CLI
+
+Requesty CLI fallback accepts the selected profile's enumerated vault key without writing it to plaintext. Profile-file and process values retain precedence over the vault.
+
+[[src/main/hermes.ts#sendMessageViaCli]] reuses the single secret-provider enumeration for the host-derived key, then supplies both `REQUESTY_API_KEY` and the legacy `OPENAI_API_KEY` to the child. Spawn regressions cover primary and regional endpoints plus credential precedence.

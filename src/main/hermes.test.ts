@@ -715,6 +715,44 @@ describe("sendMessage session model override routing", () => {
     },
   );
 
+  // @lat: [[provider-setup#Requesty provider preset#Vault credentials reach CLI]]
+  it.each([
+    ["https://router.requesty.ai/v1", "vault"],
+    ["https://router.eu.requesty.ai/v1", "vault"],
+    ["https://router.requesty.ai/v1", "profile"],
+    ["https://router.requesty.ai/v1", "process"],
+  ])(
+    "passes Requesty CLI credentials for %s from %s",
+    async (baseUrl, source) => {
+      vi.stubEnv("REQUESTY_API_KEY", "");
+      vi.stubEnv("OPENAI_API_KEY", "");
+      vi.stubEnv("CUSTOM_API_KEY", "");
+      mockedProviderListSafe.mockReturnValue({ REQUESTY_API_KEY: "vault-key" });
+      if (source === "profile")
+        mockedReadEnv.mockReturnValue({ REQUESTY_API_KEY: "profile-key" });
+      if (source === "process") vi.stubEnv("REQUESTY_API_KEY", "process-key");
+      try {
+        await sendMessage(
+          "hello",
+          noopCallbacks,
+          "work",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          { provider: "custom", model: "openai/gpt-4o-mini", baseUrl },
+        );
+        const env = mockedSpawn.mock.calls[0][2]?.env;
+        expect(env?.REQUESTY_API_KEY).toBe(`${source}-key`);
+        expect(env?.OPENAI_API_KEY).toBe(`${source}-key`);
+        expect(env?.OPENAI_BASE_URL).toBe(baseUrl);
+        expect(mockedProviderListSafe).toHaveBeenCalledExactlyOnceWith("work");
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
   // @lat: [[model-selection#Session model override#Text-only legacy fallback routes via CLI]]
   it("routes a cross-provider override through the CLI with its provider + model", async () => {
     await sendMessage(
