@@ -273,6 +273,8 @@ The desktop stores the model as `custom` at `https://router.requesty.ai/v1` beca
 
 Requesty key lookup matches the parsed HTTP(S) hostname, including regional subdomains. URL credentials, ports and paths never identify the provider, so unrelated hosts cannot select its saved key by embedding the provider name in userinfo.
 
+Strict hostname entries precede legacy URL-substring mappings, so credentials or paths naming another vendor cannot shadow the Requesty host.
+
 [[src/shared/url-key-map.ts#matchesProviderUrl]] applies this boundary to shared lookup, runtime environment hydration and installer readiness. Tests retain valid credential-bearing URLs and default ports while rejecting lookalikes and userinfo spoofs.
 
 ### Vault credentials reach CLI

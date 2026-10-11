@@ -59,6 +59,9 @@ describe("expectedEnvKeyForModel — URL fallback for custom/auto providers", ()
   it.each([
     ["https://user:pass@router.requesty.ai:443/v1", "REQUESTY_API_KEY"],
     ["https://ROUTER.EU.REQUESTY.AI:443/v1", "REQUESTY_API_KEY"],
+    ["https://openai.com:password@router.requesty.ai/v1", "REQUESTY_API_KEY"],
+    ["https://router.requesty.ai/v1/api.openai.com", "REQUESTY_API_KEY"],
+    ["https://router.requesty.ai/api.deepseek.com/v1", "REQUESTY_API_KEY"],
     ["https://router.requesty.ai:443@evil.example/v1", null],
     ["https://user:pass@requesty.ai.attacker.example/v1", null],
   ])(
