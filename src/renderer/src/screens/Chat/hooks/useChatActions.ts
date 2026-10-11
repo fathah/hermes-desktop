@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { ChatInputHandle } from "../ChatInput";
-import { createTurn, shouldSendToAgent } from "../chatMessages";
+import {
+  createTurn,
+  markActiveTurnFailed,
+  shouldSendToAgent,
+} from "../chatMessages";
 import type { SlashExecOutcome } from "../slashExec";
 import { handleSlashCommand } from "../slash/handleSlashCommand";
 import { parseSlashCommand } from "../slash/parseSlashCommand";
@@ -35,6 +39,8 @@ interface LocalCommands {
 }
 
 interface UseChatActionsArgs {
+  /** Captured connection authority must still match before prompt admission. */
+  authorizeSend?: () => Promise<boolean>;
   /** This conversation's run id — threaded to the main process so its events
    *  are tagged and its abort targets only this run. */
   runId: string;
@@ -108,6 +114,7 @@ interface UseChatActionsResult {
  */
 // @lat: [[chat-commands#Slash command execution#Local vs gateway commands]]
 export function useChatActions({
+  authorizeSend,
   runId,
   connectionId,
   profile,
@@ -140,6 +147,13 @@ export function useChatActions({
     sessionModelRef.current = sessionModel;
   });
 
+  const requireSendAuthority = useCallback(async (): Promise<void> => {
+    if (authorizeSend && !(await authorizeSend()))
+      throw new Error(
+        "Connection settings changed before this message could be sent. Try again on the current connection.",
+      );
+  }, [authorizeSend]);
+
   const pushUser = useCallback(
     (content: string, idPrefix = "user", attachments?: Attachment[]) => {
       const turn = createTurn(idPrefix);
@@ -160,27 +174,47 @@ export function useChatActions({
 
   const sendToAgent = useCallback(
     async (text: string, attachments?: Attachment[]): Promise<void> => {
+      const admittedTurn = activeTurnRef.current;
       try {
         if (sendViaDashboard) {
           const handled = await sendViaDashboard(text, attachments);
           if (handled) return;
         }
-        await window.hermesAPI.sendMessage(
-          text,
-          profile,
-          hermesSessionId || undefined,
-          messagesRef.current.filter(shouldSendToAgent).map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
-          attachments,
-          contextFolder ?? undefined,
-          runId,
-          sessionModelRef.current || undefined,
-          connectionId,
-        );
-      } catch {
-        // onChatError IPC already surfaces this to the user
+        await requireSendAuthority();
+        // Legacy IPC resolves after streaming. A validated dispatch admits the
+        // composer now; later errors retain their existing onChatError path.
+        void window.hermesAPI
+          .sendMessage(
+            text,
+            profile,
+            hermesSessionId || undefined,
+            messagesRef.current.filter(shouldSendToAgent).map((m) => ({
+              role: m.role,
+              content: m.content,
+            })),
+            attachments,
+            contextFolder ?? undefined,
+            runId,
+            sessionModelRef.current || undefined,
+            connectionId,
+          )
+          .catch(() => undefined);
+      } catch (error) {
+        if (activeTurnRef.current === admittedTurn) {
+          if (admittedTurn) {
+            admittedTurn.status = "failed";
+            setMessages((current) =>
+              markActiveTurnFailed(
+                current,
+                error instanceof Error ? error.message : String(error),
+                admittedTurn,
+              ),
+            );
+          }
+          activeTurnRef.current = null;
+          setIsLoading(false);
+        }
+        throw error;
       }
     },
     [
@@ -190,6 +224,10 @@ export function useChatActions({
       hermesSessionId,
       contextFolder,
       sendViaDashboard,
+      activeTurnRef,
+      requireSendAuthority,
+      setIsLoading,
+      setMessages,
     ],
   );
 
@@ -199,6 +237,7 @@ export function useChatActions({
   const runQuickAsk = useCallback(
     async (question: string, attachments?: Attachment[]): Promise<void> => {
       if (!question) return;
+      await requireSendAuthority();
       setIsLoading(true);
       const turn = pushUser(`💭 ${question}`, "user-btw", attachments);
       activeTurnRef.current = {
@@ -208,7 +247,7 @@ export function useChatActions({
       };
       await sendToAgent(`/btw ${question}`, attachments);
     },
-    [activeTurnRef, pushUser, sendToAgent, setIsLoading],
+    [activeTurnRef, requireSendAuthority, pushUser, sendToAgent, setIsLoading],
   );
 
   // Side question (`/btw` and the 💭 button). On the dashboard transport it runs
@@ -219,6 +258,7 @@ export function useChatActions({
   const runBackground = useCallback(
     async (question: string, attachments?: Attachment[]): Promise<void> => {
       if (!question) return;
+      await requireSendAuthority();
       // `prompt.background` is text-only — it can't carry attachments. When the
       // side question has attachments, fall back to the (blocking) quick-ask
       // path, which sends them via `prompt.submit` and shows them in the bubble,
@@ -231,9 +271,19 @@ export function useChatActions({
         if (r.error) addAgentMessage?.(`error: ${r.error}`);
         return;
       }
-      if (!isLoadingRef.current) await runQuickAsk(question, attachments);
+      if (isLoadingRef.current)
+        throw new Error(
+          "Wait for the current turn before sending this side question with attachments.",
+        );
+      await runQuickAsk(question, attachments);
     },
-    [runBackgroundViaDashboard, pushUser, addAgentMessage, runQuickAsk],
+    [
+      requireSendAuthority,
+      runBackgroundViaDashboard,
+      pushUser,
+      addAgentMessage,
+      runQuickAsk,
+    ],
   );
 
   const handleSend = useCallback(
@@ -244,7 +294,11 @@ export function useChatActions({
     ): Promise<void> => {
       const hasPayload = text.length > 0 || (attachments?.length ?? 0) > 0;
       if (!hasPayload) return;
-      if (!skipLoadingCheck && isLoadingRef.current) return;
+      await requireSendAuthority();
+      if (!skipLoadingCheck && isLoadingRef.current)
+        throw new Error(
+          "The chat is still busy. Queue this message or try again.",
+        );
 
       const cmdName = text.startsWith("/")
         ? text.split(/\s+/)[0].toLowerCase()
@@ -353,7 +407,6 @@ export function useChatActions({
           startNewChat: () => onSessionStarted?.(),
           clearTranscript: () => undefined,
         });
-
         if (result.type === "error") {
           if (showPending) replacePending(`error: ${result.message}`);
           else addAgentMessage?.(`error: ${result.message}`);
@@ -373,6 +426,7 @@ export function useChatActions({
       }
 
       setIsLoading(true);
+      isLoadingRef.current = true;
       const turn = pushUser(text, "user", attachments);
       activeTurnRef.current = {
         ...turn,
@@ -384,6 +438,7 @@ export function useChatActions({
     },
     [
       activeTurnRef,
+      requireSendAuthority,
       hermesSessionId,
       localCommands,
       profile,

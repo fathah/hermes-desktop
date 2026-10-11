@@ -2207,6 +2207,12 @@ body:has(.shell-vibrant),
 .status-strong {
   color: var(--text-secondary);
 }
+.status-usage {
+  font-variant-numeric: tabular-nums;
+}
+.status-usage-warn {
+  color: var(--warning, #d9822b);
+}
 .status-sep {
   color: var(--text-muted);
   opacity: 0.5;

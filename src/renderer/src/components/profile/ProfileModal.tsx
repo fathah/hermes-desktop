@@ -35,7 +35,7 @@ import {
 import type { ProfileEditorTarget } from "../../../../shared/profile-editor-target";
 import type { ProfileSection } from "./ProfileModalContext";
 
-/** Mirrors the entry shape returned by `window.hermesAPI.listProfiles()`. */
+/** Mirrors the entry shape returned by `window.hermesAPI.listProfiles(target)`. */
 interface ProfileInfo {
   id: string;
   name: string;
@@ -181,7 +181,7 @@ function ProfileModalEditor({
       return;
     }
     try {
-      const list = await window.hermesAPI.listProfiles();
+      const list = await window.hermesAPI.listProfiles(target);
       if (live()) setProfile(list.find((p) => p.id === id) ?? null);
     } catch {
       /* keep last-known profile */
@@ -305,9 +305,15 @@ function ProfileModalEditor({
   async function handlePickColor(color: string): Promise<void> {
     if (!writable()) return;
     setProfile((cur) => (cur ? { ...cur, color } : cur));
-    const result = await window.hermesAPI.setProfileColor(id, color);
-    if (!live()) return;
-    if (!result.success) setError(result.error || t("agents.appearanceFailed"));
+    try {
+      const result = await window.hermesAPI.setProfileColor(id, color, target);
+      if (!live()) return;
+      if (!result.success)
+        setError(result.error || t("agents.appearanceFailed"));
+    } catch (reason) {
+      if (!live()) return;
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
     await afterMutation();
   }
 
@@ -321,7 +327,11 @@ function ProfileModalEditor({
     try {
       const dataUrl = await fileToAvatarDataUrl(file);
       if (!writable()) return;
-      const result = await window.hermesAPI.setProfileAvatar(id, dataUrl);
+      const result = await window.hermesAPI.setProfileAvatar(
+        id,
+        dataUrl,
+        target,
+      );
       if (!live()) return;
       if (!result.success)
         setError(result.error || t("agents.uploadImageFailed"));
@@ -333,9 +343,15 @@ function ProfileModalEditor({
 
   async function handleRemoveAvatar(): Promise<void> {
     if (!writable()) return;
-    const result = await window.hermesAPI.removeProfileAvatar(id);
-    if (!live()) return;
-    if (!result.success) setError(result.error || t("agents.appearanceFailed"));
+    try {
+      const result = await window.hermesAPI.removeProfileAvatar(id, target);
+      if (!live()) return;
+      if (!result.success)
+        setError(result.error || t("agents.appearanceFailed"));
+    } catch (reason) {
+      if (!live()) return;
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
     await afterMutation();
   }
 
@@ -358,6 +374,7 @@ function ProfileModalEditor({
       const result = await window.hermesAPI.setProfileName(
         profile.id,
         nameDraft,
+        target,
       );
       if (!live()) return;
       if (!result.success) {
@@ -394,7 +411,7 @@ function ProfileModalEditor({
     setConfirmDelete(false);
     setError("");
     try {
-      const result = await window.hermesAPI.deleteProfile(id);
+      const result = await window.hermesAPI.deleteProfile(id, target);
       if (!live()) return;
       if (result.success) {
         onDeleted?.(id);
@@ -456,7 +473,9 @@ function ProfileModalEditor({
     section !== "persona" &&
     section !== "agentMemory"
       ? "persona"
-      : section;
+      : target.mode === "ssh" && section === "sync"
+        ? "profile"
+        : section;
 
   return (
     <AppModal
@@ -490,9 +509,10 @@ function ProfileModalEditor({
           <nav className="profile-modal-nav" aria-label={t("agents.title")}>
             {PROFILE_SECTIONS.filter(
               (s) =>
-                target.mode !== "remote" ||
-                s.id === "persona" ||
-                s.id === "agentMemory",
+                (target.mode !== "ssh" || s.id !== "sync") &&
+                (target.mode !== "remote" ||
+                  s.id === "persona" ||
+                  s.id === "agentMemory"),
             ).map((s) => (
               <button
                 key={s.id}

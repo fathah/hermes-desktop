@@ -341,7 +341,7 @@ interface HermesAPI {
   getHermesOneCredits: () => Promise<HermesOneCreditsResult>;
 
   // Cloud agent sync (profiles ↔ signed-in Hermes One account)
-  syncAgents: () => Promise<AgentSyncResult>;
+  syncAgents: (target?: ProfileEditorTarget) => Promise<AgentSyncResult>;
   getAgentSyncStatus: () => Promise<AgentSyncStatus>;
   getLinkedAgentId: (profile: string) => Promise<string | null>;
   onAgentSyncUpdated: (
@@ -699,6 +699,18 @@ interface HermesAPI {
       preview: string;
     }>
   >;
+  getSessionUsage: (
+    sessionId: string,
+    connectionId?: string,
+    profile?: string,
+  ) => Promise<{
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    cost?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+  } | null>;
   getSessionMessages: (
     sessionId: string,
     connectionId?: string,
@@ -770,7 +782,7 @@ interface HermesAPI {
   ) => Promise<boolean>;
 
   // Profiles
-  listProfiles: () => Promise<
+  listProfiles: (target?: ProfileEditorTarget) => Promise<
     Array<{
       /** Stable internal profile id used for CLI, paths, and routing. */
       id: string;
@@ -794,25 +806,34 @@ interface HermesAPI {
   createProfile: (
     name: string,
     cloneFrom: string | null,
+    target?: ProfileEditorTarget,
   ) => Promise<{ success: boolean; error?: string; id?: string }>;
   deleteProfile: (
     name: string,
+    target?: ProfileEditorTarget,
   ) => Promise<{ success: boolean; error?: string }>;
-  setActiveProfile: (name: string) => Promise<boolean>;
+  setActiveProfile: (
+    name: string,
+    target?: ProfileEditorTarget,
+  ) => Promise<boolean>;
   setProfileColor: (
     name: string,
     color: string,
+    target?: ProfileEditorTarget,
   ) => Promise<{ success: boolean; error?: string }>;
   setProfileName: (
     id: string,
     name: string,
+    target?: ProfileEditorTarget,
   ) => Promise<{ success: boolean; error?: string }>;
   setProfileAvatar: (
     name: string,
     dataUrl: string,
+    target?: ProfileEditorTarget,
   ) => Promise<{ success: boolean; error?: string }>;
   removeProfileAvatar: (
     name: string,
+    target?: ProfileEditorTarget,
   ) => Promise<{ success: boolean; error?: string }>;
   listWallets: (profile?: string) => Promise<ProfileWallet[]>;
   listCustomProviders: (profile?: string) => Promise<CustomProviderRecord[]>;

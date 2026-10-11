@@ -72,14 +72,17 @@ function profile(name = "Default Agent"): ProfileInfo {
   };
 }
 
-function installHermesAPI(profiles: ProfileInfo[]): {
+function installHermesAPI(
+  profiles: ProfileInfo[],
+  remote = false,
+): {
   setProfileName: ReturnType<typeof vi.fn>;
 } {
   const setProfileName = vi.fn().mockResolvedValue({ success: true });
   Object.defineProperty(window, "hermesAPI", {
     configurable: true,
     value: {
-      ...profileEditorFixture().api,
+      ...profileEditorFixture(remote ? "remote" : "local").api,
       listProfiles: vi.fn().mockResolvedValue(profiles),
       setProfileName,
       setProfileColor: vi.fn().mockResolvedValue({ success: true }),
@@ -87,6 +90,7 @@ function installHermesAPI(profiles: ProfileInfo[]): {
       removeProfileAvatar: vi.fn().mockResolvedValue({ success: true }),
       deleteProfile: vi.fn().mockResolvedValue({ success: true }),
       readMemory: vi.fn().mockResolvedValue({ entries: [] }),
+      isRemoteOnlyMode: vi.fn().mockResolvedValue(remote),
     },
   });
   return { setProfileName };
@@ -141,7 +145,11 @@ describe("ProfileModal name editor", () => {
     fireEvent.blur(savedInput);
 
     await waitFor(() => {
-      expect(api.setProfileName).toHaveBeenCalledWith("default", "Saved Agent");
+      expect(api.setProfileName).toHaveBeenCalledWith(
+        "default",
+        "Saved Agent",
+        expect.objectContaining({ mode: "local" }),
+      );
     });
   });
 });
@@ -196,6 +204,39 @@ describe("ProfileModal deletion failures", () => {
     );
     expect(await screen.findByText("profile is busy")).toBeInTheDocument();
     expect(deleteProfile).toHaveBeenCalledTimes(2);
-    expect(deleteProfile).toHaveBeenLastCalledWith("alpha");
+    expect(deleteProfile).toHaveBeenLastCalledWith(
+      "alpha",
+      expect.objectContaining({ mode: "local" }),
+    );
+  });
+
+  it("offers only supported Remote Persona and read-only Memory panes without local metadata", async () => {
+    installHermesAPI([profile()], true);
+    renderModal();
+    expect(
+      await screen.findByRole("button", { name: "agents.sectionPersona" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "agents.sectionAgentMemory" }),
+    ).toBeTruthy();
+    for (const name of [
+      "agents.sectionProfile",
+      "agents.sectionSync",
+      "agents.sectionWallet",
+      "agents.sectionAdvanced",
+    ])
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    expect(window.hermesAPI.listProfiles).not.toHaveBeenCalled();
+  });
+
+  it("shows every section in local mode", async () => {
+    installHermesAPI([profile()], false);
+    renderModal();
+    expect(
+      await screen.findByRole("button", { name: "agents.sectionPersona" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "agents.sectionSync" }),
+    ).toBeTruthy();
   });
 });

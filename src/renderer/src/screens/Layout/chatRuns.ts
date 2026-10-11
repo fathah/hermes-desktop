@@ -1,5 +1,6 @@
 import type { ChatMessage } from "../Chat/Chat";
 import type { SessionLocation } from "../../../../shared/session-location";
+import type { SessionUsage } from "./sessionUsage";
 
 /**
  * One concurrently-running (or open) conversation. Several runs coexist so the
@@ -19,6 +20,8 @@ export interface ChatRun {
   loading: boolean;
   /** Best-effort title (first user message) for the active-sessions bar. */
   title?: string;
+  /** Token usage reported by the chat, shown in the status bar. */
+  usage?: SessionUsage | null;
   /** Seed transcript when the run was opened from history. */
   seed?: ChatMessage[];
 }

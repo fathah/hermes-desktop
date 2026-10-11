@@ -98,6 +98,8 @@ interface UseDashboardChatTransportArgs {
   activeTurnRef: React.MutableRefObject<ActiveTurn | null>;
   connectionId?: string;
   connectionRevision?: number;
+  /** Waits for pending private-authority classification without closing an equal client. */
+  getConnectionAuthority?: () => Promise<string | null>;
   contextFolder: string | null;
   connectionMode: DashboardConnectionMode;
   enabled: boolean;
@@ -219,7 +221,7 @@ export function isDashboardSlashWorkerExitError(err: unknown): boolean {
 export async function submitDashboardPromptWithRecovery(
   client: DashboardPromptClient,
   params: {
-    onRecoveredSessionId?: (sessionId: string) => void;
+    onRecoveredSessionId?: (sessionId: string, info?: unknown) => void;
     canRecover?: () => boolean;
     sessionId: string;
     storedSessionId?: string | null;
@@ -260,7 +262,7 @@ export async function submitDashboardPromptWithRecovery(
       throw err;
     }
 
-    params.onRecoveredSessionId?.(recoveredSessionId);
+    params.onRecoveredSessionId?.(recoveredSessionId, resumed.info);
     await client.request("prompt.submit", {
       session_id: recoveredSessionId,
       text: params.text,
@@ -748,6 +750,31 @@ export function usageFromPayload(payload: unknown): Partial<UsageState> | null {
   };
 }
 
+function cumulativeUsagePayload(payload: unknown): boolean {
+  const record = asRecord(asRecord(payload).usage);
+  return "input" in record || "output" in record;
+}
+
+/** Native Hermes counters are runtime-session snapshots; OpenAI counts are turn deltas. */
+export function dashboardUsageDelta(
+  payload: unknown,
+  sessionId: string,
+  snapshots: Map<string, Partial<UsageState>>,
+): Partial<UsageState> | null {
+  const usage = usageFromPayload(payload);
+  if (!usage || !cumulativeUsagePayload(payload)) return usage;
+  const previous = snapshots.get(sessionId);
+  snapshots.set(sessionId, usage);
+  const delta = (current = 0, before = 0): number =>
+    current >= before ? current - before : current;
+  return {
+    ...usage,
+    promptTokens: delta(usage.promptTokens, previous?.promptTokens),
+    completionTokens: delta(usage.completionTokens, previous?.completionTokens),
+    totalTokens: delta(usage.totalTokens, previous?.totalTokens),
+  };
+}
+
 function messageChars(message: ChatMessage): number {
   if ("content" in message) return message.content?.length ?? 0;
   switch (message.kind) {
@@ -792,6 +819,20 @@ export function estimateContextTokens(
     }
   }
   return Math.max(Math.round((totalChars - lastAssistantBubbleChars) / 4), 0);
+}
+
+/**
+ * Rough size of a whole transcript as the NEXT turn's context (chars / 4).
+ * Unlike estimateContextTokens (which drops the latest reply because it is the
+ * turn's output), a finished/loaded conversation is all context for what comes
+ * next. Used to show an occupancy before the first live turn reports usage.
+ */
+export function estimateTranscriptTokens(
+  messages: ReadonlyArray<ChatMessage>,
+): number {
+  let totalChars = 0;
+  for (const message of messages) totalChars += messageChars(message);
+  return Math.round(totalChars / 4);
 }
 
 export function completionFailed(payload: unknown): boolean {
@@ -961,6 +1002,7 @@ export function useDashboardChatTransport({
   activeTurnRef,
   connectionId,
   connectionRevision,
+  getConnectionAuthority,
   contextFolder,
   connectionMode,
   enabled,
@@ -989,6 +1031,7 @@ export function useDashboardChatTransport({
   // immediately. Reset on connection change (see the effect below).
   const dashboardUnavailableRef = useRef(false);
   const runtimeSessionIdRef = useRef<string | null>(null);
+  const cumulativeUsageRef = useRef(new Map<string, Partial<UsageState>>());
   const storedSessionIdRef = useRef<string | null>(hermesSessionId);
   const conversationGenerationRef = useRef(0);
   const subagentResumeRef = useRef<{
@@ -1165,6 +1208,7 @@ export function useDashboardChatTransport({
 
   useEffect(() => {
     clientGenerationRef.current += 1;
+    cumulativeUsageRef.current.clear();
     subagentResumeRef.current = null;
     dashboardUnavailableRef.current = false;
     expirePendingApprovalsRef.current(true);
@@ -1391,7 +1435,11 @@ export function useDashboardChatTransport({
         activeTurnRef.current = null;
         setToolProgress(null);
         setIsLoading(false);
-        const usage = usageFromPayload(event.payload);
+        const usage = dashboardUsageDelta(
+          event.payload,
+          runtimeSessionId || event.session_id || "pending",
+          cumulativeUsageRef.current,
+        );
         if (usage || !failed) {
           // The gauge only renders when `contextTokens` is set, so it must be
           // populated even when the provider omits usage — entirely
@@ -1413,6 +1461,13 @@ export function useDashboardChatTransport({
               usage?.contextTokens ||
               estimatedContextTokens ||
               prev?.contextTokens,
+            // Exact when the provider reported it; an estimate when we fell back
+            // to the transcript; otherwise whatever the previous turn had.
+            contextEstimated: usage?.contextTokens
+              ? false
+              : estimatedContextTokens
+                ? true
+                : prev?.contextEstimated,
             contextWindowTokens:
               usage?.contextWindowTokens || prev?.contextWindowTokens,
             cacheReadTokens: prev?.cacheReadTokens,
@@ -1491,6 +1546,29 @@ export function useDashboardChatTransport({
 
       const generation = clientGenerationRef.current;
       const pending = (async () => {
+        const authority = getConnectionAuthority
+          ? await getConnectionAuthority()
+          : null;
+        const assertAuthority = async (
+          isClosed?: () => boolean,
+        ): Promise<void> => {
+          const currentAuthority = getConnectionAuthority
+            ? await getConnectionAuthority()
+            : null;
+          if (
+            clientGenerationRef.current !== generation ||
+            isClosed?.() ||
+            (getConnectionAuthority &&
+              (!authority || currentAuthority !== authority))
+          ) {
+            const error = new Error(
+              "Hermes dashboard connection authority changed. Retry on the current chat.",
+            ) as Error & { dashboardWasReachable?: boolean };
+            error.dashboardWasReachable = true;
+            throw error;
+          }
+        };
+        if (getConnectionAuthority) await assertAuthority();
         // The dashboard `/api/ws` is the ONLY chat transport when a dashboard is
         // available (matching apps/desktop, which has no /v1 chat path). A WS
         // drop / "socket hang up" — e.g. a momentary SSH tunnel blip — is
@@ -1532,9 +1610,27 @@ export function useDashboardChatTransport({
               status.error || "Hermes dashboard transport is unavailable",
             );
           }
+          let clientClosed = false;
+          let eventTail = Promise.resolve();
           const client: DashboardGatewayClient = new DashboardGatewayClient({
-            onEvent: handleGatewayEvent,
+            onEvent: (event) => {
+              if (!getConnectionAuthority) {
+                handleGatewayEvent(event);
+                return;
+              }
+              eventTail = eventTail
+                .then(async () => {
+                  await assertAuthority(() => clientClosed);
+                  if (
+                    !clientClosed &&
+                    clientGenerationRef.current === generation
+                  )
+                    handleGatewayEvent(event);
+                })
+                .catch(() => undefined);
+            },
             onClose: () => {
+              clientClosed = true;
               if (clientRef.current === client) {
                 expirePendingClarifyRef.current(true);
                 expirePendingApprovalsRef.current(true);
@@ -1542,7 +1638,21 @@ export function useDashboardChatTransport({
               }
             },
           });
+          if (getConnectionAuthority) {
+            const nativeRequest = client.request.bind(client);
+            client.request = async <T>(
+              method: string,
+              params: Record<string, unknown> = {},
+            ): Promise<T> => {
+              await assertAuthority(() => clientClosed);
+              const result = await nativeRequest<T>(method, params);
+              await assertAuthority(() => clientClosed);
+              return result;
+            };
+          }
           try {
+            if (getConnectionAuthority)
+              await assertAuthority(() => clientClosed);
             const freshUrl = window.hermesAPI.freshDashboardWsUrl
               ? await window.hermesAPI.freshDashboardWsUrl(
                   profile,
@@ -1552,8 +1662,21 @@ export function useDashboardChatTransport({
             if (!freshUrl) {
               throw new Error("Hermes dashboard WebSocket URL is unavailable");
             }
+            if (getConnectionAuthority)
+              await assertAuthority(() => clientClosed);
             await client.connect(freshUrl);
+            if (getConnectionAuthority) {
+              await assertAuthority(() => clientClosed);
+              // connect() begins with close() to clean up a prior socket. Only
+              // intercept explicit teardown after this new socket is admitted.
+              const nativeClose = client.close.bind(client);
+              client.close = () => {
+                clientClosed = true;
+                nativeClose();
+              };
+            }
           } catch (err) {
+            clientClosed = true;
             lastConnectErr = err;
             client.close();
             if (clientGenerationRef.current !== generation) {
@@ -1593,6 +1716,7 @@ export function useDashboardChatTransport({
       }
     }, [
       handleGatewayEvent,
+      getConnectionAuthority,
       profile,
       connectionId,
       connectionMode,
@@ -1639,6 +1763,13 @@ export function useDashboardChatTransport({
         }
 
         targetSessionId = response.runtimeSessionId;
+        // A resumed live runtime may already have counters. Its response is
+        // captured before this prompt; do not count those historical tokens again.
+        if (cumulativeUsagePayload(response.info))
+          cumulativeUsageRef.current.set(
+            targetSessionId,
+            usageFromPayload(response.info) || {},
+          );
         runtimeSessionIdRef.current = targetSessionId;
         lastRuntimeSessionWasCreatedRef.current = response.created;
         justCreated = response.created;
@@ -2062,8 +2193,13 @@ export function useDashboardChatTransport({
           storedSessionId: storedSessionIdRef.current,
           text: submitText,
           profile,
-          onRecoveredSessionId: (recoveredSessionId) => {
+          onRecoveredSessionId: (recoveredSessionId, info) => {
             runtimeSessionIdRef.current = recoveredSessionId;
+            if (cumulativeUsagePayload(info))
+              cumulativeUsageRef.current.set(
+                recoveredSessionId,
+                usageFromPayload(info) || {},
+              );
           },
         });
         return true;
@@ -2298,7 +2434,14 @@ export function useDashboardChatTransport({
               );
             if (!resumed?.session_id)
               throw new Error("session.resume returned no runtime session id");
-            runtimeSessionIdRef.current ??= resumed.session_id;
+            if (!runtimeSessionIdRef.current) {
+              if (cumulativeUsagePayload(resumed.info))
+                cumulativeUsageRef.current.set(
+                  resumed.session_id,
+                  usageFromPayload(resumed.info) || {},
+                );
+              runtimeSessionIdRef.current = resumed.session_id;
+            }
             return runtimeSessionIdRef.current;
           })();
           pending = { generation, promise, scope };

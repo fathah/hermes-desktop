@@ -299,8 +299,8 @@ const hermesAPI = {
     ipcRenderer.invoke("hermesone-credits"),
 
   // Cloud agent sync (profiles ↔ signed-in Hermes One account)
-  syncAgents: (): Promise<AgentSyncResult> =>
-    ipcRenderer.invoke("agent-sync-run"),
+  syncAgents: (target?: ProfileEditorTarget): Promise<AgentSyncResult> =>
+    ipcRenderer.invoke("agent-sync-run", target),
   getAgentSyncStatus: (): Promise<AgentSyncStatus> =>
     ipcRenderer.invoke("agent-sync-status"),
   getLinkedAgentId: (profile: string): Promise<string | null> =>
@@ -996,6 +996,20 @@ const hermesAPI = {
   > =>
     ipcRenderer.invoke("list-sessions", limit, offset, connectionId, profile),
 
+  getSessionUsage: (
+    sessionId: string,
+    connectionId?: string,
+    profile?: string,
+  ): Promise<{
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    cost?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+  } | null> =>
+    ipcRenderer.invoke("get-session-usage", sessionId, connectionId, profile),
+
   getSessionMessages: (
     sessionId: string,
     connectionId?: string,
@@ -1052,7 +1066,9 @@ const hermesAPI = {
     ipcRenderer.invoke("set-session-model-override", sessionId, override),
 
   // Profiles
-  listProfiles: (): Promise<
+  listProfiles: (
+    target?: ProfileEditorTarget,
+  ): Promise<
     Array<{
       id: string;
       name: string;
@@ -1068,44 +1084,52 @@ const hermesAPI = {
       color?: string;
       avatar?: string | null;
     }>
-  > => ipcRenderer.invoke("list-profiles"),
+  > => ipcRenderer.invoke("list-profiles", target),
 
   createProfile: (
     name: string,
     cloneFrom: string | null,
+    target?: ProfileEditorTarget,
   ): Promise<{ success: boolean; error?: string; id?: string }> =>
-    ipcRenderer.invoke("create-profile", name, cloneFrom),
+    ipcRenderer.invoke("create-profile", name, cloneFrom, target),
 
   deleteProfile: (
     name: string,
+    target?: ProfileEditorTarget,
   ): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke("delete-profile", name),
+    ipcRenderer.invoke("delete-profile", name, target),
 
-  setActiveProfile: (name: string): Promise<boolean> =>
-    ipcRenderer.invoke("set-active-profile", name),
+  setActiveProfile: (
+    name: string,
+    target?: ProfileEditorTarget,
+  ): Promise<boolean> => ipcRenderer.invoke("set-active-profile", name, target),
 
   setProfileColor: (
     name: string,
     color: string,
+    target?: ProfileEditorTarget,
   ): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke("set-profile-color", name, color),
+    ipcRenderer.invoke("set-profile-color", name, color, target),
 
   setProfileName: (
     id: string,
     name: string,
+    target?: ProfileEditorTarget,
   ): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke("set-profile-name", id, name),
+    ipcRenderer.invoke("set-profile-name", id, name, target),
 
   setProfileAvatar: (
     name: string,
     dataUrl: string,
+    target?: ProfileEditorTarget,
   ): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke("set-profile-avatar", name, dataUrl),
+    ipcRenderer.invoke("set-profile-avatar", name, dataUrl, target),
 
   removeProfileAvatar: (
     name: string,
+    target?: ProfileEditorTarget,
   ): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke("remove-profile-avatar", name),
+    ipcRenderer.invoke("remove-profile-avatar", name, target),
 
   listWallets: (profile?: string): Promise<ProfileWallet[]> =>
     ipcRenderer.invoke("list-wallets", profile),

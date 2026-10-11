@@ -23,7 +23,15 @@ import {
 import { extname } from "path";
 import { randomUUID } from "crypto";
 import { readdir, readFile, stat } from "fs/promises";
-import { getActiveProfileNameSync } from "../utils";
+import {
+  getActiveProfileNameSync,
+  isValidProfileName,
+  PROFILE_NAME_ERROR,
+} from "../utils";
+import {
+  getRemoteSelectedProfile,
+  setRemoteSelectedProfile,
+} from "../remote-profile-selection";
 import type { Attachment } from "../../shared/attachments";
 import type { SessionModelOverride } from "../../shared/model-override";
 import type { SessionLocation } from "../../shared/session-location";
@@ -256,10 +264,12 @@ import {
   remoteUpdateSessionTitle,
   type RemoteSessionConfig,
 } from "../remote-sessions";
+import { remoteGetSessionUsage } from "../remote-session-usage";
 import {
   remoteGetHermesHome,
   remoteGetHermesVersion,
 } from "../remote-metadata";
+import { remoteCreateProfile, remoteListProfiles } from "../remote-profiles";
 import {
   remoteGetSkillContent,
   remoteInstallSkill,
@@ -1085,13 +1095,21 @@ export function registerIpcHandlers(context: IpcContext): void {
   // Cloud agent sync — reconciles local profiles with the signed-in Hermes One
   // account's cloud agents. `agent-sync-updated` tells the renderer to reload
   // its profile list (pull-created profiles appear without a manual refresh).
-  ipcMain.handle("agent-sync-run", async (event) => {
-    const result = await syncAgents();
-    if (!event.sender.isDestroyed()) {
-      event.sender.send("agent-sync-updated", result);
-    }
-    return result;
-  });
+  ipcMain.handle(
+    "agent-sync-run",
+    async (event, target?: ProfileEditorTarget) => {
+      const { connection } = resolveProfileEditorTarget(undefined, target);
+      if (connection.mode !== "local")
+        throw new Error(
+          "Cloud agent sync is available only for Local connections.",
+        );
+      const result = await syncAgents();
+      if (!event.sender.isDestroyed()) {
+        event.sender.send("agent-sync-updated", result);
+      }
+      return result;
+    },
+  );
   ipcMain.handle("agent-sync-status", () => getAgentSyncStatus());
   // The cloud agent id a profile is currently linked to (null when unlinked),
   // for the per-profile Sync tab.
@@ -2610,6 +2628,16 @@ export function registerIpcHandlers(context: IpcContext): void {
     },
   );
 
+  // Server-side token/cost totals of one session. Remote only: a local chat
+  // gets live usage events, and the totals are not stored in a form we read.
+  ipcMain.handle(
+    "get-session-usage",
+    (_event, sessionId: string, connectionId?: string, profile?: string) => {
+      const conn = sessionConnection(connectionId);
+      if (conn.mode !== "remote") return null;
+      return remoteGetSessionUsage(conn, sessionId, activeSshProfile(profile));
+    },
+  );
   ipcMain.handle(
     "get-session-messages",
     (_event, sessionId: string, connectionId?: string, profile?: string) => {
@@ -2757,91 +2785,141 @@ export function registerIpcHandlers(context: IpcContext): void {
     },
   );
 
-  // Profiles
-  ipcMain.handle("list-profiles", async () => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) {
-      // The desktop's active profile is the LOCAL selection (persisted in
-      // ~/.hermes/active_profile by set-active-profile), not whatever the remote
-      // CLI last marked active. Override isActive so the UI highlights the
-      // profile the user actually selected — and it survives relaunches.
-      const active = getActiveProfileNameSync();
-      const list = await sshListProfiles(conn.ssh);
-      return list.map((p) => ({
-        ...p,
-        id: p.name,
-        isActive: p.name === active,
-      }));
-    }
-    return listProfiles();
-  });
+  // Profiles: captured scope fences queued renderer actions and async SSH follow-ups.
+  ipcMain.handle(
+    "list-profiles",
+    async (_event, target?: ProfileEditorTarget) => {
+      const { connection: conn } = resolveProfileEditorTarget(
+        undefined,
+        target,
+      );
+      if (conn.mode === "remote") {
+        const id = target?.connectionId || getActiveConnection().connectionId;
+        return remoteListProfiles(getRemoteSelectedProfile(id, conn), conn);
+      }
+      if (conn.mode === "ssh" && conn.ssh) {
+        const active = getActiveProfileNameSync();
+        const list = await sshListProfiles(conn.ssh);
+        return list.map((p) => ({
+          ...p,
+          id: p.name,
+          isActive: p.name === active,
+        }));
+      }
+      return listProfiles();
+    },
+  );
   ipcMain.handle(
     "create-profile",
-    (_event, name: string, cloneFrom: string | null) => {
-      const conn = getConnectionConfig();
+    (
+      _event,
+      name: string,
+      cloneFrom: string | null,
+      target?: ProfileEditorTarget,
+    ) => {
+      const { connection: conn } = resolveProfileEditorTarget(
+        undefined,
+        target,
+      );
+      if (conn.mode === "remote") {
+        if (!target)
+          throw new Error(
+            "Remote profile creation requires an explicit target.",
+          );
+        return remoteCreateProfile(name, cloneFrom, conn);
+      }
       if (conn.mode === "ssh" && conn.ssh)
         return sshCreateProfile(conn.ssh, name, cloneFrom);
       return createProfile(name, cloneFrom);
     },
   );
-  ipcMain.handle("delete-profile", (_event, name: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh)
-      return sshDeleteProfile(conn.ssh, name);
-    if (conn.mode !== "local") {
-      return {
-        success: false,
-        error:
-          "Profile deletion is unavailable for this connection. Use the connected server's profile controls.",
-      };
-    }
-    return deleteProfileWithSync(name);
-  });
-  ipcMain.handle("set-active-profile", async (_event, name: string) => {
-    // Persist the selection LOCALLY in every mode (incl. SSH) — the desktop
-    // tracks "which profile is active" via the local ~/.hermes/active_profile,
-    // so without this an SSH session forgot the choice and reset to `default`
-    // on every relaunch. Then drop the cached health flag so the next check
-    // probes the newly-active profile's gateway, not the previous one's.
-    setActiveProfile(name);
-    notifyProfileSwitched();
-    // Bring the activated profile's own gateway up if it isn't already —
-    // without stopping any other profile's gateway (their bots stay online).
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" && conn.ssh) {
-      // Per-profile gateway lives on the remote; start it over SSH. (Previously
-      // SSH was skipped entirely, so selecting/Chatting a profile in the Agents
-      // page never started its gateway and the status spun on "Starting…".)
-      if (!(await sshGatewayStatus(conn.ssh, name))) {
-        await sshStartGateway(conn.ssh, name);
-      }
-    } else if (!isRemoteMode() && !isGatewayRunning(name)) {
-      startGateway(name);
-    }
-    return true;
-  });
-
-  // Profile appearance (desktop-only avatar + accent colour). Local-only —
-  // these write to the local ~/.hermes profile dirs, not the SSH remote.
-  ipcMain.handle("set-profile-color", (_event, name: string, color: string) =>
-    setProfileColor(name, color),
+  ipcMain.handle(
+    "delete-profile",
+    (_event, name: string, target?: ProfileEditorTarget) => {
+      const { connection: conn } = resolveProfileEditorTarget(
+        undefined,
+        target,
+      );
+      if (conn.mode === "ssh" && conn.ssh)
+        return sshDeleteProfile(conn.ssh, name);
+      if (conn.mode !== "local")
+        return {
+          success: false,
+          error:
+            "Profile deletion is unavailable for this connection. Use the connected server's profile controls.",
+        };
+      return deleteProfileWithSync(name);
+    },
   );
-  ipcMain.handle("set-profile-name", (_event, id: string, name: string) => {
-    const conn = getConnectionConfig();
-    if (conn.mode === "ssh" || conn.mode === "remote") {
-      return {
-        success: false,
-        error: "Agent renaming is only supported for local profiles",
-      };
-    }
-    return setProfileName(id, name);
-  });
+  ipcMain.handle(
+    "set-active-profile",
+    async (_event, name: string, target?: ProfileEditorTarget) => {
+      const { connection: conn } = resolveProfileEditorTarget(
+        undefined,
+        target,
+      );
+      if (!isValidProfileName(name)) throw new Error(PROFILE_NAME_ERROR);
+      if (conn.mode === "remote") {
+        if (!target)
+          throw new Error(
+            "Remote profile selection requires an explicit target.",
+          );
+        setRemoteSelectedProfile(target.connectionId, conn, name);
+        notifyProfileSwitched();
+        return true;
+      }
+      setActiveProfile(name);
+      notifyProfileSwitched();
+      if (conn.mode === "ssh" && conn.ssh) {
+        if (!(await sshGatewayStatus(conn.ssh, name))) {
+          // Revalidate after status awaits so an obsolete UI cannot start a new target.
+          resolveProfileEditorTarget(undefined, target);
+          await sshStartGateway(conn.ssh, name);
+        }
+      } else if (!isGatewayRunning(name)) startGateway(name);
+      return true;
+    },
+  );
+
+  // Appearance is desktop-only. Remote rows never read or mutate local metadata.
+  ipcMain.handle(
+    "set-profile-color",
+    (_event, name: string, color: string, target?: ProfileEditorTarget) => {
+      const { connection } = resolveProfileEditorTarget(name, target);
+      if (connection.mode === "remote")
+        throw new Error("Remote profile appearance is unavailable.");
+      return setProfileColor(name, color);
+    },
+  );
+  ipcMain.handle(
+    "set-profile-name",
+    (_event, id: string, name: string, target?: ProfileEditorTarget) => {
+      const { connection } = resolveProfileEditorTarget(id, target);
+      if (connection.mode !== "local")
+        return {
+          success: false,
+          error: "Agent renaming is only supported for local profiles",
+        };
+      return setProfileName(id, name);
+    },
+  );
   ipcMain.handle(
     "set-profile-avatar",
-    (_event, name: string, dataUrl: string) => setProfileAvatar(name, dataUrl),
+    (_event, name: string, dataUrl: string, target?: ProfileEditorTarget) => {
+      const { connection } = resolveProfileEditorTarget(name, target);
+      if (connection.mode === "remote")
+        throw new Error("Remote profile appearance is unavailable.");
+      return setProfileAvatar(name, dataUrl);
+    },
   );
-  ipcMain.handle("remove-profile-avatar", (_event, name: string) =>
-    removeProfileAvatar(name),
+  ipcMain.handle(
+    "remove-profile-avatar",
+    (_event, name: string, target?: ProfileEditorTarget) => {
+      const { connection } = resolveProfileEditorTarget(name, target);
+      if (connection.mode === "remote")
+        throw new Error("Remote profile appearance is unavailable.");
+      return removeProfileAvatar(name);
+    },
   );
 
   // Profile wallets are desktop-local and profile-scoped. The renderer only

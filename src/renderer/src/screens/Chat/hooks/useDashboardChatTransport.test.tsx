@@ -16,7 +16,10 @@ import {
   resetSubagents,
   type SubagentControls,
 } from "../subagents";
-import { useDashboardChatTransport } from "./useDashboardChatTransport";
+import {
+  dashboardUsageDelta,
+  useDashboardChatTransport,
+} from "./useDashboardChatTransport";
 import { useTranscriptState } from "./useTranscriptState";
 import type { ActiveTurn, ChatMessage, UsageState } from "../types";
 
@@ -1541,6 +1544,8 @@ describe("useDashboardChatTransport context gauge estimate (no usage payload)", 
 
     const usage = lastUsage(setUsage);
     expect(usage?.contextTokens).toBeGreaterThan(0);
+    // ...and it is flagged as a guess so the UI never presents it as exact.
+    expect(usage?.contextEstimated).toBe(true);
   });
 
   it("prefers exact payload usage over the estimate", async () => {
@@ -1565,6 +1570,7 @@ describe("useDashboardChatTransport context gauge estimate (no usage payload)", 
 
     const usage = lastUsage(setUsage);
     expect(usage?.contextTokens).toBe(45000);
+    expect(usage?.contextEstimated).toBe(false);
   });
 
   it("does not fabricate usage for a failed turn without usage", async () => {
@@ -1857,6 +1863,58 @@ describe("useDashboardChatTransport subagent roster", () => {
     ).toBe(false);
   });
 
+  // @lat: [[model-context#Tests#Passive roster resume retains native usage baseline]]
+  it("keeps the native usage baseline when a passive roster read resumes the saved chat", async () => {
+    dashboardMock.request.mockImplementation(async (method: string) => {
+      if (method === "session.resume")
+        return {
+          session_id: "resumed-parent",
+          info: { usage: { input: 1000, output: 200, total: 1200 } },
+        };
+      if (method === "subagent.list") return { subagents: [] };
+      if (method === "model.options")
+        return { model: "bad-model", provider: "bad-provider", providers: [] };
+      return {};
+    });
+    const setUsage = vi.fn() as SetUsageMock;
+    const api: HarnessApi = {};
+    render(
+      <Harness api={api} hermesSessionId="saved-parent" setUsage={setUsage} />,
+    );
+    await act(async () => {
+      await api.subagents!.list();
+    });
+    expect(setUsage).not.toHaveBeenCalled();
+    expect(
+      dashboardMock.request.mock.calls.some(
+        ([method]) => method === "session.send" || method === "session.create",
+      ),
+    ).toBe(false);
+    await act(async () => {
+      await api.send?.("next turn");
+      dashboardMock.onEvent?.({
+        type: "message.complete",
+        session_id: "resumed-parent",
+        payload: {
+          text: "completed",
+          usage: { input: 1300, output: 250, total: 1550 },
+        },
+      });
+    });
+    const update = setUsage.mock.calls.at(-1)?.[0];
+    expect(typeof update).toBe("function");
+    expect(typeof update === "function" ? update(null) : update).toMatchObject({
+      promptTokens: 300,
+      completionTokens: 50,
+      totalTokens: 350,
+    });
+    expect(
+      dashboardMock.request.mock.calls.filter(
+        ([method]) => method === "session.resume",
+      ),
+    ).toHaveLength(1);
+  });
+
   it("answers empty for a new chat and does not replace a missing saved conversation", async () => {
     const api: HarnessApi = {};
     const view = render(<Harness api={api} />);
@@ -2078,4 +2136,67 @@ describe("useDashboardChatTransport subagent roster", () => {
       getSubagents(subagentScopeKey(undefined, undefined, "stored-sub")),
     ).toEqual([]);
   });
+});
+
+// @lat: [[model-context#Tests#Native cumulative counters and legacy deltas]]
+it("deduplicates native runtime counters while preserving context, legacy deltas and reset boundaries", () => {
+  const snapshots = new Map<string, Partial<UsageState>>();
+  const first = dashboardUsageDelta(
+    { usage: { input: 100, output: 20, total: 120, context_used: 80 } },
+    "runtime-a",
+    snapshots,
+  );
+  expect(first).toMatchObject({
+    promptTokens: 100,
+    completionTokens: 20,
+    totalTokens: 120,
+    contextTokens: 80,
+  });
+  expect(
+    dashboardUsageDelta(
+      { usage: { input: 150, output: 30, total: 180, context_used: 110 } },
+      "runtime-a",
+      snapshots,
+    ),
+  ).toMatchObject({
+    promptTokens: 50,
+    completionTokens: 10,
+    totalTokens: 60,
+    contextTokens: 110,
+  });
+  expect(
+    dashboardUsageDelta(
+      { usage: { input: 150, output: 30, total: 180 } },
+      "runtime-a",
+      snapshots,
+    ),
+  ).toMatchObject({ promptTokens: 0, completionTokens: 0, totalTokens: 0 });
+  expect(
+    dashboardUsageDelta(
+      { usage: { input: 5, output: 2, total: 7 } },
+      "runtime-a",
+      snapshots,
+    ),
+  ).toMatchObject({ promptTokens: 5, completionTokens: 2, totalTokens: 7 });
+  expect(
+    dashboardUsageDelta(
+      { usage: { input: 5, output: 2, total: 7 } },
+      "runtime-b",
+      snapshots,
+    ),
+  ).toMatchObject({ promptTokens: 5, completionTokens: 2, totalTokens: 7 });
+  expect(
+    dashboardUsageDelta(
+      { usage: { prompt_tokens: 8, completion_tokens: 4, total_tokens: 12 } },
+      "runtime-a",
+      snapshots,
+    ),
+  ).toMatchObject({ promptTokens: 8, completionTokens: 4, totalTokens: 12 });
+  expect(
+    dashboardUsageDelta(
+      { usage: { prompt_tokens: 8, completion_tokens: 4, total_tokens: 12 } },
+      "runtime-a",
+      snapshots,
+    ),
+  ).toMatchObject({ promptTokens: 8, completionTokens: 4, totalTokens: 12 });
 });

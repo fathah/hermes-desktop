@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Settings, Users, Check, Search } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
 import ProfileAvatar from "../../components/common/ProfileAvatar";
+import { useProfileEditorTarget } from "../../hooks/useProfileEditorTarget";
+import { useProfileEditorLifetime } from "../../hooks/useProfileEditorLifetime";
+import type { ProfileEditorTarget } from "../../../../shared/profile-editor-target";
 import { useProfileModal } from "../../components/profile/ProfileModalContext";
 
 interface ProfileInfo {
@@ -17,6 +20,7 @@ interface ProfileInfo {
 }
 
 interface ProfileSwitcherProps {
+  connectionId?: string;
   /** Id of the currently active profile ("default" for the base workspace). */
   activeProfile: string;
   /** Called after a successful switch so the shell can reset chat state. */
@@ -35,14 +39,23 @@ interface ProfileSwitcherProps {
  * Cmd/Ctrl+P: a fuzzy search field on top, running profiles grouped above a
  * "Stopped" section, each row showing its model in monospace and a running dot.
  */
-export default function ProfileSwitcher({
+function ProfileSwitcherScreen({
   activeProfile,
   onSwitch,
   onManage,
   compact = false,
-}: ProfileSwitcherProps): React.JSX.Element {
+  target,
+  isCurrent,
+}: ProfileSwitcherProps & {
+  target: ProfileEditorTarget;
+  isCurrent: (target: ProfileEditorTarget) => boolean;
+}): React.JSX.Element {
   const { t } = useI18n();
   const { openProfile } = useProfileModal();
+  const live = useProfileEditorLifetime({ target, isCurrent });
+  const readGeneration = useRef(0);
+  const actionGeneration = useRef(0);
+  const [error, setError] = useState("");
   const [switchOpen, setSwitchOpen] = useState(false);
   const [profiles, setProfiles] = useState<ProfileInfo[]>([]);
   const [query, setQuery] = useState("");
@@ -54,13 +67,17 @@ export default function ProfileSwitcher({
   const mod = isMac ? "⌘" : "Ctrl";
 
   const load = useCallback(() => {
+    if (!live()) return;
+    const generation = ++readGeneration.current;
     window.hermesAPI
-      .listProfiles()
-      .then(setProfiles)
+      .listProfiles(target)
+      .then((list) => {
+        if (live() && generation === readGeneration.current) setProfiles(list);
+      })
       .catch(() => {
         /* keep last-known list */
       });
-  }, []);
+  }, [target, live]);
 
   // Load once on mount so the chip shows the correct name/avatar immediately.
   useEffect(() => {
@@ -109,21 +126,27 @@ export default function ProfileSwitcher({
         : activeProfile;
 
   function editCurrent(): void {
+    if (!live()) return;
     openProfile(activeProfile, { onChanged: load });
   }
 
   const handleSelect = useCallback(
     async (name: string): Promise<void> => {
+      if (!live()) return;
       setSwitchOpen(false);
       if (name === activeProfile) return;
+      const generation = ++actionGeneration.current;
+      setError("");
       try {
-        await window.hermesAPI.setActiveProfile(name);
-      } catch {
-        /* still reflect the choice optimistically */
+        if (!(await window.hermesAPI.setActiveProfile(name, target)))
+          throw new Error("The profile could not be selected.");
+        if (live() && actionGeneration.current === generation) onSwitch(name);
+      } catch (reason) {
+        if (live() && actionGeneration.current === generation)
+          setError(reason instanceof Error ? reason.message : String(reason));
       }
-      onSwitch(name);
     },
-    [activeProfile, onSwitch],
+    [activeProfile, onSwitch, live, target],
   );
 
   // Fuzzy-ish filter across the user-facing name, the stable id, and the model.
@@ -206,6 +229,7 @@ export default function ProfileSwitcher({
 
   return (
     <>
+      {error && <div role="alert">{error}</div>}
       <div className={`profile-switcher ${compact ? "compact" : ""}`}>
         <button
           className="profile-switcher-trigger"
@@ -290,6 +314,7 @@ export default function ProfileSwitcher({
             <button
               className="profile-menu-manage"
               onClick={() => {
+                if (!live()) return;
                 setSwitchOpen(false);
                 onManage();
               }}
@@ -301,5 +326,21 @@ export default function ProfileSwitcher({
         </div>
       )}
     </>
+  );
+}
+
+export default function ProfileSwitcher(
+  props: ProfileSwitcherProps,
+): React.JSX.Element {
+  const scope = useProfileEditorTarget("default", props.connectionId);
+  if (!scope.target)
+    return <div>{scope.error && <div role="alert">{scope.error}</div>}</div>;
+  return (
+    <ProfileSwitcherScreen
+      key={JSON.stringify([scope.target.scopeToken, scope.revision])}
+      {...props}
+      target={scope.target}
+      isCurrent={scope.isCurrent}
+    />
   );
 }

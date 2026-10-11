@@ -91,6 +91,7 @@ export default {
   contextWindow: "Context window",
   contextUsed: "{{pct}}% used ({{left}}% left)",
   contextTokens: "{{used}} / {{total}} tokens used",
+  contextEstimated: "Estimated from the transcript",
   contextCache: "Cache: {{pct}}% hit ({{read}} read / {{write}} write)",
   removeAttachment: "Remove attachment",
   dropToAttach: "Drop files to attach",

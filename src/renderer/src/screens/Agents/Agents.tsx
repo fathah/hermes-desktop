@@ -4,6 +4,9 @@ import ProfileAvatar from "../../components/common/ProfileAvatar";
 import { AppModal, AppModalTitle } from "../../components/modal/AppModal";
 import { useI18n } from "../../components/useI18n";
 import { OrbLoader } from "../../components/OrbLoader";
+import { useProfileEditorTarget } from "../../hooks/useProfileEditorTarget";
+import { useProfileEditorLifetime } from "../../hooks/useProfileEditorLifetime";
+import type { ProfileEditorTarget } from "../../../../shared/profile-editor-target";
 import { useProfileModal } from "../../components/profile/ProfileModalContext";
 import type {
   AgentSyncResult,
@@ -27,18 +30,30 @@ interface ProfileInfo {
 }
 
 interface AgentsProps {
+  connectionId?: string;
   activeProfile: string;
   onSelectProfile: (name: string) => void;
   onChatWith: (name: string) => void;
 }
 
-function Agents({
+function AgentsScreen({
   activeProfile,
   onSelectProfile,
   onChatWith,
-}: AgentsProps): React.JSX.Element {
+  target,
+  isCurrent,
+}: AgentsProps & {
+  target: ProfileEditorTarget;
+  isCurrent: (target: ProfileEditorTarget) => boolean;
+}): React.JSX.Element {
   const { t } = useI18n();
   const { openProfile } = useProfileModal();
+  const live = useProfileEditorLifetime({ target, isCurrent });
+  const local = target.mode === "local";
+  const remote = target.mode === "remote";
+  const readGeneration = useRef(0);
+  const createGeneration = useRef(0);
+  const actionGeneration = useRef(0);
   const [profiles, setProfiles] = useState<ProfileInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -53,118 +68,124 @@ function Agents({
   const [startingProfile, setStartingProfile] = useState<string | null>(null);
 
   const loadProfiles = useCallback(async (): Promise<void> => {
-    const list = await window.hermesAPI.listProfiles();
-    setProfiles(list);
-    setLoading(false);
-  }, []);
-
-  // A switched profile starts its gateway asynchronously, so the pid file the
-  // status reads from isn't written yet when the switch returns. Poll the list
-  // until that profile reports running (or we give up) so the row flips to
-  // "Running" on its own instead of only after a manual refresh/revisit.
-  const gatewayPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const stopGatewayPoll = useCallback((): void => {
-    if (gatewayPollRef.current) {
-      clearTimeout(gatewayPollRef.current);
-      gatewayPollRef.current = null;
+    if (!live()) return;
+    const generation = ++readGeneration.current;
+    try {
+      const list = await window.hermesAPI.listProfiles(target);
+      if (live() && readGeneration.current === generation) setProfiles(list);
+    } catch (reason) {
+      if (live() && readGeneration.current === generation)
+        setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      if (live() && readGeneration.current === generation) setLoading(false);
     }
-  }, []);
+  }, [target, live]);
 
+  const gatewayPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollGeneration = useRef(0);
+  const stopGatewayPoll = useCallback((): void => {
+    pollGeneration.current += 1;
+    if (gatewayPollRef.current) clearTimeout(gatewayPollRef.current);
+    gatewayPollRef.current = null;
+  }, []);
   const pollGatewayReady = useCallback(
     (name: string): void => {
+      if (!live() || remote) return;
       stopGatewayPoll();
-      // ~15 attempts × 700ms ≈ 10s, enough for a cold gateway to come up.
-      let attemptsLeft = 15;
-      const settle = (): void =>
-        setStartingProfile((current) => (current === name ? null : current));
+      const generation = pollGeneration.current;
+      let attempts = 15;
+      const current = (): boolean =>
+        live() && pollGeneration.current === generation;
       const tick = async (): Promise<void> => {
-        attemptsLeft -= 1;
+        if (!current()) return;
+        attempts -= 1;
+        const read = ++readGeneration.current;
         try {
-          const list = await window.hermesAPI.listProfiles();
-          setProfiles(list);
+          const list = await window.hermesAPI.listProfiles(target);
+          if (!current()) return;
+          if (readGeneration.current === read) setProfiles(list);
           if (list.find((p) => p.id === name)?.gatewayRunning) {
-            settle();
+            setStartingProfile(null);
             return;
           }
         } catch {
-          // A transient listing failure (e.g. SSH) shouldn't strand the
-          // spinner — fall through to retry or give up like any other miss.
+          /* A transient SSH read can retry within the captured lifetime. */
         }
-        if (attemptsLeft <= 0) {
-          settle();
+        if (!current()) return;
+        if (attempts <= 0) {
+          setStartingProfile(null);
           return;
         }
         gatewayPollRef.current = setTimeout(tick, 700);
       };
       gatewayPollRef.current = setTimeout(tick, 700);
     },
-    [stopGatewayPoll],
+    [target, live, remote, stopGatewayPoll],
   );
-
   useEffect(() => {
-    loadProfiles();
+    void loadProfiles();
   }, [loadProfiles]);
-
-  // Cancel any in-flight gateway poll when the page unmounts.
   useEffect(() => stopGatewayPoll, [stopGatewayPoll]);
 
-  // Cloud sync: null while the signed-in state is still loading.
   const [syncStatus, setSyncStatus] = useState<AgentSyncStatus | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const syncBusy = useRef(false);
   const autoSyncedRef = useRef(false);
-
   const refreshSyncStatus = useCallback(async (): Promise<void> => {
+    if (!local || !live()) return;
     try {
-      setSyncStatus(await window.hermesAPI.getAgentSyncStatus());
+      const status = await window.hermesAPI.getAgentSyncStatus();
+      if (live()) setSyncStatus(status);
     } catch {
-      // Bridge unavailable (tests/old preload): leave the affordance hidden.
+      /* An unavailable account bridge leaves sync hidden. */
     }
-  }, []);
-
+  }, [local, live]);
   const runSync = useCallback(async (): Promise<void> => {
+    if (!local || !live() || syncBusy.current) return;
+    syncBusy.current = true;
     setSyncing(true);
     try {
-      const result = await window.hermesAPI.syncAgents();
+      const result = await window.hermesAPI.syncAgents(target);
+      if (!live()) return;
       setSyncStatus((s) => (s ? { ...s, lastResult: result } : s));
-      if (result.outcomes.some((o) => o.action === "created-local")) {
+      if (result.outcomes.some((o) => o.action === "created-local"))
         await loadProfiles();
-      }
-    } catch {
-      // Surfaced through lastResult on the next status refresh.
+    } catch (reason) {
+      if (live())
+        setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
-      setSyncing(false);
-      void refreshSyncStatus();
+      syncBusy.current = false;
+      if (live()) {
+        setSyncing(false);
+        void refreshSyncStatus();
+      }
     }
-  }, [loadProfiles, refreshSyncStatus]);
-
-  // Load the signed-in state once, then run one automatic pass per visit so
-  // console-side edits appear without a manual click.
+  }, [local, live, target, loadProfiles, refreshSyncStatus]);
   useEffect(() => {
+    if (!local) return;
     void (async () => {
       try {
         const status = await window.hermesAPI.getAgentSyncStatus();
+        if (!live()) return;
         setSyncStatus(status);
         if (status.signedIn && !status.running && !autoSyncedRef.current) {
           autoSyncedRef.current = true;
           void runSync();
         }
       } catch {
-        // Bridge unavailable: leave the affordance hidden.
+        /* Account bridge unavailable. */
       }
     })();
-  }, [runSync]);
-
-  // Syncs triggered elsewhere (e.g. right after sign-in) refresh the list too.
+  }, [local, live, runSync]);
   useEffect(() => {
-    if (!window.hermesAPI.onAgentSyncUpdated) return undefined;
+    if (!local || !window.hermesAPI.onAgentSyncUpdated) return;
     return window.hermesAPI.onAgentSyncUpdated((result: AgentSyncResult) => {
+      if (!live()) return;
       setSyncStatus((s) => (s ? { ...s, lastResult: result } : s));
-      if (result.outcomes.some((o) => o.action === "created-local")) {
+      if (result.outcomes.some((o) => o.action === "created-local"))
         void loadProfiles();
-      }
     });
-  }, [loadProfiles]);
+  }, [local, live, loadProfiles]);
 
   function syncSummary(result: AgentSyncResult): string {
     if (result.status === "unauthorized") return t("agents.syncUnauthorized");
@@ -185,57 +206,80 @@ function Agents({
     return t("agents.syncSummary", counts);
   }
 
-  // Open the create modal, defaulting the clone source to the active profile.
   function openCreate(): void {
+    if (!live()) return;
+    createGeneration.current += 1;
+    setCreating(false);
     setNewName("");
     setError("");
     setCloneConfig(true);
     setCloneSource(activeProfile || "default");
     setShowCreate(true);
   }
-
   function closeCreate(): void {
+    createGeneration.current += 1;
+    setCreating(false);
     setShowCreate(false);
     setError("");
   }
-
   async function handleCreate(): Promise<void> {
     const name = newName.trim();
-    if (!name) return;
+    if (!live() || !name || creating) return;
+    const generation = ++createGeneration.current;
+    const current = (): boolean =>
+      live() && createGeneration.current === generation;
     setCreating(true);
     setError("");
-    const result = await window.hermesAPI.createProfile(
-      name,
-      cloneConfig ? cloneSource : null,
-    );
-    setCreating(false);
-    if (result.success) {
-      setShowCreate(false);
-      setNewName("");
-    } else {
-      setError(result.error || t("agents.createFailed"));
+    try {
+      const result = await window.hermesAPI.createProfile(
+        name,
+        cloneConfig ? cloneSource : null,
+        target,
+      );
+      if (!current()) return;
+      if (result.success) {
+        setShowCreate(false);
+        setNewName("");
+      } else setError(result.error || t("agents.createFailed"));
+      await loadProfiles();
+    } catch (reason) {
+      if (current()) {
+        setError(reason instanceof Error ? reason.message : String(reason));
+        await loadProfiles();
+      }
+    } finally {
+      if (current()) setCreating(false);
     }
-    loadProfiles();
   }
-
-  async function handleSelect(name: string): Promise<void> {
-    // Show "Starting…" only when this profile's gateway isn't already up, so
-    // switching to an already-running profile doesn't flash a fake spinner.
+  async function selectProfile(name: string, chat: boolean): Promise<void> {
+    if (!live()) return;
+    const generation = ++actionGeneration.current;
+    stopGatewayPoll();
+    const current = (): boolean =>
+      live() && actionGeneration.current === generation;
+    setError("");
     const alreadyRunning = profiles.find((p) => p.id === name)?.gatewayRunning;
-    setStartingProfile(alreadyRunning ? null : name);
-    await window.hermesAPI.setActiveProfile(name);
-    onSelectProfile(name);
-    loadProfiles();
-    pollGatewayReady(name);
+    setStartingProfile(remote || alreadyRunning ? null : name);
+    try {
+      if (!(await window.hermesAPI.setActiveProfile(name, target)))
+        throw new Error("The profile could not be selected.");
+      if (!current()) return;
+      if (chat) onChatWith(name);
+      else onSelectProfile(name);
+      if (!current()) return;
+      void loadProfiles();
+      if (!chat) pollGatewayReady(name);
+    } catch (reason) {
+      if (current()) {
+        setStartingProfile(null);
+        setError(reason instanceof Error ? reason.message : String(reason));
+      }
+    }
   }
-
-  // "Chat" button — make the agent active (starts its gateway) then open a
-  // conversation with it. The only path here that starts a chat.
-  async function handleChatWith(name: string): Promise<void> {
-    await window.hermesAPI.setActiveProfile(name);
-    onChatWith(name);
-    loadProfiles();
-  }
+  const handleSelect = (name: string): Promise<void> =>
+    selectProfile(name, false);
+  const handleChatWith = (name: string): Promise<void> =>
+    selectProfile(name, true);
 
   function providerLabel(provider: string): string {
     if (!provider || provider === "auto") return t("agents.auto");
@@ -261,7 +305,7 @@ function Agents({
           <p className="agents-subtitle">{t("agents.subtitle")}</p>
         </div>
         <div className="agents-header-actions">
-          {syncStatus && !syncStatus.signedIn && (
+          {local && syncStatus && !syncStatus.signedIn && (
             <span
               className="agents-sync-hint"
               title={t("agents.syncSignedOutHint")}
@@ -269,7 +313,7 @@ function Agents({
               {t("agents.syncSignedOut")}
             </span>
           )}
-          {syncStatus?.signedIn && (
+          {local && syncStatus?.signedIn && (
             <span
               className="agents-sync-hint"
               title={
@@ -284,7 +328,7 @@ function Agents({
                 : (syncStatus.accountLabel ?? "")}
             </span>
           )}
-          {syncStatus?.signedIn && (
+          {local && syncStatus?.signedIn && (
             <button
               className="btn btn-secondary btn-sm"
               onClick={() => void runSync()}
@@ -301,7 +345,9 @@ function Agents({
       </div>
 
       {!showCreate && error && (
-        <div className="agents-create-error">{error}</div>
+        <div role="alert" className="agents-create-error">
+          {error}
+        </div>
       )}
 
       <AppModal
@@ -366,7 +412,11 @@ function Agents({
               </select>
             </label>
           )}
-          {error && <div className="agents-create-error">{error}</div>}
+          {error && (
+            <div role="alert" className="agents-create-error">
+              {error}
+            </div>
+          )}
           <div className="agents-create-modal-actions">
             <button className="btn btn-secondary" onClick={closeCreate}>
               {t("common.cancel")}
@@ -454,28 +504,32 @@ function Agents({
               )}
             </div>
             <div className="agents-cell-actions">
-              <button
-                type="button"
-                className="agents-row-edit"
-                title={t("agents.editAppearanceFor", {
-                  name: p.name,
-                })}
-                aria-label={t("agents.editAppearanceFor", {
-                  name: p.name,
-                })}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setError("");
-                  openProfile(p.id, {
-                    onChanged: loadProfiles,
-                    onDeleted: (n) => {
-                      if (activeProfile === n) onSelectProfile("default");
-                    },
-                  });
-                }}
-              >
-                <Pencil size={14} />
-              </button>
+              {!remote && (
+                <button
+                  type="button"
+                  className="agents-row-edit"
+                  title={t("agents.editAppearanceFor", {
+                    name: p.name,
+                  })}
+                  aria-label={t("agents.editAppearanceFor", {
+                    name: p.name,
+                  })}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!live()) return;
+                    setError("");
+                    openProfile(p.id, {
+                      onChanged: loadProfiles,
+                      onDeleted: (n) => {
+                        if (live() && activeProfile === n)
+                          onSelectProfile("default");
+                      },
+                    });
+                  }}
+                >
+                  <Pencil size={14} />
+                </button>
+              )}
               <button
                 className="btn btn-primary btn-sm"
                 onClick={(e) => {
@@ -494,4 +548,24 @@ function Agents({
   );
 }
 
-export default Agents;
+export default function Agents(props: AgentsProps): React.JSX.Element {
+  const scope = useProfileEditorTarget("default", props.connectionId);
+  if (!scope.target)
+    return (
+      <div className="agents-container">
+        {scope.error ? (
+          <div role="alert">{scope.error}</div>
+        ) : (
+          <OrbLoader state="searching" size={64} />
+        )}
+      </div>
+    );
+  return (
+    <AgentsScreen
+      key={JSON.stringify([scope.target.scopeToken, scope.revision])}
+      {...props}
+      target={scope.target}
+      isCurrent={scope.isCurrent}
+    />
+  );
+}

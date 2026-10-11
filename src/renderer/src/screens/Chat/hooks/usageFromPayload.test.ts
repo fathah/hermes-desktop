@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   estimateContextTokens,
+  estimateTranscriptTokens,
   usageFromPayload,
 } from "./useDashboardChatTransport";
 import type { ChatMessage } from "../types";
@@ -153,5 +154,23 @@ describe("estimateContextTokens", () => {
 
   it("returns 0 for an empty transcript so the gauge stays hidden", () => {
     expect(estimateContextTokens([])).toBe(0);
+  });
+});
+
+describe("estimateTranscriptTokens", () => {
+  const chars = (n: number): string => "x".repeat(n);
+
+  it("counts the whole transcript, including the last reply, as the next turn's context", () => {
+    const messages: ChatMessage[] = [
+      { id: "u1", role: "user", content: chars(400) },
+      { id: "a1", role: "agent", content: chars(200) },
+    ];
+    expect(estimateTranscriptTokens(messages)).toBe(150);
+    // The live-turn estimator drops that reply (it is output, not prompt).
+    expect(estimateContextTokens(messages)).toBe(100);
+  });
+
+  it("is zero for an empty conversation", () => {
+    expect(estimateTranscriptTokens([])).toBe(0);
   });
 });
