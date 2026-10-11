@@ -55,6 +55,7 @@ import {
 } from "../../assets/icons";
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
+import { useConnectionTargetRevision } from "../../hooks/useConnectionTargetRevision";
 
 type View =
   | "chat"
@@ -109,8 +110,10 @@ function Layout({
   const { openSettings } = useSettingsModal();
   const [view, setView] = useState<View>("chat");
   const [botGroupsEnabled, setBotGroupsEnabled] = useState(false);
+  const connectionRevision = useConnectionTargetRevision();
   useEffect(() => {
     let alive = true;
+    setBotGroupsEnabled(false);
     void window.hermesAPI
       .botGroups?.(connectionId, "capabilities")
       .then((status) => {
@@ -120,7 +123,7 @@ function Layout({
     return () => {
       alive = false;
     };
-  }, [connectionId]);
+  }, [connectionId, connectionRevision]);
   // Multiple conversations coexist (background sessions + multi-agent). Each is
   // a ChatRun; all are mounted, only the active one is shown. Profile switches
   // preserve existing conversations and activate a scratch run for the selected

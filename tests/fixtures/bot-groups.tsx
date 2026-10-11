@@ -112,7 +112,10 @@ const botGroups = (async (_connection: string, op: string, params = {}) => {
   }
   throw new Error("This operation is outside the visual fixture.");
 }) as BotGroupAPI;
-window.hermesAPI = { botGroups } as Window["hermesAPI"];
+window.hermesAPI = {
+  botGroups,
+  onConnectionConfigChanged: () => () => {},
+} as Window["hermesAPI"];
 createRoot(document.getElementById("root")!).render(
   <I18nProvider>
     <BotGroups connectionId="visual-fixture" visible />

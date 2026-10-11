@@ -60,3 +60,31 @@ describe("Bot groups main-process boundary", () => {
     expect(JSON.stringify(status)).not.toContain("private-secret");
   });
 });
+
+// @lat: [[bot-groups#Recovery regressions#Runtime availability]]
+it("requires a running driver and complete read capabilities before reporting groups available", async () => {
+  const complete = {
+    protocol_version: 2,
+    driver: true,
+    methods: ["groups.list", "groups.state", "groups.log"],
+  };
+  mocks.request.mockResolvedValue(complete);
+  expect(await botGroupsRequest("local-one", "capabilities")).toMatchObject({
+    available: true,
+  });
+  for (const result of [
+    { ...complete, driver: false },
+    { ...complete, protocol_version: 1 },
+    { ...complete, methods: undefined },
+    { ...complete, methods: ["groups.list", "groups.state", 42] },
+  ]) {
+    mocks.request.mockResolvedValue(result);
+    const status = await botGroupsRequest("local-one", "capabilities");
+    expect(status).toMatchObject({ available: false });
+    expect(
+      (
+        status as { capabilities: { methods: unknown[] } }
+      ).capabilities.methods.every((method) => typeof method === "string"),
+    ).toBe(true);
+  }
+});

@@ -33,6 +33,7 @@ const rooms = [room("one"), room("two")];
 const api = vi.fn();
 let actions: BotGroupAction[] = [];
 let loseAck = false;
+let notifyConnectionChange = (): void => {};
 
 beforeEach(() => {
   actions = [];
@@ -105,7 +106,13 @@ beforeEach(() => {
   );
   Object.defineProperty(window, "hermesAPI", {
     configurable: true,
-    value: { botGroups: api },
+    value: {
+      botGroups: api,
+      onConnectionConfigChanged: (handler: () => void) => {
+        notifyConnectionChange = handler;
+        return (): void => {};
+      },
+    },
   });
 });
 
@@ -227,4 +234,32 @@ describe("Bot groups presentation lifecycle", () => {
         .members.map((m) => m.profile),
     ).toEqual(["research", "review"]);
   });
+});
+
+// @lat: [[bot-groups#Recovery regressions#Edited connection scope]]
+it("discards drafts and cached rooms when a connection is edited without changing its ID", async () => {
+  render(<BotGroups connectionId="same-id" visible />);
+  const composer = await screen.findByRole("textbox", {
+    name: "botGroups.composeHint",
+  });
+  fireEvent.change(composer, {
+    target: { value: "draft for old local installation" },
+  });
+  api.mockImplementation(async (_connection, op) =>
+    op === "capabilities"
+      ? {
+          enabled: true,
+          available: false,
+          error: "Remote connections are unsupported",
+        }
+      : Promise.reject(new Error("must not read old local group")),
+  );
+  act(() => notifyConnectionChange());
+  expect(
+    await screen.findByText("Remote connections are unsupported"),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByDisplayValue("draft for old local installation"),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByText("Team one")).not.toBeInTheDocument();
 });

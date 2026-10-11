@@ -75,3 +75,15 @@ The browser smoke checks 1280px and 600px layouts, mentions, send/draft clearing
 overflow and page errors. It is not full Electron, installer, remote connection
 or real-provider LLM acceptance. Use isolated state for a provider-backed manual
 trial before enabling this experimental feature for daily work.
+
+## Recovery regressions
+
+The repaired draft follows connection revisions and reports availability only when the runtime exposes the required protocol and a running room driver.
+
+### Runtime availability
+
+Missing methods, malformed capabilities and a stopped driver leave groups unavailable instead of presenting a usable runtime. Covered by [[src/main/bot-groups.test.ts]].
+
+### Edited connection scope
+
+Editing a connection under the same ID releases the old view, drafts and requests before displaying the new target. Navigation refreshes its flag and the renderer cannot reuse old group state. Covered by [[src/renderer/src/screens/BotGroups/BotGroups.test.tsx]].

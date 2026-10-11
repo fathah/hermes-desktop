@@ -40,13 +40,30 @@ export async function botGroupsRequest(
       params,
     );
     if (operation === "capabilities") {
+      const methods = Array.isArray(result.methods)
+        ? result.methods.filter(
+            (method): method is string => typeof method === "string",
+          )
+        : [];
+      const available =
+        result.protocol_version === 2 &&
+        result.driver === true &&
+        ["groups.list", "groups.state", "groups.log"].every((method) =>
+          methods.includes(method),
+        );
       return {
         enabled: true,
-        available: result.protocol_version === 2,
+        available,
+        ...(!available
+          ? {
+              error:
+                "Agent groups require protocol v2 and a running hosted room driver.",
+            }
+          : {}),
         capabilities: {
           protocol_version: result.protocol_version,
-          driver: result.driver,
-          methods: result.methods,
+          driver: result.driver === true,
+          methods,
         },
       };
     }

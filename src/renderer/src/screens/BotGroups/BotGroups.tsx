@@ -10,6 +10,7 @@ import {
   type BotGroupState,
 } from "../../../../shared/bot-groups";
 import "./bot-groups.css";
+import { useConnectionTargetRevision } from "../../hooks/useConnectionTargetRevision";
 
 type Draft = { text: string; eventId?: string };
 interface Props {
@@ -18,10 +19,12 @@ interface Props {
 }
 
 /** UI-only state. Hermes is the sole owner of rooms, turns, context and approvals. */
-export default function BotGroups({
-  connectionId,
-  visible,
-}: Props): React.JSX.Element {
+export default function BotGroups(props: Props): React.JSX.Element {
+  const revision = useConnectionTargetRevision();
+  return <BotGroupsView key={`${props.connectionId}:${revision}`} {...props} />;
+}
+
+function BotGroupsView({ connectionId, visible }: Props): React.JSX.Element {
   const { t } = useI18n();
   const tr = (key: string): string => t("botGroups." + key);
   const [cap, setCap] = useState<BotGroupResults["capabilities"] | null>(null);
