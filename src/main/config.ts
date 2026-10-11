@@ -935,7 +935,9 @@ function appendSpeechYamlValue(
             if (indent > found.indent) return null;
             if (
               indent === found.indent &&
-              !/^[a-zA-Z_][a-zA-Z0-9_-]*[ \t]*:/.test(trimmed)
+              !/^(?:[a-zA-Z_][a-zA-Z0-9_-]*|"(?:\\.|[^"\\])*"|'(?:''|[^'])*')[ \t]*:/.test(
+                trimmed,
+              )
             )
               return null;
             break;

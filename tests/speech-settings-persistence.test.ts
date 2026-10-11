@@ -64,6 +64,22 @@ const cases = [
     name: "four-space mapping indentation",
     yaml: "tts:\n    minimax:\n        voice_id: narrator\n    openai:\n        voice: alloy\n",
   },
+  {
+    name: "double-quoted speech sibling",
+    yaml: 'tts:\n  minimax:\n    model: speech-2.8-hd\n    "voice_id": narrator\n',
+  },
+  {
+    name: "single-quoted speech sibling",
+    yaml: "tts:\n  minimax:\n    model: speech-2.8-hd\n    'voice_id': narrator\n",
+  },
+  {
+    name: "quoted provider sibling",
+    yaml: 'tts:\n  minimax:\n    model: speech-2.8-hd\n  provider: openai\n  "openai":\n    voice: alloy\n',
+  },
+  {
+    name: "escaped double-quoted sibling",
+    yaml: 'tts:\n  minimax:\n    model: speech-2.8-hd\n    "voice\\"id": narrator\n',
+  },
 ];
 // @lat: [[speech-playback-tests#Serialized settings persistence]]
 it.each(cases)(
@@ -94,6 +110,8 @@ it.each(cases)(
     if (yaml?.includes("voice_id"))
       expect(parsed.tts.minimax.voice_id).toBe("narrator");
     if (yaml?.includes("alloy")) expect(parsed.tts.openai?.voice).toBe("alloy");
+    if (yaml?.includes('"voice\\"id"'))
+      expect(parsed.tts.minimax).toHaveProperty('voice"id', "narrator");
     if (yaml?.includes("# keep comment"))
       expect(serialized).toContain("# keep comment");
     if (yaml?.includes("# keep voice"))

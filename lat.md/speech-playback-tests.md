@@ -77,7 +77,7 @@ Old profile hydration and old connection save outcomes cannot change settings af
 
 ## Serialized settings persistence
 
-Real main configuration writes persist missing or existing model, region and provider mappings in only the selected profile, preserving comments, sibling fields and Automatic values across reopening.
+Real main configuration writes persist missing or existing model, region and provider mappings in only the selected profile, preserving comments, plain or quoted sibling fields and Automatic values across reopening.
 
 ## Unsafe speech mapping refusal
 
