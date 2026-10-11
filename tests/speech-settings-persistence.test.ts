@@ -130,6 +130,96 @@ it.each(cases)(
     });
   },
 );
+
+const commentedScalarCases = ["provider", "model", "region"].flatMap((leaf) =>
+  [
+    { kind: "empty", scalar: "" },
+    { kind: "null", scalar: leaf === "region" ? "~" : "null" },
+  ].flatMap(({ kind, scalar }) =>
+    ["\n", "\r\n"].map((newline) => ({
+      name: `${kind} ${leaf} with ${newline === "\n" ? "LF" : "CRLF"}`,
+      leaf,
+      scalar,
+      newline,
+    })),
+  ),
+);
+// @lat: [[speech-playback-tests#Commented empty speech scalar preservation]]
+it.each(commentedScalarCases)(
+  "saves and reopens valid speech YAML with $name",
+  async ({ leaf, scalar, newline }) => {
+    const initial = {
+      provider: "openai",
+      model: "speech-2.8-hd",
+      region: "cn",
+      [leaf]: scalar,
+    };
+    const yaml = [
+      "# keep prefix",
+      "--- # keep start",
+      "tts: # keep speech",
+      `  provider: ${initial.provider} # keep provider`,
+      "  minimax: # keep minimax",
+      `    model: ${initial.model} # keep model`,
+      `    region: ${initial.region} # keep region`,
+      "    voice_id: narrator # keep voice",
+      "... # keep end",
+      "# keep trailer",
+      "",
+    ].join(newline);
+    expect(() => load(yaml)).not.toThrow();
+    const path = join(home, "profiles", "work", "config.yaml");
+    writeFileSync(path, yaml);
+    const { speech, target } = await runtime();
+    expect(
+      speech.setSpeechConfig("model", "speech-2.6-turbo", "work", target),
+    ).toBe(true);
+    expect(speech.setSpeechConfig("region", "cn", "work", target)).toBe(true);
+    expect(speech.getSpeechConfig("work", target)).toEqual({
+      model: "speech-2.6-turbo",
+      region: "cn",
+    });
+    expect(speech.setSpeechConfig("region", "", "work", target)).toBe(true);
+    const serialized = readFileSync(path, "utf8");
+    const parsed = load(serialized) as {
+      tts: {
+        provider: string;
+        minimax: { model: string; region: string; voice_id: string };
+      };
+    };
+    expect(parsed.tts).toEqual({
+      provider: "minimax",
+      minimax: { model: "speech-2.6-turbo", region: "", voice_id: "narrator" },
+    });
+    expect(serialized).toMatch(
+      /provider:[^\r\n]*"minimax"[ \t]+# keep provider/,
+    );
+    expect(serialized).toMatch(
+      /model:[^\r\n]*"speech-2.6-turbo"[ \t]+# keep model/,
+    );
+    expect(serialized).toMatch(/region:[^\r\n]*""[ \t]+# keep region/);
+    expect(serialized).toContain(`voice_id: narrator # keep voice${newline}`);
+    expect(serialized).toContain(`minimax: # keep minimax${newline}`);
+    expect(
+      serialized.startsWith(
+        `# keep prefix${newline}--- # keep start${newline}`,
+      ),
+    ).toBe(true);
+    expect(
+      serialized.endsWith(`... # keep end${newline}# keep trailer${newline}`),
+    ).toBe(true);
+    if (newline === "\r\n") expect(serialized).not.toMatch(/(?<!\r)\n/);
+    vi.resetModules();
+    const reopened = await runtime();
+    expect(reopened.speech.getSpeechConfig("work", reopened.target)).toEqual({
+      model: "speech-2.6-turbo",
+      region: "",
+    });
+    expect(readFileSync(join(home, "config.yaml"), "utf8")).toBe(
+      "model:\n  default: untouched\n",
+    );
+  },
+);
 // @lat: [[speech-playback-tests#Unsafe speech mapping refusal]]
 it.each([
   "tts: disabled\n",

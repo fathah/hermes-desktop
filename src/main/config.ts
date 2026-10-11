@@ -737,6 +737,7 @@ function findSegmentInBlock(
   startAt: number,
   parentIndent: number,
   segment: string,
+  stripCarriageReturn = false,
 ): SegmentMatch | null {
   // Walk lines from startAt until we leave the parent's block (a line
   // with indent <= parentIndent). Within the block, return the first
@@ -749,7 +750,8 @@ function findSegmentInBlock(
   while (cursor < content.length) {
     const lineEnd = content.indexOf("\n", cursor);
     const lineEndExclusive = lineEnd === -1 ? content.length : lineEnd;
-    const line = content.slice(cursor, lineEndExclusive);
+    const rawLine = content.slice(cursor, lineEndExclusive);
+    const line = stripCarriageReturn ? rawLine.replace(/\r$/, "") : rawLine;
     const trimmed = line.trim();
 
     if (trimmed === "" || trimmed.startsWith("#")) {
@@ -959,6 +961,7 @@ function appendSpeechYamlValue(
       cursor,
       parentIndent,
       segments[level],
+      true,
     );
     if (found) {
       if (level === segments.length - 1) {
@@ -997,9 +1000,14 @@ function appendSpeechYamlValue(
           content[found.valueEnd - 1] === "\r"
             ? found.valueEnd - 1
             : found.valueEnd;
+        // For an empty scalar the shared scanner consumes the spaces before
+        // its comment as the leading value gap. Keep explicit comment
+        // separation when inserting a quoted speech value into that gap.
+        const commentSeparator = content[valueEnd] === "#" ? " " : "";
         return (
           content.slice(0, found.valueStart) +
           quoteYamlScalar(value) +
+          commentSeparator +
           content.slice(valueEnd)
         );
       }

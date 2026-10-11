@@ -46,6 +46,8 @@ The Providers selectors load and save through the captured Local connection and 
 
 [[src/main/config.ts#setMiniMaxSpeechConfigValue]] inserts missing nested speech mappings, preserves comments and siblings, verifies both serialized speech values and writes model/region plus provider atomically to the explicit profile. Unsupported scalar or flow parents, and leaf values with child or continuation lines, fail visibly without rewriting the file.
 
+Replacing an empty or null speech leaf retains explicit whitespace before its inline comment. Speech-only scanning recognizes commented CRLF mapping headers and leaves without changing byte offsets or the generic writer, preserving comments and the document trailer.
+
 ## Single-document configuration boundary
 
 Speech settings operate inside one YAML document, preserving a standalone start marker and closing marker/comment trailer. Multiple documents and unsupported inline headers or directives fail before any write.
