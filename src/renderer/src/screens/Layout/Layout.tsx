@@ -1,4 +1,12 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import {
+  lazy,
+  Suspense,
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+} from "react";
 import Chat from "../Chat/Chat";
 import {
   dbItemsToChatMessages,
@@ -31,7 +39,6 @@ import Skills from "../Skills/Skills";
 import Memory from "../Memory/Memory";
 import Tools from "../Tools/Tools";
 import Gateway from "../Gateway/Gateway";
-import Office from "../Office/Office";
 import Providers from "../Providers/Providers";
 import RemoteProviders from "../Providers/RemoteProviders";
 import Schedules from "../Schedules/Schedules";
@@ -56,6 +63,9 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import FloatingPet from "../../components/pet/FloatingPet";
+
+// @lat: [[main-process#Deferred Office loading]]
+const Office = lazy(() => import("../Office/Office"));
 
 type View =
   | "chat"
@@ -1056,7 +1066,9 @@ function Layout({
 
           {visitedViews.has("office") && (
             <div style={paneStyle("office")}>
-              <Office profile={activeProfile} visible={view === "office"} />
+              <Suspense fallback={null}>
+                <Office profile={activeProfile} visible={view === "office"} />
+              </Suspense>
             </div>
           )}
 

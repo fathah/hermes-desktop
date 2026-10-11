@@ -330,3 +330,9 @@ Legacy SSH sessions can be deleted without a dashboard. The selected connection 
 [[src/renderer/src/screens/Sessions/Sessions.tsx#Sessions]] keeps rows until deletion is acknowledged, reports failures, and refreshes after the attempt. In-flight results are discarded after changing connection/profile, updating connection settings, or unmounting. Confirmation remains explicit and concurrent delete submissions are blocked.
 
 The deletion command passes through [[src/main/ssh-command.ts#buildSshRemoteCommand]] before SSH executes it, preserving the POSIX interpreter boundary while leaving the selected IDs and profile on stdin.
+
+## Deferred Office loading
+
+The renderer imports Office only when that tab is first visited, so Chat startup does not depend on loading the optional Three.js scene.
+
+[[src/renderer/src/screens/Layout/Layout.tsx#Layout]] retains the existing visited-tab lifecycle with a Suspense boundary. [[electron.vite.config.ts]] discovers the Office dependency graph together, including SkeletonUtils, during dev prebundling. Production emits an independent Office chunk; switching tabs preserves its mounted state.
