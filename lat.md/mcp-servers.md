@@ -8,6 +8,8 @@ The MCP tab in [[src/renderer/src/screens/Tools/Tools.tsx]] lists servers as a t
 
 The columns are Server · Transport · Command/URL · Enabled.
 
+Direct Remote requests use [[src/main/remote-api.ts#remoteDashboardRequestJson]] for token or OAuth authentication and selected-profile routing. Authentication failures propagate; a missing catalog keeps its HTTP status so only that feature is reported unsupported.
+
 - **Add** — [[src/main/mcp-servers.ts#addMcpServer]] validates the input and rejects a duplicate name.
 - **Edit** — a per-row pencil opens the shared modal pre-filled with the server's values; saving calls [[src/main/mcp-servers.ts#updateMcpServer]], which upserts the entry **in place** (no delete-then-add gap so a mid-write failure can't lose the server) and only removes the old entry when the name changed — guarding first against colliding with another server. The modal has **Visual** and **JSON** modes (a toggle): Visual is the field form; JSON is a raw `Server JSON` editor (`command`/`args`/`env`/`url`/`auth`/`enabled`). The two stay in sync on toggle; on save the active mode is the source of truth (JSON is parsed + validated inline, and an `enabled` change there is applied via `setMcpServerEnabled` after the config write). Name stays a separate field in both modes.
 - **Remove** — [[src/main/mcp-servers.ts#removeMcpServer]].

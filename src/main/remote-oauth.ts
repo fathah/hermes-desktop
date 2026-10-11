@@ -10,10 +10,16 @@ import type { ConnectionConfig } from "./config";
 
 export const REMOTE_OAUTH_PARTITION = "persist:hermes-remote-oauth";
 
-const SESSION_COOKIE_SUFFIXES = [
+const SESSION_COOKIE_NAMES = [
   "hermes_session_at",
   "hermes_session_rt",
 ] as const;
+
+// The gateway prefixes session cookie names by deploy shape (upstream
+// `hermes_cli/dashboard_auth/cookies.py::_resolved_name`): `__Host-` on a
+// direct HTTPS gateway, `__Secure-` behind a path prefix, bare over loopback
+// HTTP. Without stripping them an HTTPS gateway's sign-in is never recognized.
+const COOKIE_NAME_PREFIXES = ["__Host-", "__Secure-"] as const;
 
 export type RemoteOAuthErrorCode =
   | "oauth_cancelled"
@@ -84,14 +90,21 @@ function getRemoteOAuthSession(): Session {
   return session.fromPartition(REMOTE_OAUTH_PARTITION);
 }
 
+function isSessionCookieName(name: string): boolean {
+  const bare = COOKIE_NAME_PREFIXES.reduce(
+    (value, prefix) =>
+      value.startsWith(prefix) ? value.slice(prefix.length) : value,
+    name,
+  );
+  return SESSION_COOKIE_NAMES.some(
+    (cookieName) => bare === cookieName || bare.endsWith(`_${cookieName}`),
+  );
+}
+
 export function cookiesHaveRemoteOAuthSession(
   cookies: Array<Pick<Cookie, "name">>,
 ): boolean {
-  return cookies.some((cookie) =>
-    SESSION_COOKIE_SUFFIXES.some(
-      (suffix) => cookie.name === suffix || cookie.name.endsWith(`_${suffix}`),
-    ),
-  );
+  return cookies.some((cookie) => isSessionCookieName(cookie.name));
 }
 
 export async function remoteOAuthSessionState(
@@ -426,4 +439,31 @@ export function openRemoteOAuthLogin(
         ),
       );
   });
+}
+
+/**
+ * Drop-in `fetch` for direct Remote dashboard calls. A bare `fetch` from the
+ * main process carries no OAuth cookie, so an OAuth dashboard answers 401.
+ * When the connection is Remote + OAuth (or auto with a signed-in session) the
+ * request runs in the persistent OAuth cookie partition instead.
+ */
+export async function remoteAuthFetch(
+  url: string,
+  init: RequestInit = {},
+  connection?: ConnectionConfig,
+): Promise<Response> {
+  const conn = connection ?? (await import("./config")).getConnectionConfig();
+  if (conn.mode === "remote") {
+    const useOAuth =
+      conn.remoteAuthMode === "oauth" ||
+      (conn.remoteAuthMode === "auto" &&
+        (await remoteOAuthSessionState(conn.remoteUrl)).signedIn);
+    if (useOAuth) {
+      return getRemoteOAuthSession().fetch(url, {
+        ...init,
+        credentials: "include",
+      });
+    }
+  }
+  return fetch(url, init);
 }

@@ -19,6 +19,7 @@ import {
 } from "./utils";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { readProfileMeta, defaultColorForName } from "./profile-meta";
+import { isMultiplexGatewayRunning } from "./gateway-liveness";
 
 const PROFILES_DIR = join(HERMES_HOME, "profiles");
 
@@ -142,7 +143,10 @@ async function countSkills(profilePath: string): Promise<number> {
   }
 }
 
-async function isGatewayRunning(profilePath: string): Promise<boolean> {
+async function isGatewayRunning(
+  profilePath: string,
+  profile: string,
+): Promise<boolean> {
   const pidFile = join(profilePath, "gateway.pid");
   try {
     const raw = (await fs.readFile(pidFile, "utf-8")).trim();
@@ -153,11 +157,15 @@ async function isGatewayRunning(profilePath: string): Promise<boolean> {
       : parseInt(raw, 10);
     const pid =
       typeof parsed === "number" && Number.isFinite(parsed) ? parsed : NaN;
-    if (isNaN(pid)) return false;
-    return pidIsAliveAs(pid, ["python", "pythonw"]);
+    if (!isNaN(pid) && pidIsAliveAs(pid, ["python", "pythonw"])) {
+      return true;
+    }
   } catch {
-    return false;
+    // A managed multiplexer has no per-profile PID file.
   }
+  return isMultiplexGatewayRunning(HERMES_HOME, profile, (pid) =>
+    pidIsAliveAs(pid, ["python", "pythonw"]),
+  );
 }
 
 async function getActiveProfileName(): Promise<string> {
@@ -190,7 +198,7 @@ export async function listProfiles(): Promise<ProfileInfo[]> {
     fileExists(join(HERMES_HOME, ".env")),
     fileExists(join(HERMES_HOME, "SOUL.md")),
     countSkills(HERMES_HOME),
-    isGatewayRunning(HERMES_HOME),
+    isGatewayRunning(HERMES_HOME, "default"),
     readProfileMeta("default"),
   ]);
 
@@ -233,7 +241,7 @@ export async function listProfiles(): Promise<ProfileInfo[]> {
             fileExists(join(profilePath, ".env")),
             fileExists(join(profilePath, "SOUL.md")),
             countSkills(profilePath),
-            isGatewayRunning(profilePath),
+            isGatewayRunning(profilePath, name),
             readProfileMeta(name),
           ]);
 

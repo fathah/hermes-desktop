@@ -252,6 +252,43 @@ describe("dashboardModelMatches", () => {
   it("does not require a live model for auto mode", () => {
     expect(dashboardModelMatches("auto", "whatever", null)).toBe(true);
   });
+
+  it("accepts a named providers: entry reported back under the bare custom namespace", () => {
+    expect(
+      dashboardModelMatches("omlx", "Qwen3.8-Whittle-MoE-27B-MLX-4bit", {
+        provider: "custom",
+        model: "Qwen3.8-Whittle-MoE-27B-MLX-4bit",
+        providers: [
+          {
+            slug: "omlx",
+            is_current: true,
+            models: ["Qwen3.8-Whittle-MoE-27B-MLX-4bit"],
+          },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects a named provider match when a different row is the one actually current", () => {
+    expect(
+      dashboardModelMatches("omlx", "Qwen3.8-Whittle-MoE-27B-MLX-4bit", {
+        provider: "custom",
+        model: "Qwen3.8-Whittle-MoE-27B-MLX-4bit",
+        providers: [
+          {
+            slug: "omlx",
+            is_current: false,
+            models: ["Qwen3.8-Whittle-MoE-27B-MLX-4bit"],
+          },
+          {
+            slug: "custom:lm",
+            is_current: true,
+            models: ["Qwen3.8-Whittle-MoE-27B-MLX-4bit"],
+          },
+        ],
+      }),
+    ).toBe(false);
+  });
 });
 
 describe("dashboard attachment sync", () => {
