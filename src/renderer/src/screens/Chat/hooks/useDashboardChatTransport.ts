@@ -74,7 +74,10 @@ interface FileAttachResponse {
 }
 
 interface DashboardPromptClient {
-  request<T = unknown>(method: string, params?: unknown): Promise<T>;
+  request<T = unknown>(
+    method: string,
+    params?: Record<string, unknown>,
+  ): Promise<T>;
 }
 
 interface EnsureDashboardRuntimeSessionParams {
@@ -122,6 +125,9 @@ interface UseDashboardChatTransportArgs {
    *  unavailable on a remote/SSH connection and the renderer is falling back to
    *  the legacy HTTP transport. Lets the UI surface a one-time notice. */
   onDashboardUnavailable?: (reason: string) => void;
+  /** Cosmetic activity for the visible pet; only accepted session events. */
+  onPetEvent?: (event: DashboardStreamEvent) => void;
+  onPetFailure?: () => void;
 }
 
 interface UseDashboardChatTransportResult {
@@ -1019,10 +1025,13 @@ export function useDashboardChatTransport({
   setToolProgress,
   setUsage,
   onDashboardUnavailable,
+  onPetEvent,
+  onPetFailure,
 }: UseDashboardChatTransportArgs): UseDashboardChatTransportResult {
   const clientRef = useRef<DashboardGatewayClient | null>(null);
   const connectingRef = useRef<Promise<DashboardGatewayClient> | null>(null);
   const clientGenerationRef = useRef(0);
+  const submissionGenerationRef = useRef(0);
   // Sticky "dashboard transport can't connect on this remote/SSH connection"
   // flag. The dashboard WebSocket (`/api/ws`) never connects against a tunneled
   // `hermes gateway` (issue #667), so once we've learned it's unavailable we
@@ -1252,6 +1261,21 @@ export function useDashboardChatTransport({
         return;
       }
       logDashboardEvent(event, "accepted", runtimeSessionId);
+      if (
+        onPetEvent &&
+        [
+          "tool.start",
+          "tool.generating",
+          "tool.complete",
+          "thinking.delta",
+          "reasoning.delta",
+          "approval.request",
+          "clarify.request",
+          "clarify.expire",
+          "message.complete",
+        ].includes(event.type)
+      )
+        onPetEvent(event);
 
       // A delegated child relays its activity into THIS conversation as
       // `subagent.*` events. That is application state for the in-chat roster
@@ -1524,6 +1548,7 @@ export function useDashboardChatTransport({
       connectionMode,
       flushDeltasNow,
       messagesRef,
+      onPetEvent,
       scheduleDeltaFlush,
       profile,
       subagentSessionKey,
@@ -1726,12 +1751,14 @@ export function useDashboardChatTransport({
 
   const ensureRuntimeSession = useCallback(
     async (
-      client: DashboardGatewayClient,
+      client: DashboardPromptClient,
       options: {
         excludeSeedUserId?: string | null;
         forceCreate?: boolean;
+        assertCurrent?: () => void;
       } = {},
     ): Promise<string> => {
+      options.assertCurrent?.();
       let targetSessionId = runtimeSessionIdRef.current;
       let justCreated = false;
 
@@ -1748,6 +1775,7 @@ export function useDashboardChatTransport({
           profile,
           storedSessionId: stored,
         });
+        options.assertCurrent?.();
         const recordRuntimeInfo = window.hermesAPI.recordAgentRuntimeInfo;
         if (typeof recordRuntimeInfo === "function") {
           void recordRuntimeInfo(response.info, profile, connectionId).catch(
@@ -1794,11 +1822,13 @@ export function useDashboardChatTransport({
             cwd: contextFolder,
           })
           .catch((err) => {
+            options.assertCurrent?.();
             lastSyncedCwdRef.current = null;
             console.warn("Failed to sync dashboard CWD:", err);
           });
       }
 
+      options.assertCurrent?.();
       return targetSessionId;
     },
     [
@@ -1813,8 +1843,9 @@ export function useDashboardChatTransport({
 
   const ensureSelectedModel = useCallback(
     async (
-      client: DashboardGatewayClient,
+      client: DashboardPromptClient,
       sessionId: string,
+      assertCurrent?: () => void,
     ): Promise<string> => {
       const command = dashboardModelCommand(provider, model);
       if (!command) return sessionId;
@@ -1825,12 +1856,13 @@ export function useDashboardChatTransport({
         await client
           .request("session.close", { session_id: targetSessionId })
           .catch(() => undefined);
+        assertCurrent?.();
         runtimeSessionIdRef.current = null;
         pendingApprovalsRef.current = [];
         storedSessionIdRef.current = storedSessionId;
         reasoningSegmentClosedRef.current = false;
         appliedModelRef.current = null;
-        return ensureRuntimeSession(client);
+        return ensureRuntimeSession(client, { assertCurrent });
       };
 
       const switchAndValidate = async (
@@ -1931,6 +1963,7 @@ export function useDashboardChatTransport({
       try {
         return await switchAndValidate(sessionId);
       } catch (err) {
+        assertCurrent?.();
         if (!isDashboardSlashWorkerExitError(err)) throw err;
         appliedModelRef.current = null;
         const freshSessionId = await resetRuntimeSession(sessionId);
@@ -1942,7 +1975,7 @@ export function useDashboardChatTransport({
 
   const syncDashboardAttachments = useCallback(
     async (
-      client: DashboardGatewayClient,
+      client: DashboardPromptClient,
       sessionId: string,
       attachments?: Attachment[],
     ): Promise<{ handled: boolean; refs: string[] }> => {
@@ -2014,6 +2047,21 @@ export function useDashboardChatTransport({
   const sendMessage = useCallback(
     async (text: string, attachments?: Attachment[]): Promise<boolean> => {
       if (!enabled) return false;
+      const submissionGeneration = ++submissionGenerationRef.current;
+      const clientGeneration = clientGenerationRef.current;
+      const conversationGeneration = conversationGenerationRef.current;
+      const submittedTurn =
+        pendingClarifyRef.current?.activeTurn ?? activeTurnRef.current;
+      const ownsLifetime = (): boolean =>
+        submissionGenerationRef.current === submissionGeneration &&
+        clientGenerationRef.current === clientGeneration &&
+        conversationGenerationRef.current === conversationGeneration;
+      const ownsSubmission = (): boolean =>
+        ownsLifetime() && activeTurnRef.current === submittedTurn;
+      const assertSubmission = (): void => {
+        if (!ownsSubmission())
+          throw new Error("Hermes dashboard submission was superseded");
+      };
       const pendingClarifyRequestId = pendingClarifyRef.current?.requestId;
       if (pendingClarifyRequestId) {
         try {
@@ -2024,8 +2072,13 @@ export function useDashboardChatTransport({
           }
           return true;
         } catch (err) {
+          if (
+            !ownsLifetime() ||
+            (activeTurnRef.current && activeTurnRef.current !== submittedTurn)
+          )
+            return true;
           const message = err instanceof Error ? err.message : String(err);
-          const activeTurn = activeTurnRef.current;
+          const activeTurn = submittedTurn;
           if (activeTurn) activeTurn.status = "failed";
           setMessages((prev) =>
             markActiveTurnFailed(prev, message, activeTurn),
@@ -2069,10 +2122,15 @@ export function useDashboardChatTransport({
           await recordContinuation(storedSessionId, items).catch(
             () => undefined,
           );
+          assertSubmission();
         }
       };
       const failActiveTurn = (message: string): true => {
-        const activeTurn = activeTurnRef.current;
+        // The native request is already handled; an obsolete reply must not
+        // fail a replacement turn or send it through the legacy fallback.
+        if (!ownsSubmission()) return true;
+        onPetFailure?.();
+        const activeTurn = submittedTurn;
         if (activeTurn) activeTurn.status = "failed";
         if (pendingApprovalsRef.current.length) {
           expirePendingApprovalsRef.current();
@@ -2116,6 +2174,7 @@ export function useDashboardChatTransport({
       try {
         client = await ensureClient();
       } catch (err) {
+        if (!ownsSubmission()) return true;
         // Dashboard was reachable but the chat WS wouldn't connect: do NOT fall
         // back to the /v1 path — over the dashboard tunnel /v1 doesn't exist and
         // 405s. Surface the error so the user retries on the same transport.
@@ -2133,6 +2192,20 @@ export function useDashboardChatTransport({
         return failActiveTurn(message);
       }
 
+      if (!ownsSubmission()) return true;
+      // Session/model/attachment helpers may mutate runtime refs after their
+      // awaits. Admit each response only while this submission still owns them.
+      const submissionClient: DashboardPromptClient = {
+        async request<T = unknown>(
+          method: string,
+          params?: Record<string, unknown>,
+        ): Promise<T> {
+          assertSubmission();
+          const result = await client.request<T>(method, params);
+          assertSubmission();
+          return result;
+        },
+      };
       try {
         let continuationItems: DesktopSessionContinuationItem[] = [];
         const forceCreateRuntime = recreateRuntimeSessionRef.current;
@@ -2143,18 +2216,21 @@ export function useDashboardChatTransport({
           );
           const staleRuntimeSessionId = runtimeSessionIdRef.current;
           if (staleRuntimeSessionId) {
-            await client
+            await submissionClient
               .request("session.close", { session_id: staleRuntimeSessionId })
               .catch(() => undefined);
+            assertSubmission();
           }
           runtimeSessionIdRef.current = null;
           pendingApprovalsRef.current = [];
           reasoningSegmentClosedRef.current = false;
           appliedModelRef.current = null;
         }
-        const runtimeSessionId = await ensureRuntimeSession(client, {
+        const runtimeSessionId = await ensureRuntimeSession(submissionClient, {
           forceCreate: forceCreateRuntime,
+          assertCurrent: assertSubmission,
         });
+        assertSubmission();
         if (
           lastRuntimeSessionWasCreatedRef.current ||
           pendingRecoveredContinuationRef.current.length > 0
@@ -2166,16 +2242,20 @@ export function useDashboardChatTransport({
         }
         await recordContinuationItems(continuationItems);
         const selectedSessionId = await ensureSelectedModel(
-          client,
+          submissionClient,
           runtimeSessionId,
+          assertSubmission,
         );
+        assertSubmission();
         await recordContinuationItems(mergePendingRecoveredContinuation([]));
         const syncedAttachments = await syncDashboardAttachments(
-          client,
+          submissionClient,
           selectedSessionId,
           attachments,
         );
+        assertSubmission();
         if (!syncedAttachments.handled) {
+          if (!ownsSubmission()) return true;
           if (fallbackOnUnavailable) return false;
           return failActiveTurn(
             "Hermes dashboard could not attach the selected file. Use Auto or Legacy to fall back to the legacy attachment path.",
@@ -2186,14 +2266,16 @@ export function useDashboardChatTransport({
           syncedAttachments.refs,
         );
         const approvalNonceBeforeSubmit = approvalNonceRef.current;
-        await submitDashboardPromptWithRecovery(client, {
+        await submitDashboardPromptWithRecovery(submissionClient, {
           canRecover: () =>
+            ownsSubmission() &&
             approvalNonceRef.current === approvalNonceBeforeSubmit,
           sessionId: selectedSessionId,
           storedSessionId: storedSessionIdRef.current,
           text: submitText,
           profile,
           onRecoveredSessionId: (recoveredSessionId, info) => {
+            assertSubmission();
             runtimeSessionIdRef.current = recoveredSessionId;
             if (cumulativeUsagePayload(info))
               cumulativeUsageRef.current.set(
@@ -2204,6 +2286,7 @@ export function useDashboardChatTransport({
         });
         return true;
       } catch (err) {
+        if (!ownsSubmission()) return true;
         appliedModelRef.current = null;
         recreateRuntimeSessionRef.current = true;
         const message = err instanceof Error ? err.message : String(err);
@@ -2221,6 +2304,7 @@ export function useDashboardChatTransport({
       ensureSelectedModel,
       syncDashboardAttachments,
       messagesRef,
+      onPetFailure,
       setIsLoading,
       setMessages,
       setToolProgress,

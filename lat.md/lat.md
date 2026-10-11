@@ -6,6 +6,7 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[chat-input]] — the unified chat composer surface and its theme-aware animated border treatment.
 - [[chat-performance]] — how chat rendering stays responsive through contained transcript rows, batched textarea resizing, and fixed-row slash-command virtualization.
 - [[chat-experience-preferences]] — user-message Markdown plus persisted completion-sound and native multi-language spell-check preferences.
+- [[shared-pets]] — the official Hermes pet gateway contract shared across profiles, gallery selection, sprite rendering, and live activity.
 - [[speech-playback]] — selected Local speech authority, bounded MiniMax synthesis and shared playback lifecycle.
 - [[speech-playback-tests]] — actual speech IPC and message lifecycle regressions.
 - [[model-context]] — the per-model context-window override that drives the context gauge and the agent's auto-compaction.

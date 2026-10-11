@@ -773,3 +773,135 @@ it("preserves approval-before-terminal order and wakes obsolete equal-authority 
     screen.queryByRole("button", { name: "chat.approval.once" }),
   ).toBeNull();
 });
+
+// @lat: [[shared-pets#Recovery regressions#Obsolete native replies]]
+it.each(["success", "rejection"] as const)(
+  "ignores an obsolete native %s after a replacement prompt without damaging its runtime or pet activity",
+  async (reply) => {
+    const f = await fixture();
+    const ordinary = gateway.request.getMockImplementation()!;
+    let complete!: () => void;
+    let promptCount = 0;
+    gateway.request.mockImplementation((method, params) => {
+      if (method === "prompt.submit" && ++promptCount === 1)
+        return new Promise((resolve, reject) => {
+          complete = () =>
+            reply === "success"
+              ? resolve({ status: "ok" })
+              : reject(new Error("obsolete prompt failed"));
+        });
+      return ordinary(method, params);
+    });
+    const events: Array<Record<string, unknown>> = [];
+    const listener = (event: Event): void => {
+      events.push((event as CustomEvent<Record<string, unknown>>).detail);
+    };
+    window.addEventListener("hermes-pet-activity", listener);
+    try {
+      renderChat();
+      await send();
+      await act(async () => f.rotateKey());
+      const stop = document.querySelector(".chat-stop-btn");
+      if (stop) fireEvent.click(stop);
+      await waitFor(() =>
+        expect(document.querySelector(".chat-stop-btn")).toBeNull(),
+      );
+      gateway.request.mockClear();
+      const box = screen.getByPlaceholderText("chat.typeMessage");
+      fireEvent.change(box, { target: { value: "replacement prompt" } });
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "chat.send" }),
+        ).not.toBeDisabled(),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "chat.send" }));
+      await waitFor(() =>
+        expect(gateway.request).toHaveBeenCalledWith(
+          "prompt.submit",
+          expect.objectContaining({ text: "replacement prompt" }),
+        ),
+      );
+      expect(document.querySelector(".chat-stop-btn")).not.toBeNull();
+      events.length = 0;
+      await act(async () => complete());
+      expect(events).toEqual([]);
+      expect(document.querySelector(".chat-stop-btn")).not.toBeNull();
+      expect(screen.queryByText("obsolete prompt failed")).toBeNull();
+      // The obsolete catch must not request a fresh runtime/model next time.
+      await act(async () =>
+        gateway.clients.at(-1)?.onEvent?.({
+          type: "message.complete",
+          session_id: "runtime-saved",
+          payload: { text: "replacement completed" },
+        }),
+      );
+      await waitFor(() =>
+        expect(document.querySelector(".chat-stop-btn")).toBeNull(),
+      );
+      gateway.request.mockClear();
+      fireEvent.change(box, { target: { value: "next native prompt" } });
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "chat.send" }),
+        ).not.toBeDisabled(),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "chat.send" }));
+      await waitFor(() =>
+        expect(gateway.request).toHaveBeenCalledWith(
+          "prompt.submit",
+          expect.objectContaining({
+            session_id: "runtime-saved",
+            text: "next native prompt",
+          }),
+        ),
+      );
+      expect(gateway.request).not.toHaveBeenCalledWith(
+        "session.close",
+        expect.anything(),
+      );
+      expect(gateway.request).not.toHaveBeenCalledWith(
+        "session.create",
+        expect.anything(),
+      );
+      expect(gateway.request).not.toHaveBeenCalledWith(
+        "session.resume",
+        expect.anything(),
+      );
+    } finally {
+      window.removeEventListener("hermes-pet-activity", listener);
+    }
+  },
+);
+
+// @lat: [[shared-pets#Recovery regressions#Current native failure]]
+it("retains a current native failure and its owning pet failure activity", async () => {
+  await fixture();
+  const ordinary = gateway.request.getMockImplementation()!;
+  gateway.request.mockImplementation((method, params) =>
+    method === "prompt.submit"
+      ? Promise.reject(new Error("current prompt failed"))
+      : ordinary(method, params),
+  );
+  const events: Array<Record<string, unknown>> = [];
+  const listener = (event: Event): void => {
+    events.push((event as CustomEvent<Record<string, unknown>>).detail);
+  };
+  window.addEventListener("hermes-pet-activity", listener);
+  try {
+    renderChat();
+    await send();
+    await screen.findByText("current prompt failed");
+    expect(document.querySelector(".chat-stop-btn")).toBeNull();
+    expect(events).toEqual([
+      expect.objectContaining({
+        connectionId: "a",
+        profile: "work",
+        runId: "run",
+        type: "turn.failed",
+        failed: true,
+      }),
+    ]);
+  } finally {
+    window.removeEventListener("hermes-pet-activity", listener);
+  }
+});

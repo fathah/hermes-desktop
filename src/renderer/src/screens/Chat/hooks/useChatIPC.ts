@@ -26,6 +26,7 @@ interface UseChatIPCArgs {
   setIsLoading: (loading: boolean) => void;
   setUsage: React.Dispatch<React.SetStateAction<UsageState | null>>;
   activeTurnRef: React.MutableRefObject<ActiveTurn | null>;
+  onPetFailure?: () => void;
 }
 
 /**
@@ -55,6 +56,7 @@ export function useChatIPC({
   setIsLoading,
   setUsage,
   activeTurnRef,
+  onPetFailure,
 }: UseChatIPCArgs): void {
   const reasoningSegmentClosedRef = useRef(false);
   const dbPollRef = useRef<ReturnType<typeof window.setInterval> | null>(null);
@@ -241,6 +243,7 @@ export function useChatIPC({
 
     const cleanupError = window.hermesAPI.onChatError((eventRunId, error) => {
       if (!eventMatchesRun(eventRunId, runId)) return;
+      onPetFailure?.();
       reasoningSegmentClosedRef.current = false;
       stopDbPolling();
       const activeTurn = activeTurnRef.current;
@@ -426,6 +429,7 @@ export function useChatIPC({
     setIsLoading,
     setUsage,
     activeTurnRef,
+    onPetFailure,
     stopDbPolling,
   ]);
 }

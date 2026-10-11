@@ -81,8 +81,10 @@ function installHermesApi(callbacks: ChatIpcCallbacks): {
 
 function Harness({
   sessionScopeId,
+  onPetFailure,
 }: {
   sessionScopeId: string | null;
+  onPetFailure?: () => void;
 }): React.JSX.Element {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [, setHermesSessionId] = useState<string | null>(sessionScopeId);
@@ -102,6 +104,7 @@ function Harness({
     setIsLoading,
     setUsage,
     activeTurnRef,
+    onPetFailure,
   });
 
   return (
@@ -117,6 +120,16 @@ afterEach(() => {
 });
 
 describe("useChatIPC session scoping", () => {
+  it("reports a legacy chat error to the pet before clearing loading", () => {
+    const callbacks: ChatIpcCallbacks = {};
+    installHermesApi(callbacks);
+    const onPetFailure = vi.fn();
+    render(<Harness sessionScopeId={null} onPetFailure={onPetFailure} />);
+    act(() => callbacks.error?.("run-1", "provider failed"));
+    expect(onPetFailure).toHaveBeenCalledOnce();
+    act(() => callbacks.error?.("other-run", "unrelated failure"));
+    expect(onPetFailure).toHaveBeenCalledOnce();
+  });
   it("ignores late DB refreshes from an old session after the visible chat is cleared", async () => {
     const callbacks: ChatIpcCallbacks = {};
     const api = installHermesApi(callbacks);

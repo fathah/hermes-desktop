@@ -24,6 +24,7 @@ import { useLocalCommands } from "./hooks/useLocalCommands";
 import {
   dashboardChatEnabledForConnection,
   useDashboardChatTransport,
+  completionFailed,
   estimateTranscriptTokens,
 } from "./hooks/useDashboardChatTransport";
 import { useI18n } from "../../components/useI18n";
@@ -61,6 +62,7 @@ import type {
   AgentSlashCommand,
 } from "./slash/types";
 import { shouldPlayCompletionSound } from "./chatNotifications";
+import type { DashboardRpcEvent } from "./dashboardGatewayClient";
 
 interface QueuedMessage {
   text: string;
@@ -597,6 +599,20 @@ function Chat({
 
   const visibleSessionScopeId = messages.length === 0 ? null : hermesSessionId;
 
+  const notifyPetFailure = useCallback(() => {
+    window.dispatchEvent(
+      new CustomEvent("hermes-pet-activity", {
+        detail: {
+          connectionId,
+          profile: profile ?? "default",
+          runId,
+          type: "turn.failed",
+          failed: true,
+        },
+      }),
+    );
+  }, [connectionId, profile, runId]);
+
   useChatIPC({
     runId,
     connectionId,
@@ -608,6 +624,7 @@ function Chat({
     setIsLoading,
     setUsage,
     activeTurnRef,
+    onPetFailure: notifyPetFailure,
   });
 
   // No parent-driven reset effects: each run is its own <Chat key={runId}>
@@ -767,6 +784,26 @@ function Chat({
     });
   }, [t]);
 
+  const handlePetEvent = useCallback(
+    (event: DashboardRpcEvent) => {
+      window.dispatchEvent(
+        new CustomEvent("hermes-pet-activity", {
+          detail: {
+            connectionId,
+            profile: profile ?? "default",
+            runId,
+            type: event.type,
+            payload: event.payload,
+            failed:
+              event.type === "message.complete" &&
+              completionFailed(event.payload),
+          },
+        }),
+      );
+    },
+    [connectionId, profile, runId],
+  );
+
   const dashboardTransport = useDashboardChatTransport({
     activeTurnRef,
     getConnectionAuthority,
@@ -788,6 +825,8 @@ function Chat({
     setToolProgress,
     setUsage,
     onDashboardUnavailable: handleDashboardUnavailable,
+    onPetEvent: handlePetEvent,
+    onPetFailure: notifyPetFailure,
   });
 
   const respondDashboardClarify = dashboardTransport.respondClarify;

@@ -3854,12 +3854,28 @@ body:has(.shell-vibrant),
 
 .content {
   flex: 1;
+  position: relative;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   /* Hairline seam so the content pane reads as a distinct material layer above
      the (darker / translucent) sidebar rather than one flat black field. */
   border-inline-start: 1px solid var(--border);
+}
+
+/* The mascot floats above the app surface without covering the composer. */
+.pet-floating {
+  position: absolute;
+  right: 24px;
+  bottom: 92px;
+  z-index: 30;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.26));
+}
+.pet-floating:active {
+  cursor: grabbing;
 }
 
 /* ========================================================================
@@ -11421,6 +11437,93 @@ body:has(.shell-vibrant),
 /* ── Settings modal ─────────────────────────────────────────────────────
    Global settings modal: grouped left nav + a single active pane on the
    right. Built on the same AppModal shell as the profile modal. */
+.pet-settings {
+  min-width: 0;
+}
+.pet-settings-error {
+  color: var(--error, #ef4444);
+  font-size: 12px;
+}
+.pet-settings-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.pet-settings-controls input[type="range"] {
+  width: 150px;
+  accent-color: var(--accent-text);
+}
+.pet-settings-controls input[type="checkbox"] {
+  accent-color: var(--accent-text);
+}
+.pet-settings-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+.pet-settings-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  min-width: 0;
+  overflow: hidden;
+}
+.pet-settings-adopt {
+  width: 100%;
+  min-height: 116px;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  border: 0;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.pet-settings-adopt.active {
+  outline: 2px solid var(--accent-text);
+  outline-offset: -2px;
+}
+.pet-settings-adopt img {
+  width: 64px;
+  height: 68px;
+  object-fit: contain;
+}
+.pet-settings-adopt small {
+  color: var(--text-muted);
+}
+.pet-settings-actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 4px;
+}
+.pet-settings-actions button {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+.pet-settings-actions button:hover {
+  color: var(--text-primary);
+}
+.pet-settings-rename {
+  padding: 4px;
+}
+.pet-settings-rename .settings-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
 .settings-modal-overlay {
   padding: 24px;
   /* Lighter scrim so the frosted glass reads as translucent. */
