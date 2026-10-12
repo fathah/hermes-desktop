@@ -1167,9 +1167,9 @@ function Layout({
           {visitedViews.has("tools") && (
             <div style={paneStyle("tools")}>
               <Tools
+                key={JSON.stringify([connectionId, activeProfile])}
                 profile={activeProfile}
                 showPlatformToolsets={!remoteMode}
-                remoteMode={remoteMode}
                 visible={view === "tools"}
                 onBrowseSkills={() => focusDiscover("skills")}
                 onBrowseMcps={() => focusDiscover("mcps")}
