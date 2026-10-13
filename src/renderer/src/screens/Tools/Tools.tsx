@@ -4,7 +4,6 @@ import { useI18n } from "../../components/useI18n";
 import { Wrench, Plug, Puzzle, Search, X } from "../../assets/icons";
 import { TOOL_ICONS, FALLBACK_TOOL_ICON } from "../../components/toolMeta";
 import Skills from "../Skills/Skills";
-import RemoteNotice from "../../components/RemoteNotice";
 import { OrbLoader } from "../../components/OrbLoader";
 
 interface ToolsetInfo {
@@ -17,7 +16,6 @@ interface ToolsetInfo {
 interface ToolsProps {
   profile?: string;
   showPlatformToolsets?: boolean;
-  remoteMode?: boolean;
   // Whether this pane is the active view. The Layout keeps tabs mounted and
   // toggles visibility, so we refetch on each show to pick up changes made
   // elsewhere (e.g. installing an MCP from Discover).
@@ -312,7 +310,6 @@ function TinyIcon({
 function Tools({
   profile,
   showPlatformToolsets = true,
-  remoteMode = false,
   visible = true,
   onBrowseSkills,
   onBrowseMcps,
@@ -644,11 +641,7 @@ function Tools({
 
       {activeTab === "skills" ? (
         <div className="tools-skills-pane">
-          {remoteMode ? (
-            <RemoteNotice feature="Skills" />
-          ) : (
-            <Skills profile={profile} embedded onBrowse={onBrowseSkills} />
-          )}
+          <Skills profile={profile} embedded onBrowse={onBrowseSkills} />
         </div>
       ) : (
         <div className="tools-pane">
