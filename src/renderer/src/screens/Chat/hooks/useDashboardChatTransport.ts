@@ -1935,7 +1935,12 @@ export function useDashboardChatTransport({
         if (!resolvedCommand) return targetSessionId;
         const key = `${targetSessionId}\n${dashboardProvider}\n${model}`;
         let slashResponse: SlashExecResponse | null = null;
-        if (appliedModelRef.current !== key) {
+        // The runtime can fall back to another model after a successful turn.
+        // A previous application is reusable only while fresh options agree.
+        if (
+          appliedModelRef.current !== key ||
+          !dashboardModelMatches(dashboardProvider, model, before)
+        ) {
           slashResponse = await client.request<SlashExecResponse>(
             "slash.exec",
             {

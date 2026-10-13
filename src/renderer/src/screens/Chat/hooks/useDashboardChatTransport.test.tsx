@@ -588,6 +588,7 @@ describe("useDashboardChatTransport recovery", () => {
     expect(dashboardMock.connect).toHaveBeenCalledWith("ws://fresh-dashboard");
   });
 
+  // @lat: [[model-selection#Live model reconciliation#Matching runtime preserves the no-op path]]
   it("does not request model.options twice when no model switch runs", async () => {
     dashboardMock.request.mockImplementation(async (method) => {
       if (method === "session.create") {
@@ -603,6 +604,14 @@ describe("useDashboardChatTransport recovery", () => {
 
     await act(async () => {
       await api.send?.("first");
+      dashboardMock.onEvent?.({
+        type: "message.complete",
+        session_id: "live",
+        payload: { text: "Done" },
+      });
+    });
+    await act(async () => {
+      api.activeTurnRef!.current = { ...activeRecoveryTurn };
       await api.send?.("second");
     });
 
@@ -612,6 +621,129 @@ describe("useDashboardChatTransport recovery", () => {
       3,
     );
   });
+
+  // @lat: [[model-selection#Live model reconciliation#Fallback drift is reconciled before submission]]
+  it.each([
+    ["fallback-provider", "fallback-model"],
+    ["bad-provider", "fallback-model"],
+    ["fallback-provider", "bad-model"],
+  ])(
+    "reapplies a cached selection after live drift to %s/%s",
+    async (fallbackProvider, fallbackModel) => {
+      let liveProvider = "bad-provider";
+      let liveModel = "bad-model";
+      dashboardMock.request.mockImplementation(async (method) => {
+        if (method === "session.create")
+          return { session_id: "live", stored_session_id: "stored" };
+        if (method === "model.options")
+          return { provider: liveProvider, model: liveModel, providers: [] };
+        if (method === "slash.exec") {
+          liveProvider = "bad-provider";
+          liveModel = "bad-model";
+        }
+        return {};
+      });
+      const api: HarnessApi = {};
+      render(<Harness api={api} initialConnectionMode="ssh" />);
+      await act(async () => {
+        await api.send?.("first");
+        dashboardMock.onEvent?.({
+          type: "message.complete",
+          session_id: "live",
+          payload: { text: "Done on fallback" },
+        });
+      });
+      liveProvider = fallbackProvider;
+      liveModel = fallbackModel;
+      dashboardMock.request.mockClear();
+
+      await act(async () => {
+        api.activeTurnRef!.current = { ...activeRecoveryTurn };
+        await api.send?.("second");
+      });
+
+      expect(
+        dashboardMock.request.mock.calls.map(([method]) => method),
+      ).toEqual([
+        "model.options",
+        "slash.exec",
+        "model.options",
+        "prompt.submit",
+      ]);
+      expect(dashboardMock.request).toHaveBeenCalledWith("slash.exec", {
+        session_id: "live",
+        command: "/model bad-model --provider bad-provider",
+      });
+      expect(dashboardMock.request).toHaveBeenLastCalledWith("prompt.submit", {
+        session_id: "live",
+        text: "second",
+      });
+      expect(api.activeTurnRef?.current?.status).toBe("running");
+    },
+  );
+
+  // @lat: [[model-selection#Live model reconciliation#Refused drift repair cannot submit to the fallback]]
+  it.each(["busy", "warning"] as const)(
+    "does not submit or replay a prompt when a drift repair returns %s",
+    async (refusal) => {
+      let drifted = false;
+      dashboardMock.request.mockImplementation(async (method) => {
+        if (method === "session.create")
+          return { session_id: "live", stored_session_id: "stored" };
+        if (method === "model.options")
+          return drifted
+            ? { provider: "fallback-provider", model: "fallback-model" }
+            : { provider: "bad-provider", model: "bad-model" };
+        if (method === "slash.exec" && drifted) {
+          if (refusal === "busy") throw new Error("session busy");
+          return {
+            warning: "Switch deferred until the running turn completes",
+          };
+        }
+        return {};
+      });
+      const api: HarnessApi = {};
+      render(<Harness api={api} initialConnectionMode="ssh" />);
+      await act(async () => {
+        await api.send?.("first");
+        dashboardMock.onEvent?.({
+          type: "message.complete",
+          session_id: "live",
+          payload: { text: "Done" },
+        });
+      });
+      drifted = true;
+      dashboardMock.request.mockClear();
+
+      await act(async () => {
+        api.activeTurnRef!.current = { ...activeRecoveryTurn };
+        await api.send?.("second");
+      });
+
+      expect(dashboardMock.request).toHaveBeenCalledWith("slash.exec", {
+        session_id: "live",
+        command: "/model bad-model --provider bad-provider",
+      });
+      const methods = dashboardMock.request.mock.calls.map(
+        ([method]) => method,
+      );
+      expect(methods).not.toContain("prompt.submit");
+      expect(methods).not.toContain("session.close");
+      expect(methods).not.toContain("session.create");
+      expect(methods).not.toContain("session.interrupt");
+      expect(api.isLoading).toBe(false);
+      expect(api.activeTurnRef?.current).toBeNull();
+      expect(
+        api.messages?.some(
+          (message) =>
+            "error" in message &&
+            message.error?.includes(
+              refusal === "busy" ? "session busy" : "Switch deferred",
+            ),
+        ),
+      ).toBe(true);
+    },
+  );
 
   it("surfaces OAuth login requirements without legacy fallback", async () => {
     // @lat: [[remote-dashboard-oauth#Test specifications#OAuth no-fallback]]
