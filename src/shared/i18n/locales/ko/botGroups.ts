@@ -1,0 +1,41 @@
+export default {
+  title: "봇 그룹",
+  experimental: "실험 기능 · 로컬 설치 전용",
+  create: "새 그룹",
+  refresh: "새로고침",
+  empty: "아직 그룹이 없습니다.",
+  more: "그룹 더 보기",
+  intro:
+    "에이전트 2~6개와 협업하세요. 공유 컨텍스트와 실행은 Hermes가 관리합니다.",
+  unavailable:
+    "봇 그룹을 사용하려면 실험용 브리지와 Hermes 그룹 프로토콜 v2 런타임이 필요합니다.",
+  connecting: "연결 중…",
+  noDriver: "그룹 워커를 사용할 수 없습니다. Hermes 대시보드를 확인하세요.",
+  blocked: "조치가 필요합니다. 아래 대기 중인 요청을 검토하세요.",
+  working: "에이전트가 작업 중입니다…",
+  ready: "준비됨",
+  stop: "그룹 중지",
+  name: "그룹 이름",
+  selectMembers: "에이전트 프로필을 2~6개 선택하세요",
+  cancel: "취소",
+  messages: "그룹 메시지",
+  you: "나",
+  approval: "승인 필요",
+  once: "한 번 허용",
+  deny: "거부",
+  retry: "작업 재시도",
+  confirmRetry: "결과를 확인했습니다. 재시도",
+  retryWarning:
+    "이 작업의 결과가 확실하지 않습니다. 재시도하면 외부 작업이 반복될 수 있으니 먼저 결과를 확인하세요.",
+  sendUnknown:
+    "전송이 확인되지 않았습니다. 같은 요청을 안전하게 다시 보내려면 메시지를 바꾸지 말고 다시 전송하세요.",
+  composeHint:
+    "@로 멤버를 지정하거나 모두에게 보내세요. 새 메시지를 보내면 진행 중인 논의의 방향이 바뀝니다.",
+  placeholder: "에이전트에게 메시지 보내기…",
+  send: "전송",
+  requestFailed: "그룹 요청에 실패했습니다.",
+  turn_failed: "에이전트 하나가 실패했습니다. 그룹 상태를 확인하세요.",
+  turn_cancelled: "에이전트 턴이 취소되었습니다.",
+  turn_deferred: "확인이 필요한 에이전트 턴이 있습니다.",
+  recent: "최근 이벤트 500개를 표시합니다. 전체 기록은 Hermes에 남아 있습니다.",
+};

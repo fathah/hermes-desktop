@@ -184,6 +184,30 @@ import soulJa from "./locales/ja/soul";
 import memoryJa from "./locales/ja/memory";
 import installJa from "./locales/ja/install";
 import constantsJa from "./locales/ja/constants";
+import botGroupsKo from "./locales/ko/botGroups";
+import commonKo from "./locales/ko/common";
+import navigationKo from "./locales/ko/navigation";
+import discoverKo from "./locales/ko/discover";
+import welcomeKo from "./locales/ko/welcome";
+import setupKo from "./locales/ko/setup";
+import chatKo from "./locales/ko/chat";
+import settingsKo from "./locales/ko/settings";
+import toolsKo from "./locales/ko/tools";
+import sessionsKo from "./locales/ko/sessions";
+import modelsKo from "./locales/ko/models";
+import providersKo from "./locales/ko/providers";
+import officeKo from "./locales/ko/office";
+import errorsKo from "./locales/ko/errors";
+import schedulesKo from "./locales/ko/schedules";
+import skillsKo from "./locales/ko/skills";
+import gatewayKo from "./locales/ko/gateway";
+import agentsKo from "./locales/ko/agents";
+import soulKo from "./locales/ko/soul";
+import memoryKo from "./locales/ko/memory";
+import installKo from "./locales/ko/install";
+import constantsKo from "./locales/ko/constants";
+import kanbanKo from "./locales/ko/kanban";
+import diagnoseKo from "./locales/ko/diagnose";
 import commonPt from "./locales/pt-BR/common";
 import navigationPt from "./locales/pt-BR/navigation";
 import welcomePt from "./locales/pt-BR/welcome";
@@ -533,6 +557,34 @@ export const resources = {
       memory: memoryJa,
       install: installJa,
       constants: constantsJa,
+    },
+  },
+  ko: {
+    translation: {
+      botGroups: botGroupsKo,
+      common: commonKo,
+      navigation: navigationKo,
+      discover: discoverKo,
+      welcome: welcomeKo,
+      setup: setupKo,
+      chat: chatKo,
+      settings: settingsKo,
+      tools: toolsKo,
+      sessions: sessionsKo,
+      models: modelsKo,
+      providers: providersKo,
+      office: officeKo,
+      errors: errorsKo,
+      schedules: schedulesKo,
+      skills: skillsKo,
+      gateway: gatewayKo,
+      agents: agentsKo,
+      soul: soulKo,
+      memory: memoryKo,
+      install: installKo,
+      constants: constantsKo,
+      kanban: kanbanKo,
+      diagnose: diagnoseKo,
     },
   },
   tr: {

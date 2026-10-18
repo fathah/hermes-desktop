@@ -49,6 +49,10 @@ describe("shared i18n", () => {
     expect(t("welcome.title", "pl")).toBe("Witamy w Hermes");
   });
 
+  it("returns ko text when available", () => {
+    expect(t("welcome.title", "ko")).toBe("Hermes One에 오신 것을 환영합니다");
+  });
+
   it("returns he text when available", () => {
     expect(t("welcome.title", "he")).toBe("ברוכים הבאים ל-Hermes");
   });
@@ -73,6 +77,12 @@ describe("shared i18n", () => {
   it("preserves interpolation placeholders in pl", () => {
     expect(t("common.updateAvailable", "pl", { version: "1.2.3" })).toBe(
       "Aktualizacja v1.2.3",
+    );
+  });
+
+  it("preserves interpolation placeholders in ko", () => {
+    expect(t("common.updateAvailable", "ko", { version: "1.2.3" })).toBe(
+      "업데이트 v1.2.3",
     );
   });
 });
