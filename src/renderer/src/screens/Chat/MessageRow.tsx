@@ -6,6 +6,7 @@ import { OrbLoader } from "../../components/OrbLoader";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
 import { AttachmentChip } from "../../components/AttachmentChip";
 import { MediaSegmentView } from "../../components/MediaImage";
+import { InlinePreview } from "../../components/InlinePreview";
 import { useI18n } from "../../components/useI18n";
 import { parseMediaTokens, cleanLeakedToolTags } from "./mediaUtils";
 import { SpeechButton } from "./SpeechButton";
@@ -317,6 +318,13 @@ export const MessageRow = memo(function MessageRow({
                     {segment.value}
                   </AgentMarkdown>
                 ) : null
+              ) : segment.type === "preview" ? (
+                <InlinePreview
+                  key={`p-${segment.start}`}
+                  file={segment.attrs.file}
+                  raw={segment.raw}
+                  height={segment.attrs.height}
+                />
               ) : (
                 <MediaSegmentView
                   key={`m-${segment.start}`}

@@ -544,6 +544,7 @@ interface HermesAPI {
   readMediaFile: (filePath: string) => Promise<string | null>;
   saveMediaFile: (src: string, name: string) => Promise<boolean>;
   mediaFileExists: (filePath: string) => Promise<boolean>;
+  readPreviewFile: (filePath: string) => Promise<string | null>;
   showMediaMenu: (
     src: string,
     name: string,

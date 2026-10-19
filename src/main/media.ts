@@ -152,6 +152,26 @@ export function mediaFileExists(filePath: string): boolean {
   }
 }
 
+const MAX_PREVIEW_BYTES = 4 * 1024 * 1024;
+const PREVIEW_EXT_RE = /\.(html?|xhtml)$/i;
+
+/**
+ * Read a local HTML file as UTF-8 text for the `::preview{file="…"}`
+ * transcript directive. Returns null when the path is missing, not an HTML
+ * file, too large, or unreadable — the renderer then falls back to showing
+ * the directive verbatim rather than a broken frame.
+ */
+export function readHtmlFileText(filePath: string): string | null {
+  try {
+    if (!filePath || !PREVIEW_EXT_RE.test(filePath)) return null;
+    if (!existsSync(filePath) || statSync(filePath).size > MAX_PREVIEW_BYTES)
+      return null;
+    return readFileSync(filePath, "utf8");
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Prompt the user for a destination and write `src` there. `src` may be a
  * `data:` URL, an http(s) URL, or a local filesystem path. Returns true on
