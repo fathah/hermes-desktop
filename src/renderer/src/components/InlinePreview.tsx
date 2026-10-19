@@ -120,6 +120,9 @@ export function InlinePreview({
 
   useEffect(() => {
     let cancelled = false;
+    // Clear the previous error on every (re)read so a relative path that
+    // failed before its workspace was linked can recover once it is linked.
+    setFailed(false);
     window.hermesAPI
       .readPreviewFile(file, workspace ?? undefined)
       .then((text) => {
