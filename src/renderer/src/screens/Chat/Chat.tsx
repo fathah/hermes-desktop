@@ -1012,6 +1012,24 @@ function Chat({
     handleBackgroundRef.current = actions.handleBackground;
   });
 
+  // Inline-preview widget intents: `data-hermes-send` / `window.hermes.send`
+  // inside a `::preview` frame dispatch `inline-preview:send`, routed here
+  // through the ordinary send path so a widget's "Refresh" button wakes the
+  // agent. InlinePreview already validated the message (type, token, length,
+  // throttle); the prompt is sent as a normal user turn.
+  useEffect(() => {
+    const handleWidgetIntent = (e: Event): void => {
+      const customEvent = e as CustomEvent<string>;
+      const prompt =
+        typeof customEvent.detail === "string" ? customEvent.detail.trim() : "";
+      if (!prompt) return;
+      void handleSendRef.current(prompt).catch(() => undefined);
+    };
+    document.addEventListener("inline-preview:send", handleWidgetIntent);
+    return () =>
+      document.removeEventListener("inline-preview:send", handleWidgetIntent);
+  }, []);
+
   // Drain queued messages one at a time when the agent finishes.
   useEffect(() => {
     if (isLoading) return;
@@ -1364,6 +1382,7 @@ function Chat({
                   profile={profile}
                   connectionId={connectionId}
                   speechEnabled={active && connectionMode === "local"}
+                  contextFolder={contextFolder}
                 />
               )}
               <div ref={bottomRef} />

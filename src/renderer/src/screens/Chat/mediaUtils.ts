@@ -1,3 +1,4 @@
+// @lat: [[inline-preview#Inline preview directive]]
 /**
  * Parsing for agent-delivered media (issue #299).
  *
@@ -107,6 +108,17 @@ const STANDALONE_CODE_PATH_RE = new RegExp(
   "gi",
 );
 
+// `::preview{file="…"}` — render a workspace HTML file live in the message.
+// Ported from Nous Research's apps/desktop transcript-directive system.
+// Recognised anywhere a word can start, so `std::vector` is never a
+// directive; the brace group and attribute values are bounded so adversarial
+// input is never scanned unbounded.
+const PREVIEW_DIRECTIVE_RE =
+  /(?<=^|\s)::([a-z][a-z0-9-]{0,63})(?:\{([^{}]{0,1024})\})?/g;
+const PREVIEW_ATTR_RE = /([a-z][\w-]{0,63})=(?:"([^"]*)"|'([^']*)')/gi;
+// Only HTML is inline-renderable; anything else stays literal text.
+const PREVIEW_FILE_RE = /\.(?:html?|xhtml)$/i;
+
 export interface MediaToken {
   /** The resolved path or URL. */
   src: string;
@@ -116,6 +128,14 @@ export interface MediaToken {
   isImage: boolean;
   /** Last path/URL segment, for download filenames and alt text. */
   name: string;
+}
+
+/** Parsed, untrusted `::preview{…}` attributes. */
+export interface PreviewAttrs {
+  /** The HTML file to render inline (`.html`/`.htm`/`.xhtml`). */
+  file: string;
+  /** Optional starting height in px; content measurement overrides it. */
+  height?: string;
 }
 
 export type MediaSegment =
@@ -140,6 +160,17 @@ export type MediaSegment =
       /** Character offset of this segment in the original content string —
        *  same stability rationale as the text segment's `start`. */
       start: number;
+    }
+  | {
+      type: "preview";
+      /** Parsed, untrusted `::preview{…}` attributes (`file`, optional `height`). */
+      attrs: PreviewAttrs;
+      /** Exact original `::preview{…}` source text; re-rendered verbatim when
+       *  the file can't be read, so a broken directive never becomes a dead
+       *  frame. */
+      raw: string;
+      /** Character offset — stable React key while streaming. */
+      start: number;
     };
 
 interface Hit {
@@ -149,6 +180,13 @@ interface Hit {
   raw: string;
   source: "media-token" | "bare-path";
   origin?: "markdown-image";
+}
+
+interface PreviewHit {
+  start: number;
+  end: number;
+  attrs: PreviewAttrs;
+  raw: string;
 }
 
 function toToken(raw: string, wasQuoted: boolean): MediaToken | null {
@@ -164,6 +202,17 @@ function toToken(raw: string, wasQuoted: boolean): MediaToken | null {
     isImage: /^data:image\//i.test(src) || IMAGE_EXT.test(src),
     name,
   };
+}
+
+/** Parse `key="value"` / `key='value'` attributes from a `::preview{…}`
+ *  body. Unquoted values are ignored (they are usually model output that
+ *  half-parsed) so a malformed directive never renders a broken frame. */
+function parsePreviewAttrs(body: string | undefined): PreviewAttrs {
+  const attrs: Record<string, string> = {};
+  for (const pair of (body ?? "").matchAll(PREVIEW_ATTR_RE)) {
+    attrs[pair[1].toLowerCase()] = pair[2] ?? pair[3] ?? "";
+  }
+  return { file: attrs.file ?? "", height: attrs.height };
 }
 
 function isAbsoluteFileLike(src: string): boolean {
@@ -182,18 +231,41 @@ function markdownDestination(raw: string): string {
     : trimmed;
 }
 
-/** Char ranges of ``` fenced blocks and `inline` code spans. */
+/** Char ranges of ```/~~~ fenced blocks and `inline` code spans. Open (unclosed)
+ *  fences count too: while a message streams the closing fence hasn't arrived,
+ *  so everything from the opener to the end of content is still code. */
 function codeRanges(content: string): Array<[number, number]> {
   const ranges: Array<[number, number]> = [];
   let m: RegExpExecArray | null;
-  const fenced = /```[\s\S]*?```/g;
+
+  // Closed fenced blocks — CommonMark allows ``` and ~~~ (3+ chars).
+  const fenced = /(`{3,}|~{3,})[^\n]*\n[\s\S]*?\n?[ \t]*\1[ \t]*(?=\n|$)/g;
   while ((m = fenced.exec(content)) !== null) {
     ranges.push([m.index, m.index + m[0].length]);
   }
+
   const inline = /`[^`\n]+`/g;
   while ((m = inline.exec(content)) !== null) {
     ranges.push([m.index, m.index + m[0].length]);
   }
+
+  // Open fence (no closer): the last unmatched opener swallows the rest.
+  const openFence = /(?:^|\n)[ \t]*(`{3,}|~{3,})[^\n]*/g;
+  let lastOpen: { at: number; fence: string } | null = null;
+  while ((m = openFence.exec(content)) !== null) {
+    const fence = m[1];
+    const at = m.index + m[0].lastIndexOf(fence);
+    if (content.indexOf(fence, at + fence.length) === -1) {
+      lastOpen = { at, fence };
+    }
+  }
+  if (
+    lastOpen &&
+    !ranges.some(([s, e]) => lastOpen!.at >= s && lastOpen!.at < e)
+  ) {
+    ranges.push([lastOpen.at, content.length]);
+  }
+
   return ranges;
 }
 
@@ -235,7 +307,27 @@ export function parseMediaTokens(content: string): MediaSegment[] {
   const code = codeRanges(content);
   const markdownDestinations = markdownDestinationRanges(content);
   const hits: Hit[] = [];
+  const previewHits: PreviewHit[] = [];
+  // Spans of every `::preview{…}` directive (valid or not) so the media
+  // passes never treat a path inside a directive as a bare file path.
+  const previewSpans: Array<[number, number]> = [];
   let m: RegExpExecArray | null;
+
+  // `::preview{file="…"}` — render a workspace HTML file inline (ported from
+  // Nous Research's apps/desktop). Recognised before the media passes so a
+  // directive is never misread as a bare path; only HTML targets are
+  // inline-renderable, anything else stays literal text.
+  PREVIEW_DIRECTIVE_RE.lastIndex = 0;
+  while ((m = PREVIEW_DIRECTIVE_RE.exec(content)) !== null) {
+    if (inCode(m.index, code)) continue;
+    const start = m.index;
+    const end = start + m[0].length;
+    previewSpans.push([start, end]);
+    if (m[1] !== "preview") continue;
+    const attrs = parsePreviewAttrs(m[2]);
+    if (!attrs.file || !PREVIEW_FILE_RE.test(attrs.file)) continue;
+    previewHits.push({ start, end, attrs, raw: m[0] });
+  }
 
   // 0) Markdown images: ![alt](C:\path\image.png), ![alt](/path),
   // or direct image sources such as data:image/... . Direct markdown images
@@ -391,6 +483,9 @@ export function parseMediaTokens(content: string): MediaSegment[] {
   );
   const uniqueHits: Hit[] = [];
   for (const hit of hits) {
+    // A path inside a `::preview{…}` directive is not media — the directive
+    // owns that span (rendered inline, or left verbatim if invalid).
+    if (previewSpans.some(([s, e]) => hit.start < e && hit.end > s)) continue;
     if (
       hasDirectMarkdownImage &&
       hit.origin !== "markdown-image" &&
@@ -405,24 +500,58 @@ export function parseMediaTokens(content: string): MediaSegment[] {
     uniqueHits.push(hit);
   }
 
+  // Merge media hits and preview directives into one ordered replacement list
+  // so the two segment kinds interleave with the surrounding text correctly.
+  interface Replacement {
+    start: number;
+    end: number;
+    kind: "media" | "preview";
+    hit?: Hit;
+    preview?: PreviewHit;
+  }
+  const replacements: Replacement[] = [
+    ...uniqueHits.map((hit) => ({
+      start: hit.start,
+      end: hit.end,
+      kind: "media" as const,
+      hit,
+    })),
+    ...previewHits.map((preview) => ({
+      start: preview.start,
+      end: preview.end,
+      kind: "preview" as const,
+      preview,
+    })),
+  ].sort((a, b) => a.start - b.start);
+
   const segments: MediaSegment[] = [];
   let last = 0;
-  for (const h of uniqueHits) {
-    if (h.start > last) {
+  for (const r of replacements) {
+    if (r.start < last) continue; // swallowed by an earlier replacement
+    if (r.start > last) {
       segments.push({
         type: "text",
-        value: content.slice(last, h.start),
+        value: content.slice(last, r.start),
         start: last,
       });
     }
-    segments.push({
-      type: "media",
-      token: h.token,
-      raw: h.raw,
-      source: h.source,
-      start: h.start,
-    });
-    last = h.end;
+    if (r.kind === "media" && r.hit) {
+      segments.push({
+        type: "media",
+        token: r.hit.token,
+        raw: r.hit.raw,
+        source: r.hit.source,
+        start: r.hit.start,
+      });
+    } else if (r.kind === "preview" && r.preview) {
+      segments.push({
+        type: "preview",
+        attrs: r.preview.attrs,
+        raw: r.preview.raw,
+        start: r.preview.start,
+      });
+    }
+    last = r.end;
   }
   if (last < content.length) {
     segments.push({ type: "text", value: content.slice(last), start: last });

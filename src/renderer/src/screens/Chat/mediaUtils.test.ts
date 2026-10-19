@@ -444,6 +444,70 @@ describe("parseMediaTokens (issue #299)", () => {
   });
 });
 
+describe("parseMediaTokens ::preview directives", () => {
+  it("extracts a ::preview{file=...} directive as a preview segment", () => {
+    const segs = parseMediaTokens('::preview{file="/tmp/widget.html"}');
+    expect(segs).toHaveLength(1);
+    expect(segs[0]).toMatchObject({
+      type: "preview",
+      raw: '::preview{file="/tmp/widget.html"}',
+      start: 0,
+      attrs: { file: "/tmp/widget.html" },
+    });
+  });
+
+  it("parses a height attribute and keeps surrounding prose", () => {
+    const segs = parseMediaTokens(
+      "intro\n::preview{file=\"a.html\" height='480'}\noutro",
+    );
+    const preview = segs.find((s) => s.type === "preview");
+    expect(preview).toMatchObject({
+      type: "preview",
+      attrs: { file: "a.html", height: "480" },
+    });
+    expect(segs[0]).toEqual({ type: "text", value: "intro\n", start: 0 });
+    expect(segs[segs.length - 1].type).toBe("text");
+  });
+
+  it("does NOT parse an unquoted file attribute", () => {
+    const segs = parseMediaTokens("::preview{file=widget.html}");
+    expect(segs.every((s) => s.type === "text")).toBe(true);
+  });
+
+  it("does NOT treat C++ scope resolution as a directive", () => {
+    const segs = parseMediaTokens(
+      'std::vector<int> and ::preview{file="x.html"}',
+    );
+    expect(segs.some((s) => s.type === "preview")).toBe(true);
+    expect(
+      segs
+        .filter((s) => s.type === "text")
+        .map((s) => s.value)
+        .join(""),
+    ).toContain("std::vector<int>");
+  });
+
+  it("ignores a directive inside a fenced code block", () => {
+    const segs = parseMediaTokens('```\n::preview{file="x.html"}\n```');
+    expect(segs.every((s) => s.type === "text")).toBe(true);
+  });
+
+  it("leaves a non-HTML target verbatim instead of extracting its path", () => {
+    const segs = parseMediaTokens('::preview{file="/tmp/x.svg"}');
+    expect(segs.every((s) => s.type === "text")).toBe(true);
+  });
+
+  it("ignores a directive inside a ~~~ fenced code block", () => {
+    const segs = parseMediaTokens('~~~\n::preview{file="x.html"}\n~~~');
+    expect(segs.every((s) => s.type === "text")).toBe(true);
+  });
+
+  it("ignores a directive inside an open (streaming) code fence", () => {
+    const segs = parseMediaTokens('```\n::preview{file="x.html"}');
+    expect(segs.every((s) => s.type === "text")).toBe(true);
+  });
+});
+
 describe("cleanLeakedToolTags", () => {
   it("extracts the answer from a leaked skill_view tag", () => {
     const raw =
