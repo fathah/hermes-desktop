@@ -231,18 +231,41 @@ function markdownDestination(raw: string): string {
     : trimmed;
 }
 
-/** Char ranges of ``` fenced blocks and `inline` code spans. */
+/** Char ranges of ```/~~~ fenced blocks and `inline` code spans. Open (unclosed)
+ *  fences count too: while a message streams the closing fence hasn't arrived,
+ *  so everything from the opener to the end of content is still code. */
 function codeRanges(content: string): Array<[number, number]> {
   const ranges: Array<[number, number]> = [];
   let m: RegExpExecArray | null;
-  const fenced = /```[\s\S]*?```/g;
+
+  // Closed fenced blocks — CommonMark allows ``` and ~~~ (3+ chars).
+  const fenced = /(`{3,}|~{3,})[^\n]*\n[\s\S]*?\n?[ \t]*\1[ \t]*(?=\n|$)/g;
   while ((m = fenced.exec(content)) !== null) {
     ranges.push([m.index, m.index + m[0].length]);
   }
+
   const inline = /`[^`\n]+`/g;
   while ((m = inline.exec(content)) !== null) {
     ranges.push([m.index, m.index + m[0].length]);
   }
+
+  // Open fence (no closer): the last unmatched opener swallows the rest.
+  const openFence = /(?:^|\n)[ \t]*(`{3,}|~{3,})[^\n]*/g;
+  let lastOpen: { at: number; fence: string } | null = null;
+  while ((m = openFence.exec(content)) !== null) {
+    const fence = m[1];
+    const at = m.index + m[0].lastIndexOf(fence);
+    if (content.indexOf(fence, at + fence.length) === -1) {
+      lastOpen = { at, fence };
+    }
+  }
+  if (
+    lastOpen &&
+    !ranges.some(([s, e]) => lastOpen!.at >= s && lastOpen!.at < e)
+  ) {
+    ranges.push([lastOpen.at, content.length]);
+  }
+
   return ranges;
 }
 

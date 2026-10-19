@@ -16,8 +16,8 @@ import {
   statSync,
   rmSync,
 } from "fs";
-import { join, extname } from "path";
-import { tmpdir } from "os";
+import { extname, isAbsolute, join, resolve } from "path";
+import { homedir, tmpdir } from "os";
 import { createHash } from "crypto";
 import { BrowserWindow, dialog } from "electron";
 
@@ -157,16 +157,27 @@ const PREVIEW_EXT_RE = /\.(html?|xhtml)$/i;
 
 /**
  * Read a local HTML file as UTF-8 text for the `::preview{file="…"}`
- * transcript directive. Returns null when the path is missing, not an HTML
+ * transcript directive. Relative paths resolve against `baseDir` (the
+ * session's linked workspace), `~` expands to the user's home, and absolute
+ * paths are used as-is. Returns null when the path is missing, not an HTML
  * file, too large, or unreadable — the renderer then falls back to showing
  * the directive verbatim rather than a broken frame.
  */
-export function readHtmlFileText(filePath: string): string | null {
+export function readHtmlFileText(
+  filePath: string,
+  baseDir?: string,
+): string | null {
   try {
     if (!filePath || !PREVIEW_EXT_RE.test(filePath)) return null;
-    if (!existsSync(filePath) || statSync(filePath).size > MAX_PREVIEW_BYTES)
+    let resolved = filePath;
+    if (filePath === "~" || filePath.startsWith("~/")) {
+      resolved = join(homedir(), filePath.slice(1));
+    } else if (!isAbsolute(filePath) && baseDir) {
+      resolved = resolve(baseDir, filePath);
+    }
+    if (!existsSync(resolved) || statSync(resolved).size > MAX_PREVIEW_BYTES)
       return null;
-    return readFileSync(filePath, "utf8");
+    return readFileSync(resolved, "utf8");
   } catch {
     return null;
   }

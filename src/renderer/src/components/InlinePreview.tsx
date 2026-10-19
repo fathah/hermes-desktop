@@ -73,11 +73,12 @@ function measurementScript(token: string): string {
 }
 
 /**
- * Gives the widget its ONE voice: `window.hermes.send(prompt)` posts the
- * prompt up tagged with the mount token, and a capture-phase click listener
- * wires declarative `data-hermes-send="…"` on any element with zero script.
- * The parent validates (type, token, length, throttle) and routes an accepted
- * prompt through the chat send path; nothing else crosses the frame boundary.
+ * The widget's ONE voice: a capture-phase click listener on `data-hermes-send`
+ * posts the prompt up tagged with the mount token. Only TRUSTED user clicks
+ * are accepted (`isTrusted`) and no programmatic `window.hermes.send` is
+ * exposed, so a script or load handler in the frame cannot impersonate the
+ * user and start an agent turn. The parent validates (type, token, length,
+ * throttle) and routes an accepted prompt through the chat send path.
  */
 function intentScript(token: string): string {
   return (
@@ -87,9 +88,8 @@ function intentScript(token: string): string {
     "parent.postMessage({type:" +
     JSON.stringify(INTENT_MESSAGE_TYPE) +
     ",token:t,prompt:p.trim()},\"*\")}" +
-    "window.hermes={send:send};" +
-    "addEventListener(\"click\",function(e){var el=e.target&&e.target.closest?" +
-    "e.target.closest(\"[data-hermes-send]\"):null;" +
+    "addEventListener(\"click\",function(e){if(!e.isTrusted)return;" +
+    "var el=e.target&&e.target.closest?e.target.closest(\"[data-hermes-send]\"):null;" +
     "if(el)send(el.getAttribute(\"data-hermes-send\")||\"\")},true)})()</script>"
   );
 }
@@ -104,10 +104,13 @@ export function InlinePreview({
   file,
   raw,
   height,
+  workspace,
 }: {
   file: string;
   raw: string;
   height?: string;
+  /** The session's linked workspace, used to resolve relative file paths. */
+  workspace?: string | null;
 }): React.JSX.Element {
   const [doc, setDoc] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -118,7 +121,7 @@ export function InlinePreview({
   useEffect(() => {
     let cancelled = false;
     window.hermesAPI
-      .readPreviewFile(file)
+      .readPreviewFile(file, workspace ?? undefined)
       .then((text) => {
         if (cancelled) return;
         if (text) setDoc(text);
@@ -130,7 +133,7 @@ export function InlinePreview({
     return () => {
       cancelled = true;
     };
-  }, [file]);
+  }, [file, workspace]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {

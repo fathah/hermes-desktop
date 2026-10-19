@@ -496,6 +496,16 @@ describe("parseMediaTokens ::preview directives", () => {
     const segs = parseMediaTokens('::preview{file="/tmp/x.svg"}');
     expect(segs.every((s) => s.type === "text")).toBe(true);
   });
+
+  it("ignores a directive inside a ~~~ fenced code block", () => {
+    const segs = parseMediaTokens('~~~\n::preview{file="x.html"}\n~~~');
+    expect(segs.every((s) => s.type === "text")).toBe(true);
+  });
+
+  it("ignores a directive inside an open (streaming) code fence", () => {
+    const segs = parseMediaTokens('```\n::preview{file="x.html"}');
+    expect(segs.every((s) => s.type === "text")).toBe(true);
+  });
 });
 
 describe("cleanLeakedToolTags", () => {

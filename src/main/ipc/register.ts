@@ -2209,8 +2209,10 @@ export function registerIpcHandlers(context: IpcContext): void {
   // Research's apps/desktop). Local filesystem only for now: remote/SSH media
   // reads route through `readMediaForCurrentConnection` and would need a text
   // equivalent on the backend before this can span connections.
-  ipcMain.handle("read-preview-file", (_event, filePath: string) =>
-    readHtmlFileText(filePath),
+  ipcMain.handle(
+    "read-preview-file",
+    (_event, filePath: string, baseDir?: string) =>
+      readHtmlFileText(filePath, baseDir),
   );
 
   // Native right-click menu for a rendered media element (#299): "Open"

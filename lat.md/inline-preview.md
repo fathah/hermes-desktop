@@ -6,7 +6,7 @@ The `::preview{file="…"}` transcript directive renders a workspace HTML file l
 
 ## Widget intents
 
-A widget can talk back: an injected script defines `window.hermes.send(prompt)` and wires `data-hermes-send="…"` clicks, posting the prompt to the parent tagged with the mount token.
+A widget can talk back: an injected script wires `data-hermes-send="…"` clicks — and only genuine (trusted) user clicks, never script or load handlers — posting the prompt to the parent tagged with the mount token.
 
 [[src/renderer/src/components/InlinePreview.tsx#InlinePreview]] validates the intent (type, mount token, 500-char cap, 1/s throttle) and re-emits it as an `inline-preview:send` DOM event, which [[src/renderer/src/screens/Chat/Chat.tsx]] routes through the ordinary send path — so a widget's "Refresh" button wakes the agent, which re-emits an updated `::preview`.
 
@@ -14,4 +14,4 @@ A widget can talk back: an injected script defines `window.hermes.send(prompt)` 
 
 The frame is opaque-origin and script-only, so the document cannot reach app cookies, storage, or IPC.
 
-Reads are local-filesystem only and capped at 4 MiB; remote URLs stay out of scope — the [[web-preview]] webview panel remains the surface for remote HTTPS.
+Reads are local-filesystem only and capped at 4 MiB; remote URLs stay out of scope — the [[web-preview]] webview panel remains the surface for remote HTTPS. Relative `file` paths resolve against the session's linked workspace, and `~` expands to the user's home.

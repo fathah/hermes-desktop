@@ -171,6 +171,9 @@ interface MessageRowProps {
   profile?: string;
   connectionId?: string;
   speechEnabled?: boolean;
+  /** Linked workspace for this conversation, used to resolve relative
+   *  `::preview` file paths. */
+  contextFolder?: string | null;
 }
 
 export const MessageRow = memo(function MessageRow({
@@ -184,6 +187,7 @@ export const MessageRow = memo(function MessageRow({
   profile,
   connectionId,
   speechEnabled,
+  contextFolder,
 }: MessageRowProps): React.JSX.Element {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
@@ -324,6 +328,7 @@ export const MessageRow = memo(function MessageRow({
                   file={segment.attrs.file}
                   raw={segment.raw}
                   height={segment.attrs.height}
+                  workspace={contextFolder}
                 />
               ) : (
                 <MediaSegmentView

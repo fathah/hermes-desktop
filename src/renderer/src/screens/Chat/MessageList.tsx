@@ -59,6 +59,9 @@ interface MessageListProps {
   profile?: string;
   connectionId?: string;
   speechEnabled?: boolean;
+  /** Linked workspace for this conversation, used to resolve relative
+   *  `::preview` file paths. */
+  contextFolder?: string | null;
 }
 
 function TypingIndicator({
@@ -112,6 +115,7 @@ export const MessageList = memo(function MessageList({
   profile,
   connectionId,
   speechEnabled,
+  contextFolder,
 }: MessageListProps): React.JSX.Element {
   const { t } = useI18n();
   // Extra rows bound the tree while following the latest output. When the
@@ -436,6 +440,7 @@ export const MessageList = memo(function MessageList({
         profile={profile}
         connectionId={connectionId}
         speechEnabled={speechEnabled}
+        contextFolder={contextFolder}
       />,
     );
   }

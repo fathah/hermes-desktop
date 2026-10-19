@@ -1382,6 +1382,7 @@ function Chat({
                   profile={profile}
                   connectionId={connectionId}
                   speechEnabled={active && connectionMode === "local"}
+                  contextFolder={contextFolder}
                 />
               )}
               <div ref={bottomRef} />

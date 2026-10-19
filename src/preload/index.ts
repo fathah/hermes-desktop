@@ -655,8 +655,8 @@ const hermesAPI = {
     ipcRenderer.invoke("save-media-file", src, name),
   mediaFileExists: (filePath: string): Promise<boolean> =>
     ipcRenderer.invoke("media-file-exists", filePath),
-  readPreviewFile: (filePath: string): Promise<string | null> =>
-    ipcRenderer.invoke("read-preview-file", filePath),
+  readPreviewFile: (filePath: string, workspace?: string): Promise<string | null> =>
+    ipcRenderer.invoke("read-preview-file", filePath, workspace),
   showMediaMenu: (
     src: string,
     name: string,
