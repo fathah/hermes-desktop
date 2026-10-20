@@ -117,7 +117,7 @@ describe("OAuth provider model discovery", () => {
     expect(result.models).toContain("gemini-3-pro-preview");
   });
 
-  // @lat: [[provider-setup#Provider setup#MiniMax OAuth discovery fallback]]
+  // @lat: [[provider-setup#Provider setup#MiniMax text model choices]]
   it("includes the current MiniMax models when the Python call fails", async () => {
     behavior.err = new Error("python: command not found");
     const result = await discoverProviderModels(
@@ -127,11 +127,35 @@ describe("OAuth provider model discovery", () => {
       undefined,
     );
     expect(result.status).toBe("ok");
-    expect(result.models).toEqual([
-      "MiniMax-M3",
+    expect(result.models).toEqual(["MiniMax-M3"]);
+  });
+
+  it("offers only current runtime MiniMax choices, Flash first, without inventing entitlement", async () => {
+    behavior.stdout = JSON.stringify([
       "MiniMax-M2.7",
-      "MiniMax-M2.7-highspeed",
+      "MiniMax-M3",
+      "MiniMax-M3.1-Flash",
+      "MiniMax-M3.1-Flash-Preview",
     ]);
+    const result = await discoverProviderModels(
+      "minimax-oauth",
+      undefined,
+      undefined,
+      undefined,
+    );
+    expect(result.models).toEqual(["MiniMax-M3.1-Flash", "MiniMax-M3"]);
+    _clearCache();
+    behavior.stdout = JSON.stringify(["MiniMax-M2.7", "MiniMax-M3"]);
+    expect(
+      (
+        await discoverProviderModels(
+          "minimax-oauth",
+          undefined,
+          undefined,
+          undefined,
+        )
+      ).models,
+    ).toEqual(["MiniMax-M3"]);
   });
 
   it("caches the result so a second call skips the Python spawn", async () => {

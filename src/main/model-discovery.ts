@@ -31,6 +31,11 @@ import {
 // circular import via `model-discovery → config → ...`).
 import { PROVIDER_BASE_URLS } from "./provider-registry";
 import { normalizeModelEndpointUrl } from "../shared/model-endpoint";
+import {
+  currentMiniMaxChoices,
+  MINIMAX_OAUTH_MODELS,
+  MINIMAX_TEXT_MODELS,
+} from "./minimax-models";
 
 /** Providers whose `/models` we never call — either they don't expose it,
  *  use a different protocol, or rely on OAuth credentials we can't
@@ -87,7 +92,7 @@ const OAUTH_PROVIDER_CURATED: Record<string, string[]> = {
     "gemini-3-pro-preview",
     "gemini-3-flash-preview",
   ],
-  "minimax-oauth": ["MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.7-highspeed"],
+  "minimax-oauth": MINIMAX_OAUTH_MODELS,
   "qwen-oauth": [],
 };
 
@@ -136,7 +141,12 @@ function runProviderModelIdsPython(provider: string): Promise<string[] | null> {
  *  curated fallback when that's unavailable. */
 async function discoverOAuthModels(provider: string): Promise<string[]> {
   const live = await runProviderModelIdsPython(provider);
-  if (live && live.length > 0) return uniqueSorted(live);
+  if (live && live.length > 0) {
+    const models = uniqueSorted(live);
+    return provider === "minimax-oauth"
+      ? currentMiniMaxChoices(models)
+      : models;
+  }
   return OAUTH_PROVIDER_CURATED[provider] ?? [];
 }
 
@@ -554,6 +564,16 @@ export async function discoverProviderModels(
     return { models, status: "ok", cached: false, freeModels };
   }
 
+  // @lat: [[provider-setup#Provider setup#MiniMax text model choices]]
+  // Curated suggestions do not verify credentials or account entitlement.
+  if (lowerProvider === "minimax" || lowerProvider === "minimax-cn") {
+    return {
+      models: [...MINIMAX_TEXT_MODELS],
+      status: "unsupported",
+      cached: false,
+    };
+  }
+
   if (!lowerProvider || NON_DISCOVERABLE_PROVIDERS.has(lowerProvider)) {
     // For "custom", caller must pass baseUrl explicitly — fall through
     // and the canonicalBaseUrl() check below will redirect to that path.
@@ -604,6 +624,10 @@ async function fetchAndCacheModels(
   const url = buildUrl(baseUrl);
   const headers = authHeaders(lowerProvider, apiKey);
   const result = await fetchModelsHttp(url, headers, 10_000);
+  // Preserve explicit custom-endpoint catalogs and provider-qualified IDs.
+  if (lowerProvider !== "custom") {
+    result.models = currentMiniMaxChoices(result.models);
+  }
   if (result.reachable) {
     setCache(lowerProvider, baseUrl, result.models);
     _ctxCache.set(
