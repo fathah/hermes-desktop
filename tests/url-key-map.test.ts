@@ -71,6 +71,31 @@ describe("URL_KEY_MAP", () => {
     },
   );
 
+  // @lat: [[provider-setup#Opper provider preset#Credential host boundary]]
+  it.each([
+    ["https://user:pass@api.opper.ai:443/v3/compat", true],
+    ["https://API.OPPER.AI:443/v3/compat", true],
+    ["api.opper.ai/v3/compat", true],
+    ["https://api.opper.ai.:443/v3/compat", true],
+    ["https://openai.com:password@api.opper.ai/v3/compat", true],
+    ["https://api.opper.ai/v3/compat/api.openai.com", true],
+    ["https://api.opper.ai/api.deepseek.com/v3/compat", true],
+    ["https://api.opper.ai:443@evil.example/v3/compat", false],
+    ["https://user:pass@api.opper.ai.attacker.example/v3/compat", false],
+    ["https://evil.example/api.opper.ai/v3/compat", false],
+    ["https://copper.ai/v3/compat", false],
+    ["ftp://api.opper.ai/v3/compat", false],
+  ])(
+    "resolves Opper credentials only for the parsed HTTP host %s",
+    (url, known) => {
+      expect(expectedEnvKeyForUrl(url)).toBe(
+        known ? "OPPER_API_KEY" : CUSTOM_API_KEY_ENV,
+      );
+      expect(isKnownProviderUrl(url)).toBe(known);
+      expect(hostDerivedEnvKeyForUrl(url)).toBe(known ? "OPPER_API_KEY" : null);
+    },
+  );
+
   // @lat: [[provider-setup#Requesty provider preset#Credential host boundary]]
   it.each([
     ["https://user:pass@router.requesty.ai:443/v1", true],
@@ -116,6 +141,7 @@ describe("URL_KEY_MAP", () => {
       "https://global.api-route.com/v1": "API_ROUTE_API_KEY",
       "https://router.eu.requesty.ai/v1": "REQUESTY_API_KEY",
       "https://api.cheaperinference.com/v1": "CHEAPERINFERENCE_API_KEY",
+      "https://api.opper.ai/v3/compat": "OPPER_API_KEY",
     };
     for (const [url, envKey] of Object.entries(expected)) {
       expect(expectedEnvKeyForUrl(url)).toBe(envKey);

@@ -408,6 +408,7 @@ const URL_TO_ENV_KEY: Array<[RegExp, string, boolean?]> = [
   [/(?:^|\.)requesty\.ai$/i, "REQUESTY_API_KEY", true],
   [/^global\.api-route\.com$/i, "API_ROUTE_API_KEY", true],
   [/^api\.cheaperinference\.com$/i, "CHEAPERINFERENCE_API_KEY", true],
+  [/^api\.opper\.ai$/i, "OPPER_API_KEY", true],
   [/openrouter\.ai/i, "OPENROUTER_API_KEY"],
   [/anthropic\.com/i, "ANTHROPIC_API_KEY"],
   [/openai\.com/i, "OPENAI_API_KEY"],

@@ -38,6 +38,7 @@ export default {
   fireworks: "Fireworks",
   cerebras: "Cerebras",
   requesty: "Requesty",
+  opper: "Opper",
   api_route: "API Route",
   mistral: "Mistral",
   // Theme
@@ -93,6 +94,8 @@ export default {
   apiRouteApiKey: "Chave de API da API Route",
   apiRouteHint: "Gateway multimodelo compatível com OpenAI",
   requestyHint: "Gateway multimodelo compatível com OpenAI",
+  opperApiKey: "Chave de API da Opper",
+  opperHint: "Gateway multimodelo compatível com OpenAI",
   mistralApiKey: "Chave de API da Mistral",
   mistralHint: "Modelos Mistral e Codestral",
   perplexityApiKey: "Chave de API da Perplexity",
