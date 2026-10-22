@@ -17,6 +17,7 @@ import { homedir, tmpdir } from "os";
 import http from "http";
 import https from "https";
 import net from "net";
+import { StringDecoder } from "string_decoder";
 import WebSocket from "ws";
 import {
   HERMES_HOME,
@@ -1762,6 +1763,9 @@ function sendMessageViaApi(
       }
 
       let buffer = "";
+      // HTTP chunks can split a UTF-8 character; retain incomplete bytes until
+      // the next chunk instead of inserting replacement characters into JSON.
+      const decoder = new StringDecoder("utf8");
 
       /** Parse an SSE block which may contain `event:` and `data:` lines. */
       function processSseBlock(block: string): boolean {
@@ -1784,7 +1788,7 @@ function sendMessageViaApi(
       }
 
       res.on("data", (chunk: Buffer) => {
-        buffer += chunk.toString();
+        buffer += decoder.write(chunk);
         const parts = buffer.split("\n\n");
         buffer = parts.pop() || "";
 
@@ -1794,6 +1798,7 @@ function sendMessageViaApi(
       });
 
       res.on("end", () => {
+        buffer += decoder.end();
         if (buffer.trim()) {
           for (const part of buffer.split("\n\n")) {
             if (processSseBlock(part)) return;
@@ -2053,8 +2058,9 @@ function sendMessageViaRuns(
           return;
         }
         let buffer = "";
+        const decoder = new StringDecoder("utf8");
         res.on("data", (chunk: Buffer) => {
-          buffer += chunk.toString();
+          buffer += decoder.write(chunk);
           const parts = buffer.split("\n\n");
           buffer = parts.pop() || "";
           for (const part of parts) {
@@ -2072,6 +2078,7 @@ function sendMessageViaRuns(
           }
         });
         res.on("end", () => {
+          buffer += decoder.end();
           if (buffer.trim()) {
             const parsed = parseRunSseBlock(buffer);
             if (parsed?.data) {
