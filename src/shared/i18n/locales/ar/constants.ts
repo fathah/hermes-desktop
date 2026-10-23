@@ -43,6 +43,7 @@ export default {
   atlascloud: "AtlasCloud",
   requesty: "Requesty",
   api_route: "API Route",
+  aistupidlevel: "AI Stupid Level",
   mistral: "Mistral",
   // Theme
   themeSystem: "النظام",
@@ -104,6 +105,8 @@ export default {
   apiRouteApiKey: "مفتاح API Route API",
   apiRouteHint: "بوابة نماذج متعددة متوافقة مع OpenAI",
   requestyHint: "بوابة نماذج متعددة متوافقة مع OpenAI",
+  aistupidlevelApiKey: "مفتاح AI Stupid Level API",
+  aistupidlevelHint: "بوابة نماذج متعددة متوافقة مع OpenAI",
   mistralApiKey: "مفتاح Mistral API",
   mistralHint: "نماذج Mistral و Codestral",
   perplexityApiKey: "مفتاح Perplexity API",

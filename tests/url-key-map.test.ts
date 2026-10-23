@@ -45,6 +45,31 @@ describe("URL_KEY_MAP", () => {
       );
     },
   );
+  // @lat: [[provider-setup#AI Stupid Level provider preset#Credential host boundary]]
+  it.each([
+    ["https://aistupidlevel.info/v1", true],
+    ["https://AISTUPIDLEVEL.INFO:443/v1", true],
+    ["aistupidlevel.info/v1", true],
+    ["https://aistupidlevel.info.:443/v1", true],
+    ["https://openai.com:password@aistupidlevel.info/v1", true],
+    ["https://aistupidlevel.info/v1/api.openai.com", true],
+    ["https://aistupidlevel.info:443@evil.example/v1", false],
+    ["https://aistupidlevel.info.attacker.example/v1", false],
+    ["https://evil.example/aistupidlevel.info/v1", false],
+    ["https://www.aistupidlevel.info/v1", false],
+    ["ftp://aistupidlevel.info/v1", false],
+  ])(
+    "resolves AI Stupid Level credentials only for its HTTP host %s",
+    (url, known) => {
+      expect(expectedEnvKeyForUrl(url)).toBe(
+        known ? "AISTUPIDLEVEL_API_KEY" : CUSTOM_API_KEY_ENV,
+      );
+      expect(isKnownProviderUrl(url)).toBe(known);
+      expect(hostDerivedEnvKeyForUrl(url)).toBe(
+        known ? "AISTUPIDLEVEL_API_KEY" : null,
+      );
+    },
+  );
   // @lat: [[provider-setup#Cheaper Inference provider preset#Credential host boundary]]
   it.each([
     ["https://user:pass@api.cheaperinference.com:443/v1", true],
@@ -116,6 +141,7 @@ describe("URL_KEY_MAP", () => {
       "https://global.api-route.com/v1": "API_ROUTE_API_KEY",
       "https://router.eu.requesty.ai/v1": "REQUESTY_API_KEY",
       "https://api.cheaperinference.com/v1": "CHEAPERINFERENCE_API_KEY",
+      "https://aistupidlevel.info/v1": "AISTUPIDLEVEL_API_KEY",
     };
     for (const [url, envKey] of Object.entries(expected)) {
       expect(expectedEnvKeyForUrl(url)).toBe(envKey);

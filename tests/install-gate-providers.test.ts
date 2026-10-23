@@ -71,6 +71,24 @@ describe("expectedEnvKeyForModel — URL fallback for custom/auto providers", ()
     expect(expectedEnvKeyForModel("custom", url)).toBe(expected);
     expect(expectedEnvKeyForModel("auto", url)).toBe(expected);
   });
+  // @lat: [[provider-setup#AI Stupid Level provider preset#Installer readiness]]
+  it.each([
+    ["https://aistupidlevel.info/v1", "AISTUPIDLEVEL_API_KEY"],
+    [
+      "https://openai.com:password@aistupidlevel.info:443/v1",
+      "AISTUPIDLEVEL_API_KEY",
+    ],
+    ["https://AISTUPIDLEVEL.INFO/v1", "AISTUPIDLEVEL_API_KEY"],
+    ["https://aistupidlevel.info.attacker.example/v1", null],
+    ["https://aistupidlevel.info@evil.example/v1", null],
+    ["https://evil.example/aistupidlevel.info/v1", null],
+  ])(
+    "resolves AI Stupid Level installer credentials for %s",
+    (url, expected) => {
+      expect(expectedEnvKeyForModel("custom", url)).toBe(expected);
+      expect(expectedEnvKeyForModel("auto", url)).toBe(expected);
+    },
+  );
   it.each([
     [
       "https://user:pass@api.cheaperinference.com:443/v1",

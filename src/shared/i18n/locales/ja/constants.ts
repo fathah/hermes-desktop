@@ -36,6 +36,7 @@ export default {
   cerebras: "Cerebras",
   requesty: "Requesty",
   api_route: "API Route",
+  aistupidlevel: "AI Stupid Level",
   mistral: "Mistral",
   // Theme
   themeSystem: "システム",
@@ -90,6 +91,8 @@ export default {
   apiRouteApiKey: "API Route API キー",
   apiRouteHint: "OpenAI 互換のマルチモデルゲートウェイ",
   requestyHint: "OpenAI 互換のマルチモデルゲートウェイ",
+  aistupidlevelApiKey: "AI Stupid Level API キー",
+  aistupidlevelHint: "OpenAI 互換のマルチモデルゲートウェイ",
   mistralApiKey: "Mistral API キー",
   mistralHint: "Mistral と Codestral モデル",
   perplexityApiKey: "Perplexity API キー",
