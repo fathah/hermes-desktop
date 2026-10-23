@@ -39,6 +39,7 @@ export default {
   cerebras: "Cerebras",
   requesty: "Requesty",
   api_route: "API Route",
+  aistupidlevel: "AI Stupid Level",
   mistral: "Mistral",
   // Theme
   themeSystem: "Systemowy",
@@ -96,6 +97,8 @@ export default {
   apiRouteApiKey: "Klucz API API Route",
   apiRouteHint: "Wielomodelowa brama zgodna z OpenAI",
   requestyHint: "Wielomodelowa brama zgodna z OpenAI",
+  aistupidlevelApiKey: "Klucz API AI Stupid Level",
+  aistupidlevelHint: "Wielomodelowa brama zgodna z OpenAI",
   mistralApiKey: "Klucz API Mistral",
   mistralHint: "Modele Mistral i Codestral",
   perplexityApiKey: "Klucz API Perplexity",

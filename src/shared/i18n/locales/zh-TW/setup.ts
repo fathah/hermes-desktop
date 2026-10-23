@@ -24,6 +24,7 @@ export default {
     cerebras: "Cerebras",
     requesty: "Requesty",
     api_route: "API Route",
+    aistupidlevel: "AI Stupid Level",
     mistral: "Mistral",
   },
   serverPreset: "伺服器預設",
