@@ -532,16 +532,20 @@ export function describeImageSrc(src: string): MediaToken {
   const trimmed = src.trim();
   const isUrl = /^(?:https?:\/\/|data:image\/)/i.test(trimmed);
   let filenameSource = trimmed;
+  let fallbackName = trimmed;
   if (/^https?:\/\//i.test(trimmed)) {
     try {
       // Signed URLs need their original query for fetching, but only the
       // pathname determines the file type and suggested download name.
-      filenameSource = new URL(trimmed).pathname;
+      const url = new URL(trimmed);
+      filenameSource = url.pathname;
+      fallbackName = url.hostname;
     } catch {
       // Keep malformed destinations renderable as before.
     }
   }
-  const name = filenameSource.split(/[\\/]/).filter(Boolean).pop() || trimmed;
+  const name =
+    filenameSource.split(/[\\/]/).filter(Boolean).pop() || fallbackName;
   return {
     src: trimmed,
     isUrl,

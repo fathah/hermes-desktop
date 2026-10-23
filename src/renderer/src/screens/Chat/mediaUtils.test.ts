@@ -90,6 +90,22 @@ describe("parseMediaTokens (issue #299)", () => {
     }
   });
 
+  it.each([
+    "https://files.example.test",
+    "https://files.example.test/",
+    "https://files.example.test/?signature=abc#preview",
+  ])("uses the hostname as the filename for root URLs: %s", (src) => {
+    expect(describeImageSrc(src)).toMatchObject({
+      src,
+      name: "files.example.test",
+      isUrl: true,
+      isImage: false,
+    });
+    expect(media(parseMediaTokens(`MEDIA:${src}`)).token.name).toBe(
+      "files.example.test",
+    );
+  });
+
   it("strips trailing punctuation from a bare MEDIA: token", () => {
     const segs = parseMediaTokens("see MEDIA:/tmp/out.png.");
     expect(media(segs).token.src).toBe("/tmp/out.png");
