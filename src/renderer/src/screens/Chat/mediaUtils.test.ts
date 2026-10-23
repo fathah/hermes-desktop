@@ -49,6 +49,47 @@ describe("parseMediaTokens (issue #299)", () => {
     });
   });
 
+  // @lat: [[chat-media#Chat media#URL image classification]]
+  it.each([
+    "https://images.example.test/chart.png?token=abc&expires=123",
+    "https://images.example.test/chart.png#preview",
+    "https://images.example.test/chart.png?token=abc#preview",
+  ])("recognizes image URLs without removing access parameters: %s", (src) => {
+    const expected = { src, name: "chart.png", isUrl: true, isImage: true };
+    expect(media(parseMediaTokens(`MEDIA:${src}`)).token).toMatchObject(
+      expected,
+    );
+    expect(media(parseMediaTokens(`![chart](${src})`)).token).toMatchObject(
+      expected,
+    );
+    expect(describeImageSrc(src)).toMatchObject(expected);
+  });
+
+  it("does not classify a download as an image because of its query or fragment", () => {
+    for (const src of [
+      "https://files.example.test/report.pdf?preview=chart.png",
+      "https://files.example.test/report.pdf#chart.png",
+    ]) {
+      expect(describeImageSrc(src)).toMatchObject({
+        src,
+        name: "report.pdf",
+        isUrl: true,
+        isImage: false,
+      });
+    }
+  });
+
+  it("preserves question marks and hashes in local filenames", () => {
+    for (const src of ["/tmp/chart#draft.png", "/tmp/chart?draft.png"]) {
+      expect(describeImageSrc(src)).toMatchObject({
+        src,
+        name: src.slice(5),
+        isUrl: false,
+        isImage: true,
+      });
+    }
+  });
+
   it("strips trailing punctuation from a bare MEDIA: token", () => {
     const segs = parseMediaTokens("see MEDIA:/tmp/out.png.");
     expect(media(segs).token.src).toBe("/tmp/out.png");

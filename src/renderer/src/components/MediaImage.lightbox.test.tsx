@@ -1,7 +1,7 @@
 import { fireEvent, render } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MediaImage } from "./MediaImage";
-import type { MediaToken } from "../screens/Chat/mediaUtils";
+import { MediaImage, MediaSegmentView } from "./MediaImage";
+import { parseMediaTokens, type MediaToken } from "../screens/Chat/mediaUtils";
 
 vi.mock("./useI18n", () => ({
   useI18n: () => ({
@@ -31,6 +31,18 @@ describe("MediaImage lightbox", () => {
         showMediaMenu: vi.fn(),
       },
     });
+  });
+
+  it("renders signed image URLs as images and retains their access query", () => {
+    const src =
+      "https://images.example.test/chart.png?signature=abc&expires=123";
+    const segment = parseMediaTokens(`MEDIA:${src}`)[0];
+    if (segment.type !== "media") throw new Error("expected media segment");
+    const view = render(<MediaSegmentView {...segment} />);
+    expect(view.getByRole("img", { name: "chart.png" })).toHaveAttribute(
+      "src",
+      src,
+    );
   });
 
   it("portals the lightbox to document.body so paint containment cannot clip it", () => {

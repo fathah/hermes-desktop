@@ -156,14 +156,7 @@ function toToken(raw: string, wasQuoted: boolean): MediaToken | null {
   // Bare MEDIA: tokens may swallow trailing sentence punctuation.
   if (!wasQuoted) src = src.replace(/[).,;:!?\]}]+$/, "");
   if (!src) return null;
-  const isUrl = /^(?:https?:\/\/|data:image\/)/i.test(src);
-  const name = src.split(/[\\/]/).filter(Boolean).pop() || src;
-  return {
-    src,
-    isUrl,
-    isImage: /^data:image\//i.test(src) || IMAGE_EXT.test(src),
-    name,
-  };
+  return describeImageSrc(src);
 }
 
 function isAbsoluteFileLike(src: string): boolean {
@@ -538,11 +531,21 @@ export function cleanLeakedToolTags(content: string): string {
 export function describeImageSrc(src: string): MediaToken {
   const trimmed = src.trim();
   const isUrl = /^(?:https?:\/\/|data:image\/)/i.test(trimmed);
-  const name = trimmed.split(/[\\/]/).filter(Boolean).pop() || trimmed;
+  let filenameSource = trimmed;
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      // Signed URLs need their original query for fetching, but only the
+      // pathname determines the file type and suggested download name.
+      filenameSource = new URL(trimmed).pathname;
+    } catch {
+      // Keep malformed destinations renderable as before.
+    }
+  }
+  const name = filenameSource.split(/[\\/]/).filter(Boolean).pop() || trimmed;
   return {
     src: trimmed,
     isUrl,
-    isImage: /^data:image\//i.test(trimmed) || IMAGE_EXT.test(trimmed),
+    isImage: /^data:image\//i.test(trimmed) || IMAGE_EXT.test(filenameSource),
     name,
   };
 }
