@@ -533,6 +533,7 @@ export function describeImageSrc(src: string): MediaToken {
   const isUrl = /^(?:https?:\/\/|data:image\/)/i.test(trimmed);
   let filenameSource = trimmed;
   let fallbackName = trimmed;
+  let decodeName = false;
   if (/^https?:\/\//i.test(trimmed)) {
     try {
       // Signed URLs need their original query for fetching, but only the
@@ -540,12 +541,24 @@ export function describeImageSrc(src: string): MediaToken {
       const url = new URL(trimmed);
       filenameSource = url.pathname;
       fallbackName = url.hostname;
+      decodeName = true;
     } catch {
       // Keep malformed destinations renderable as before.
     }
   }
-  const name =
+  let name =
     filenameSource.split(/[\\/]/).filter(Boolean).pop() || fallbackName;
+  if (decodeName) {
+    try {
+      const decodedName = decodeURIComponent(name);
+      // The save dialog uses this name as a path: do not introduce separators
+      // or characters that are invalid in cross-platform download filenames.
+      // eslint-disable-next-line no-control-regex -- reject decoded control chars
+      if (!/[\x00-\x1F<>:"/\\|?*]/.test(decodedName)) name = decodedName;
+    } catch {
+      // Invalid percent escapes must not prevent rendering or downloading.
+    }
+  }
   return {
     src: trimmed,
     isUrl,

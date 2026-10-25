@@ -65,6 +65,32 @@ describe("parseMediaTokens (issue #299)", () => {
     expect(describeImageSrc(src)).toMatchObject(expected);
   });
 
+  it.each([
+    ["my%20chart.png", "my chart.png"],
+    ["%E6%B5%8B%E8%AF%95.png", "测试.png"],
+    ["caf%C3%A9.png", "café.png"],
+    ["chart%2520draft.png", "chart%20draft.png"],
+    ["folder%2Fchart.png", "folder%2Fchart.png"],
+    ["folder%2fchart.png", "folder%2fchart.png"],
+    ["folder%5Cchart.png", "folder%5Cchart.png"],
+    ["C%3Achart.png", "C%3Achart.png"],
+    ["chart%00draft.png", "chart%00draft.png"],
+    ["chart%3Fdraft.png", "chart%3Fdraft.png"],
+    ["bad%ZZchart.png", "bad%ZZchart.png"],
+    ["bad%20%ZZchart.png", "bad%20%ZZchart.png"],
+    ["bad%C3%28chart.png", "bad%C3%28chart.png"],
+  ])("decodes only safe URL filenames: %s", (filename, name) => {
+    const src = `https://images.example.test/${filename}?signature=a%2Fb#preview`;
+    const expected = { src, name, isUrl: true, isImage: true };
+    expect(describeImageSrc(src)).toMatchObject(expected);
+    expect(media(parseMediaTokens(`MEDIA:${src}`)).token).toMatchObject(
+      expected,
+    );
+    expect(media(parseMediaTokens(`![chart](${src})`)).token).toMatchObject(
+      expected,
+    );
+  });
+
   it("does not classify a download as an image because of its query or fragment", () => {
     for (const src of [
       "https://files.example.test/report.pdf?preview=chart.png",
@@ -79,8 +105,13 @@ describe("parseMediaTokens (issue #299)", () => {
     }
   });
 
-  it("preserves question marks and hashes in local filenames", () => {
-    for (const src of ["/tmp/chart#draft.png", "/tmp/chart?draft.png"]) {
+  it("preserves question marks, hashes and percent escapes in local filenames", () => {
+    for (const src of [
+      "/tmp/chart#draft.png",
+      "/tmp/chart?draft.png",
+      "/tmp/my%20chart.png",
+      "/tmp/folder%2Fchart.png",
+    ]) {
       expect(describeImageSrc(src)).toMatchObject({
         src,
         name: src.slice(5),

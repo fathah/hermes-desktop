@@ -45,6 +45,30 @@ describe("MediaImage lightbox", () => {
     );
   });
 
+  it.each(["png", "pdf"])(
+    "uses a decoded %s download name without changing the signed source",
+    (extension) => {
+      const src = `https://files.example.test/my%20chart.${extension}?signature=a%2Fb#preview`;
+      const name = `my chart.${extension}`;
+      const segment = parseMediaTokens(`MEDIA:${src}`)[0];
+      if (segment.type !== "media") throw new Error("expected media segment");
+      const view = render(<MediaSegmentView {...segment} />);
+
+      if (extension === "png") {
+        const image = view.getByRole("img", { name });
+        expect(image).toHaveAttribute("src", src);
+        fireEvent.click(image);
+        fireEvent.click(
+          view.getByRole("button", { name: "chat.media.saveImage" }),
+        );
+      } else {
+        fireEvent.click(view.getByRole("button", { name }));
+      }
+
+      expect(window.hermesAPI.saveMediaFile).toHaveBeenCalledWith(src, name);
+    },
+  );
+
   it("portals the lightbox to document.body so paint containment cannot clip it", () => {
     // Regression for the content-visibility clipping bug: `.chat-message` rows
     // imply paint containment (#748), which traps an inline fixed backdrop
