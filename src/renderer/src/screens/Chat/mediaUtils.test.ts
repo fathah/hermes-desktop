@@ -49,6 +49,94 @@ describe("parseMediaTokens (issue #299)", () => {
     });
   });
 
+  // @lat: [[chat-media#Chat media#URL image classification]]
+  it.each([
+    "https://images.example.test/chart.png?token=abc&expires=123",
+    "https://images.example.test/chart.png#preview",
+    "https://images.example.test/chart.png?token=abc#preview",
+  ])("recognizes image URLs without removing access parameters: %s", (src) => {
+    const expected = { src, name: "chart.png", isUrl: true, isImage: true };
+    expect(media(parseMediaTokens(`MEDIA:${src}`)).token).toMatchObject(
+      expected,
+    );
+    expect(media(parseMediaTokens(`![chart](${src})`)).token).toMatchObject(
+      expected,
+    );
+    expect(describeImageSrc(src)).toMatchObject(expected);
+  });
+
+  it.each([
+    ["my%20chart.png", "my chart.png"],
+    ["%E6%B5%8B%E8%AF%95.png", "测试.png"],
+    ["caf%C3%A9.png", "café.png"],
+    ["chart%2520draft.png", "chart%20draft.png"],
+    ["folder%2Fchart.png", "folder%2Fchart.png"],
+    ["folder%2fchart.png", "folder%2fchart.png"],
+    ["folder%5Cchart.png", "folder%5Cchart.png"],
+    ["C%3Achart.png", "C%3Achart.png"],
+    ["chart%00draft.png", "chart%00draft.png"],
+    ["chart%3Fdraft.png", "chart%3Fdraft.png"],
+    ["bad%ZZchart.png", "bad%ZZchart.png"],
+    ["bad%20%ZZchart.png", "bad%20%ZZchart.png"],
+    ["bad%C3%28chart.png", "bad%C3%28chart.png"],
+  ])("decodes only safe URL filenames: %s", (filename, name) => {
+    const src = `https://images.example.test/${filename}?signature=a%2Fb#preview`;
+    const expected = { src, name, isUrl: true, isImage: true };
+    expect(describeImageSrc(src)).toMatchObject(expected);
+    expect(media(parseMediaTokens(`MEDIA:${src}`)).token).toMatchObject(
+      expected,
+    );
+    expect(media(parseMediaTokens(`![chart](${src})`)).token).toMatchObject(
+      expected,
+    );
+  });
+
+  it("does not classify a download as an image because of its query or fragment", () => {
+    for (const src of [
+      "https://files.example.test/report.pdf?preview=chart.png",
+      "https://files.example.test/report.pdf#chart.png",
+    ]) {
+      expect(describeImageSrc(src)).toMatchObject({
+        src,
+        name: "report.pdf",
+        isUrl: true,
+        isImage: false,
+      });
+    }
+  });
+
+  it("preserves question marks, hashes and percent escapes in local filenames", () => {
+    for (const src of [
+      "/tmp/chart#draft.png",
+      "/tmp/chart?draft.png",
+      "/tmp/my%20chart.png",
+      "/tmp/folder%2Fchart.png",
+    ]) {
+      expect(describeImageSrc(src)).toMatchObject({
+        src,
+        name: src.slice(5),
+        isUrl: false,
+        isImage: true,
+      });
+    }
+  });
+
+  it.each([
+    "https://files.example.test",
+    "https://files.example.test/",
+    "https://files.example.test/?signature=abc#preview",
+  ])("uses the hostname as the filename for root URLs: %s", (src) => {
+    expect(describeImageSrc(src)).toMatchObject({
+      src,
+      name: "files.example.test",
+      isUrl: true,
+      isImage: false,
+    });
+    expect(media(parseMediaTokens(`MEDIA:${src}`)).token.name).toBe(
+      "files.example.test",
+    );
+  });
+
   it("strips trailing punctuation from a bare MEDIA: token", () => {
     const segs = parseMediaTokens("see MEDIA:/tmp/out.png.");
     expect(media(segs).token.src).toBe("/tmp/out.png");
