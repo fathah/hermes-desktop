@@ -167,7 +167,7 @@ async function fetchNousFreeModelIds(
     const base = (auth.providers?.nous?.inference_base_url || "").trim();
     if (!token || !base) return [];
 
-    const url = `${base.replace(/\/+$/, "")}/models`;
+    const url = buildUrl(base);
     return await new Promise<string[]>((resolve) => {
       const u = new URL(url);
       const mod = u.protocol === "https:" ? https : http;
@@ -405,8 +405,15 @@ function uniqueSorted(values: string[]): string[] {
 }
 
 function buildUrl(base: string): string {
-  const trimmed = base.replace(/\/+$/, "");
-  return `${trimmed}/models`;
+  try {
+    const url = new URL(base);
+    url.pathname = `${url.pathname.replace(/\/+$/, "")}/models`;
+    url.hash = "";
+    return url.href;
+  } catch {
+    // Leave invalid input for the HTTP client's existing failure handling.
+    return base;
+  }
 }
 
 interface FetchModelsResult {
@@ -562,7 +569,7 @@ export async function discoverProviderModels(
     }
   }
 
-  const explicitBase = (baseUrlOverride || "").trim().replace(/\/+$/, "");
+  const explicitBase = (baseUrlOverride || "").trim();
   const baseUrl = explicitBase || canonicalBaseUrl(lowerProvider) || "";
   if (!baseUrl) return { models: [], status: "unknown-host", cached: false };
 
@@ -657,7 +664,7 @@ export async function getModelContextWindow(
     return null;
   }
 
-  const explicitBase = (baseUrlOverride || "").trim().replace(/\/+$/, "");
+  const explicitBase = (baseUrlOverride || "").trim();
   const baseUrl = explicitBase || canonicalBaseUrl(lowerProvider) || "";
   if (!baseUrl) return null;
   const key = cacheKey(lowerProvider, baseUrl);

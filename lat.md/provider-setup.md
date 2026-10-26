@@ -358,3 +358,9 @@ API Route CLI fallback forwards the selected profile's resolved key from its vau
 The real Setup form saves API Route credentials and the chosen custom model to its selected profile, then real config readers reopen the files without changing another profile.
 
 An isolated fixture selects the preset and enters a model ID and fake key. Actual config writers persist `custom`, the unchanged model ID, the endpoint and `API_ROUTE_API_KEY`; fresh readers recover them and reverse branding remains API Route.
+
+## Catalogue URL construction
+
+Discovery appends `/models` to the endpoint pathname while preserving query parameters and omitting fragments. Query values are never modified by trailing-slash cleanup.
+
+[[src/main/model-discovery.ts#buildUrl]] is shared by standard catalogue and Nous pricing requests. [[tests/model-discovery.test.ts]] captures real HTTP request paths for version queries, encoded tenant values, fragments and slash-terminated query values.

@@ -81,6 +81,25 @@ describe("model-discovery", () => {
     expect(result.models).toEqual(["alpha", "beta", "gamma"]);
   });
 
+  it.each([
+    "?api-version=2026-01",
+    "#settings",
+    "/?tenant=a%2Fb#settings",
+    "?route=tenant/",
+  ])("preserves endpoint URL components %s", async (suffix) => {
+    let receivedUrl = "";
+    server = http.createServer((req, res) => {
+      receivedUrl = req.url || "";
+      res.end(JSON.stringify({ data: [{ id: "tenant-model" }] }));
+    });
+    await listen();
+    const { discoverProviderModels } = await loadDiscovery();
+    const endpoint = new URL(baseUrl + suffix);
+    const expected = "/v1/models" + endpoint.search;
+    await discoverProviderModels("custom", endpoint.href, "sk-test", undefined);
+    expect(receivedUrl).toBe(expected);
+  });
+
   it("returns status=no-key for public custom endpoints when no apiKey is provided or in .env", async () => {
     server = http.createServer(() => {
       throw new Error("must not be called when there's no key");
