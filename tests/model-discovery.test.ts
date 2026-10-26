@@ -123,6 +123,39 @@ describe("model-discovery", () => {
     expect(receivedAuth).toBe("");
   });
 
+  it.each([undefined, "sk-ipv6"])(
+    "discovers IPv6 loopback models with key %s",
+    async (apiKey) => {
+      server = http.createServer((_req, res) => {
+        res.end(
+          JSON.stringify({
+            data: [{ id: "ipv6-local", context_length: 8192 }],
+          }),
+        );
+      });
+      await new Promise<void>((resolve, reject) => {
+        server.once("error", reject);
+        server.listen(0, "::1", resolve);
+      });
+      const ipv6Base = `http://[::1]:${(server.address() as AddressInfo).port}/v1`;
+      const { discoverProviderModels, getModelContextWindow, _clearCache } =
+        await loadDiscovery();
+      expect(
+        await discoverProviderModels("custom", ipv6Base, apiKey, undefined),
+      ).toMatchObject({ status: "ok", models: ["ipv6-local"] });
+      _clearCache();
+      expect(
+        await getModelContextWindow(
+          "custom",
+          "ipv6-local",
+          ipv6Base,
+          apiKey,
+          undefined,
+        ),
+      ).toBe(8192);
+    },
+  );
+
   it("discovers named local-provider models without an API key", async () => {
     let receivedAuth = "not-called";
     server = http.createServer((req, res) => {
