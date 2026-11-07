@@ -74,6 +74,7 @@ The interop test compiles that view and fails if any `hyx_` name appears.
 | `identity.hy` | `py/kotoba_gateway/identity.py` | none upstream (Kotoba mesh); uses `cryptography` Ed25519 |
 | `ledger.hy` | `py/kotoba_gateway/ledger.py` | none upstream; block/head vocabulary follows `kotobase-federation` |
 | `peers.hy` | `py/kotoba_gateway/peers.py` | none upstream |
+| `orders.hy` | `py/kotoba_gateway/orders.py` | none upstream; `network-awai-apex` ADR 0027 |
 
 The upstream references are to Hermes Agent 0.21.5 (local `4f649c65`). The wire contracts these share (`/v1/runs` event names and key order, the capability shape, `X-Hermes-Session-Id`) are what the gateway tests pin.
 
@@ -136,6 +137,20 @@ The mesh makes agent execution and session state independent of any server. Thes
 - Kotoba Cloud account, device, orgs and agent sync (`src/main/kotoba-cloud-*.ts`, `agent-sync.ts`)
 - Model inference, when the configured provider is a hosted API (for example `api.murakumo.cloud`). A local or self-hosted OpenAI-compatible endpoint removes it.
 - Release checks and auto-update (GitHub releases)
+
+## Paid orders
+
+With `--order-provider` and its settings, a node serves paid inference one order at a time (`orders.hy`, `network-awai-apex` ADR 0027 V1).
+
+This route calls a local llama.cpp server directly. It does not run a Hermes agent, and it does not change any other route.
+
+An order fixes the buyer, the provider, this node and the model. The local operator registers it with the hash of its key at `POST /v1/orders`. That key opens one call to `POST /v1/chat/completions`, and the signed receipt at `GET /v1/orders/{cid}/receipt`, and nothing else.
+
+The node measures the call from the engine's own `usage`, appends a ledger block of hashes to the session `order-<cid>`, and signs an `awai.work-receipt/1`. No prompt, output or key is stored. The input hash is keyed with the order's key, so a short prompt cannot be guessed from it.
+
+Before spending an order, the node checks that the model and engine files have not changed since their digests were taken, and that the engine reports serving that model path. This does not attest what the engine really ran. A failed call spends the order and leaves no receipt.
+
+A receipt records work, not its quality, and nothing here moves money. A streaming client receives the finished result as chunks, after the call ends. One order allows one call, so a Hermes turn that makes several calls does not fit yet.
 
 ## Tests
 
@@ -226,3 +241,63 @@ Plain Python imports the Hy modules after `import hy`. It signs and verifies thr
 ### Python view compiles without mangled names
 
 Every Hy module's generated Python compiles and contains no `hyx_` mangled names.
+
+### An order gets one signed receipt
+
+A registered order's key returns the engine's answer and a receipt signed by this node. The receipt's output CID, keyed input hash, digests and measurement match the call, and its fields are a closed set.
+
+### Orders keep no prompt or output
+
+After a served order, no file in the state directory contains the prompt, the output or the key.
+
+### An order key works once
+
+A second call is refused with `order_used` and never reaches the engine. Of two simultaneous calls, exactly one runs.
+
+### An order key opens nothing else
+
+An order's key cannot read models, another order's receipt or register an order, and an unknown key is refused.
+
+### An order this node cannot honour is refused
+
+Registration refuses another provider, node or model, a live or unknown value class, a past expiry, and missing fields.
+
+### An order key belongs to one order
+
+The same order cannot register twice, and a key cannot open two orders. A refused order leaves nothing behind.
+
+### Registering orders is local only
+
+Registering an order needs the local operator's credential.
+
+### A different model refuses before spending the order
+
+If the engine reports another model, or the model file changed, the call is refused without reaching the engine. An engine mismatch leaves the order usable once it is corrected.
+
+### A failed call leaves no receipt
+
+An engine error or a missing measurement spends the order. Its receipt route says `order_failed`, and the key is not accepted again.
+
+### An expired order is refused
+
+A call after the order's expiry is refused without reaching the engine.
+
+### The order caps the tokens
+
+The engine is asked for the order's `max-tokens`, or a smaller valid amount from the caller.
+
+### A streaming client gets the same result
+
+A `stream: true` call receives the finished answer as OpenAI chunks, and the order still has a receipt.
+
+### The upstream stays on this machine
+
+A non-local upstream is refused at startup, and a redirect from the engine is not followed.
+
+### A receipt survives a restart
+
+The receipt reads back after the order desk restarts, and the key stays spent.
+
+### Orders change nothing when they are off
+
+Without the settings, the order routes answer 404 and capabilities report orders as off.

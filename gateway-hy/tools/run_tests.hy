@@ -12,6 +12,7 @@
 
 (setv MODULES ["tests.test_gateway" "tests.test_fleet_secrets"
                "tests.test_mesh"
+               "tests.test_orders"
                "tests.test_shard"
                "tests.test_placement"
                "tests.test_python_interop"])

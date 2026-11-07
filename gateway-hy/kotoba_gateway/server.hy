@@ -27,6 +27,11 @@
 ;;   GET  /v1/placement              operator-signed placement manifest
 ;;   PUT  /v1/placement              adopt a newer manifest (local only)
 ;;
+;; Paid orders (see orders.hy), with --order-provider:
+;;
+;;   POST /v1/orders                 register an order and its key hash (local only)
+;;   GET  /v1/orders/{cid}/receipt   the signed receipt (local, or the order's key)
+;;
 ;; Callers authenticate either as the local desktop (Bearer API_SERVER_KEY) or
 ;; as a trusted node (did:key-signed request headers).
 ;;
@@ -42,6 +47,7 @@
         kotoba_gateway.backend [Callbacks make-backend]
         kotoba_gateway.identity [NodeIdentity verify-request]
         kotoba_gateway.ledger [BlockStore Ledger is-valid-cid]
+        kotoba_gateway.orders [OrderDesk OrderError]
         kotoba_gateway.peers [PeerTable split-list]
         kotoba_gateway.runs [RunRegistry run-event TERMINAL-STATUSES]
         kotoba_gateway.placement [Placement]
@@ -55,6 +61,7 @@
       RUN-PATH-RE (re.compile r"^/v1/runs/([A-Za-z0-9_-]+)(/events|/stop)?$")
       BLOCK-PATH-RE (re.compile r"^/v1/blocks/([a-z2-7]+)$")
       SESSION-PATH-RE (re.compile r"^/v1/sessions/([A-Za-z0-9_.:-]+)/(head|pull)$")
+      ORDER-RECEIPT-RE (re.compile r"^/v1/orders/([a-z2-7]+)/receipt$")
       GOSSIP-SECONDS 120
       LOOPBACK #{"127.0.0.1" "::1" "localhost"})
 
@@ -116,6 +123,7 @@
           self.public-url public-url
           self.shard None
           self.placement None
+          self.orders None
           self.runs (RunRegistry)
           self.started-at (time.time)
           self.model (.model-name backend)
@@ -328,6 +336,8 @@
                                     "runtime" "kotoba-hy" "node" g.node.did})))
     (when (= path "/.well-known/kotoba-node")
       (return (.send-json self 200 (.manifest g))))
+    (when (.order-route self method path)
+      (return))
     (setv self.principal (.authorize g self.headers method self.path self.raw-body))
     (when (is self.principal None)
       (return (.send-error-json self 401 "Invalid API key or untrusted node." "invalid_api_key")))
@@ -338,6 +348,9 @@
       (and (= method "GET") (= path "/v1/shard")) (.shard-status self)
       (and (= method "GET") (= path "/v1/placement")) (.placement-get self)
       (and (= method "PUT") (= path "/v1/placement")) (.placement-put self)
+      (and (= method "POST") (= path "/v1/orders")) (.order-register self)
+      (and (= method "GET") (.match ORDER-RECEIPT-RE path))
+      (.order-receipt self (.group (.match ORDER-RECEIPT-RE path) 1))
       (and (= method "GET") (= path "/v1/peers")) (.peers-list self)
       (and (= method "POST") (= path "/v1/peers")) (.peers-add self)
       (and (= method "GET") block-match) (.block self (.group block-match 1))
@@ -407,6 +420,7 @@
                              "run_submission" True "run_events" True "run_stop" True
                              "session_continuity_header" "X-Hermes-Session-Id"
                              "cors" False
+                             "orders" (is-not g.orders None)
                              "mesh" {"node" g.node.did
                                      "peers" (len (.listing g.peers))
                                      "content_addressed_sessions" True
@@ -582,6 +596,81 @@
 
   ;; -- chat completions --
 
+  ;; -- paid orders --
+
+  (defn order-route [self method path]
+    "Serve a request made with an order's key. False leaves it to normal auth,
+    so an order's key opens nothing else on this node."
+    (setv desk self.gateway.orders
+          header (or (.get self.headers "Authorization") ""))
+    (when (or (is desk None) (not (.startswith header "Bearer ")))
+      (return False))
+    (setv key (cut header 7 None)
+          found (.lookup desk key))
+    (when (is found None)
+      (return False))
+    (setv [cid order] found
+          receipt-match (.match ORDER-RECEIPT-RE path))
+    (cond
+      (and (= method "POST") (= path "/v1/chat/completions"))
+      (do (.order-chat self desk cid order key) True)
+      (and (= method "GET") receipt-match (= (.group receipt-match 1) cid))
+      (do (.order-receipt self cid) True)
+      True False))
+
+  (defn order-register [self]
+    (when (!= self.principal "local")
+      (return (.send-error-json self 403 "Only the local operator may register orders." "local_only")))
+    (setv desk self.gateway.orders)
+    (when (is desk None)
+      (return (.send-error-json self 404 "Orders are not enabled on this node." "not_found")))
+    (setv body (.read-json self))
+    (when (is body None) (return))
+    (try
+      (.send-json self 201 {"order" (.register desk (.get body "order") (.get body "key_sha256"))})
+      (except [e OrderError]
+        (.send-error-json self e.status e.message e.code))))
+
+  (defn order-receipt [self cid]
+    (setv desk self.gateway.orders)
+    (when (is desk None)
+      (return (.send-error-json self 404 "Orders are not enabled on this node." "not_found")))
+    (try
+      (.send-json self 200 (.receipt desk cid))
+      (except [e OrderError]
+        (.send-error-json self e.status e.message e.code))))
+
+  (defn order-chat [self desk cid order key]
+    (setv body (.read-json self))
+    (when (is body None) (return))
+    (try
+      (setv served (.serve desk cid order key self.raw-body body))
+      (except [e OrderError]
+        (return (.send-error-json self e.status e.message e.code))))
+    (setv headers {"X-Awai-Order" cid "X-Awai-Receipt" (get served "receipt-cid")})
+    (if (.get body "stream")
+        (.order-stream self served headers)
+        (.send-json self 200 (get served "reply") headers)))
+
+  (defn order-stream [self served headers]
+    "The finished result as OpenAI chunks: a client that only streams can read it."
+    (setv reply (get served "reply")
+          message (dict (get served "message"))
+          frame {"id" (.get reply "id") "object" "chat.completion.chunk"
+                 "created" (.get reply "created") "model" (.get reply "model")})
+    (when (.get message "tool_calls")
+      (setv (get message "tool_calls") (lfor [i call] (enumerate (get message "tool_calls"))
+                                             {#** call "index" i})))
+    (.start-sse self headers)
+    (try
+      (.sse self {#** frame "choices" [{"index" 0 "delta" message "finish_reason" None}]})
+      (.sse self {#** frame
+                  "choices" [{"index" 0 "delta" {}
+                              "finish_reason" (.get (get (get reply "choices") 0) "finish_reason" "stop")}]
+                  "usage" (get reply "usage")})
+      (.sse self "[DONE]")
+      (except [[BrokenPipeError ConnectionResetError]] None)))
+
   (defn chat-completions [self]
     (setv body (.read-json self))
     (when (is body None) (return))
@@ -705,6 +794,15 @@
   (.add_argument p "--backend" :default (os.environ.get "KOTOBA_GATEWAY_BACKEND" "hermes")
                  :choices ["hermes" "echo"])
   (.add_argument p "--pid-file" :default (os.environ.get "KOTOBA_GATEWAY_PID_FILE"))
+  ;; Paid orders (network-awai-apex ADR 0027). All of them, or none.
+  (.add_argument p "--order-provider" :default (os.environ.get "KOTOBA_ORDER_PROVIDER")
+                 :help "the provider did:key that orders must name; turns on orders")
+  (.add_argument p "--order-upstream" :default (os.environ.get "KOTOBA_ORDER_UPSTREAM")
+                 :help "the local llama.cpp server")
+  (.add_argument p "--order-engine-file" :default (os.environ.get "KOTOBA_ORDER_ENGINE_FILE"))
+  (.add_argument p "--order-engine-version" :default (os.environ.get "KOTOBA_ORDER_ENGINE_VERSION"))
+  (.add_argument p "--order-model-file" :default (os.environ.get "KOTOBA_ORDER_MODEL_FILE"))
+  (.add_argument p "--order-model-revision" :default (os.environ.get "KOTOBA_ORDER_MODEL_REVISION"))
   ;; Shard host (profile distribution phase 2): tick only due profiles.
   (.add_argument p "--shard" :default (os.environ.get "KOTOBA_SHARD" "off")
                  :choices ["off" "observe" "run"])
@@ -804,6 +902,25 @@
                                       :seeds (split-list (os.environ.get "KOTOBA_PEERS"))
                                       :trusted (split-list (os.environ.get "KOTOBA_TRUSTED_PEERS"))
                                       :public-url (os.environ.get "KOTOBA_PUBLIC_URL")))
+  (when args.order-provider
+    (setv settings [args.order-upstream args.order-engine-file args.order-engine-version
+                    args.order-model-file args.order-model-revision])
+    (when (not (all settings))
+      (print "[kotoba-gateway] Refusing orders: --order-provider needs the upstream, engine and model settings."
+             :file sys.stderr)
+      (return 78))
+    (try
+      (setv gateway.orders (OrderDesk gateway.node gateway.ledger
+                                      (os.path.join (default-state-dir home) "kotoba-orders")
+                                      args.order-provider args.order-upstream
+                                      args.order-engine-file args.order-engine-version
+                                      args.order-model-file args.order-model-revision))
+      (except [e [ValueError OSError]]
+        (print f"[kotoba-gateway] Refusing orders: {e}" :file sys.stderr)
+        (return 78)))
+    (print (+ f"[kotoba-gateway] orders on: provider={args.order-provider} model="
+              (get gateway.orders.model "digest"))
+           :file sys.stderr :flush True))
   (.start-gossip gateway.peers (int (os.environ.get "KOTOBA_GOSSIP_SECONDS" GOSSIP-SECONDS)))
   (setv placement None)
   (when args.operator-did
