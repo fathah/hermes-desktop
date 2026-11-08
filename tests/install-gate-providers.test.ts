@@ -71,6 +71,21 @@ describe("expectedEnvKeyForModel — URL fallback for custom/auto providers", ()
     expect(expectedEnvKeyForModel("custom", url)).toBe(expected);
     expect(expectedEnvKeyForModel("auto", url)).toBe(expected);
   });
+  // @lat: [[provider-setup#Standard Compute provider preset#Installer readiness]]
+  it.each([
+    ["https://api.stdcmpt.com/v1", "STDCMPT_API_KEY"],
+    ["https://openai.com:password@api.stdcmpt.com:443/v1", "STDCMPT_API_KEY"],
+    ["https://API.STDCMPT.COM/v1", "STDCMPT_API_KEY"],
+    ["https://api.stdcmpt.com.attacker.example/v1", null],
+    ["https://api.stdcmpt.com@evil.example/v1", null],
+    ["https://evil.example/api.stdcmpt.com/v1", null],
+  ])(
+    "resolves Standard Compute installer credentials for %s",
+    (url, expected) => {
+      expect(expectedEnvKeyForModel("custom", url)).toBe(expected);
+      expect(expectedEnvKeyForModel("auto", url)).toBe(expected);
+    },
+  );
   it.each([
     [
       "https://user:pass@api.cheaperinference.com:443/v1",

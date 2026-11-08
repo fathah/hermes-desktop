@@ -28,6 +28,7 @@ export const PROVIDER_BASE_URLS: Record<string, string> = {
   novita: "https://api.novita.ai/openai/v1",
   requesty: "https://router.requesty.ai/v1",
   api_route: "https://global.api-route.com/v1",
+  standardcompute: "https://api.stdcmpt.com/v1",
   cheaperinference: "https://api.cheaperinference.com/v1",
   cerebras: "https://api.cerebras.ai/v1",
   perplexity: "https://api.perplexity.ai",
