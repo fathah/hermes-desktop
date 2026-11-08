@@ -363,7 +363,7 @@ An isolated fixture selects the preset and enters a model ID and fake key. Actua
 
 Standard Compute is an optional paid OpenAI-compatible gateway preset, with a dedicated API-key field and authenticated model discovery.
 
-Select **Local / OpenAI-Compatible** during setup, then **Standard Compute** under remote APIs. Get a key from https://standardcompute.com/dashboard/api-keys, paste it, fetch models and select a chat model available to your account. The preset uses https://api.stdcmpt.com/v1 and stores models as `custom` with that base URL. Model IDs are preserved. Setup is documented at https://docs.standardcompute.com.
+Select **Local / OpenAI-Compatible** during setup, then **Standard Compute** under remote APIs. Get a key from https://standardcompute.com/dashboard/api-keys, paste it and enter a chat model ID available to your account. To fetch the model catalog, finish setup and open the model picker under Providers. The preset uses https://api.stdcmpt.com/v1 and stores models as `custom` with that base URL. Model IDs are preserved. Setup is documented at https://docs.standardcompute.com.
 
 The key is stored as `STDCMPT_API_KEY`, matching Hermes Agent's hostname-derived variable for `api.stdcmpt.com`. The existing CLI path forwards the selected endpoint's resolved key to this variable and the legacy `OPENAI_API_KEY` slot; no native agent provider id is required.
 
