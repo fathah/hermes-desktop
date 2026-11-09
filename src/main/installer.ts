@@ -1125,7 +1125,8 @@ async function runInstallWindows(emit: (t: string) => void): Promise<void> {
   ].join("\r\n");
 
   try {
-    writeFileSync(wrapperPath, wrapperScript, { encoding: "utf8" });
+    // PowerShell 5.1 reads a BOM-less script as ANSI, mangling non-ASCII paths.
+    writeFileSync(wrapperPath, `\uFEFF${wrapperScript}`, { encoding: "utf8" });
   } catch (err) {
     throw new Error(
       `Failed to stage Windows installer: ${(err as Error).message}`,
