@@ -39,6 +39,7 @@ export default {
   cerebras: "Cerebras",
   requesty: "Requesty",
   api_route: "API Route",
+  uberllm: "UberLLM",
   mistral: "Mistral",
   // Theme
   themeSystem: "Sistem",
@@ -95,6 +96,8 @@ export default {
   requestyApiKey: "Requesty API Anahtarı",
   apiRouteApiKey: "API Route API Anahtarı",
   apiRouteHint: "OpenAI uyumlu çok modelli ağ geçidi",
+  uberllmApiKey: "UberLLM API Anahtarı",
+  uberllmHint: "OpenAI uyumlu çok modelli ağ geçidi",
   requestyHint: "OpenAI uyumlu çok modelli ağ geçidi",
   mistralApiKey: "Mistral API Anahtarı",
   mistralHint: "Mistral ve Codestral modelleri",
