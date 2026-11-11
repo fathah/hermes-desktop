@@ -38,6 +38,8 @@ Prompt submission forwards session adoption through its authority wrapper, so cu
 
 Model-options or command preflight can adopt an earlier runtime on the same socket. The first prompt must adopt its replacement before receiving clarification or approval requests. Tests run the actual gateway client through the React transport hook and verify a batch card produces a matching-ID reply, rather than a legacy response RPC.
 
+Connection-authority and usage regressions retain the client's activation method in their fixtures, so the full submission path still exercises their teardown and accounting assertions.
+
 ## Superseded submission ownership
 
 A submission that loses its turn or connection authority cannot rebind blocking-request ownership after a delayed session reply.

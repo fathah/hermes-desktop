@@ -28,6 +28,7 @@ const gateway = vi.hoisted(() => ({
 }));
 vi.mock("./dashboardGatewayClient", () => ({
   DashboardGatewayClient: class {
+    activateServerRequests = vi.fn();
     connected = true;
     owner: {
       onEvent?: (event: unknown) => void;
