@@ -23,6 +23,8 @@ import {
   HERMES_REPO,
   HERMES_PYTHON,
   hermesCliArgs,
+  hermesPythonArgs,
+  hermesRuntimeKind,
   getEnhancedPath,
 } from "./installer";
 import {
@@ -372,12 +374,16 @@ function transcribeAudioViaLocalPython(
   ].join("\n");
 
   return new Promise((resolve, reject) => {
-    const proc = spawn(HERMES_PYTHON, ["-c", script, audioPath], {
-      cwd: HERMES_REPO,
-      env: tuiGatewayEnv(profile),
-      stdio: ["ignore", "pipe", "pipe"],
-      ...HIDDEN_SUBPROCESS_OPTIONS,
-    });
+    const proc = spawn(
+      HERMES_PYTHON,
+      hermesPythonArgs(["-c", script, audioPath]),
+      {
+        cwd: HERMES_REPO,
+        env: tuiGatewayEnv(profile),
+        stdio: ["ignore", "pipe", "pipe"],
+        ...HIDDEN_SUBPROCESS_OPTIONS,
+      },
+    );
 
     let stdout = "";
     let stderr = "";
@@ -819,17 +825,16 @@ class TuiGatewayClient {
     this.token = randomUUID();
     const dashboardEnv = {
       ...this.env,
+      HERMES_DESKTOP: "1",
       HERMES_DASHBOARD_SESSION_TOKEN: this.token,
       HERMES_DASHBOARD_TUI: "1",
     };
-    // NB: no `--tui` flag here. It's a *global* hermes option (valid only
-    // before a subcommand), not a `dashboard` subcommand option, so passing
-    // `dashboard --tui` makes argparse exit 2 ("unrecognized arguments:
-    // --tui") and the warmup fails. The JSON-RPC gateway this client talks to
-    // (`/api/ws`) is always served by a plain `hermes dashboard` and is gated
-    // only by HERMES_DASHBOARD_SESSION_TOKEN (set in `dashboardEnv`).
+    // Managed Agent uses the headless backend; legacy installations keep the
+    // browser-backed dashboard command they already support.
+    const managed = hermesRuntimeKind() === "managed";
     const args = hermesCliArgs([
-      "dashboard",
+      managed ? "serve" : "dashboard",
+      ...(managed ? ["--isolated"] : []),
       "--no-open",
       "--host",
       "127.0.0.1",

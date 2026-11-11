@@ -1,8 +1,9 @@
-// Pin the bootstrap script to reviewed upstream bytes. Agent/dependency updates
-// performed by that script retain their own upstream update behavior.
-export const PINNED_INSTALL_COMMIT = "503d863fcd2cbfc0be5a6d6c536fae2e98aa4204";
+// Reviewed Hermes Agent v0.23.1: pin both bootstrap bytes and the fresh-install
+// Agent baseline. Existing newer installs retain upstream's rollback guard.
+// @lat: [[installer-runtime#Reviewed installation baseline]]
+export const PINNED_INSTALL_COMMIT = "3b421578588243f920886e6fe79a6faa87ea026e";
 export const PINNED_INSTALL_SHA256 =
-  "0582d9b1562efcb6e0ac62f4451021667830b830a72ce7d91eaea9fee8b6c09b";
+  "abf338605dae6dd28d101673ac6aed7995c955745db46d47676bc591a7957209";
 export const INSTALLER_VERIFICATION_FAILED = 87;
 
 function shellQuote(value: string): string {

@@ -346,10 +346,13 @@ export function installSkill(
   profile?: string,
 ): SkillCliResult {
   try {
-    const args = hermesCliArgs(["skills", "install", identifier, "--yes"]);
-    if (profile && profile !== "default") {
-      args.splice(process.platform === "win32" ? 2 : 1, 0, "-p", profile);
-    }
+    const args = hermesCliArgs([
+      ...(profile && profile !== "default" ? ["-p", profile] : []),
+      "skills",
+      "install",
+      identifier,
+      "--yes",
+    ]);
 
     const stdout = execFileSync(HERMES_PYTHON, args, {
       cwd: HERMES_REPO,
@@ -381,10 +384,13 @@ export function uninstallSkill(name: string, profile?: string): SkillCliResult {
   // Try the CLI first (updates hub lock files, handles complex cases).
   let cliResult: SkillCliResult | undefined;
   try {
-    const args = hermesCliArgs(["skills", "uninstall", name, "--yes"]);
-    if (profile && profile !== "default") {
-      args.splice(process.platform === "win32" ? 2 : 1, 0, "-p", profile);
-    }
+    const args = hermesCliArgs([
+      ...(profile && profile !== "default" ? ["-p", profile] : []),
+      "skills",
+      "uninstall",
+      name,
+      "--yes",
+    ]);
 
     const stdout = execFileSync(HERMES_PYTHON, args, {
       cwd: HERMES_REPO,

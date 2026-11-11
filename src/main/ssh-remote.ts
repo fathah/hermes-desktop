@@ -3311,7 +3311,7 @@ export async function sshListCachedSessions(
 // `hermes update`, `hermes dump`, and `hermes --version` when called over
 // SSH as the hermes user.
 //
-// Probe the well-known venv install paths first; fall back to bare `hermes`
+// Probe canonical PM launchers before legacy venv install paths; fall back to bare `hermes`
 // on PATH only if none of those exist, preserving the old behavior for
 // non-installer deployments.
 //
@@ -3332,6 +3332,10 @@ export async function sshListCachedSessions(
 // Shared with the SSH target inspection in ssh-docker.ts so "is Hermes
 // installed on the host?" uses the exact same probe list as command execution.
 export const REMOTE_HERMES_CLI_CANDIDATES = [
+  "$HERMES_HOME/hermes-agent/.hermes/bin/hermes",
+  "$HOME/hermes-agent/.hermes/bin/hermes",
+  "$HOME/.hermes/hermes-agent/.hermes/bin/hermes",
+  "/opt/hermes/hermes-agent/.hermes/bin/hermes",
   "$HOME/hermes-agent/.venv/bin/hermes",
   "$HOME/hermes-agent/venv/bin/hermes",
   "$HOME/.hermes/hermes-agent/.venv/bin/hermes",
@@ -3341,17 +3345,22 @@ export const REMOTE_HERMES_CLI_CANDIDATES = [
   "$HOME/.local/bin/hermes",
 ];
 
+// @lat: [[installer-runtime#SSH managed launcher discovery]]
 export function buildRemoteHermesCmd(args: string[], extraShell = ""): string {
   const launcherCandidates = REMOTE_HERMES_LAUNCHER_CANDIDATES;
   const candidates = REMOTE_HERMES_CLI_CANDIDATES;
   const quotedArgs = args.map((a) => shellQuote(a)).join(" ");
-  const launcherProbe = launcherCandidates
-    .map((p) => `[ -x ${p} ] && exec ${p} ${quotedArgs}${extraShell}`)
-    .join("; ");
-  const probe = candidates
-    .map((p) => `[ -x ${p} ] && exec ${p} ${quotedArgs}${extraShell}`)
-    .join("; ");
-  const script = `${launcherProbe}; ${probe}; command -v hermes >/dev/null && exec hermes ${quotedArgs}${extraShell}; echo "ERR: hermes CLI not found on remote PATH, configured launcher, or in any known venv location" >&2; exit 1`;
+  const probeCandidate = (path: string): string => {
+    // These are fixed templates: expand only the intended remote home variable,
+    // keeping spaces, quotes and shell metacharacters inside one executable path.
+    const guard = path.startsWith("$HERMES_HOME/")
+      ? '[ -n "${HERMES_HOME:-}" ] && '
+      : "";
+    return `${guard}[ -x "${path}" ] && exec "${path}" ${quotedArgs}${extraShell}`;
+  };
+  const launcherProbe = launcherCandidates.map(probeCandidate).join("; ");
+  const probe = candidates.map(probeCandidate).join("; ");
+  const script = `${launcherProbe}; ${probe}; command -v hermes >/dev/null && exec hermes ${quotedArgs}${extraShell}; echo "ERR: hermes CLI not found on remote PATH, configured launcher, or in any known managed or legacy installation" >&2; exit 1`;
   return `sh -c ${shellQuote(script)}`;
 }
 

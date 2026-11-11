@@ -4,6 +4,14 @@ Main-process gateway chat supports Agent's peer-to-peer blocking requests while 
 
 [[src/main/hermes.ts#TuiGatewayClient]] distinguishes requests from responses, advertises `client.capabilities`, and retains bounded request identities per socket. Unhandled requests receive an explicit refusal; unsupported window-owned requests use the protocol's not-shown error.
 
+Managed runtimes use `serve --isolated --no-open`; legacy runtimes retain `dashboard`. The desktop only owns the process it launched and does not attach shutdown authority to a system gateway.
+
+## Managed backend ownership
+
+A managed headless backend receives both the desktop marker and its per-spawn token, matching Agent's process-ownership and loopback-authentication contract.
+
+`--isolated` prevents silently attaching a separately owned machine backend. `HERMES_DESKTOP=1` alone is not ownership proof; Agent also requires the private session token, which is never added to unrelated shell launches.
+
 ## Correlated replies
 
 Approval controls resolve exactly one server request by its wire ID, never an approval queue head or a newly minted client RPC ID.
@@ -65,3 +73,11 @@ The relay filters sensitive entries from `session.resume`, `session.activate` an
 An aborted native dialog removes its own submission listener, and a retired dialog cannot answer a later credential request.
 
 Executable dialog-lifecycle fixtures verify abort, pre-abort and stale-sender behavior without opening a native window or collecting real credentials.
+
+## Current Agent model-library extension
+
+The desktop's configured-model shortcut library extends current model-router assembly without changing an already enabled embedded-chat setting.
+
+[[src/main/hermes-agent-compat.ts#patchDashboardCompatibilitySource]] recognizes legacy inline model routes and the current explicit model-router mount. Upstream lacks the desktop-specific `/api/model/library` surface, so its scoped extension remains necessary. The injected handlers import their own helpers rather than relying on names removed by Agent's refactor, mount before the SPA, and remain idempotent. The same rules apply to the SSH patcher.
+
+Shim revision v4 recognizes `app.include_router(_models_routes.router)` and supplies its own JSON, token, clock, typing and Hermes-home imports. Library and active-model reads share the requested default or named profile, as specified by [[model-context#Model context window#Dashboard default profile isolation]]. An already enabled chat constant stays unchanged; only a required library-extension difference triggers atomic source replacement with the original backup retained.

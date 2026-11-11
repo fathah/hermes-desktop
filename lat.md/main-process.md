@@ -58,7 +58,7 @@ Renderer IPC handlers are isolated from app bootstrap so the registry can be spl
 
 [[src/main/ipc/register.ts#registerIpcHandlers]] currently preserves the existing handler behavior behind one registration function. It receives app-level callbacks for the main window, model-library notifications, connection-config notifications, external URL opening, and active chat abort handles.
 
-Current Agent blocking requests, main-issued card identities and request cancellation follow [[main-server-requests]]. Renderer dashboard sockets also use its main-only credential boundary across Local, SSH and direct Remote connections.
+Current Agent blocking requests, main-issued card identities and request cancellation follow [[main-server-requests]]. Renderer dashboard sockets also use its main-only credential boundary across Local, SSH and direct Remote connections. Local CLI and Python helper ownership follows [[installer-runtime]].
 
 Wallet and token-balance handlers sit in the same registry: `list-wallets`, `create-wallet`, `import-wallet`, `rename-wallet`, `delete-wallet` (backed by [[wallet-token-balances#Wallet Store]]) and `get-token-balances` (backed by [[wallet-token-balances#Token Balances]]).
 
@@ -247,6 +247,8 @@ Read, fsync, and replacement failures leave the original credential file byte-id
 ## SSH login shell
 
 [[src/main/ssh-remote.ts#sshExec]] wraps POSIX commands with [[src/main/ssh-command.ts#buildSshRemoteCommand]] so a fish login shell cannot reinterpret assignments or control flow. Remote hosts must provide `/bin/sh`.
+
+[[installer-runtime#SSH managed launcher discovery]] defines deployment-hook precedence, canonical PM launcher discovery and the shared Docker host-inspection boundary; the shell wrapper preserves those selected paths and arguments.
 
 ### Explicit POSIX interpreter
 

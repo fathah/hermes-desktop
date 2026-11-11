@@ -8,6 +8,7 @@ import {
   type Mock,
 } from "vitest";
 import { EventEmitter } from "events";
+import { spawn } from "child_process";
 import type { ConnectionConfig } from "../src/main/config";
 
 const transport = vi.hoisted(() => ({
@@ -22,13 +23,16 @@ const transport = vi.hoisted(() => ({
   sockets: [] as Array<{ emit: (name: string, value?: string) => boolean }>,
   respond: vi.fn(),
   runsEvent: null as ((event: Record<string, unknown>) => void) | null,
+  runtimeKind: "legacy" as "legacy" | "managed",
 }));
 
 vi.mock("../src/main/installer", () => ({
   HERMES_HOME: "/tmp/approval-test",
   HERMES_PYTHON: "/usr/bin/true",
   HERMES_REPO: "/tmp",
-  hermesCliArgs: () => [],
+  hermesCliArgs: (args: string[] = []) => args,
+  hermesPythonArgs: (args: string[]) => args,
+  hermesRuntimeKind: () => transport.runtimeKind,
   getEnhancedPath: () => "",
 }));
 vi.mock("../src/main/config", () => ({
@@ -278,6 +282,7 @@ beforeEach(() => {
   transport.rpc.length = 0;
   transport.sockets.length = 0;
   transport.runsEvent = null;
+  transport.runtimeKind = "legacy";
   transport.respond.mockReset();
   transport.respond.mockImplementation((method: string) =>
     method === "session.create"
@@ -426,6 +431,22 @@ describe("approval transport safety", () => {
 });
 
 describe("main-process peer-to-peer Agent requests", () => {
+  // @lat: [[main-server-requests#Managed backend ownership]]
+  it("starts managed chat as a desktop-owned headless isolated backend", async () => {
+    transport.runtimeKind = "managed";
+    const handle = await send(callbacks());
+    expect(spawn).toHaveBeenLastCalledWith(
+      "/usr/bin/true",
+      expect.arrayContaining(["serve", "--isolated", "--no-open"]),
+      expect.objectContaining({
+        env: expect.objectContaining({
+          HERMES_DESKTOP: "1",
+          HERMES_DASHBOARD_SESSION_TOKEN: expect.any(String),
+        }),
+      }),
+    );
+    handle.abort();
+  });
   // @lat: [[main-server-requests#Correlated replies]]
   it("advertises before creating a session and answers the exact server id once", async () => {
     const cb = callbacks();
