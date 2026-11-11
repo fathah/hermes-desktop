@@ -65,3 +65,4 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[backup-import]] — Native consent, explicit captured Local profile and diagnostic preservation for backup restore.
 - [[server-requests]] — Current Agent blocking-request replies, cancellation, replay and batch clarification.
 - [[main-server-requests]] — Main-process request correlation, native secret collection, cancellation and safe replay restoration.
+- [[compatibility-validation]] — Current and legacy Agent evidence with Local, SSH and Remote validation boundaries.

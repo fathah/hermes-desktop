@@ -45,6 +45,8 @@ The recommended and maximum supported contract are both 8. An older contract sug
 
 [[src/renderer/src/components/settings/AboutPane.tsx#AboutPane]] shows a desktop-update explanation for a future Agent contract and leaves the desktop updater available. It does not suggest updating or downgrading Agent to fix a desktop that predates that interface. Missing translations use the existing English fallback.
 
+The [November 11 upstream review](../docs/upstream-gap-review-2026-11-11.md) records the original contract-6 limitation. A numeric verdict describes the tested protocol boundary; it does not certify every optional Agent product surface or every packaged platform.
+
 [[src/main/ipc/register.ts#registerIpcHandlers]] exposes the snapshot plus bounded runtime-info and command-inventory recorders through preload. [[src/renderer/src/components/settings/AboutPane.tsx#AboutPane]] shows the observed and recommended desktop contracts alongside the independent Agent update action.
 
 ## Test specifications

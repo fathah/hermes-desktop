@@ -1,5 +1,6 @@
 import { readFileSync } from "fs";
 import { join } from "path";
+import { load } from "js-yaml";
 import { describe, expect, it } from "vitest";
 
 const ROOT = join(import.meta.dirname, "..");
@@ -13,13 +14,27 @@ describe("Linux release artifacts", () => {
     );
   });
 
+  // @lat: [[desktop-updates#Stable and beta release channels#Architecture-specific Linux feeds]]
   it.each([
     ["stable", ".github/workflows/release.yml", "latest-linux-arm64.yml"],
     ["beta", ".github/workflows/beta-release.yml", "beta-linux-arm64.yml"],
   ])("publishes the %s arm64 update feed", (_channel, workflow, feed) => {
     const source = readFileSync(join(ROOT, workflow), "utf-8");
+    const parsed = load(source) as {
+      jobs: {
+        publish: {
+          steps: Array<{ uses?: string; with?: { files?: string } }>;
+        };
+      };
+    };
+    const publishStep = parsed.jobs.publish.steps.find(
+      (step) => step.uses === "softprops/action-gh-release@v2",
+    );
 
     expect(source).toContain(`dist/${feed}`);
+    expect(publishStep?.with?.files?.split(/\s+/)).toContain(
+      `artifacts/${feed}`,
+    );
   });
 });
 
