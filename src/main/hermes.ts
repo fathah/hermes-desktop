@@ -4220,7 +4220,14 @@ export function testRemoteConnection(
   // Both the gateway /health and the dashboard /api/status answer JSON. The
   // dashboard SPA answers every unknown path with HTML 200, so an HTML reply is
   // never a healthy Hermes endpoint, whichever path was asked.
-  const probe = (path: string, probeHeaders = headers): Promise<boolean> =>
+  const probeResponse = (
+    path: string,
+    probeHeaders = headers,
+  ): Promise<{
+    ok: boolean;
+    statusCode: number | undefined;
+    looksLikeHtml: boolean;
+  }> =>
     new Promise((resolve) => {
       const target = `${normalized}${path}`;
       const mod = target.startsWith("https") ? https : http;
@@ -4230,17 +4237,27 @@ export function testRemoteConnection(
         (res) => {
           const contentType = String(res.headers?.["content-type"] || "");
           const looksLikeHtml = contentType.toLowerCase().includes("text/html");
-          resolve(res.statusCode === 200 && !looksLikeHtml);
+          resolve({
+            ok: res.statusCode === 200 && !looksLikeHtml,
+            statusCode: res.statusCode,
+            looksLikeHtml,
+          });
           res.resume();
         },
       );
-      req.on("error", () => resolve(false));
+      const failed = (): void =>
+        resolve({ ok: false, statusCode: undefined, looksLikeHtml: false });
+      req.on("error", failed);
       req.on("timeout", () => {
         req.destroy();
-        resolve(false);
+        failed();
       });
       req.end();
     });
+  const probe = async (
+    path: string,
+    probeHeaders = headers,
+  ): Promise<boolean> => (await probeResponse(path, probeHeaders)).ok;
 
   // Try both: the saved connection says which to prefer, but a candidate URL
   // (Welcome / Settings test a NEW url before it is saved) may be either a
@@ -4258,12 +4275,22 @@ export function testRemoteConnection(
         if (configuredOAuth) return true;
         // Dashboard status is public, even when a supplied token is invalid.
         // Verify candidate token access before saving a successful connection.
-        return probe("/api/sessions?limit=1", {
+        const dashboardHeaders = {
           ...headers,
           ...(resolvedApiKey
             ? { "X-Hermes-Session-Token": resolvedApiKey }
             : {}),
-        });
+        };
+        const sessions = await probeResponse(
+          "/api/sessions?limit=1",
+          dashboardHeaders,
+        );
+        if (sessions.ok) return true;
+        // A fresh Agent may not have state.db until its first session is
+        // created. Only that service-unavailable response permits a second,
+        // read-only protected endpoint to verify the same candidate token.
+        if (sessions.statusCode !== 503 || sessions.looksLikeHtml) return false;
+        return probe("/api/profiles", dashboardHeaders);
       }),
     Promise.resolve(false),
   );

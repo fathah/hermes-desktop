@@ -14,6 +14,16 @@ Direct remote schedules use the shared OAuth or token boundary and the selected 
 
 Token dashboard connection tests use public status only for discovery, then verify a protected session-list route with the candidate session-token header. Raw gateway health is public too, so gateway tests verify protected model access with the candidate Bearer token. Existing OAuth discovery remains separate from native sign-in.
 
+A fresh Agent 0.23.1 can return a non-HTML session-list 503 before its first session initializes the database. Only that response permits a read-only protected profiles probe with the same candidate headers. Profiles must succeed; authentication denials, other statuses, HTML and network failures never trigger this fallback.
+
+## Fresh dashboard transport readiness
+
+Remote token, OAuth and SSH chat readiness verifies protected access before probing the chat WebSocket, including when a fresh Agent has not created its session database.
+
+[[src/main/dashboard.ts#verifyDashboardProtectedAccess]] retries only a typed, non-HTML session-list 503 against `/api/profiles` on the identical authenticated transport. Token and SSH retain their session headers; OAuth retains the main-process cookie partition and login-required errors. The fallback never switches credentials, creates a session or uses anonymous HTTP.
+
+HTTP errors carry structured status and HTML classification; response text cannot authorize a fallback. A successful profiles probe still requires [[src/main/dashboard.ts#probeDashboardWebSocket]], with a freshly minted ticket for OAuth. HTML, interrupted responses and authentication failures remain errors.
+
 ## Run history
 
 An expanded job shows its newest runs and bounded plain-text output, owned by the selected connection and profile.
@@ -69,6 +79,54 @@ SSH dashboard cron requests explicitly select the default profile, including the
 ### Dashboard token validation
 
 A public dashboard status response cannot validate a candidate token; connection tests reject unauthorized session-list requests and accept the candidate only when protected access succeeds.
+
+### Fresh dashboard token validation
+
+A real HTTP fixture simulates a fresh Agent with unavailable sessions and verifies profiles accepts only the valid candidate token. Both protected probes receive the same candidate headers without borrowing another saved server's credentials.
+
+### Session probe refusals
+
+Session authentication denials, other server errors, HTML and network failures cannot trigger a profiles retry, even when that route would succeed.
+
+### Fresh profile probe refusals
+
+A fresh dashboard remains rejected when the fallback profiles probe denies authentication, returns HTML or a server error, or loses its connection. A session-list 503 alone never establishes readiness.
+
+### OAuth discovery remains separate
+
+An existing OAuth connection still discovers the public dashboard status without token probes; native sign-in remains responsible for its authentication.
+
+### Dashboard fresh-store transport
+
+Real HTTP fixtures verify Remote and SSH readiness accepts unavailable fresh sessions only after protected profiles access, keeps candidate credentials on both requests and still probes WebSocket. Existing session stores keep their original path.
+
+### Dashboard session readiness refusals
+
+Remote and SSH session authentication denials, other server errors, HTML, malformed JSON and network failures cannot trigger profiles or WebSocket probes. Error text mentioning 503 has no authority.
+
+### Dashboard profile readiness refusals
+
+Remote and SSH readiness stays false when fallback profiles access fails authentication, returns HTML or malformed JSON, has a server error or loses its connection. No WebSocket attempt follows failed protected access.
+
+### Dashboard WebSocket readiness
+
+Fresh-store protected profiles access cannot report a running dashboard when the actual chat WebSocket refuses its upgrade.
+
+### OAuth fresh-store readiness
+
+Fresh-store OAuth retries profiles through the cookie request client and then probes a freshly minted ticket WebSocket; no token or anonymous HTTP request replaces either cookie-backed read.
+
+### OAuth fresh-store refusal boundary
+
+OAuth authentication denials, other statuses, HTML, interrupted responses and unstructured errors never retry profiles, mint a ticket or switch to token transport.
+
+### OAuth fresh-store login expiry
+
+An expired OAuth session discovered by fallback profiles remains a login-required failure and cannot proceed to WebSocket ticket creation.
+
+### OAuth HTTP response classification
+
+OAuth HTTP errors preserve status and HTML classification from headers or body so fresh-store decisions use trusted response metadata while 401 retains its existing login-required signal.
 
 ### Gateway token validation
 

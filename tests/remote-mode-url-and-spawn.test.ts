@@ -756,6 +756,178 @@ describe("testRemoteConnection candidate probing", () => {
     },
   );
 
+  async function withDashboard(
+    reply: (
+      path: string,
+      headers: http.IncomingHttpHeaders,
+    ) => { status: number; type: string } | null,
+    check: (url: string, seen: string[]) => Promise<void>,
+  ): Promise<void> {
+    const seen: string[] = [];
+    const server = http.createServer((req, res) => {
+      const path = req.url || "/";
+      seen.push(path);
+      const response = reply(path, req.headers);
+      if (!response) {
+        req.socket.destroy();
+        return;
+      }
+      res.writeHead(response.status, { "Content-Type": response.type });
+      res.end(response.type.includes("text/html") ? "<html>SPA</html>" : "{}");
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string")
+        throw new Error("Missing dashboard fixture port");
+      await check(`http://127.0.0.1:${address.port}`, seen);
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
+  }
+
+  // @lat: [[scheduled-jobs#Test specifications#Fresh dashboard token validation]]
+  it.each([
+    { token: "candidate-token", valid: true },
+    { token: "invalid-token", valid: false },
+    { token: "", valid: false },
+  ])(
+    "validates a fresh dashboard through authenticated profiles (token=$token)",
+    async ({ token, valid }) => {
+      connModeRef.mode = "remote";
+      connAuthRef.apiKey = "saved-other-server-token";
+      const protectedHeaders: http.IncomingHttpHeaders[] = [];
+      await withDashboard(
+        (path, headers) => {
+          if (path === "/health") return { status: 200, type: "text/html" };
+          if (path === "/api/status")
+            return { status: 200, type: "application/json" };
+          protectedHeaders.push(headers);
+          if (path === "/api/sessions?limit=1")
+            return { status: 503, type: "application/json" };
+          const authorized =
+            path === "/api/profiles" &&
+            headers.authorization === "Bearer candidate-token" &&
+            headers["x-hermes-session-token"] === "candidate-token";
+          return {
+            status: authorized ? 200 : 401,
+            type: "application/json",
+          };
+        },
+        async (url, seen) => {
+          await expect(testRemoteConnection(url, token)).resolves.toBe(valid);
+          expect(seen).toEqual([
+            "/health",
+            "/api/status",
+            "/api/sessions?limit=1",
+            "/api/profiles",
+          ]);
+          for (const headers of protectedHeaders) {
+            expect(headers.authorization).toBe(
+              token ? `Bearer ${token}` : undefined,
+            );
+            expect(headers["x-hermes-session-token"]).toBe(token || undefined);
+          }
+        },
+      );
+    },
+  );
+
+  // @lat: [[scheduled-jobs#Test specifications#Session probe refusals]]
+  it.each([
+    {
+      name: "unauthorized",
+      response: { status: 401, type: "application/json" },
+    },
+    { name: "forbidden", response: { status: 403, type: "application/json" } },
+    {
+      name: "server error",
+      response: { status: 500, type: "application/json" },
+    },
+    { name: "SPA", response: { status: 200, type: "text/html" } },
+    { name: "HTML unavailable", response: { status: 503, type: "text/html" } },
+    { name: "network error", response: null },
+  ])("does not retry profiles after a session $name", async ({ response }) => {
+    await withDashboard(
+      (path) => {
+        if (path === "/health") return { status: 200, type: "text/html" };
+        if (path === "/api/sessions?limit=1") return response;
+        return { status: 200, type: "application/json" };
+      },
+      async (url, seen) => {
+        await expect(
+          testRemoteConnection(url, "candidate-token"),
+        ).resolves.toBe(false);
+        expect(seen).toEqual([
+          "/health",
+          "/api/status",
+          "/api/sessions?limit=1",
+        ]);
+      },
+    );
+  });
+
+  // @lat: [[scheduled-jobs#Test specifications#Fresh profile probe refusals]]
+  it.each([
+    {
+      name: "unauthorized",
+      response: { status: 401, type: "application/json" },
+    },
+    { name: "forbidden", response: { status: 403, type: "application/json" } },
+    {
+      name: "server error",
+      response: { status: 500, type: "application/json" },
+    },
+    {
+      name: "unavailable",
+      response: { status: 503, type: "application/json" },
+    },
+    { name: "SPA", response: { status: 200, type: "text/html" } },
+    { name: "network error", response: null },
+  ])(
+    "rejects a fresh dashboard when profiles returns $name",
+    async ({ response }) => {
+      await withDashboard(
+        (path) => {
+          if (path === "/health") return { status: 200, type: "text/html" };
+          if (path === "/api/sessions?limit=1")
+            return { status: 503, type: "application/json" };
+          if (path === "/api/profiles") return response;
+          return { status: 200, type: "application/json" };
+        },
+        async (url, seen) => {
+          await expect(
+            testRemoteConnection(url, "candidate-token"),
+          ).resolves.toBe(false);
+          expect(seen).toEqual([
+            "/health",
+            "/api/status",
+            "/api/sessions?limit=1",
+            "/api/profiles",
+          ]);
+        },
+      );
+    },
+  );
+
+  // @lat: [[scheduled-jobs#Test specifications#OAuth discovery remains separate]]
+  it("keeps configured OAuth discovery separate from native sign-in", async () => {
+    connModeRef.mode = "remote";
+    connAuthRef.mode = "oauth";
+    const probe = stubHttp(() => ({ status: 200, type: "application/json" }));
+    try {
+      await expect(testRemoteConnection(connAuthRef.url)).resolves.toBe(true);
+      expect(probe.seen).toEqual([`${connAuthRef.url}/api/status`]);
+    } finally {
+      probe.restore();
+    }
+  });
+
   // @lat: [[scheduled-jobs#Test specifications#Gateway token validation]]
   it.each([false, true])(
     "validates a gateway token through protected models (valid=%s)",
