@@ -115,13 +115,27 @@ Local evidence remains under `.sandbox/release-v0.7.8/packaged-local-attempt4/`;
 
 The checked-in `scripts/verify-packaged-app.mjs` reproduces this tier. Remote requires explicit isolated `--agent-repo` and `--python` inputs. Local requires `--mode=local --hermes-home=/absolute/temporary/home` and an ownership marker at that home; it refuses an unmarked installation or a non-temporary path. The explicit marker is `{"purpose":"hermes-desktop-packaged-ui","ownedHome":"/absolute/temporary/home"}` in `.desktop-compat-fixture.json`.
 
+## Signed CI DMG application
+
+The actual arm64 artifact from the successful release dry run was downloaded, verified, copied from a read-only mounted DMG into an owned test folder, and run with isolated state.
+
+The artifact came from run `43075715283`, production-input commit `439c8b07`, artifact `13881213648`. Its ZIP-container SHA-256 matched GitHub's recorded digest: `c04b44272db9d9892f35c89fd77a33f7fb893d76e5dca3029fcb71622fdde244`. The DMG passed CRC verification; its copied app passed `codesign --verify --deep --strict`, stapled-ticket validation and Gatekeeper assessment (`Notarized Developer ID`). The bundle was hardened arm64, identifier `com.nousresearch.hermes`, signing team `WM6645CA5X`.
+
+Both signed-app Local and Remote UI runs passed the same nine checks, including matching-ID batch answers, completion, four-item restored history, About v0.7.8 and native SQLite 3.53.4. Neither run had page/console errors, main-process fatal errors or admission retries. The DMG was detached, fixture settings restored and app/backend processes stopped. No copy was installed into `/Applications` and no existing account or desktop profile was used.
+
+The signed ASAR SHA-256 was `780246561749c27f9f98e929a2db27ad74d65c042c645b87d61b15b81221e620`. All 21,424 packed files and 65 unchanged unpacked files matched their hashes. Signing legitimately changed the two unpacked Darwin SQLite prebuilds after ASAR header creation; the verifier required strict parent/native signatures and the explicit expected team for those two entries. Their actual sizes/hashes are recorded, and all other unpacked entries remain exact.
+
+Signed verification requires `--expected-team-id=WM6645CA5X`. A wrong-team case and a changed PNG resource were both rejected before launch; original resource bytes were restored and strict parent verification passed again. The default unsigned preflight still passed every original hash with zero signing exceptions. These checks exercise the verifier change without relaxing application or test assertions.
+
+Evidence is retained under `.sandbox/release-v0.7.8/signed-macos/`: `provenance.json`, `signing.json`, `mount-copy.json`, `local-verified/result.json`, `remote-verified/result.json`, both negative-case reports and the strict unsigned-preflight report. The original CI assets were not modified.
+
 ## Remaining acceptance boundaries
 
 These checks establish current wire compatibility but do not certify every installed environment, external identity provider or packaged operating system.
 
 - Remote OAuth account sign-in, external SSH hosts, remote provisioning and container-host launchers need deployment or operator acceptance beyond loopback transport testing.
 - No actual ML inference or paid provider call ran. The request-only tier directly opens Agent server requests; the actual Agent tier uses a scripted localhost provider to exercise the full tool loop.
-- Windows and Linux packaged fresh installation/update, macOS signed application installation/update, and the complete SSH Electron connection-selection workflow remain separate checks. The macOS Local and Remote compatibility UI flows passed as recorded above.
+- Native Windows/Linux installation and launch, an actual updater upgrade from the previous release, x64 macOS app launch, and the complete SSH Electron connection-selection workflow remain separate checks. macOS arm64 Local/Remote UI passed for both the unsigned candidate and the signed CI DMG copy.
 - Capability regression tests verify that future contracts request a desktop update and retain unknown feature states, rather than being silently certified or suggesting an Agent downgrade.
 
 ## Application checks and candidate
@@ -139,7 +153,7 @@ The working tree is prepared as desktop v0.7.8, with no release tag, published p
 
 The final regression rerun began at 18:12 UTC on November 11 on `codex/release-v0.7.8`, after the REST-history fix and macOS ZIP packaging completed and both native UI runs exited. The command was plain `npm test`, using the repository's normal `vitest run --maxWorkers=4`. Its log is `/private/tmp/hermes-release-v0.7.8-historyfinal-tests.log`; audit and refreshed whole-repository lint logs are `/private/tmp/hermes-release-v0.7.8-historyfinal-audit.log` and `/private/tmp/hermes-release-v0.7.8-historyfinal-lint.log`.
 
-Source snapshots and counts are recorded in `/private/tmp/hermes-release-v0.7.8-historyfinal-test-start.json`, `/private/tmp/hermes-release-v0.7.8-historyfinal-test-end.json` and `/private/tmp/hermes-release-v0.7.8-historyfinal-qa-result.json`. All 1,128 source, test, script, workflow and build-configuration files had the same start/end manifest SHA-256: `0beef7a73e903e7d7900f09be05bb801f486ec074fbacc959a88eac112f756d7`. The run started at history-fix commit `3e668f01fbeec36e3273cf53d36b3e03bdb514f9`; the same tested bytes were committed as release candidate `439c8b07d751aefc70c6079ea94a98f9e4e6d511` before it finished. Only documentation evidence changed afterward. This pass supersedes all earlier suite counts.
+Source snapshots and counts are recorded in `/private/tmp/hermes-release-v0.7.8-historyfinal-test-start.json`, `/private/tmp/hermes-release-v0.7.8-historyfinal-test-end.json` and `/private/tmp/hermes-release-v0.7.8-historyfinal-qa-result.json`. All 1,128 source, test, script, workflow and build-configuration files had the same start/end manifest SHA-256: `0beef7a73e903e7d7900f09be05bb801f486ec074fbacc959a88eac112f756d7`. The run started at history-fix commit `3e668f01fbeec36e3273cf53d36b3e03bdb514f9`; the same tested bytes were committed as release candidate `439c8b07d751aefc70c6079ea94a98f9e4e6d511` before it finished. Application and regression-test sources stayed unchanged afterward. The standalone verifier was then extended and checked for signed-native artifacts as recorded above; that script is excluded from production packaging. This pass supersedes all earlier suite counts.
 
 An immediately preceding run overlapped two native Electron acceptance runs and hit the unchanged five-second ceiling in two Layout usage tests. That file passed unchanged in isolation, then the complete quiet rerun passed with normal four-worker settings. No assertions or test deadlines were relaxed for this load-related retry; its earlier log remains `/private/tmp/hermes-release-v0.7.8-historyfinal-attempt1-tests.log`.
 
@@ -147,4 +161,4 @@ The native Linux package-hook fixtures repeatedly reached their former five-seco
 
 The current model-library compatibility adapter was also executed as an in-memory overlay of the actual Agent v0.23.1 web-server module using Python 3.14. It registered both library routes, returned distinct root/profile models, and wrote the named profile without changing the root library. The source export was not modified by this probe.
 
-The [v0.7.8 release draft](releases/v0.7.8.md) records the compatibility scope, upgrade notes and seven focused PRs. The [release dry run](https://github.com/fathah/hermes-desktop/actions/runs/43075715283) builds the `439c8b07` candidate without publishing; its prepare job confirmed `dry_run=true`, v0.7.8 tag absence and skipped publication. Later evidence-only documentation updates do not change its production inputs. Signed packaged-platform installation/update and external OAuth/deployment checks above remain separate pre-publication acceptance work.
+The [v0.7.8 release draft](releases/v0.7.8.md) records the compatibility scope, upgrade notes and seven focused PRs. The [release dry run](https://github.com/fathah/hermes-desktop/actions/runs/43075715283) passed all five platform builds and artifact uploads for `439c8b07`; both macOS builds were signed/notarized and native architectures verified. Its prepare job confirmed `dry_run=true` and v0.7.8 tag absence; publication and website rebuild were skipped. Later documentation and standalone-verifier updates do not change its production inputs. Actual updater, remaining native-platform and external OAuth/deployment checks above remain separate pre-publication acceptance work.

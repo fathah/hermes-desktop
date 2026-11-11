@@ -42,6 +42,8 @@ The packaged-app runner verifies archive bytes and drives the actual Electron UI
 
 `scripts/verify-packaged-app.mjs` first checks packed and unpacked ASAR file hashes, candidate metadata, the runtime payload allowlist and absence of environment files. It launches an explicit packaged executable with isolated home, Hermes state and Electron user data. The UI path covers Welcome, Remote token setup, composer submission, real multi-question clarification, completion, saved-history restoration and About version. A native in-memory SQLite query runs inside packaged Electron, and renderer errors and main-process fatal errors fail acceptance.
 
+Developer ID signing changes unpacked Mach-O binaries after ASAR header creation. `--expected-team-id` allows only the known better-sqlite3 Darwin prebuilds to differ after strict parent and file signature checks match that team; actual and header hashes remain recorded. All other files require exact header hashes.
+
 The runner retains screenshots, hash counts and a JSON report, with diagnostic logs on failure. `--preflight-only` runs only archive validation. This tier does not certify a signed installer, auto-update, external OAuth or external-host deployment; Local and SSH wire behavior remains covered by their separate live runners.
 
 Diagnostic WebSocket traces retain method, correlation, session and result-key metadata without frame bodies or credentials. Acceptance requires contract 8, one batched clarification answered with its matching request ID and one new conversation with restored final content; existing fixture conversations remain intact.
@@ -57,3 +59,15 @@ Optional `--mode=local --hermes-home=/absolute/temporary/home` uses an actual ma
 Local fixture configuration includes dummy custom-provider keys and a generated `API_SERVER_KEY`, matching normal Desktop setup without any user credentials. The required batched WebSocket request and matching response prevent a legacy fallback from satisfying acceptance.
 
 The 2026-11-11 macOS arm64 candidate passed both native UI modes against Agent v0.23.1, including native SQLite 3.53.4 and complete restored tool activity. The [acceptance record](../docs/compatibility-acceptance-2026-11-11.md) retains archive identity, per-mode reports and screenshot evidence.
+
+## Signed CI application acceptance
+
+A CI-built macOS arm64 app is verified against its public Developer ID and tested from an owned copy extracted from a read-only disk image.
+
+Release dry run `43075715283` at `439c8b07` produced artifact `13881213648`. Its downloaded ZIP matched GitHub's SHA-256 digest before extraction. The DMG checksum passed, then the image was mounted read-only without browsing, its app copied into the verification folder, and the image detached.
+
+The copied app passed deep strict code-signature verification, Gatekeeper assessment as `Notarized Developer ID`, and stapled-ticket validation for team `WM6645CA5X`. Both Local and Remote UI runs passed the same nine checks, including real batched clarification, matching request IDs, complete restored tool activity, desktop version 0.7.8 and native SQLite 3.53.4.
+
+The verifier requires `--expected-team-id=WM6645CA5X` for this signed candidate. A wrong team and a modified resource in the owned copy were each rejected before launch; exact resource bytes were restored and the parent signature reverified. Unsigned default preflight still requires every header hash without signed exceptions.
+
+This evidence covers the notarized CI app and read-only DMG extraction. Installation into an existing system, account migration and in-place updater application remain operator acceptance. CI publishing was explicitly skipped.

@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/explicit-function-return-type -- Executable JavaScript acceptance harness. */
 /** Packaged Electron UI + actual Agent with scripted localhost responses, never paid inference. */
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
@@ -174,8 +174,78 @@ function verifyArchive() {
     links: 0,
     verifiedBytes: 0,
     entries: entries.length,
+    postSigningNativeFiles: [],
   };
   report.archive = result;
+  const expectedSigningTeam =
+    typeof args["expected-team-id"] === "string"
+      ? args["expected-team-id"]
+      : null;
+  const codesign = (args) => {
+    const checked = spawnSync("codesign", args, {
+      encoding: "utf8",
+      timeout: 30000,
+    });
+    assert.equal(
+      checked.status,
+      0,
+      `Code signature verification failed: ${checked.stderr || checked.error || checked.stdout}`,
+    );
+    return checked.stdout + checked.stderr;
+  };
+  if (expectedSigningTeam) {
+    assert.match(
+      expectedSigningTeam,
+      /^[A-Z0-9]{10}$/,
+      "Expected signing team must be an explicit Apple team identifier",
+    );
+    const app = path.resolve(path.dirname(executablePath), "../..");
+    codesign(["--verify", "--deep", "--strict", app]);
+    const signingTeam = /TeamIdentifier=(\S+)/.exec(
+      codesign(["--display", "--verbose=4", app]),
+    )?.[1];
+    assert.equal(
+      signingTeam,
+      expectedSigningTeam,
+      "Parent signing team differs from the expected team",
+    );
+    result.expectedTeamId = expectedSigningTeam;
+    result.parentTeamId = signingTeam;
+  }
+  const verifyPostSigningNative = (relative, bytes, entry, actualHash) => {
+    const magic = bytes.length >= 4 ? bytes.readUInt32BE(0) : 0;
+    assert.ok(
+      process.platform === "darwin" &&
+        expectedSigningTeam &&
+        entry.unpacked &&
+        /^node_modules\/better-sqlite3\/prebuilds\/darwin-(?:arm64|x64)\.node$/.test(
+          relative,
+        ) &&
+        [
+          0xfeedface, 0xcefaedfe, 0xfeedfacf, 0xcffaedfe, 0xcafebabe,
+          0xbebafeca, 0xcafebabf, 0xbfbafeca,
+        ].includes(magic),
+      `Archive integrity mismatch (signed native verification requires an explicit expected team and known native entry): ${relative}`,
+    );
+    const filename = path.join(`${archive}.unpacked`, ...relative.split("/"));
+    codesign(["--verify", "--strict", filename]);
+    const nativeTeam = /TeamIdentifier=(\S+)/.exec(
+      codesign(["--display", "--verbose=4", filename]),
+    )?.[1];
+    assert.equal(
+      nativeTeam,
+      expectedSigningTeam,
+      `Native signing team differs from the sealed parent: ${relative}`,
+    );
+    result.postSigningNativeFiles.push({
+      path: relative,
+      teamId: nativeTeam,
+      headerSize: entry.size,
+      actualSize: bytes.length,
+      headerSha256: entry.integrity.hash,
+      actualSha256: actualHash,
+    });
+  };
   const walk = (files, prefix = "") => {
     for (const [name, entry] of Object.entries(files)) {
       const relative = prefix ? `${prefix}/${name}` : name;
@@ -205,16 +275,9 @@ function verifyArchive() {
             path.join(`${archive}.unpacked`, ...relative.split("/")),
           )
         : asar.extractFile(archive, relative);
-      assert.equal(
-        bytes.length,
-        entry.size,
-        `Archive size mismatch: ${relative}`,
-      );
-      assert.equal(
-        createHash("sha256").update(bytes).digest("hex"),
-        entry.integrity.hash,
-        `Archive integrity mismatch: ${relative}`,
-      );
+      const actualHash = createHash("sha256").update(bytes).digest("hex");
+      if (bytes.length !== entry.size || actualHash !== entry.integrity.hash)
+        verifyPostSigningNative(relative, bytes, entry, actualHash);
       if (entry.unpacked) result.unpackedFiles += 1;
       else result.packedFiles += 1;
       result.verifiedBytes += bytes.length;
