@@ -7,13 +7,15 @@ lat:
 
 Tests cover interactive gateway questions, transport-correct replies and the lifecycle of pending answers.
 
+The original specifications below protect legacy event/RPC behavior. Current matching-ID request replies, batch forms, cancellation and authoritative reconnect restoration are additionally documented and tested through [[server-requests]].
+
 ## Interactive gateway requests
 
 Gateway events preserve questions and choices as interactive cards rather than flattening them into text.
 
 ## Gateway answer delivery
 
-Choice, free-text and skip answers use clarify.respond on the originating dashboard session.
+Legacy choice, free-text and skip answers use clarify.respond on the originating dashboard session.
 
 ## Composer fallback
 
@@ -33,7 +35,7 @@ Connection changes invalidate pending questions before replies can reach another
 
 ## Completed turns and replay
 
-Completed questions remain unavailable when a gateway request is replayed.
+Completed legacy questions remain unavailable when their notification is replayed; stale same-socket current snapshots cannot reopen a settled request either.
 
 ## Card transport routing
 
@@ -49,7 +51,7 @@ A late acknowledgement resolves its original question without clearing the next 
 
 ## Disconnect during answer
 
-Closing the active socket while a clarification response is pending clears that turn and loading state, expires the card, and leaves the composer available for recovery.
+Closing the socket clears the pending turn and disables its card. Current open requests can restore after a new socket resumes the owner; stale replies cannot use that new socket.
 
 ## Stale request isolation
 
@@ -62,3 +64,5 @@ Replaying a question while its answer is being delivered preserves the resumed t
 ## Gateway expiration
 
 A matching clarify.expire event disables the timed-out card and restores tracking of the resumed agent turn. Events for another request or session leave the current question untouched.
+
+Current Agent `request.cancel` frames are adapted to the same request-specific expiry path. Batch answer validation, locked-answer restoration, multi-selection encoding and keyboard submission follow [[server-requests#Batch clarification]].

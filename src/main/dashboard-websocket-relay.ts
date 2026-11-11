@@ -1,10 +1,19 @@
 import { randomBytes } from "crypto";
 import http from "http";
 import WebSocket, { WebSocketServer, type RawData } from "ws";
+import {
+  gatewayRequestRecord,
+  parseGatewayServerRequest,
+  type GatewayServerRequest,
+} from "../shared/gateway-server-requests";
 
 export interface DashboardWebSocketRelayOptions {
   acceptTimeoutMs?: number;
   connectTimeoutMs?: number;
+  collectSensitiveRequest?: (
+    request: GatewayServerRequest,
+    signal: AbortSignal,
+  ) => Promise<{ value: string } | null>;
 }
 
 const RENDERER_SAFE_WS_HOSTS = new Set(["127.0.0.1", "localhost"]);
@@ -38,13 +47,195 @@ function forwardFrame(peer: WebSocket, data: RawData, isBinary: boolean): void {
   });
 }
 
-function bridgeWebSockets(renderer: WebSocket, target: WebSocket): void {
-  renderer.on("message", (data, isBinary) =>
-    forwardFrame(target, data, isBinary),
-  );
-  target.on("message", (data, isBinary) =>
-    forwardFrame(renderer, data, isBinary),
-  );
+function frameObject(
+  data: RawData,
+  isBinary: boolean,
+): Record<string, unknown> | null {
+  if (isBinary) return null;
+  try {
+    const text = Array.isArray(data)
+      ? Buffer.concat(data).toString("utf8")
+      : Buffer.isBuffer(data)
+        ? data.toString("utf8")
+        : Buffer.from(data).toString("utf8");
+    return gatewayRequestRecord(JSON.parse(text));
+  } catch {
+    return null;
+  }
+}
+
+function bridgeWebSockets(
+  renderer: WebSocket,
+  target: WebSocket,
+  options: DashboardWebSocketRelayOptions,
+): void {
+  const sensitive = new Map<string, AbortController>();
+  const sensitiveSessions = new Map<string, string>();
+  const retired = new Set<string>();
+  let live = true;
+  let prompts = Promise.resolve();
+  const retire = (id: string): void => {
+    retired.add(id);
+    if (retired.size > 512) retired.delete(retired.values().next().value!);
+  };
+  const cancel = (id: string, sessionId?: string): void => {
+    if (
+      sessionId &&
+      sensitive.has(id) &&
+      sensitiveSessions.get(id) !== sessionId
+    )
+      return;
+    sensitive.get(id)?.abort();
+    sensitive.delete(id);
+    sensitiveSessions.delete(id);
+    retire(id);
+  };
+  const close = (): void => {
+    live = false;
+    for (const controller of sensitive.values()) controller.abort();
+    sensitive.clear();
+    sensitiveSessions.clear();
+    retired.clear();
+  };
+  const answer = (id: string, response: Record<string, unknown>): void => {
+    if (!live || target.readyState !== WebSocket.OPEN) return;
+    try {
+      target.send(JSON.stringify({ jsonrpc: "2.0", id, ...response }));
+    } catch {
+      /* The disconnected request cannot be answered later on another socket. */
+    }
+  };
+  renderer.on("message", (data, isBinary) => {
+    const frame = frameObject(data, isBinary);
+    // The chat renderer never owns password RPCs or their responses.
+    if (
+      typeof frame?.id === "string" &&
+      (sensitive.has(frame.id) || retired.has(frame.id))
+    )
+      return;
+    forwardFrame(target, data, isBinary);
+  });
+  const consumeSensitiveRequest = (request: GatewayServerRequest): boolean => {
+    if (
+      ![
+        "sudo",
+        "secret",
+        "vault.unlock_prompt",
+        "vault.code",
+        "vault.save_login",
+      ].includes(request.method)
+    )
+      return false;
+    if (sensitive.has(request.id) || retired.has(request.id)) return true;
+    if (!request.sessionId.trim()) {
+      retire(request.id);
+      answer(request.id, {
+        error: {
+          code: -32602,
+          message: "Sensitive input requires an owning chat session.",
+        },
+      });
+      return true;
+    }
+    if (request.method === "vault.save_login" || sensitive.size >= 32) {
+      retire(request.id);
+      answer(request.id, {
+        error: {
+          code: -32601,
+          message:
+            "This sensitive interaction is not supported by this desktop.",
+        },
+      });
+      return true;
+    }
+    const controller = new AbortController();
+    sensitive.set(request.id, controller);
+    sensitiveSessions.set(request.id, request.sessionId);
+    prompts = prompts.then(async () => {
+      if (!live || controller.signal.aborted) return;
+      const collect =
+        options.collectSensitiveRequest ??
+        (async (value, signal) => {
+          const { collectGatewayRequestValue } =
+            await import("./gatewayPrompt");
+          return collectGatewayRequestValue(value, signal);
+        });
+      try {
+        const result = await collect(request, controller.signal);
+        if (
+          !live ||
+          controller.signal.aborted ||
+          sensitive.get(request.id) !== controller
+        )
+          return;
+        answer(
+          request.id,
+          result
+            ? { result }
+            : {
+                error: {
+                  code: -32601,
+                  message:
+                    "This sensitive interaction is not supported by this desktop.",
+                },
+              },
+        );
+      } catch {
+        if (live && !controller.signal.aborted) {
+          answer(request.id, {
+            error: {
+              code: -32603,
+              message: "The sensitive interaction could not be completed.",
+            },
+          });
+        }
+      } finally {
+        if (sensitive.get(request.id) === controller) {
+          sensitive.delete(request.id);
+          sensitiveSessions.delete(request.id);
+        }
+        retire(request.id);
+      }
+    });
+    return true;
+  };
+  target.on("message", (data, isBinary) => {
+    const frame = frameObject(data, isBinary);
+    const params = gatewayRequestRecord(frame?.params);
+    if (frame?.method === "event" && params?.type === "request.cancel") {
+      const id = gatewayRequestRecord(params.payload)?.id;
+      if (typeof id === "string")
+        cancel(
+          id,
+          typeof params.session_id === "string" ? params.session_id : undefined,
+        );
+    }
+    const result = gatewayRequestRecord(frame?.result);
+    if (frame && Array.isArray(result?.open_requests)) {
+      const openRequests = result.open_requests.filter((entry) => {
+        const request = parseGatewayServerRequest(entry);
+        return !request || !consumeSensitiveRequest(request);
+      });
+      if (openRequests.length !== result.open_requests.length) {
+        forwardFrame(
+          renderer,
+          Buffer.from(
+            JSON.stringify({
+              ...frame,
+              result: { ...result, open_requests: openRequests },
+            }),
+          ),
+          false,
+        );
+        return;
+      }
+    }
+    const request = parseGatewayServerRequest(frame);
+    if (request && consumeSensitiveRequest(request)) return;
+    forwardFrame(renderer, data, isBinary);
+  });
+  renderer.once("close", close);
+  target.once("close", close);
   renderer.once("close", (code, reason) => closePeer(target, code, reason));
   target.once("close", (code, reason) => closePeer(renderer, code, reason));
   renderer.on("error", () => target.terminate());
@@ -118,7 +309,7 @@ export function createLoopbackWebSocketRelay(
         clearTimeout(connectTimer);
         sockets.handleUpgrade(request, socket, head, (renderer) => {
           closeListener();
-          bridgeWebSockets(renderer, upstream);
+          bridgeWebSockets(renderer, upstream, options);
         });
       });
       upstream.once("error", () => {
@@ -154,7 +345,7 @@ export function createLoopbackWebSocketRelay(
 export async function dashboardWebSocketUrlForRenderer(
   targetUrl: string,
 ): Promise<string> {
-  return dashboardWebSocketUrlNeedsRelay(targetUrl)
-    ? createLoopbackWebSocketRelay(targetUrl)
-    : targetUrl;
+  // All transports use the main-process boundary, including Local and WSS:
+  // sudo/password answers must never cross the chat renderer.
+  return createLoopbackWebSocketRelay(targetUrl);
 }

@@ -128,8 +128,9 @@ exit 1
 export async function showPasswordDialog(
   parent: BrowserWindow | null,
   prompt: string,
-  opts: { title?: string; heading?: string } = {},
+  opts: { title?: string; heading?: string; signal?: AbortSignal } = {},
 ): Promise<string | null> {
+  if (opts.signal?.aborted) return null;
   const title = opts.title ?? "Administrator Password Required";
   const heading = opts.heading ?? "The installer needs your password";
   return new Promise((resolve) => {
@@ -158,6 +159,7 @@ export async function showPasswordDialog(
     function finish(value: string | null): void {
       if (settled) return;
       settled = true;
+      opts.signal?.removeEventListener("abort", onAbort);
       ipcMain.removeListener(ASKPASS_SUBMIT_CHANNEL, onSubmit);
       try {
         if (!win.isDestroyed()) win.close();
@@ -165,6 +167,10 @@ export async function showPasswordDialog(
         /* non-fatal */
       }
       resolve(value);
+    }
+
+    function onAbort(): void {
+      finish(null);
     }
 
     function onSubmit(event: IpcMainEvent, value: unknown): void {
@@ -177,6 +183,11 @@ export async function showPasswordDialog(
     }
 
     ipcMain.on(ASKPASS_SUBMIT_CHANNEL, onSubmit);
+    opts.signal?.addEventListener("abort", onAbort, { once: true });
+    if (opts.signal?.aborted) {
+      finish(null);
+      return;
+    }
     win.on("closed", () => finish(null));
     win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     win.webContents.on("will-navigate", (event) => event.preventDefault());

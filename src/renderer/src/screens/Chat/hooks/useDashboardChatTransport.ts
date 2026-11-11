@@ -74,6 +74,7 @@ interface FileAttachResponse {
 }
 
 interface DashboardPromptClient {
+  activateServerRequests?(sessionId: string): void;
   request<T = unknown>(
     method: string,
     params?: Record<string, unknown>,
@@ -1340,6 +1341,24 @@ export function useDashboardChatTransport({
 
       const failed =
         event.type === "message.complete" && completionFailed(event.payload);
+      if (event.type === "approval.expire") {
+        const requestId = gatewayApprovalRequestId(event.payload);
+        if (!requestId) return;
+        pendingApprovalsRef.current = pendingApprovalsRef.current.filter(
+          (pending) => pending.requestId !== requestId,
+        );
+        setMessages((current) =>
+          current.map((message) =>
+            message.kind === "approval" &&
+            message.responsePath === "dashboard" &&
+            message.requestId === requestId &&
+            !message.resolved
+              ? { ...message, unavailable: true }
+              : message,
+          ),
+        );
+        return;
+      }
       const approvalRequestId =
         event.type === "approval.request"
           ? dashboardApprovalRequestId(
@@ -1359,6 +1378,12 @@ export function useDashboardChatTransport({
         );
         if (
           previous?.kind === "approval" &&
+          !(
+            event.payload &&
+            typeof event.payload === "object" &&
+            (event.payload as Record<string, unknown>).server_request_replay ===
+              true
+          ) &&
           (previous.resolved || previous.unavailable)
         )
           return;
@@ -1562,6 +1587,7 @@ export function useDashboardChatTransport({
       profile,
       subagentSessionKey,
       setIsLoading,
+      setMessages,
       setToolProgress,
       setUsage,
     ],
@@ -1668,6 +1694,8 @@ export function useDashboardChatTransport({
               if (clientRef.current === client) {
                 expirePendingClarifyRef.current(true);
                 expirePendingApprovalsRef.current(true);
+                runtimeSessionIdRef.current = null;
+                appliedModelRef.current = null;
                 clientRef.current = null;
               }
             },
@@ -1818,6 +1846,8 @@ export function useDashboardChatTransport({
         recreateRuntimeSessionRef.current = false;
         setHermesSessionId(storedId);
       }
+
+      client.activateServerRequests?.(targetSessionId);
 
       if (
         contextFolder &&
@@ -2326,6 +2356,7 @@ export function useDashboardChatTransport({
           onRecoveredSessionId: (recoveredSessionId, info) => {
             assertSubmission();
             runtimeSessionIdRef.current = recoveredSessionId;
+            client?.activateServerRequests?.(recoveredSessionId);
             if (cumulativeUsagePayload(info))
               cumulativeUsageRef.current.set(
                 recoveredSessionId,
@@ -2578,6 +2609,7 @@ export function useDashboardChatTransport({
                 );
               runtimeSessionIdRef.current = resumed.session_id;
             }
+            client.activateServerRequests?.(runtimeSessionIdRef.current);
             return runtimeSessionIdRef.current;
           })();
           pending = { generation, promise, scope };

@@ -158,13 +158,15 @@ The legacy approval responses `/approve` and `/deny` (the `RENDERER_NATIVE_SLASH
 
 Dangerous commands pause the current turn until the user explicitly allows or denies them; the desktop never auto-approves or replays a prompt after an approval request.
 
-Response acknowledgements may follow turn completion; lifecycle regression coverage is documented in [[approval-completion]].
+Legacy response acknowledgements may follow turn completion; lifecycle regression coverage is documented in [[approval-completion]]. Current Agent requests use the matching-ID response path in [[server-requests#Matching request replies]].
 
-[[src/shared/chat-approval.ts#normalizeApprovalRequest]] limits choices to the gateway's offered permissions and preserves a deny path. Dashboard chat renders [[src/renderer/src/screens/Chat/ApprovalCard.tsx#ApprovalCard]] from `approval.request`. Responses include the gateway-issued `request_id` and runtime session ID through [[src/renderer/src/screens/Chat/hooks/useDashboardChatTransport.ts#useDashboardChatTransport]]. Cards queue in arrival order, with an in-flight guard. Only an acknowledgment resolving exactly one request succeeds. Network failures can retry the same ID; a missing ID or unresolved acknowledgment invalidates the cards and interrupts the turn.
+[[src/shared/chat-approval.ts#normalizeApprovalRequest]] limits choices to the gateway's offered permissions and preserves a deny path. Dashboard chat renders [[src/renderer/src/screens/Chat/ApprovalCard.tsx#ApprovalCard]] from a normalized `approval.request`; cards queue in arrival order with an in-flight guard.
 
-Gateway-only WebSocket chat registers opaque renderer IDs through [[src/main/hermes.ts#registerPendingApproval]], bound to the originating renderer and run by [[src/main/ipc/register.ts#registerIpcHandlers]]. These IDs map to the upstream request IDs; they never substitute for them. Completion, cancellation, renderer destruction, or connection loss clears pending requests. Run cleanup retains the originating connection key; cancelled IPC calls settle, and runs that finish before their handle arrives are not registered as active. A transport failure after any approval request cannot replay the prompt. Callers without an approval UI fail closed. `Always allow` requires a second confirmation because the gateway persists that permission.
+For legacy Agent events, [[src/renderer/src/screens/Chat/hooks/useDashboardChatTransport.ts#useDashboardChatTransport]] sends the gateway-issued `request_id` and runtime session ID through `approval.respond`. Only an acknowledgement resolving exactly one request succeeds; a missing ID or unresolved acknowledgement invalidates the cards and interrupts the turn. Current Agent requests instead receive a JSON-RPC result with their original `srq-*` ID on the originating socket. The adapter's success result confirms socket delivery, not a separate backend acknowledgement. Cancellation, settled-ID fencing and reconnect restoration follow [[server-requests]].
 
-The current upstream `/v1/runs/{run_id}/approval` handler ignores request IDs and resolves the queue head. Desktop therefore stops Runs API turns that request approval, using the original connection's credentials, and directs users to Dashboard chat. Ordinary Runs streaming remains available; manual Runs approvals require an upstream contract change first.
+Main-process WebSocket chat registers opaque renderer IDs through [[src/main/hermes.ts#registerPendingApproval]], bound to the originating renderer and run by [[src/main/ipc/register.ts#registerIpcHandlers]]. These IDs map to upstream legacy or current wire IDs; they never substitute for them. Completion, cancellation, renderer destruction, or connection loss clears pending interactions. Run cleanup retains the originating connection key; cancelled IPC calls settle, and runs that finish before their handle arrives are not registered as active. A transport failure after any interactive request cannot replay the prompt; see [[main-server-requests#Interactive turns never replay]]. Callers without an approval UI fail closed. `Always allow` requires a second confirmation because the gateway persists that permission.
+
+Desktop's Runs API adapter has no supported per-request approval contract. It therefore stops Runs turns that request approval, using the original connection's credentials, and directs users to Dashboard chat. Ordinary Runs streaming remains available; the adapter never grants a queue-head approval without request correlation.
 
 ### Stale approval isolation
 
@@ -176,7 +178,9 @@ WebSocket transport tests verify opaque renderer IDs map to gateway IDs, and mis
 
 ### Terminal approval replay
 
-Renderer transport tests replay answered and expired approvals before a fresh request. Terminal cards never re-enter the pending FIFO, and successful acknowledgements mark cards resolved before another event can arrive.
+Renderer tests keep answered and expired legacy approvals out of the FIFO and mark successful responses resolved immediately.
+
+Current replay tests additionally fence stale same-socket snapshots and restore unanswered requests only after a real reconnect adopts their owner.
 
 ### Runs approval fail-closed
 
@@ -236,6 +240,8 @@ The palette pre-normalizes searchable command metadata and virtualizes its group
 
 Dashboard clarify requests preserve structured choices. Answers and skips must return through the originating dashboard client, while local cards retain IPC delivery.
 
-[[src/renderer/src/screens/Chat/dashboardEventAdapter.ts#appendClarifyRequest]] creates a dashboard-tagged card. [[src/renderer/src/screens/Chat/Chat.tsx#Chat]] supplies the transport responder to [[src/renderer/src/screens/Chat/ClarifyCard.tsx]]. [[src/renderer/src/screens/Chat/hooks/useDashboardChatTransport.ts#useDashboardChatTransport]] shares delivery with the composer, accepts only a confirmed `status: ok`, and invalidates pending questions on connection/session changes, completion, abort or teardown. Disconnects expire cards rather than sending an old answer through a new runtime. The card retains retry feedback on delivery failure. Tests: [[dashboard-clarify]].
+[[src/renderer/src/screens/Chat/dashboardEventAdapter.ts#appendClarifyRequest]] creates a dashboard-tagged card. [[src/renderer/src/screens/Chat/Chat.tsx#Chat]] supplies the transport responder to [[src/renderer/src/screens/Chat/ClarifyCard.tsx]]. [[src/renderer/src/screens/Chat/hooks/useDashboardChatTransport.ts#useDashboardChatTransport]] shares delivery with the composer and invalidates pending questions on connection/session changes, completion, abort or teardown. Legacy answers require the Agent's `status: ok`; current requests send a matching-ID `{answers}` response and return adapter success once it is sent. The card retains retry feedback on delivery failure. Tests: [[dashboard-clarify]].
 
-Agent `clarify.expire` notifications disable only the matching pending card and restore tracking of the turn that resumes after timeout. Replays of answered, expired or currently responding questions cannot invalidate a newer question or reset the resumed turn's busy state.
+Legacy `clarify.expire` and current `request.cancel` disable only the matching pending card. A disconnect first disables controls and clears the old runtime identity; unanswered current requests may then restore from the new connection's `open_requests` after runtime adoption. Settled requests cannot be reopened by stale same-socket snapshots. Legacy terminal-card replays stay closed.
+
+Current clarification presents one form for up to five questions, retaining server-locked answers and encoding selected multiple choices as the Agent's JSON-array strings. Send and Ctrl/Command+Enter submit the complete answer map; Skip leaves unanswered entries null. Question and answer bounds, malformed-input handling and replay rules are documented in [[server-requests#Batch clarification]].

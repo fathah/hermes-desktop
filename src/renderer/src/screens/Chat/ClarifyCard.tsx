@@ -1,6 +1,7 @@
 import { memo, useRef, useState } from "react";
 import { useI18n } from "../../components/useI18n";
 import type { ClarifyMessage } from "./types";
+import { normalizeGatewayClarifyAnswers } from "../../../../shared/gateway-server-requests";
 
 /**
  * Sentinel answer for "skip — let Hermes decide". Mirrors the gateway's
@@ -62,6 +63,17 @@ export const ClarifyCard = memo(function ClarifyCard({
       setSubmitting(false);
     }
   };
+
+  if (msg.questions?.length) {
+    return (
+      <BatchClarifyForm
+        msg={msg}
+        submitting={submitting}
+        error={error}
+        submit={submit}
+      />
+    );
+  }
 
   if (resolved) {
     return (
@@ -138,3 +150,200 @@ export const ClarifyCard = memo(function ClarifyCard({
     </div>
   );
 });
+
+/** A current Agent asks the whole set once, and receives one answer keyed by question ID. */
+function BatchClarifyForm({
+  msg,
+  submitting,
+  error,
+  submit,
+}: {
+  msg: ClarifyMessage;
+  submitting: boolean;
+  error: boolean;
+  submit: (answer: string) => Promise<void>;
+}): React.JSX.Element {
+  const { t } = useI18n();
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [selections, setSelections] = useState<Record<string, string[]>>({});
+  const questions = msg.questions ?? [];
+  const lockedAnswers =
+    normalizeGatewayClarifyAnswers(msg.answers, questions) ??
+    Object.create(null);
+  const disabled = submitting || !!msg.unavailable || !!msg.resolved;
+  let submitted: Record<string, string | null> = Object.create(null);
+  if (msg.resolved && msg.answer) {
+    try {
+      submitted =
+        normalizeGatewayClarifyAnswers(
+          JSON.parse(msg.answer).answers,
+          questions,
+        ) ?? Object.create(null);
+    } catch {
+      /* Legacy free text has no batch summary. */
+    }
+  }
+  const readableAnswer = (qid: string, answer: string): string => {
+    if (!questions.find((question) => question.qid === qid)?.multi_select)
+      return answer;
+    try {
+      const values: unknown = JSON.parse(answer);
+      if (
+        Array.isArray(values) &&
+        values.every((value) => typeof value === "string")
+      )
+        return values.join(", ");
+    } catch {
+      /* Free-text answers remain literal. */
+    }
+    return answer;
+  };
+  const valueFor = (qid: string): string =>
+    Object.hasOwn(lockedAnswers, qid)
+      ? readableAnswer(qid, lockedAnswers[qid] ?? "")
+      : Object.hasOwn(drafts, qid)
+        ? drafts[qid]
+        : "";
+  const answerSet = (skip = false): string =>
+    JSON.stringify({
+      answers: Object.fromEntries(
+        questions.map(({ qid, multi_select }) => [
+          qid,
+          Object.hasOwn(lockedAnswers, qid)
+            ? (lockedAnswers[qid] ?? null)
+            : skip
+              ? null
+              : multi_select && Object.hasOwn(selections, qid)
+                ? selections[qid].length
+                  ? JSON.stringify(selections[qid])
+                  : null
+                : valueFor(qid).trim() || null,
+        ]),
+      ),
+    });
+  return (
+    <div
+      className={`chat-clarify chat-clarify-group${msg.resolved ? " chat-clarify--resolved" : ""}`}
+    >
+      {questions.map((question) => {
+        const locked = Object.hasOwn(lockedAnswers, question.qid);
+        if (msg.resolved)
+          return (
+            <div key={question.qid}>
+              <div className="chat-clarify-question">{question.question}</div>
+              <div className="chat-clarify-answer">
+                {readableAnswer(
+                  question.qid,
+                  (Object.hasOwn(submitted, question.qid)
+                    ? submitted[question.qid]
+                    : "") || "",
+                ) || t("chat.clarify.skipped")}
+              </div>
+            </div>
+          );
+        return (
+          <fieldset key={question.qid} disabled={disabled || locked}>
+            <legend className="chat-clarify-question">
+              {question.question}
+            </legend>
+            {!!question.choices.length && (
+              <div className="chat-clarify-choices">
+                {question.choices.map((choice, index) => (
+                  <button
+                    key={index}
+                    type="button"
+                    className="chat-clarify-choice"
+                    aria-pressed={
+                      question.multi_select
+                        ? (Object.hasOwn(selections, question.qid)
+                            ? selections[question.qid]
+                            : []
+                          ).includes(choice)
+                        : valueFor(question.qid) === choice
+                    }
+                    onClick={() => {
+                      if (question.multi_select) {
+                        const before = Object.hasOwn(selections, question.qid)
+                          ? selections[question.qid]
+                          : [];
+                        const next = before.includes(choice)
+                          ? before.filter((item) => item !== choice)
+                          : [...before, choice];
+                        setSelections((current) => ({
+                          ...current,
+                          [question.qid]: next,
+                        }));
+                        setDrafts((current) => ({
+                          ...current,
+                          [question.qid]: next.join(", "),
+                        }));
+                      } else
+                        setDrafts((current) => ({
+                          ...current,
+                          [question.qid]: choice,
+                        }));
+                    }}
+                  >
+                    {choice}
+                  </button>
+                ))}
+              </div>
+            )}
+            <textarea
+              className="chat-clarify-textarea"
+              aria-label={question.question}
+              rows={2}
+              placeholder={t("chat.clarify.placeholder")}
+              value={valueFor(question.qid)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+                  event.preventDefault();
+                  if (questions.some(({ qid }) => valueFor(qid).trim()))
+                    void submit(answerSet());
+                }
+              }}
+              onChange={(event) => {
+                setSelections((current) => {
+                  const next = { ...current };
+                  delete next[question.qid];
+                  return next;
+                });
+                setDrafts((current) => ({
+                  ...current,
+                  [question.qid]: event.target.value,
+                }));
+              }}
+            />
+          </fieldset>
+        );
+      })}
+      {!msg.resolved && (
+        <>
+          <button
+            className="chat-clarify-send"
+            disabled={
+              disabled || !questions.some(({ qid }) => valueFor(qid).trim())
+            }
+            onClick={() => void submit(answerSet())}
+          >
+            {t("chat.clarify.send")}
+          </button>
+          <button
+            className="chat-clarify-skip"
+            disabled={disabled}
+            onClick={() => void submit(answerSet(true))}
+          >
+            {t("chat.clarify.skip")}
+          </button>
+        </>
+      )}
+      {(error || msg.unavailable) && (
+        <div className="chat-clarify-error" role="alert">
+          {t(
+            msg.unavailable ? "chat.clarify.unavailable" : "chat.clarify.error",
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

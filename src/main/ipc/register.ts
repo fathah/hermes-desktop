@@ -2091,6 +2091,9 @@ export function registerIpcHandlers(context: IpcContext): void {
             onClarify: (req) => {
               safeSend("chat-clarify-request", req);
             },
+            onRequestCancelled: (req) => {
+              safeSend("chat-request-cancelled", req);
+            },
             onApproval: (req) => {
               // Office one-chat omits runId and has no approval UI.
               if (!runId) return false;

@@ -1,5 +1,6 @@
 import type { BrowserWindow } from "electron";
 import { showPasswordDialog } from "./askpass";
+import type { GatewayServerRequest } from "../shared/gateway-server-requests";
 
 /**
  * Mid-turn gateway credential prompts (`sudo.request` / `secret.request`).
@@ -32,15 +33,18 @@ export function setGatewayPromptParent(
  * Prompt for the sudo password. Resolves with the password, or "" if the user
  * cancels (safe skip — terminal sudo then fails cleanly rather than hanging).
  */
-export async function promptSudoPassword(): Promise<string> {
+export async function promptSudoPassword(
+  signal?: AbortSignal,
+): Promise<string> {
   const parent = parentWindowGetter();
   const value = await showPasswordDialog(
     parent,
     "An agent command needs administrator (sudo) access to continue. " +
-      "Your password is sent only to the local sudo prompt and is never stored.",
+      "Your password is sent only to the requesting Hermes Agent's sudo prompt and is never stored.",
     {
       title: "Administrator Password Required",
       heading: "Hermes needs your sudo password",
+      signal,
     },
   );
   return value ?? "";
@@ -54,6 +58,7 @@ export async function promptSudoPassword(): Promise<string> {
 export async function promptSecretValue(
   envVar: string,
   prompt: string,
+  signal?: AbortSignal,
 ): Promise<string> {
   const parent = parentWindowGetter();
   const detail =
@@ -64,6 +69,45 @@ export async function promptSecretValue(
     heading: envVar
       ? `Hermes needs a value for ${envVar}`
       : "Hermes needs a secret value",
+    signal,
   });
   return value ?? "";
+}
+
+/** Sensitive RPC answers stay between this main-process modal and Agent. */
+export async function collectGatewayRequestValue(
+  request: GatewayServerRequest,
+  signal?: AbortSignal,
+): Promise<{ value: string } | null> {
+  if (signal?.aborted) return null;
+  if (request.method === "sudo") {
+    return { value: await promptSudoPassword(signal) };
+  }
+  if (request.method === "secret") {
+    if (
+      typeof request.params.env_var !== "string" ||
+      request.params.env_var.length > 256
+    )
+      return null;
+    return {
+      value: await promptSecretValue(
+        request.params.env_var,
+        typeof request.params.prompt === "string"
+          ? request.params.prompt.slice(0, 16_384)
+          : "",
+        signal,
+      ),
+    };
+  }
+  if (
+    request.method === "vault.unlock_prompt" ||
+    request.method === "vault.code"
+  ) {
+    const detail =
+      request.method === "vault.unlock_prompt"
+        ? `Unlock ${typeof request.params.display_name === "string" ? request.params.display_name.slice(0, 256) : "the requested password manager"}.`
+        : `Enter the one-time code for ${typeof request.params.site === "string" ? request.params.site.slice(0, 256) : "the requested site"}.`;
+    return { value: await promptSecretValue("", detail, signal) };
+  }
+  return null;
 }

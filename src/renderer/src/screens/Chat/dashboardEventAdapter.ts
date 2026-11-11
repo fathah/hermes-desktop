@@ -1,5 +1,9 @@
 import type { ChatToolEvent } from "../../../../shared/chat-stream";
 import { normalizeApprovalRequest } from "../../../../shared/chat-approval";
+import {
+  normalizeGatewayClarifyAnswers,
+  normalizeGatewayClarifyQuestions,
+} from "../../../../shared/gateway-server-requests";
 import { isLossyChunkCopy } from "./lossyText";
 import type {
   ActiveTurn,
@@ -53,25 +57,26 @@ function appendApprovalRequest(
   payload: unknown,
   requestId: string,
 ): ChatMessage[] {
-  if (
-    messages.some(
-      (message) =>
-        message.kind === "approval" && message.requestId === requestId,
-    )
-  ) {
+  const existingIndex = messages.findIndex(
+    (message) => message.kind === "approval" && message.requestId === requestId,
+  );
+  const replay = isRecord(payload) && payload.server_request_replay === true;
+  if (existingIndex >= 0 && !replay) {
     return [...messages];
   }
   const request = normalizeApprovalRequest(payload, requestId);
-  return [
-    ...messages,
-    {
-      id: `approval-dashboard-${requestId}`,
-      kind: "approval",
-      role: "agent",
-      responsePath: "dashboard",
-      ...request,
-    },
-  ];
+  const card: ChatMessage = {
+    id: `approval-dashboard-${requestId}`,
+    kind: "approval",
+    role: "agent",
+    responsePath: "dashboard",
+    ...request,
+  };
+  return existingIndex >= 0
+    ? messages.map((message, index) =>
+        index === existingIndex ? card : message,
+      )
+    : [...messages, card];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -204,6 +209,7 @@ function appendClarifyRequest(
   // Gateway replays must not re-open an already answered or expired card.
   if (
     existing?.kind === "clarify" &&
+    payload.server_request_replay !== true &&
     (existing.resolved || existing.unavailable)
   )
     return [...messages];
@@ -216,6 +222,16 @@ function appendClarifyRequest(
     choices,
     responsePath: "dashboard",
     unavailable: !requestId,
+    ...(normalizeGatewayClarifyQuestions(payload.questions).length
+      ? {
+          questions: normalizeGatewayClarifyQuestions(payload.questions),
+          answers:
+            normalizeGatewayClarifyAnswers(
+              payload.answers,
+              normalizeGatewayClarifyQuestions(payload.questions),
+            ) ?? undefined,
+        }
+      : {}),
   };
   if (existingIndex >= 0) {
     return [
