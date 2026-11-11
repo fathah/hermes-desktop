@@ -449,6 +449,7 @@ function toNumericMessageId(value: unknown, index: number): number {
   return index + 1;
 }
 
+// @lat: [[chat-commands#Restored REST tool activity]]
 function normalizeMessageRow(row: RemoteRecord, index: number): RawMessageRow {
   return {
     id: toNumericMessageId(row.id, index),
@@ -456,7 +457,12 @@ function normalizeMessageRow(row: RemoteRecord, index: number): RawMessageRow {
     content: typeof row.content === "string" ? row.content : null,
     timestamp: numberValue(row.timestamp, index),
     tool_call_id: nullableString(row.tool_call_id),
-    tool_calls: typeof row.tool_calls === "string" ? row.tool_calls : null,
+    tool_calls:
+      typeof row.tool_calls === "string"
+        ? row.tool_calls
+        : Array.isArray(row.tool_calls)
+          ? JSON.stringify(row.tool_calls)
+          : null,
     tool_name: nullableString(row.tool_name),
     reasoning: nullableString(row.reasoning),
     reasoning_content: nullableString(row.reasoning_content),

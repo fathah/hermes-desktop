@@ -142,6 +142,20 @@ A second live reasoning segment that is not a lossy duplicate of any DB row in t
 
 The chunk-copy check never crosses turns: a live preview in turn 2 is kept even when its text would match turn 1's canonical reasoning, so repeated questions can't cross-cancel live rows.
 
+## Restored REST tool activity
+
+Remote and SSH history preserve tool calls returned as decoded REST arrays or legacy JSON strings, so reopening a conversation retains its tool activity alongside the final assistant text.
+
+[[src/main/remote-sessions.ts#normalizeMessageRow]] serializes only array-shaped `tool_calls` into the existing database-row representation. [[src/main/sessions.ts#expandRowsToHistory]] then applies the shared parser and preserves call IDs, names, arguments and matching tool results. Unrelated top-level objects, numbers and booleans do not become tool calls.
+
+### Decoded arrays retain legacy history
+
+Real REST fixtures produce identical history from decoded arrays and legacy strings, including clarification arguments, matching tool results and the final assistant message.
+
+### Unrelated tool-call values remain ignored
+
+Malformed top-level tool-call values cannot create activity rows or remove the remaining user, result and assistant history.
+
 ## Bubble hover timestamp
 
 Each user/assistant bubble reveals a relative "time ago" label on row hover, so the transcript stays uncluttered at rest but is still scrutable when a user wants to know _when_ something was said.
