@@ -2,6 +2,22 @@ import { describe, expect, it } from "vitest";
 import { buildLocalDashboardCliArgs } from "../src/main/dashboard-launch";
 
 describe("local dashboard launch args", () => {
+  it("starts a managed Agent headlessly while keeping its explicit profile and ownership scope", () => {
+    expect(
+      buildLocalDashboardCliArgs("work", 9123, { headless: true }),
+    ).toEqual([
+      "--profile",
+      "work",
+      "serve",
+      "--isolated",
+      "--no-open",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "9123",
+    ]);
+  });
+
   it("matches the current upstream desktop dashboard command shape", () => {
     expect(buildLocalDashboardCliArgs(undefined, 9123)).toEqual([
       "dashboard",

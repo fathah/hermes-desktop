@@ -7,6 +7,7 @@ export function dashboardCliArgs(
 
 export interface LocalDashboardCliOptions {
   skipBuild?: boolean;
+  headless?: boolean;
 }
 
 export function buildLocalDashboardCliArgs(
@@ -15,7 +16,7 @@ export function buildLocalDashboardCliArgs(
   options: LocalDashboardCliOptions = {},
 ): string[] {
   const args = dashboardCliArgs(profile, [
-    "dashboard",
+    options.headless ? "serve" : "dashboard",
     "--isolated",
     "--no-open",
     "--host",

@@ -15,6 +15,7 @@ import {
 import {
   getEnhancedPath,
   hermesCliArgs,
+  hermesRuntimeKind,
   HERMES_HOME,
   HERMES_PYTHON,
   HERMES_REPO,
@@ -752,6 +753,9 @@ async function startLocalDashboard(
   const hasPrebuiltWebDist = dashboardHasPrebuiltWebDist();
   const cliArgs = buildLocalDashboardCliArgs(resolvedProfile, port, {
     skipBuild: hasPrebuiltWebDist,
+    headless:
+      typeof hermesRuntimeKind === "function" &&
+      hermesRuntimeKind() === "managed",
   });
 
   let proc: ChildProcess;

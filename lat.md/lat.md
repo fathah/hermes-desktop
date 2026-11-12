@@ -17,6 +17,7 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[loading-indicators]] — the thinking-orbs dotted-orb loaders behind every loading state, and the OrbLoader wrapper that pins dark/light from the Hermes theme registry instead of the library's auto-detection.
 - [[window-chrome]] — the browser-style title bar where open-conversation tabs sit on top of the window drag region, clickable while empty space still drags.
 - [[desktop-updates]] — GitHub release checks, startup upgrade button behavior, and the Settings auto-upgrade preference.
+- [[installer-runtime]] — installation-bound managed Python discovery, upstream bootstrap delegation, legacy fallback and the reviewed installer baseline.
 - [[desktop-security]] — verified Unix bootstrap execution and safe rendering of runtime provider names.
 - [[agent-capabilities]] — capability-based compatibility between the independent desktop and system-installed Hermes Agent, including bounded runtime evidence and update gating.
 - [[connections]] — the versioned main-process connection registry, stable active connection identity, and lossless migration from the legacy singleton configuration.

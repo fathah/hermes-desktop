@@ -41,3 +41,9 @@ One clarification card presents the Agent's question set and submits one answer 
 Selected multi-choice answers use the Agent's JSON-array string representation, while the card displays readable choice labels. Selection does not submit prematurely: Send or Ctrl/Command+Enter sends the whole form, and Skip preserves locked answers while leaving the rest null.
 
 [[src/shared/gateway-server-requests.ts#normalizeGatewayClarifyQuestions]] bounds distinct question IDs, question text and choices before controls are created. [[src/shared/gateway-server-requests.ts#normalizeGatewayClarifyAnswers]] admits only typed, bounded answers for those IDs. IDs remain data, including prototype-looking names; malformed locks and oversized labels are rejected before presentation.
+
+## Backend launch scope
+
+Managed local Agent installations run the headless server while legacy installations retain their existing dashboard command and explicit profile isolation.
+
+[[src/main/dashboard-launch.ts#buildLocalDashboardCliArgs]] selects `serve` only for a resolved managed runtime. The desktop owns only the child it launches; this compatibility slice does not change system-service ownership or introduce connection pooling.

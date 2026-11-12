@@ -1,5 +1,5 @@
 import { execFileSync } from "child_process";
-import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { describe, expect, it, vi } from "vitest";
@@ -94,6 +94,7 @@ function runWithHermesShim(command: string): Buffer {
     env: {
       ...process.env,
       HOME: home,
+      HERMES_HOME: "",
       PATH: `${localBin}:${process.env.PATH || ""}`,
     },
   });
@@ -135,7 +136,7 @@ describe("ssh Hermes command quoting", () => {
       "sh -c '[ -x $HOME/hermes-agent/.venv/bin/hermes ] && exec $HOME/hermes-agent/.venv/bin/hermes 'kanban' 'create'",
     );
     expect(command).toContain(
-      `$HOME/hermes-agent/.venv/bin/hermes '"'"'kanban'"'"'`,
+      `"$HOME/hermes-agent/.venv/bin/hermes" '"'"'kanban'"'"'`,
     );
   });
 
@@ -178,6 +179,103 @@ describe("ssh Hermes command quoting", () => {
       expect(output).toBe("doctor stderr preserved\n");
     },
     30000,
+  );
+});
+
+describe("managed SSH runtime discovery", () => {
+  function writeLauncher(path: string, owner: string): void {
+    mkdirSync(join(path, ".."), { recursive: true });
+    writeFileSync(
+      path,
+      `#!/bin/sh\nprintf '%s\\0' '${owner}'\nprintf '%s\\0' "$@"\n`,
+      { mode: 0o755 },
+    );
+  }
+
+  // @lat: [[installer-runtime#Test specifications#SSH managed precedence and quoting]]
+  itPosix.each([false, true])(
+    "prefers managed launchers and preserves quoted paths/arguments (custom home %s)",
+    (customHome) => {
+      const directory = mkdtempSync(join(tmpdir(), "hermes-managed-ssh-"));
+      const home = join(directory, "home with 'quotes' $value & spaces");
+      const selectedHome = join(
+        directory,
+        "custom Agent 'home' $value & spaces",
+      );
+      try {
+        writeLauncher(
+          join(home, ".hermes", "hermes-agent", ".hermes", "bin", "hermes"),
+          "managed-default",
+        );
+        writeLauncher(
+          join(home, ".hermes", "hermes-agent", "venv", "bin", "hermes"),
+          "stale-legacy",
+        );
+        writeLauncher(
+          join(selectedHome, "hermes-agent", ".hermes", "bin", "hermes"),
+          "managed-custom",
+        );
+        const args = [
+          "-p",
+          "profile with spaces",
+          "doctor",
+          "literal 'quote' $(printf no) & tail",
+        ];
+        const output = execFileSync(
+          "/bin/sh",
+          ["-c", buildRemoteHermesCmd(args)],
+          {
+            env: {
+              ...process.env,
+              HOME: home,
+              HERMES_HOME: customHome ? selectedHome : "",
+            },
+          },
+        );
+        expect(parseNulArgs(output)).toEqual([
+          customHome ? "managed-custom" : "managed-default",
+          ...args,
+        ]);
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
+  // @lat: [[installer-runtime#Test specifications#Explicit SSH launcher ownership]]
+  itPosix(
+    "preserves deployment hook precedence over canonical PM launchers",
+    () => {
+      const directory = mkdtempSync(join(tmpdir(), "hermes-managed-ssh-hook-"));
+      try {
+        writeLauncher(
+          join(directory, ".config", "hermes-desktop", "remote-hermes"),
+          "deployment-hook",
+        );
+        writeLauncher(
+          join(
+            directory,
+            ".hermes",
+            "hermes-agent",
+            ".hermes",
+            "bin",
+            "hermes",
+          ),
+          "managed",
+        );
+        const output = execFileSync(
+          "/bin/sh",
+          ["-c", buildRemoteHermesCmd(["--version"])],
+          {
+            env: { ...process.env, HOME: directory, HERMES_HOME: "" },
+          },
+        );
+        expect(parseNulArgs(output)).toEqual(["deployment-hook", "--version"]);
+        expect(buildRemoteHermesCmd([])).toContain('[ -n "${HERMES_HOME:-}" ]');
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    },
   );
 });
 

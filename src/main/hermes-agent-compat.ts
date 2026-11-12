@@ -14,7 +14,7 @@ import { HERMES_HOME, HERMES_REPO } from "./installer";
 import { sshExec } from "./ssh-remote";
 
 export const HERMES_AGENT_COMPAT_VERSION =
-  "2026-09-07.dashboard-chat-model-library.v3";
+  "2026-11-11.dashboard-chat-model-library.v4";
 
 export interface HermesAgentCompatResult {
   ok: boolean;
@@ -50,6 +50,8 @@ const MODEL_LIBRARY_COMPAT_START =
 const MODEL_LIBRARY_COMPAT_END =
   "# --- /HERMES_ONE_MODEL_LIBRARY_COMPAT_V1 ------------------------------------";
 const DASHBOARD_SPA_MOUNT_ANCHOR = "mount_spa(app)";
+const DASHBOARD_MODELS_ROUTER_ANCHOR =
+  "app.include_router(_models_routes.router)";
 
 const MODEL_LIBRARY_COMPAT_SOURCE = `
 
@@ -60,6 +62,12 @@ const MODEL_LIBRARY_COMPAT_SOURCE = `
 # deliberately stored in this agent's HERMES_HOME so remote shortcuts stay on
 # the remote host and survive desktop restarts without changing upstream model
 # assignment semantics.
+import json
+import secrets
+import time
+from typing import Any, Dict, Optional
+from hermes_constants import get_hermes_home
+
 def _hermes_one_profile_home(profile=None):
     requested = str(profile or "").strip()
     if not requested or requested.lower() == "current":
@@ -375,7 +383,10 @@ export function patchDashboardModelLibrarySource(
   source: string,
 ): DashboardSourcePatchResult {
   const withoutExisting = removeModelLibraryCompatBlock(source);
-  if (!withoutExisting.source.includes('@app.post("/api/model/set")')) {
+  if (
+    !withoutExisting.source.includes('@app.post("/api/model/set")') &&
+    !withoutExisting.source.includes(DASHBOARD_MODELS_ROUTER_ANCHOR)
+  ) {
     return {
       compatible: false,
       changed: false,
@@ -545,7 +556,7 @@ export async function ensureSshDashboardCompatibility(
   ).toString("base64");
   const script = String.raw`
 import base64, json, os, re, sys
-version = "2026-09-07.dashboard-chat-model-library.v3"
+version = "2026-11-11.dashboard-chat-model-library.v4"
 model_library_compat_source = base64.b64decode("__MODEL_LIBRARY_COMPAT_BASE64__").decode("utf-8")
 candidates = []
 try:
@@ -621,7 +632,8 @@ else:
 if compatible:
     original_source = source
     source_without_model_library, removed_model_library = remove_model_library_compat_block(source)
-    if '@app.post("/api/model/set")' in source_without_model_library:
+    if ('@app.post("/api/model/set")' in source_without_model_library
+            or 'app.include_router(_models_routes.router)' in source_without_model_library):
         source = insert_model_library_compat_block(source_without_model_library)
         if source != original_source:
             changed = True
