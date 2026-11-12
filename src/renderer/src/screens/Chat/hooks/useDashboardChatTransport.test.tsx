@@ -26,6 +26,7 @@ import type { ActiveTurn, Attachment, ChatMessage, UsageState } from "../types";
 type SetUsageMock = Mock<(value: SetStateAction<UsageState | null>) => void>;
 
 const dashboardMock = vi.hoisted(() => ({
+  activateServerRequests: vi.fn(),
   close: vi.fn(),
   connect: vi.fn(async () => undefined),
   instances: [] as Array<{
@@ -37,32 +38,43 @@ const dashboardMock = vi.hoisted(() => ({
   onClose: null as (() => void) | null,
   onEvent: null as ((event: DashboardRpcEvent) => void) | null,
   request: vi.fn(),
+  useRealClient: false,
 }));
 
-vi.mock("../dashboardGatewayClient", () => ({
-  DashboardGatewayClient: class MockDashboardGatewayClient {
-    close = dashboardMock.close;
-    connect = dashboardMock.connect;
-    connected = true;
-    request = dashboardMock.request;
+vi.mock("../dashboardGatewayClient", async (importOriginal) => {
+  const { DashboardGatewayClient } =
+    await importOriginal<typeof import("../dashboardGatewayClient")>();
+  return {
+    DashboardGatewayClient: class MockDashboardGatewayClient {
+      activateServerRequests = dashboardMock.activateServerRequests;
+      close = dashboardMock.close;
+      connect = dashboardMock.connect;
+      connected = true;
+      request = dashboardMock.request;
 
-    constructor(
-      options: {
-        onEvent?: (event: DashboardRpcEvent) => void;
-        onClose?: () => void;
-      } = {},
-    ) {
-      dashboardMock.onEvent = options.onEvent ?? null;
-      dashboardMock.onClose = options.onClose ?? null;
-      dashboardMock.instances.push(this);
-    }
-  },
-}));
+      constructor(
+        options: {
+          onEvent?: (event: DashboardRpcEvent) => void;
+          onClose?: () => void;
+        } = {},
+      ) {
+        if (dashboardMock.useRealClient)
+          return new DashboardGatewayClient(
+            options,
+          ) as unknown as MockDashboardGatewayClient;
+        dashboardMock.onEvent = options.onEvent ?? null;
+        dashboardMock.onClose = options.onClose ?? null;
+        dashboardMock.instances.push(this);
+      }
+    },
+  };
+});
 
 interface HarnessApi {
   isLoading?: boolean;
   activeTurnRef?: MutableRefObject<ActiveTurn | null>;
   abort?: () => void;
+  execSlash?: ReturnType<typeof useDashboardChatTransport>["execSlash"];
   messages?: ChatMessage[];
   respondClarify?: ReturnType<
     typeof useDashboardChatTransport
@@ -91,6 +103,69 @@ const activeRecoveryTurn: ActiveTurn = {
   turnId: "turn-recovery",
   userId: "u-recovery",
 };
+
+class ProtocolWebSocket extends EventTarget {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSED = 3;
+  static last: ProtocolWebSocket;
+  static onRequest: (
+    socket: ProtocolWebSocket,
+    frame: Record<string, unknown>,
+  ) => void;
+  readyState = ProtocolWebSocket.CONNECTING;
+  sent: Array<Record<string, unknown>> = [];
+
+  constructor(_url: string) {
+    super();
+    ProtocolWebSocket.last = this;
+    queueMicrotask(() => {
+      this.readyState = ProtocolWebSocket.OPEN;
+      this.dispatchEvent(new Event("open"));
+    });
+  }
+
+  send(value: string): void {
+    const frame = JSON.parse(value) as Record<string, unknown>;
+    this.sent.push(frame);
+    if (typeof frame.method === "string")
+      queueMicrotask(() => ProtocolWebSocket.onRequest(this, frame));
+  }
+
+  receive(value: unknown): void {
+    this.dispatchEvent(
+      new MessageEvent("message", { data: JSON.stringify(value) }),
+    );
+  }
+
+  reply(frame: Record<string, unknown>, result: unknown): void {
+    this.receive({ jsonrpc: "2.0", id: frame.id, result });
+  }
+
+  clarify(sessionId: string, requestId = "srq-prompt-clarify"): void {
+    this.receive({
+      jsonrpc: "2.0",
+      id: requestId,
+      method: "clarify",
+      params: {
+        session_id: sessionId,
+        questions: [
+          {
+            qid: "transport",
+            question: "Which transport?",
+            choices: ["Local", "Remote"],
+          },
+          { qid: "city", question: "Which city?" },
+        ],
+      },
+    });
+  }
+
+  close(): void {
+    this.readyState = ProtocolWebSocket.CLOSED;
+    this.dispatchEvent(new Event("close"));
+  }
+}
 
 function Harness({
   api,
@@ -165,6 +240,7 @@ function Harness({
       isLoading,
       activeTurnRef,
       abort: transport.abort,
+      execSlash: transport.execSlash,
       messages,
       respondApproval: transport.respondApproval,
       respondClarify: transport.respondClarify,
@@ -187,6 +263,7 @@ function Harness({
     transport.respondApproval,
     transport.respondClarify,
     transport.abort,
+    transport.execSlash,
   ]);
 
   return null;
@@ -194,11 +271,13 @@ function Harness({
 
 describe("useDashboardChatTransport recovery", () => {
   beforeEach(() => {
+    dashboardMock.activateServerRequests.mockClear();
     dashboardMock.close.mockClear();
     dashboardMock.connect.mockClear();
     dashboardMock.instances.length = 0;
     dashboardMock.onEvent = null;
     dashboardMock.request.mockReset();
+    dashboardMock.useRealClient = false;
     Object.defineProperty(window, "hermesAPI", {
       configurable: true,
       value: {
@@ -240,6 +319,164 @@ describe("useDashboardChatTransport recovery", () => {
     });
     return api;
   }
+
+  describe("current protocol submission ownership", () => {
+    beforeEach(() => {
+      dashboardMock.useRealClient = true;
+      vi.stubGlobal("WebSocket", ProtocolWebSocket);
+    });
+
+    afterEach(() => {
+      dashboardMock.useRealClient = false;
+      vi.unstubAllGlobals();
+    });
+
+    function replyModelOrCommand(
+      socket: ProtocolWebSocket,
+      frame: Record<string, unknown>,
+    ): void {
+      socket.reply(
+        frame,
+        frame.method === "model.options"
+          ? { model: "bad-model", provider: "bad-provider", providers: [] }
+          : {},
+      );
+    }
+
+    // @lat: [[server-requests#Submission runtime ownership]]
+    it("delivers and answers a current clarification after model preflight adopts a replacement runtime", async () => {
+      ProtocolWebSocket.onRequest = (socket, frame) => {
+        if (frame.method === "session.create") {
+          socket.reply(frame, {
+            session_id: "preflight-runtime",
+            stored_session_id: "stored-preflight",
+          });
+        } else if (frame.method === "session.resume") {
+          socket.reply(frame, {
+            session_id: "prompt-runtime",
+            resumed: "stored-chat",
+          });
+        } else if (frame.method === "prompt.submit") {
+          socket.reply(frame, { status: "running" });
+          socket.clarify("prompt-runtime");
+        } else replyModelOrCommand(socket, frame);
+      };
+      const api: HarnessApi = {};
+      const view = render(<Harness api={api} />);
+      await act(async () => {
+        await api.execSlash?.("/model", vi.fn());
+      });
+      expect(ProtocolWebSocket.last.sent).toContainEqual(
+        expect.objectContaining({
+          method: "model.options",
+          params: { session_id: "preflight-runtime" },
+        }),
+      );
+      view.rerender(<Harness api={api} hermesSessionId="stored-chat" />);
+      await act(async () => {
+        expect(await api.send?.("first prompt")).toBe(true);
+      });
+      expect(
+        api.messages?.find((message) => message.kind === "clarify"),
+      ).toMatchObject({
+        requestId: "srq-prompt-clarify",
+        questions: [{ qid: "transport" }, { qid: "city" }],
+      });
+      await act(async () => {
+        expect(
+          await api.respondClarify?.(
+            "srq-prompt-clarify",
+            JSON.stringify({ answers: { transport: "Local", city: "Dubai" } }),
+          ),
+        ).toBe(true);
+      });
+      expect(ProtocolWebSocket.last.sent).toContainEqual({
+        jsonrpc: "2.0",
+        id: "srq-prompt-clarify",
+        result: { answers: { transport: "Local", city: "Dubai" } },
+      });
+      expect(
+        ProtocolWebSocket.last.sent.some(
+          (frame) => frame.method === "clarify.respond",
+        ),
+      ).toBe(false);
+      expect(
+        api.messages?.find((message) => message.kind === "clarify"),
+      ).toMatchObject({ resolved: true });
+    });
+
+    // @lat: [[server-requests#Superseded submission ownership]]
+    it("cannot adopt a late superseded runtime over the current pending clarification", async () => {
+      let oldCreate: Record<string, unknown> | undefined;
+      let creates = 0;
+      ProtocolWebSocket.onRequest = (socket, frame) => {
+        if (frame.method === "session.create") {
+          if (++creates === 1) oldCreate = frame;
+          else
+            socket.reply(frame, {
+              session_id: "current-runtime",
+              stored_session_id: "stored-current",
+            });
+        } else if (frame.method === "prompt.submit") {
+          socket.reply(frame, { status: "running" });
+          socket.clarify("current-runtime");
+        } else replyModelOrCommand(socket, frame);
+      };
+      const api: HarnessApi = {};
+      render(<Harness api={api} />);
+      let oldSend: Promise<boolean> | undefined;
+      act(() => {
+        oldSend = api.send?.("old prompt");
+      });
+      await waitFor(() => expect(oldCreate).toBeDefined());
+      await act(async () => {
+        api.activeTurnRef!.current = { ...activeRecoveryTurn };
+        expect(await api.send?.("current prompt")).toBe(true);
+      });
+      expect(
+        api.messages?.find((message) => message.kind === "clarify"),
+      ).toMatchObject({ requestId: "srq-prompt-clarify" });
+      await act(async () => {
+        ProtocolWebSocket.last.reply(oldCreate!, {
+          session_id: "obsolete-runtime",
+          stored_session_id: "stored-old",
+        });
+        expect(await oldSend).toBe(true);
+        ProtocolWebSocket.last.clarify(
+          "obsolete-runtime",
+          "srq-obsolete-clarify",
+        );
+      });
+      expect(ProtocolWebSocket.last.sent).toContainEqual(
+        expect.objectContaining({
+          id: "srq-obsolete-clarify",
+          error: expect.objectContaining({ code: 4404 }),
+        }),
+      );
+      expect(
+        api.messages?.filter((message) => message.kind === "clarify"),
+      ).toHaveLength(1);
+      await act(async () => {
+        expect(
+          await api.respondClarify?.(
+            "srq-prompt-clarify",
+            JSON.stringify({ answers: { transport: "Local", city: "Dubai" } }),
+          ),
+        ).toBe(true);
+      });
+      expect(ProtocolWebSocket.last.sent).toContainEqual(
+        expect.objectContaining({
+          id: "srq-prompt-clarify",
+          result: { answers: { transport: "Local", city: "Dubai" } },
+        }),
+      );
+      expect(
+        ProtocolWebSocket.last.sent.filter(
+          (frame) => frame.method === "prompt.submit",
+        ),
+      ).toHaveLength(1);
+    });
+  });
 
   // @lat: [[dashboard-clarify#Gateway answer delivery]]
   it.each(["staging", "custom answer", ""])(

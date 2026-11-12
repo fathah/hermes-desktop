@@ -32,6 +32,20 @@ Unsupported request methods receive an explicit error instead of silently leavin
 
 Password and secret values remain in the main-process relay. The renderer never renders or answers secret requests. New product surfaces such as onboarding and browser-vault management are not inferred from transport support.
 
+## Submission runtime ownership
+
+Prompt submission forwards session adoption through its authority wrapper, so current blocking requests belong to the runtime created or resumed for that prompt.
+
+Model-options or command preflight can adopt an earlier runtime on the same socket. The first prompt must adopt its replacement before receiving clarification or approval requests. Tests run the actual gateway client through the React transport hook and verify a batch card produces a matching-ID reply, rather than a legacy response RPC.
+
+Connection-authority and usage regressions retain the client's activation method in their fixtures, so the full submission path still exercises their teardown and accounting assertions.
+
+## Superseded submission ownership
+
+A submission that loses its turn or connection authority cannot rebind blocking-request ownership after a delayed session reply.
+
+The wrapper checks submission ownership before forwarding activation, just as it checks every RPC response. A newer runtime keeps its pending clarification and can answer it; requests for an obsolete runtime are explicitly declined without appending a card.
+
 ## Batch clarification
 
 One clarification card presents the Agent's question set and submits one answer map keyed by the original question IDs.

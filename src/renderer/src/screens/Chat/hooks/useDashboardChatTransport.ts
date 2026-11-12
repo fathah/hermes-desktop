@@ -2275,6 +2275,11 @@ export function useDashboardChatTransport({
       // Session/model/attachment helpers may mutate runtime refs after their
       // awaits. Admit each response only while this submission still owns them.
       const submissionClient: DashboardPromptClient = {
+        // @lat: [[server-requests#Submission runtime ownership]]
+        activateServerRequests(sessionId: string): void {
+          assertSubmission();
+          client.activateServerRequests(sessionId);
+        },
         async request<T = unknown>(
           method: string,
           params?: Record<string, unknown>,
