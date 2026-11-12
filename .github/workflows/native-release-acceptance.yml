@@ -146,7 +146,8 @@ jobs:
             const {createHash} = require('node:crypto');
             const {Readable, Transform} = require('node:stream');
             const {pipeline} = require('node:stream/promises');
-            const extract = require(require.resolve('extract-zip', {paths:[process.env.GITHUB_WORKSPACE]}));
+            const workspaceRequire = require('node:module').createRequire(path.join(process.env.GITHUB_WORKSPACE, 'package.json'));
+            const {extract} = workspaceRequire('@electron-internal/extract-zip');
             const candidate = path.join(process.env.RUNNER_TEMP, 'native-candidate');
             const baseline = path.join(process.env.RUNNER_TEMP, 'native-baseline');
             const evidence = path.join(process.env.RUNNER_TEMP, 'native-evidence');
