@@ -389,14 +389,25 @@ try {
     const page = await application.firstWindow({ timeout: 60000 });
     await page.locator("#root").waitFor({ state: "visible", timeout: 60000 });
     await page
-      .locator("body")
-      .filter({ hasText: /Hermes/i })
+      .getByRole("heading", { name: "Welcome to Hermes One", exact: true })
       .waitFor({ state: "visible", timeout: 60000 });
-    assert.match(
-      await page.locator("body").innerText(),
-      /Hermes/i,
-      "The actual packaged UI must render",
+    await page
+      .locator('.onboard-screen[data-phase="done"]')
+      .waitFor({ state: "visible", timeout: 60000 });
+    await page.waitForFunction(
+      () => {
+        const screen = document.querySelector(
+          '.onboard-screen[data-phase="done"]',
+        );
+        return [".onboard-title", ".onboard-body"].every((selector) => {
+          const element = screen?.querySelector(selector);
+          return element && getComputedStyle(element).opacity === "1";
+        });
+      },
+      undefined,
+      { timeout: 60000 },
     );
+    report.checks.push("Fresh Welcome title and controls finish their reveal");
     report.runtime = await bounded(
       application.evaluate(({ app }) => {
         const createRequire = process.getBuiltinModule("module").createRequire;

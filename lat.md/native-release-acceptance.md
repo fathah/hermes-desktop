@@ -8,6 +8,8 @@ The native installer runner refuses non-CI execution and paths outside the runne
 
 `scripts/verify-native-install.mjs` verifies a DMG-copied app and Gatekeeper on macOS, executes the real per-user NSIS installer on Windows, installs the DEB through the package manager on Linux x64, and places the arm64 AppImage in its user-owned executable location. Each run records installer identity, runtime architecture and version, a UI screenshot, and a native SQLite query from inside packaged Electron. It never installs Agent or calls a model.
 
+Fresh UI acceptance waits for Welcome's exact heading, completed onboarding phase and fully revealed title and controls before querying SQLite or taking its screenshot. Text mounted behind the opening animation cannot satisfy readiness.
+
 An `--install-only` pass prepares the published baseline for the separate updater runner. Installation roots carry a native fixture marker; the updater requires its own explicit ownership marker before modifying that disposable baseline. AppImage baselines use a versionless filename so replacement is observed at the same path.
 
 ## Native startup diagnostics

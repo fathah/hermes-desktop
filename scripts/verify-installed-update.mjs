@@ -348,7 +348,8 @@ try {
   );
   await Promise.all([closed, requested]);
   application = null;
-  const deadline = Date.now() + 180000;
+  const deadline =
+    Date.now() + (process.platform === "win32" ? 300000 : 180000);
   let installed = false;
   while (Date.now() < deadline) {
     try {
