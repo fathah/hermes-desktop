@@ -1,6 +1,6 @@
 // @vitest-environment node
-import { execFileSync, spawnSync } from "child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { spawnSync } from "child_process";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { dirname, join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -123,7 +123,7 @@ describe("installation-bound Hermes runtimes", () => {
   });
 
   // @lat: [[installer-runtime#Test specifications#Windows interpreter selection]]
-  it("uses Windows store Python and only prefers its own existing pythonw", () => {
+  it("preserves the complete canonical Windows command despite pythonw siblings", () => {
     const fixture = managed("win32");
     createFile(join(repo, "venv", "Scripts", "pythonw.exe"));
     const resolveRuntime = (): HermesRuntime =>
@@ -134,7 +134,10 @@ describe("installation-bound Hermes runtimes", () => {
     expect(resolveRuntime().python).toBe(fixture.python);
     const pythonw = join(dirname(fixture.python), "pythonw.exe");
     createFile(pythonw);
-    expect(resolveRuntime().python).toBe(pythonw);
+    expect(resolveRuntime()).toMatchObject({
+      python: fixture.python,
+      cliPrefix: fixture.prefix,
+    });
   });
 
   // @lat: [[installer-runtime#Test specifications#Command-file-only runtime requires repair]]
@@ -177,6 +180,11 @@ describe("installation-bound Hermes runtimes", () => {
       expect(runtime.cliPrefix).toEqual(
         windows ? ["-m", "hermes_cli.main"] : [script],
       );
+      if (windows) {
+        const pythonw = join(dirname(python), "pythonw.exe");
+        createFile(pythonw);
+        expect(resolveHermesRuntime(home, { platform }).python).toBe(pythonw);
+      }
       const args = ["-c", "print('legacy')"];
       expect(buildHermesPythonArgs(runtime, repo, args)).toBe(args);
     },
@@ -185,21 +193,34 @@ describe("installation-bound Hermes runtimes", () => {
   const python = availablePython();
   // @lat: [[installer-runtime#Test specifications#Raw helper bootstraps dependencies]]
   it.skipIf(!python)(
-    "bootstraps real Python helpers and preserves quoted arguments",
+    "captures raw helper stdout and stderr through the canonical interpreter",
     () => {
-      const fixture = managed();
+      const fixture = managed("win32");
+      let selectedPython = python!;
+      if (process.platform !== "win32") {
+        selectedPython = fixture.python;
+        rmSync(selectedPython);
+        symlinkSync(python!, selectedPython);
+        // Model a windowless sibling that exits successfully without output.
+        // The producer's selected interpreter must remain authoritative.
+        createFile(
+          join(dirname(selectedPython), "pythonw.exe"),
+          "#!/bin/sh\nexit 0\n",
+        );
+      }
       createFile(
         join(repo, "hermes_bootstrap.py"),
         "import os\nos.environ['DESKTOP_TEST_BOOTSTRAPPED'] = 'yes'\n",
       );
       const runtime = resolveHermesRuntime(home, {
-        readLauncher: fixture.readLauncher,
+        platform: "win32",
+        readLauncher: () => JSON.stringify([selectedPython, ...fixture.prefix]),
       });
       const code =
-        "import json, os, sys; print(json.dumps({'bootstrapped': os.environ.get('DESKTOP_TEST_BOOTSTRAPPED'), 'args': sys.argv[1:], 'pythonpath': os.environ.get('PYTHONPATH')}))";
+        "import json, os, sys; print(json.dumps({'bootstrapped': os.environ.get('DESKTOP_TEST_BOOTSTRAPPED'), 'args': sys.argv[1:], 'pythonpath': os.environ.get('PYTHONPATH')})); print('managed-raw-stderr', file=sys.stderr)";
       const arg = "a folder/with 'single' and \"double\" quotes";
-      const output = execFileSync(
-        python!,
+      const output = spawnSync(
+        runtime.python,
         buildHermesPythonArgs(runtime, repo, ["-c", code, arg]),
         {
           encoding: "utf8",
@@ -209,13 +230,19 @@ describe("installation-bound Hermes runtimes", () => {
             PYTHONPATH: join(home, "untrusted-imports"),
           },
           timeout: 5000,
+          windowsHide: true,
+          stdio: ["ignore", "pipe", "pipe"],
         },
       );
-      expect(JSON.parse(output)).toEqual({
+      expect(output.status).toBe(0);
+      expect(output.stderr.trim()).toBe("managed-raw-stderr");
+      expect(JSON.parse(output.stdout)).toEqual({
         bootstrapped: "yes",
         args: [arg],
         pythonpath: null,
       });
+      expect(runtime.python).toBe(selectedPython);
+      expect(runtime.cliPrefix).toEqual(fixture.prefix);
     },
   );
 });

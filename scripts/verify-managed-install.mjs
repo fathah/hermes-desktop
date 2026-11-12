@@ -429,6 +429,11 @@ try {
     ]),
   );
   const runtime = resolveHermesRuntime(hermesHome);
+  assert.deepEqual(
+    [runtime.python, ...runtime.cliPrefix],
+    report.launcherCommand,
+    "Desktop must preserve the complete canonical Agent runtime command",
+  );
   assert.equal(runtime.kind, "managed");
   assert.equal(runtime.available, true, runtime.error);
   assert.equal(runtime.script, launcher);

@@ -96,10 +96,12 @@ export function resolveHermesRuntime(
       ) {
         return unavailable;
       }
-      const pythonw = windows ? join(command[0], "..", "pythonw.exe") : "";
       return {
         kind: "managed",
-        python: pythonw && regularFile(pythonw) ? pythonw : command[0],
+        // Interpreter identity belongs to Agent's runtime contract. A pythonw
+        // substitution forces its Windows bootstrap to relaunch and can lose
+        // captured pipes; callers hide console windows with windowsHide instead.
+        python: command[0],
         script: launcher,
         cliPrefix: command.slice(1),
         available: true,
