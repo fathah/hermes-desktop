@@ -11,6 +11,10 @@ import {
   snapshotStartupDiagnostics,
   assertStartupDiagnostics,
 } from "./acceptance-diagnostics.mjs";
+import {
+  validateStapledApplication,
+  waitForWelcomeReady,
+} from "./native-acceptance-helpers.mjs";
 
 const args = Object.fromEntries(
   process.argv.slice(2).map((argument) => {
@@ -294,7 +298,16 @@ async function install() {
         assert.equal(team, args["expected-team-id"]);
       report.signingTeam = team;
       report.signatureDisplay = signed.stdout + signed.stderr;
-      run("xcrun", ["stapler", "validate", bundle]);
+      report.staplerAttempts = [];
+      await validateStapledApplication(bundle, {
+        onAttempt: (attempt) => {
+          report.commands.push({
+            command: "xcrun",
+            args: ["stapler", "validate", bundle],
+          });
+          report.staplerAttempts.push(attempt);
+        },
+      });
       run("spctl", ["--assess", "--type", "execute", "--verbose=4", bundle]);
       report.checks.push(
         "Signed DMG application copied and Gatekeeper assessed",
@@ -388,15 +401,8 @@ try {
     diagnostics = watchStartupDiagnostics(application);
     const page = await application.firstWindow({ timeout: 60000 });
     await page.locator("#root").waitFor({ state: "visible", timeout: 60000 });
-    await page
-      .locator("body")
-      .filter({ hasText: /Hermes/i })
-      .waitFor({ state: "visible", timeout: 60000 });
-    assert.match(
-      await page.locator("body").innerText(),
-      /Hermes/i,
-      "The actual packaged UI must render",
-    );
+    await waitForWelcomeReady(page);
+    report.checks.push("Fresh Welcome title and controls finish their reveal");
     report.runtime = await bounded(
       application.evaluate(({ app }) => {
         const createRequire = process.getBuiltinModule("module").createRequire;

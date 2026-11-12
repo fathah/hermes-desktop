@@ -8,6 +8,10 @@ The native installer runner refuses non-CI execution and paths outside the runne
 
 `scripts/verify-native-install.mjs` verifies a DMG-copied app and Gatekeeper on macOS, executes the real per-user NSIS installer on Windows, installs the DEB through the package manager on Linux x64, and places the arm64 AppImage in its user-owned executable location. Each run records installer identity, runtime architecture and version, a UI screenshot, and a native SQLite query from inside packaged Electron. It never installs Agent or calls a model.
 
+Fresh UI acceptance waits for Welcome's exact heading, completed onboarding phase and fully revealed title and controls before querying SQLite or taking its screenshot. Text mounted behind the opening animation cannot satisfy readiness.
+
+Stapler validation retries only exit 68 with the observed `NSURLErrorDomain Code=-1005` network-loss diagnostic. Three attempts use bounded commands and two- then four-second backoffs; ticket rejection, other failures and exhausted retries remain failures.
+
 An `--install-only` pass prepares the published baseline for the separate updater runner. Installation roots carry a native fixture marker; the updater requires its own explicit ownership marker before modifying that disposable baseline. AppImage baselines use a versionless filename so replacement is observed at the same path.
 
 ## Native startup diagnostics
@@ -51,6 +55,18 @@ The installed Linux packager expands shipping artifact configuration for x64 and
 ### Acquisition loads workspace dependencies under github-script
 
 The actual workflow acquisition script runs with a wrapped `require` lacking `resolve`, loads the workspace ZIP dependency and reaches mocked GitHub metadata before any download or installation.
+
+### Welcome reveal must finish before native inspection
+
+The actual Welcome helper remains pending on a completed phase while either title or body opacity is below one, and resolves only after both reveal in a controlled DOM.
+
+### Stapler retries only proven transient network loss
+
+The actual stapler helper executes bounded validation commands and retries the observed network loss with two- and four-second backoffs, requiring a successful final result.
+
+### Stapler rejects completed failures and exhausted retries
+
+The actual helper rejects ticket failures, other network codes, incorrect exits and process timeouts without retries. Three transient failures also reject, so retries cannot admit an unvalidated application.
 
 ## Managed Agent provisioning
 
