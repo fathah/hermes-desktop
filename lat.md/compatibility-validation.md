@@ -98,7 +98,9 @@ The installed-updater runner applies an unpublished candidate to an owned copy o
 
 Acceptance requires baseline launch and native SQLite, update discovery, real download, `quitAndInstall`, replacement of the installed payload, and a new launch at the candidate version. The same isolated user data, marker and automatic-upgrade preference must survive. The test uses full downloads and a controlled local feed; it does not certify public GitHub feed delivery or differential downloads.
 
-The fixture polls replacement for five minutes on Windows and three minutes elsewhere. A native Windows run took 178 seconds from quit-and-install to replacement launch, so its larger test budget leaves headroom while retaining all version, SQLite and preserved-data assertions.
+The fixture bounds both the close event and replacement polling to five minutes on Windows and three minutes elsewhere. A native Windows run took 178 seconds from quit-and-install to replacement launch; the larger test budget retains all version, SQLite and preserved-data assertions.
+
+Reports distinguish the baseline's actual main-process PID from Playwright's launch-wrapper PID. A close failure records their liveness and wrapper exit state plus the installed package version before cleanup, and still fails acceptance.
 
 ## Packaged application acceptance
 

@@ -197,6 +197,7 @@ async function runtime(app) {
         version: app.getVersion(),
         packaged: app.isPackaged,
         arch: process.arch,
+        pid: process.pid,
         userData: app.getPath("userData"),
         sqlite,
       };
@@ -212,6 +213,22 @@ function archivePath() {
     : path.join(path.dirname(executable), "resources/app.asar");
 }
 
+function processStatus(pid, child) {
+  const result = {
+    pid,
+    exitCode: child?.exitCode ?? null,
+    signalCode: child?.signalCode ?? null,
+  };
+  try {
+    process.kill(pid, 0);
+    return { ...result, alive: true };
+  } catch (error) {
+    if (error.code === "ESRCH") return { ...result, alive: false };
+    if (error.code === "EPERM") return { ...result, alive: true };
+    return { ...result, alive: null, inspectionError: String(error) };
+  }
+}
+
 // @lat: [[compatibility-validation#Installed updater acceptance]]
 try {
   checkpoint("baseline launch");
@@ -222,6 +239,10 @@ try {
   assert.equal(path.resolve(before.userData), userData);
   assert.equal(before.sqlite.marker, 42);
   report.before = before;
+  report.baselineProcesses = {
+    mainPid: before.pid,
+    wrapperPid: application.process().pid,
+  };
   report.beforeDiagnostics = await inspectUi(application);
   report.checks.push(
     "Published baseline launches with native SQLite in isolated user data",
@@ -334,7 +355,12 @@ try {
     "Installed updater discovers and downloads candidate through a loopback generic feed",
   );
   checkpoint("quit and install");
-  const closed = application.waitForEvent("close", { timeout: 180000 });
+  const installTimeoutMs = process.platform === "win32" ? 300000 : 180000;
+  report.installTimeoutMs = installTimeoutMs;
+  const quitStartedAt = Date.now();
+  const closed = application.waitForEvent("close", {
+    timeout: installTimeoutMs,
+  });
   const requested = bounded(
     application.evaluate(() => {
       setTimeout(
@@ -346,10 +372,31 @@ try {
     10000,
     "quit and install request",
   );
-  await Promise.all([closed, requested]);
+  try {
+    await Promise.all([closed, requested]);
+  } catch (error) {
+    const wrapper = startupDiagnostics.process;
+    report.closeFailureDiagnostics = {
+      elapsedMs: Date.now() - quitStartedAt,
+      wrapper: processStatus(wrapper.pid, wrapper),
+      main: processStatus(
+        before.pid,
+        before.pid === wrapper.pid ? wrapper : undefined,
+      ),
+    };
+    try {
+      asar.uncache(archivePath());
+      report.closeFailureDiagnostics.installedPackageVersion = JSON.parse(
+        asar.extractFile(archivePath(), "package.json").toString(),
+      ).version;
+    } catch (inspectionError) {
+      report.closeFailureDiagnostics.installedPackageReadError =
+        String(inspectionError);
+    }
+    throw error;
+  }
   application = null;
-  const deadline =
-    Date.now() + (process.platform === "win32" ? 300000 : 180000);
+  const deadline = Date.now() + installTimeoutMs;
   let installed = false;
   while (Date.now() < deadline) {
     try {
