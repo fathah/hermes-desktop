@@ -22,6 +22,17 @@ import { describe, expect, it } from "vitest";
 
 const root = join(import.meta.dirname, "..");
 const script = join(root, "scripts/verify-managed-install.mjs");
+const python = ["python3", "python"].find(
+  (candidate) =>
+    spawnSync(
+      candidate,
+      ["-c", "import sys; assert sys.version_info.major == 3"],
+      {
+        timeout: 3000,
+        stdio: "ignore",
+      },
+    ).status === 0,
+);
 
 describe("actual managed installer acceptance boundary", () => {
   // @lat: [[native-release-acceptance#Managed Agent provisioning#Managed installation requires CI]]
@@ -181,6 +192,114 @@ setInterval(() => {}, 1000);
   },
   15000,
 );
+
+// @lat: [[native-release-acceptance#Managed Agent provisioning#Raw output and web import streams remain distinct]]
+it.skipIf(!python)(
+  "preserves original Python stdout across an importing module's redirection without accepting stderr as raw output",
+  () => {
+    const trial = mkdtempSync(join(tmpdir(), "hermes-managed-streams-"));
+    try {
+      mkdirSync(join(trial, "hermes_cli"));
+      writeFileSync(join(trial, "hermes_cli", "__init__.py"), "");
+      writeFileSync(
+        join(trial, "hermes_cli", "web_server.py"),
+        "import sys, types\nsys.modules['tui_gateway.server'] = types.SimpleNamespace(__file__=__file__)\nsys.stdout = sys.stderr\nprint('module redirected stdout')\n",
+      );
+      const source = readFileSync(script, "utf8");
+      const helpers = source.slice(
+        source.indexOf("function probeSource("),
+        source.indexOf("\ntry {\n  const {"),
+      );
+      const report: {
+        probes?: Record<
+          string,
+          { status: number; stdout: string; stderr: string }
+        >;
+      } = {};
+      const context = vm.createContext({
+        assert,
+        spawnSync,
+        repo: trial,
+        env: { ...process.env, HERMES_HOME: trial },
+        report,
+      });
+      const runner = vm.runInContext(
+        `${helpers}; ({ probeSource, captureProbe });`,
+        context,
+      );
+      const minimal = runner.captureProbe("minimal", python, [
+        "-c",
+        "import json; print(json.dumps({'raw': 'current stdout'}))",
+      ]);
+      expect(minimal.raw).toBe("current stdout");
+      const web = runner.captureProbe("web", python, [
+        "-c",
+        `import sys\nsys.path.insert(0, ${JSON.stringify(trial)})\n${runner.probeSource("web")}`,
+        "quoted ' argument with spaces",
+      ]);
+      expect(web.stdoutRedirected).toBe(true);
+      expect(web.stdoutIsStderr).toBe(true);
+      expect(web.gatewayServerLoaded).toBe(true);
+      expect(web.argv).toEqual(["quoted ' argument with spaces"]);
+      expect(web.home).toBe(trial);
+      expect(web.webServer).toBe(join(trial, "hermes_cli", "web_server.py"));
+      expect(report.probes?.web.stderr).toContain("module redirected stdout");
+      expect(JSON.parse(report.probes!.web.stdout).stdoutRedirected).toBe(true);
+      expect(() =>
+        runner.captureProbe("missing-output", python, [
+          "-c",
+          "import sys; sys.stderr.write('{\"notRawOutput\":true}\\n'); sys.stdout = None; print('lost')",
+        ]),
+      ).toThrow("returned no stdout");
+      expect(report.probes?.["missing-output"].status).toBe(0);
+      expect(report.probes?.["missing-output"].stdout).toBe("");
+      expect(report.probes?.["missing-output"].stderr).toContain(
+        "notRawOutput",
+      );
+    } finally {
+      rmSync(trial, { recursive: true, force: true });
+    }
+  },
+);
+
+// @lat: [[native-release-acceptance#Selected acceptance targets#Workflow target selection]]
+it("selects all, native or managed checks while always retaining provenance validation", () => {
+  const workflow = load(
+    readFileSync(
+      join(root, ".github/workflows/native-release-acceptance.yml"),
+      "utf8",
+    ),
+  ) as {
+    on: {
+      workflow_dispatch: {
+        inputs: {
+          checks: { type: string; default: string; options: string[] };
+        };
+      };
+    };
+    concurrency: { group: string };
+    jobs: {
+      validate: { if?: string };
+      native: { if: string; needs: string };
+      managed_agent: { if: string; needs: string };
+    };
+  };
+  expect(workflow.on.workflow_dispatch.inputs.checks).toEqual({
+    description: "Acceptance targets to execute",
+    required: true,
+    type: "choice",
+    default: "all",
+    options: ["all", "native", "managed"],
+  });
+  expect(workflow.jobs.validate.if).toBeUndefined();
+  expect(workflow.jobs.native.if).toBe("${{ inputs.checks != 'managed' }}");
+  expect(workflow.jobs.managed_agent.if).toBe(
+    "${{ inputs.checks != 'native' }}",
+  );
+  expect(workflow.jobs.native.needs).toBe("validate");
+  expect(workflow.jobs.managed_agent.needs).toBe("validate");
+  expect(workflow.concurrency.group).toContain("${{ inputs.checks || 'all' }}");
+});
 
 // @lat: [[native-release-acceptance#Managed Agent provisioning#Managed CI requires production provisioning]]
 it("requires actual managed provisioning and evidence on native Windows and Linux", () => {
