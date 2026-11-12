@@ -30,6 +30,40 @@ Real disposable children exercise the runner's process helpers and teardown: a l
 
 The actual packaged completion gate rejects a caught console error even when there is no page exception or main-process fatal error; clean diagnostics still pass.
 
+### Fresh protected backend probes
+
+Before UI connection, actual source backends must have no session database and return complete JSON with sessions 503, same-token profiles 200 and invalid-token profiles 401. Unexpected status, HTML and truncated responses fail acceptance.
+
+### Bounded owned process cleanup
+
+Packaged teardown bounds Electron close, signals only recorded child processes and waits after forced termination. A hung-close and real signal-resistant child regression verify that cleanup finishes and confirms exit.
+
+### Cleanup failure evidence
+
+Surviving owned processes fail an otherwise successful report. Cleanup failures are recorded separately when the UI already failed, preserving the original stage and diagnostic evidence.
+
+### Owned launcher descendants
+
+SSH teardown independently finds processes by exact fixture HOME, Hermes home and cwd, so reparented launchers cannot evade direct-child cleanup. Recorded CLI arguments also reject any unexpected messaging-gateway startup.
+
+## Startup diagnostics
+
+Native installer and updater acceptance reject page exceptions, caught renderer console errors and main-process fatal errors, including messages emitted before their first window listener attaches.
+
+The shared `scripts/acceptance-diagnostics.mjs` records live windows and process streams, then reads Playwright's retained startup messages before each acceptance gate. A successful UI or SQLite query alone cannot hide an observed startup failure.
+
+### Retained renderer failures
+
+Live console errors, messages retained before listener attachment, page exceptions and failures in later windows all fail native acceptance even when the app can render and query SQLite.
+
+### Main-process fatal failures
+
+Fatal process output, including uncaught exceptions and missing or unloadable native modules, fails both native acceptance runners.
+
+### Native runner completion gates
+
+The actual installer completion gate and updater UI inspection routine reject an injected caught console error before a successful acceptance result can be recorded.
+
 ## Evidence boundaries
 
 An isolated live transport result proves wire behavior through those concrete paths; it does not prove OAuth sign-in, external provisioning, model inference or a packaged platform's installation.
@@ -106,6 +140,12 @@ SSH mode drives the packaged Welcome connection form through a disposable localh
 
 An owned client wrapper invokes the real OpenSSH binary with explicit temporary known-hosts and control-socket paths and no user SSH configuration. This isolates client state even when OpenSSH resolves its default paths from the account database instead of HOME.
 
-The recorded gateway PID is the real source backend owned by the runner; it avoids starting an unrelated messaging gateway. No database schema or conversation is seeded. Production SSH discovery, authentication, tunnelling, protocol handling and history reads remain active, followed by the same batch clarification, restored-history, About and native SQLite checks.
+The short SSH trial path leaves room for OpenSSH's socket suffix on macOS. Standalone tunnel options remain intact. Before Welcome, fresh-store and protected endpoint probes are asserted; teardown confirms owned multiplex sockets and processes have stopped.
+
+The recorded gateway PID and held advisory lock truthfully identify the owned source webserver. They keep Agent's stale-record cleanup from removing fixture liveness metadata and avoid ancillary messaging-gateway startup. No database or conversation is seeded.
+
+Production SSH discovery, authentication, tunnelling, protocol handling and history reads remain active, followed by the same batch clarification, restored-history, About and native SQLite checks. This liveness fixture does not certify messaging-gateway provisioning. An independent process sweep verifies exact fixture environment and cwd before stopping any orphaned descendants.
 
 The report identifies localhost and the fixture boundary explicitly. This tier does not certify an external host, SSH provisioning or an installed-system upgrade. Daemon, backend, app and fixture state belong only to the runner and are cleaned up after success.
+
+On 2026-11-12 the updated unsigned macOS arm64 candidate passed all nine SSH UI checks against Agent v0.23.1, with three scripted provider requests, four restored transcript rows and SQLite 3.53.4. The final held-lock fixture started no messaging gateway; the independent sweep stopped three late CLI descendants and found none remaining. Fresh-store/auth probes, native process exit and socket cleanup passed. The earlier signed candidate reproduced the fresh SSH readiness bug; this result covers its rebuilt fix, not a newly signed artifact.

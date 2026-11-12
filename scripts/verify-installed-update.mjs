@@ -9,6 +9,11 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import * as asar from "@electron/asar";
 import { _electron } from "playwright";
+import {
+  assertStartupDiagnostics,
+  snapshotStartupDiagnostics,
+  watchStartupDiagnostics,
+} from "./acceptance-diagnostics.mjs";
 
 const args = Object.fromEntries(
   process.argv.slice(2).map((arg) => {
@@ -93,6 +98,7 @@ const feed = JSON.stringify({
   releaseDate: new Date().toISOString(),
 });
 let application;
+let startupDiagnostics;
 let server;
 let stage = "baseline launch";
 let mainLog = "";
@@ -150,7 +156,25 @@ async function launch() {
     timeout: 60000,
   });
   recordProcess(result);
+  startupDiagnostics = watchStartupDiagnostics(result);
   return result;
+}
+
+async function inspectUi(app) {
+  const window = await app.firstWindow({ timeout: 60000 });
+  await window.locator("#root").waitFor({ state: "visible", timeout: 60000 });
+  assert.match(
+    await window.locator("body").innerText(),
+    /Hermes/i,
+    "The installed UI must render",
+  );
+  const diagnostics = await bounded(
+    snapshotStartupDiagnostics(app, startupDiagnostics),
+    10000,
+    "startup diagnostic snapshot",
+  );
+  assertStartupDiagnostics(diagnostics);
+  return diagnostics;
 }
 
 async function runtime(app) {
@@ -194,6 +218,7 @@ try {
   assert.equal(path.resolve(before.userData), userData);
   assert.equal(before.sqlite.marker, 42);
   report.before = before;
+  report.beforeDiagnostics = await inspectUi(application);
   report.checks.push(
     "Published baseline launches with native SQLite in isolated user data",
   );
@@ -295,6 +320,12 @@ try {
     0,
   );
   report.download = downloaded;
+  report.preInstallDiagnostics = await bounded(
+    snapshotStartupDiagnostics(application, startupDiagnostics),
+    10000,
+    "pre-install diagnostic snapshot",
+  );
+  assertStartupDiagnostics(report.preInstallDiagnostics);
   report.checks.push(
     "Installed updater discovers and downloads candidate through a loopback generic feed",
   );
@@ -358,7 +389,7 @@ try {
     ),
     { autoUpgrade: false },
   );
-  await application.firstWindow({ timeout: 60000 });
+  report.afterDiagnostics = await inspectUi(application);
   report.after = after;
   report.checks.push(
     "Updated installed application launches with native SQLite and preserves existing user data and preferences",

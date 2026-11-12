@@ -95,7 +95,9 @@ const trialRoot =
   mode === "ssh" && fs.existsSync("/private/tmp")
     ? "/private/tmp"
     : os.tmpdir();
-const trial = fs.mkdtempSync(path.join(trialRoot, "hermes-packaged-app-"));
+const trial = fs.mkdtempSync(
+  path.join(trialRoot, mode === "ssh" ? "hui-" : "hermes-packaged-app-"),
+);
 const localHome =
   mode === "local" && !args["preflight-only"] ? ownedLocalHome() : null;
 const sshHome = mode === "ssh" ? path.join(trial, "ssh-home") : null;
@@ -121,6 +123,7 @@ const wireFrames = [];
 const settingsBackups = [];
 const fixtureSecrets = new Set([token]);
 let application;
+let electronProcess;
 let page;
 let provider;
 let sshFixture;
@@ -344,6 +347,122 @@ async function until(check, label, timeout = 60000) {
   }
   throw new Error(`Timed out: ${label}`);
 }
+
+async function bounded(promise, timeout, label) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`Timed out: ${label}`)),
+          timeout,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function stopOwnedProcesses(processes, timeout = 3000) {
+  const running = (child) =>
+    child.pid && child.exitCode === null && child.signalCode === null;
+  const wait = async () => {
+    const deadline = Date.now() + timeout;
+    while (processes.some(running) && Date.now() < deadline) await delay(25);
+  };
+  for (const child of processes) if (running(child)) child.kill("SIGTERM");
+  await wait();
+  for (const child of processes) if (running(child)) child.kill("SIGKILL");
+  await wait();
+  return processes.map((child) => ({
+    pid: child.pid,
+    exitCode: child.exitCode,
+    signalCode: child.signalCode,
+    exited: !running(child),
+  }));
+}
+
+function validateBackendProbe(probe, body) {
+  const expected =
+    probe.credential === "invalid"
+      ? 401
+      : probe.route.startsWith("/api/sessions")
+        ? 503
+        : 200;
+  assert.equal(
+    probe.status,
+    expected,
+    `Unexpected ${probe.credential} ${probe.route} status`,
+  );
+  assert.match(probe.contentType || "", /application\/json/i);
+  const parsed = JSON.parse(body);
+  assert.ok(parsed && typeof parsed === "object" && !Array.isArray(parsed));
+}
+
+function recordCleanupFailure(error) {
+  report.cleanupErrors ||= [];
+  report.cleanupErrors.push(safeText(error.stack || error));
+  if (report.passed) {
+    report.passed = false;
+    report.stage = "fixture cleanup";
+    report.error = report.cleanupErrors[0];
+    report.logs = trial;
+  }
+}
+
+// @lat: [[compatibility-validation#Acceptance failure handling#Owned launcher descendants]]
+function sweepSshFixtureProcesses(python, home, hermesHome) {
+  const code = `import os,json,pathlib,psutil,sys
+home=pathlib.Path(sys.argv[1]).resolve();hermes_home=str(pathlib.Path(sys.argv[2]).resolve())
+def owned(p):
+    try:
+        cwd=pathlib.Path(p.cwd()).resolve()
+        if cwd != home and home not in cwd.parents:return False
+        env=p.environ()
+        return pathlib.Path(env.get('HOME','/')).resolve()==home and str(pathlib.Path(env.get('HERMES_HOME','/')).resolve())==hermes_home
+    except (psutil.Error,OSError):return False
+def scan():
+    return [p for p in psutil.process_iter(['pid','create_time']) if p.pid!=os.getpid() and owned(p)]
+records=[]
+for attempt in range(3):
+    processes=scan()
+    if not processes:break
+    identities=[{'pid':p.pid,'created':p.create_time(),'home':hermes_home,'cwd':p.cwd()} for p in processes]
+    for p in processes:
+        try:
+            if p.is_running() and owned(p):p.terminate()
+        except psutil.NoSuchProcess:pass
+    _,alive=psutil.wait_procs(processes,timeout=2)
+    for p in alive:
+        if p.is_running() and owned(p):p.kill()
+    _,alive=psutil.wait_procs(alive,timeout=2)
+    for identity,p in zip(identities,processes):
+        try:identity['exited']=not p.is_running() or p.status()==psutil.STATUS_ZOMBIE
+        except psutil.NoSuchProcess:identity['exited']=True
+        records.append(identity)
+    if any(p.is_running() and owned(p) for p in alive):raise RuntimeError('Owned fixture descendants survived cleanup')
+remaining=scan()
+print(json.dumps({'processes':records,'remaining':[p.pid for p in remaining]}))
+if remaining:sys.exit(1)
+`;
+  const result = spawnSync(python, ["-c", code, home, hermesHome], {
+    cwd: desktopHome,
+    env: { PATH: process.env.PATH, HOME: desktopHome },
+    encoding: "utf8",
+    timeout: 15000,
+  });
+  assert.equal(
+    result.status,
+    0,
+    safeText(
+      `Fixture descendant cleanup failed: ${result.stderr || result.error}`,
+    ),
+  );
+  return JSON.parse(result.stdout);
+}
+
 async function screenshot(name) {
   const filename = path.join(evidence, `${name}.png`);
   await page.screenshot({ path: filename, fullPage: true });
@@ -369,6 +488,7 @@ function fixtureCommand(command, argv, options = {}) {
 }
 
 async function startSshFixture(backendPort, backendPid, agentRepo, python) {
+  stage = "disposable SSH fixture startup";
   assert.ok(sshHome, "SSH fixture requires its own home");
   assert.notEqual(
     fs.realpathSync(sshHome),
@@ -382,7 +502,7 @@ async function startSshFixture(backendPort, backendPid, agentRepo, python) {
   const clientBin = path.join(desktopHome, "bin");
   fs.mkdirSync(clientBin);
   const knownHosts = path.join(trial, "known_hosts");
-  const controlPath = path.join(trial, "control-%C");
+  const controlPath = path.join(trial, "c-%C");
   const clientLog = path.join(trial, "ssh-client-used.log");
   fs.writeFileSync(
     path.join(clientBin, "ssh"),
@@ -400,17 +520,18 @@ async function startSshFixture(backendPort, backendPid, agentRepo, python) {
       mode: 0o700,
     });
   const remotePath = `${bin}:/usr/bin:/bin:/usr/sbin:/sbin`;
-  const launcherCode = `import sys,runpy;sys.path.insert(0,${JSON.stringify(agentRepo)});sys.argv=['hermes']+sys.argv[1:];runpy.run_module('hermes_cli.main',run_name='__main__')`;
+  const launcherLog = path.join(trial, "ssh-launchers.jsonl");
+  const launcherCode = `import sys,runpy,os,json,psutil;open(${JSON.stringify(launcherLog)},'a').write(json.dumps({'pid':os.getpid(),'created':psutil.Process().create_time(),'home':os.environ['HERMES_HOME'],'argv':sys.argv[1:]})+'\\n');sys.path.insert(0,${JSON.stringify(agentRepo)});sys.argv=['hermes']+sys.argv[1:];runpy.run_module('hermes_cli.main',run_name='__main__')`;
   fs.writeFileSync(
     path.join(agentHome, "desktop-remote-hermes"),
     `#!/bin/sh\nexec ${shellQuote(python)} -c ${shellQuote(launcherCode)} "$@"\n`,
     { mode: 0o700 },
   );
-  // The live PID belongs to the real backend created above; no session/schema is seeded.
-  fs.writeFileSync(
-    path.join(agentHome, "gateway.pid"),
-    JSON.stringify({ pid: backendPid }),
+  const gatewayRecord = JSON.parse(
+    fs.readFileSync(path.join(agentHome, "gateway.pid"), "utf8"),
   );
+  assert.equal(gatewayRecord.pid, backendPid);
+  assert.equal(gatewayRecord.hermes_home, agentHome);
   const commandLog = path.join(trial, "ssh-commands.log");
   const forced = path.join(trial, "ssh-command");
   fs.writeFileSync(
@@ -535,9 +656,18 @@ async function startSshFixture(backendPort, backendPid, agentRepo, python) {
       preservesStandaloneTunnels: true,
     },
     gatewayPidMetadata:
-      "Records the already owned real source backend; no messaging gateway or session database was seeded.",
+      "Truthful same-home source webserver PID with an owned advisory gateway.lock; this fixture avoids ancillary messaging-gateway startup without seeding a session database.",
   };
-  return { host: "127.0.0.1", port, username, key, backendPort, clientLog };
+  return {
+    host: "127.0.0.1",
+    port,
+    username,
+    key,
+    backendPort,
+    clientLog,
+    launcherLog,
+    python,
+  };
 }
 
 /** Same deterministic clarify exchange as the separate actual-Agent chat tier. */
@@ -655,6 +785,7 @@ function createProvider() {
 }
 
 async function startBackend() {
+  stage = "actual Agent backend startup";
   provider = createProvider();
   await new Promise((resolve, reject) =>
     provider.once("error", reject).listen(0, "127.0.0.1", resolve),
@@ -721,7 +852,18 @@ async function startBackend() {
         2,
       ),
     );
-  const code = `import sys\nsys.path.insert(0, ${JSON.stringify(agentRepo)})\nfrom hermes_cli import web_server\nweb_server.start_server(host='127.0.0.1', port=${port}, open_browser=False, headless=True, isolated=True)\n`;
+  const gatewayFixture =
+    mode === "ssh"
+      ? `import os,json,fcntl
+from gateway.status import get_process_start_time
+record={'pid':os.getpid(),'hermes_home':os.environ['HERMES_HOME'],'start_time':get_process_start_time(os.getpid())}
+desktop_fixture_lock=open(os.path.join(os.environ['HERMES_HOME'],'gateway.lock'),'w')
+fcntl.flock(desktop_fixture_lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+desktop_fixture_lock.write(json.dumps(record));desktop_fixture_lock.flush()
+with open(os.path.join(os.environ['HERMES_HOME'],'gateway.pid'),'w') as f:f.write(json.dumps(record))
+`
+      : "";
+  const code = `import sys\nsys.path.insert(0, ${JSON.stringify(agentRepo)})\nfrom hermes_cli import web_server\n${gatewayFixture}web_server.start_server(host='127.0.0.1', port=${port}, open_browser=False, headless=True, isolated=True)\n`;
   report.backendStore =
     "Fresh home; no state.db schema or conversations seeded.";
   const log = fs.openSync(path.join(trial, "agent.log"), "w");
@@ -762,6 +904,12 @@ async function startBackend() {
     }
   }, "actual Agent backend startup");
   report.backendProbes = [];
+  assert.equal(
+    fs.existsSync(path.join(agentHome, "state.db")),
+    false,
+    "Fresh backend fixture already has a session database",
+  );
+  report.freshSessionStoreVerified = true;
   for (const [route, credential] of [
     ["/api/status", "none"],
     ["/api/sessions?limit=1", "fixture"],
@@ -770,6 +918,8 @@ async function startBackend() {
   ]) {
     const value = credential === "invalid" ? "invalid-fixture-token" : token;
     const result = await fetch(`${endpoint}${route}`, {
+      redirect: "error",
+      signal: AbortSignal.timeout(5000),
       headers:
         credential === "none"
           ? undefined
@@ -778,13 +928,15 @@ async function startBackend() {
               "X-Hermes-Session-Token": value,
             },
     });
-    report.backendProbes.push({
+    const probe = {
       route,
       credential,
       status: result.status,
       contentType: result.headers.get("content-type"),
-    });
-    await result.arrayBuffer();
+    };
+    report.backendProbes.push(probe);
+    validateBackendProbe(probe, await result.text());
+    probe.asserted = true;
   }
   if (mode === "ssh")
     sshFixture = await startSshFixture(port, backend.pid, agentRepo, python);
@@ -814,7 +966,7 @@ async function runUi(endpoint) {
       ELECTRON_ENABLE_LOGGING: "1",
     },
   });
-  const electronProcess = application.process();
+  electronProcess = application.process();
   for (const stream of [electronProcess.stdout, electronProcess.stderr])
     stream?.on("data", (data) => {
       mainLog += safeText(data);
@@ -1287,55 +1439,140 @@ try {
 } finally {
   if (application) {
     try {
-      await application.close();
-    } catch {
-      application.process().kill("SIGTERM");
+      await bounded(application.close(), 5000, "Electron close");
+    } catch (error) {
+      report.applicationCloseFallback = safeText(error.message || error);
+    }
+    try {
+      report.applicationProcess = (
+        await stopOwnedProcesses([electronProcess])
+      )[0];
+      assert.equal(
+        report.applicationProcess.exited,
+        true,
+        "Owned Electron process survived cleanup",
+      );
+    } catch (error) {
+      recordCleanupFailure(error);
     }
   }
   if (sshFixture) {
-    const sockets = fs
-      .readdirSync(trial)
-      .filter((name) => name.startsWith("control-"))
-      .map((name) => path.join(trial, name))
-      .filter((name) => fs.lstatSync(name).isSocket());
-    report.sshFixture.controlMastersStopped = sockets.map((socket) => {
-      const stopped = spawnSync(
-        "/usr/bin/ssh",
-        [
-          "-F",
-          "/dev/null",
-          "-S",
+    try {
+      const sockets = fs
+        .readdirSync(trial)
+        .filter((name) => name.startsWith("c-"))
+        .map((name) => path.join(trial, name))
+        .filter((name) => fs.lstatSync(name).isSocket());
+      report.sshFixture.controlMastersStopped = [];
+      for (const socket of sockets) {
+        const stopped = spawnSync(
+          "/usr/bin/ssh",
+          [
+            "-F",
+            "/dev/null",
+            "-S",
+            socket,
+            "-O",
+            "exit",
+            "-p",
+            String(sshFixture.port),
+            `${sshFixture.username}@127.0.0.1`,
+          ],
+          { encoding: "utf8", timeout: 5000 },
+        );
+        let responding = true;
+        const deadline = Date.now() + 3000;
+        while (Date.now() < deadline) {
+          if (!fs.existsSync(socket)) {
+            responding = false;
+            break;
+          }
+          const checked = spawnSync(
+            "/usr/bin/ssh",
+            [
+              "-F",
+              "/dev/null",
+              "-S",
+              socket,
+              "-O",
+              "check",
+              `${sshFixture.username}@127.0.0.1`,
+            ],
+            { encoding: "utf8", timeout: 1000 },
+          );
+          if (checked.status !== null && checked.status !== 0) {
+            responding = false;
+            fs.rmSync(socket, { force: true });
+            break;
+          }
+          await delay(50);
+        }
+        const closed = !responding && !fs.existsSync(socket);
+        report.sshFixture.controlMastersStopped.push({
           socket,
-          "-O",
-          "exit",
-          "-p",
-          String(sshFixture.port),
-          `${sshFixture.username}@127.0.0.1`,
-        ],
-        { encoding: "utf8", timeout: 5000 },
-      );
-      return { socket, status: stopped.status };
-    });
+          status: stopped.status,
+          closed,
+        });
+        if (!closed)
+          recordCleanupFailure(
+            new Error(`Owned SSH master survived cleanup: ${socket}`),
+          );
+      }
+    } catch (error) {
+      recordCleanupFailure(error);
+    }
   }
-  for (const child of children) child.kill("SIGTERM");
-  const deadline = Date.now() + 3000;
-  while (
-    children.some(
-      (child) => child.exitCode === null && child.signalCode === null,
-    ) &&
-    Date.now() < deadline
-  )
-    await delay(50);
-  for (const child of children)
-    if (child.exitCode === null && child.signalCode === null)
-      child.kill("SIGKILL");
-  if (mode === "ssh")
-    report.fixtureProcesses = children.map((child) => ({
-      pid: child.pid,
-      exitCode: child.exitCode,
-      signalCode: child.signalCode,
-    }));
-  if (provider) await new Promise((resolve) => provider.close(resolve));
+  try {
+    report.fixtureProcesses = await stopOwnedProcesses(children);
+    assert.ok(
+      report.fixtureProcesses.every((child) => child.exited),
+      "Owned fixture process survived cleanup",
+    );
+  } catch (error) {
+    recordCleanupFailure(error);
+  }
+  if (sshFixture) {
+    try {
+      const launchers = fs.existsSync(sshFixture.launcherLog)
+        ? fs
+            .readFileSync(sshFixture.launcherLog, "utf8")
+            .trim()
+            .split("\n")
+            .filter(Boolean)
+            .map((line) => JSON.parse(line))
+        : [];
+      report.sshFixture.launchers = launchers;
+      // Sweep independently of parent PIDs: nohup/exec can reparent a launcher.
+      report.sshFixture.descendantCleanup = sweepSshFixtureProcesses(
+        sshFixture.python,
+        sshHome,
+        agentHome,
+      );
+      assert.ok(
+        !launchers.some((entry) =>
+          entry.argv.some(
+            (arg, index) =>
+              arg === "gateway" && entry.argv[index + 1] === "run",
+          ),
+        ),
+        "Fixture unexpectedly started a messaging gateway",
+      );
+    } catch (error) {
+      recordCleanupFailure(error);
+    }
+  }
+  if (provider) {
+    try {
+      provider.closeAllConnections();
+      await bounded(
+        new Promise((resolve) => provider.close(resolve)),
+        3000,
+        "fixture provider close",
+      );
+    } catch (error) {
+      recordCleanupFailure(error);
+    }
+  }
   if (localHome && fs.existsSync(path.join(localHome, "dashboard-stderr.log")))
     fs.writeFileSync(
       path.join(evidence, "local-agent.log"),
@@ -1353,7 +1590,7 @@ try {
       path.join(evidence, "agent.log"),
       safeText(fs.readFileSync(path.join(trial, "agent.log"), "utf8")),
     );
-  for (const name of ["sshd.log", "ssh-commands.log"])
+  for (const name of ["sshd.log", "ssh-commands.log", "ssh-launchers.jsonl"])
     if (fs.existsSync(path.join(trial, name)))
       fs.writeFileSync(
         path.join(evidence, name),

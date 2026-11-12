@@ -13,10 +13,60 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { load } from "js-yaml";
 import { Script } from "vm";
+import { Arch } from "builder-util";
+// Initialize the builder's CommonJS platform exports before its concrete class.
+import "app-builder-lib";
+import { LinuxPackager } from "app-builder-lib/out/linuxPackager";
+import type { Packager } from "app-builder-lib/out/packager";
+import type { Configuration } from "app-builder-lib/out/configuration";
 import { describe, expect, it } from "vitest";
 
 const root = join(import.meta.dirname, "..");
 const script = join(root, "scripts/verify-native-install.mjs");
+
+// @lat: [[native-release-acceptance#Test specifications#Updater files use actual builder names]]
+it.each([
+  { id: "linux-x64", architecture: Arch.x64 },
+  { id: "linux-arm64", architecture: Arch.arm64 },
+])(
+  "uses the installed builder's actual AppImage name for $id",
+  ({ id, architecture }) => {
+    const config = load(
+      readFileSync(join(root, "electron-builder.yml"), "utf8"),
+    ) as Configuration;
+    const metadata = JSON.parse(
+      readFileSync(join(root, "package.json"), "utf8"),
+    );
+    const builder = new LinuxPackager({ config, metadata } as Packager);
+    const actualName = builder.expandArtifactNamePattern(
+      config.appImage,
+      "AppImage",
+      architecture,
+    );
+    const workflow = load(
+      readFileSync(
+        join(root, ".github/workflows/native-release-acceptance.yml"),
+        "utf8",
+      ),
+    ) as {
+      jobs: {
+        native: {
+          strategy: {
+            matrix: {
+              include: Array<{ id: string; candidate_update: string }>;
+            };
+          };
+        };
+      };
+    };
+    const target = workflow.jobs.native.strategy.matrix.include.find(
+      (entry) => entry.id === id,
+    );
+    expect(target?.candidate_update.replace("VERSION", metadata.version)).toBe(
+      actualName,
+    );
+  },
+);
 
 describe("native acceptance installation boundary", () => {
   // @lat: [[native-release-acceptance#Test specifications#Non-CI execution is refused]]

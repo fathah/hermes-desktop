@@ -84,7 +84,7 @@ jobs:
             arch: x64
             artifact: linux-x64-artifacts
             candidate_install: hermes-desktop_VERSION_amd64.deb
-            candidate_update: hermes-desktop-VERSION-x64.AppImage
+            candidate_update: hermes-desktop-VERSION-x86_64.AppImage
             baseline_install: hermes-desktop-VERSION-x86_64.AppImage
           - id: linux-arm64
             runner: ubuntu-24.04-arm
@@ -214,4 +214,49 @@ jobs:
         with:
           name: native-${{ matrix.id }}-acceptance
           path: ${{ runner.temp }}/native-evidence/
+          if-no-files-found: warn
+
+  managed_agent:
+    name: Fresh managed Agent (${{ matrix.id }})
+    needs: validate
+    timeout-minutes: 35
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: windows-x64
+            runner: windows-2025
+          - id: linux-x64
+            runner: ubuntu-24.04
+    steps:
+      - name: Check out exact acceptance tooling
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install acceptance tooling without rebuilding an app
+        run: npm ci --ignore-scripts
+
+      - name: Provision and verify the actual pinned managed Agent
+        shell: bash
+        run: >-
+          node scripts/verify-managed-install.mjs
+          --owned-root="$RUNNER_TEMP/managed-agent"
+          --output="$RUNNER_TEMP/managed-agent/result.json"
+
+      - name: Retain managed Agent acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: managed-agent-${{ matrix.id }}-acceptance
+          path: |
+            ${{ runner.temp }}/managed-agent/result.json
+            ${{ runner.temp }}/managed-agent/installer.log
           if-no-files-found: warn

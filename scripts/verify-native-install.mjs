@@ -6,6 +6,11 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import {
+  watchStartupDiagnostics,
+  snapshotStartupDiagnostics,
+  assertStartupDiagnostics,
+} from "./acceptance-diagnostics.mjs";
 
 const args = Object.fromEntries(
   process.argv.slice(2).map((argument) => {
@@ -154,6 +159,7 @@ const report = {
   ],
 };
 let application;
+let diagnostics;
 function run(command, commandArgs, options = {}) {
   report.commands.push({ command, args: commandArgs });
   const result = spawnSync(command, commandArgs, {
@@ -379,9 +385,8 @@ try {
       env: appEnv,
       timeout: 60000,
     });
-    const errors = [];
+    diagnostics = watchStartupDiagnostics(application);
     const page = await application.firstWindow({ timeout: 60000 });
-    page.on("pageerror", (error) => errors.push(error.message));
     await page.locator("#root").waitFor({ state: "visible", timeout: 60000 });
     assert.match(
       await page.locator("body").innerText(),
@@ -418,7 +423,6 @@ try {
     assert.equal(report.runtime.architecture, expectedArch);
     assert.equal(report.runtime.sqlite.proof, 17);
     assert.match(report.runtime.sqlite.version, /^\d+\.\d+\.\d+$/);
-    assert.deepEqual(errors, []);
     report.checks.push(
       "Native packaged UI, version and application identity verified",
       "Packaged native SQLite opened and queried inside Electron",
@@ -429,10 +433,34 @@ try {
     );
     await page.screenshot({ path: screenshot });
     report.screenshot = screenshot;
+    report.diagnostics = await bounded(
+      snapshotStartupDiagnostics(application, diagnostics),
+      "Startup diagnostic snapshot",
+    );
+    assertStartupDiagnostics(report.diagnostics);
+    report.checks.push(
+      "No renderer page/console errors or fatal main-process startup diagnostics",
+    );
   }
   report.passed = true;
 } catch (error) {
   report.error = error instanceof Error ? error.stack : String(error);
+  if (diagnostics) {
+    try {
+      report.diagnostics = await bounded(
+        snapshotStartupDiagnostics(application, diagnostics),
+        "Failure diagnostic snapshot",
+        5000,
+      );
+    } catch (diagnosticError) {
+      report.diagnosticSnapshotError = String(diagnosticError);
+      report.diagnostics = {
+        pageErrors: diagnostics.pageErrors,
+        consoleErrors: diagnostics.consoleErrors,
+        mainLog: diagnostics.mainLog,
+      };
+    }
+  }
   process.exitCode = 1;
 } finally {
   if (application) {
@@ -448,13 +476,18 @@ try {
         }),
       ]);
     } catch (error) {
-      application.process().kill("SIGKILL");
+      (diagnostics?.process || application.process()).kill("SIGKILL");
       report.cleanupError = String(error);
       report.passed = false;
       process.exitCode = 1;
     } finally {
       clearTimeout(timer);
     }
+  }
+  if (diagnostics) {
+    const logPath = path.join(path.dirname(output), "native-main.log");
+    fs.writeFileSync(logPath, diagnostics.mainLog);
+    report.mainLogPath = logPath;
   }
   fs.writeFileSync(output, `${JSON.stringify(report, null, 2)}\n`);
   process.stdout.write(
