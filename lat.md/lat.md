@@ -66,3 +66,4 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[server-requests]] — Current Agent blocking-request replies, cancellation, replay and batch clarification.
 - [[main-server-requests]] — Main-process request correlation, native secret collection, cancellation and safe replay restoration.
 - [[compatibility-validation]] — Current and legacy Agent evidence with Local, SSH and Remote validation boundaries.
+- [[native-release-acceptance]] — Disposable native installer, launch, SQLite and actual updater acceptance across shipping platforms.

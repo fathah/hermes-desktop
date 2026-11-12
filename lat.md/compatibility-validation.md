@@ -12,6 +12,24 @@ Approval correlation, batched clarification, cancellation, main-only secrets and
 
 The smoke also verifies explicit refusal of unsupported window interactions, native-only secret restoration after reconnect and rejection of an invalid Remote token. It keeps sensitive replay entries out of the renderer's `open_requests`; matching-ID replies still settle the original Agent request.
 
+## Acceptance failure handling
+
+Acceptance runners report startup and observed renderer failures as failed evidence and preserve their normal fixture teardown.
+
+Spawn errors are captured immediately and surfaced through the runner's bounded waits, so the normal failure report and child cleanup still run. Packaged UI completion requires empty page-error and console-error collections alongside its main-process fatal-error check.
+
+### Missing child executable
+
+The actual transport-runner CLI returns a failed JSON report for a missing Python executable, with an ENOENT explanation and no uncaught process error. Its logs stay inside the fixture's OS temporary directory on Windows and POSIX systems.
+
+### Existing children after startup failure
+
+Real disposable children exercise the runner's process helpers and teardown: a later missing executable is surfaced by startup waiting and an already running child is terminated.
+
+### Caught renderer console errors
+
+The actual packaged completion gate rejects a caught console error even when there is no page exception or main-process fatal error; clean diagnostics still pass.
+
 ## Evidence boundaries
 
 An isolated live transport result proves wire behavior through those concrete paths; it does not prove OAuth sign-in, external provisioning, model inference or a packaged platform's installation.
@@ -35,6 +53,14 @@ A separate macOS arm64 acceptance run executes the production verified installer
 [[src/main/installer-download.ts#verifiedInstallerCommand]] supplied the downloaded/hash-verified script and pinned Agent commit. The run used its noninteractive setup skip plus upstream's browser/computer-use opt-outs. PM genuinely installed tools and locked application dependencies, published launchers and built products; no runtime facts or generations were fixture-created. Desktop's resolver, CLI version and [[src/main/installer.ts#hermesPythonArgs|raw helper]] then succeeded against that installation.
 
 An OS sandbox allowed writes only inside the disposable tree and blocked system package/service commands. Package caches, home and Hermes state were isolated, including the installer's temporary shell rc edits. The [acceptance record](../docs/compatibility-acceptance-2026-11-11.md) retains the exact flags and evidence boundaries. Native Windows/Linux provisioning, optional browser/computer-use tools, services and signed app installation remain separate checks.
+
+## Installed updater acceptance
+
+The installed-updater runner applies an unpublished candidate to an owned copy of the published baseline through the actual packaged updater.
+
+`scripts/verify-installed-update.mjs` requires an explicit installation root with a matching `.desktop-update-fixture.json` ownership marker. A loopback generic feed supplies the candidate bytes and SHA512 to the existing updater singleton; production source and feed configuration stay unchanged.
+
+Acceptance requires baseline launch and native SQLite, update discovery, real download, `quitAndInstall`, replacement of the installed payload, and a new launch at the candidate version. The same isolated user data, marker and automatic-upgrade preference must survive. The test uses full downloads and a controlled local feed; it does not certify public GitHub feed delivery or differential downloads.
 
 ## Packaged application acceptance
 
@@ -71,3 +97,15 @@ The copied app passed deep strict code-signature verification, Gatekeeper assess
 The verifier requires `--expected-team-id=WM6645CA5X` for this signed candidate. A wrong team and a modified resource in the owned copy were each rejected before launch; exact resource bytes were restored and the parent signature reverified. Unsigned default preflight still requires every header hash without signed exceptions.
 
 This evidence covers the notarized CI app and read-only DMG extraction. Installation into an existing system, account migration and in-place updater application remain operator acceptance. CI publishing was explicitly skipped.
+
+## SSH packaged application acceptance
+
+SSH mode drives the packaged Welcome connection form through a disposable localhost OpenSSH daemon to an explicit actual Agent source backend.
+
+`--mode=ssh` requires the source checkout and Python inputs used by Remote mode. The daemon owns temporary host and client keys, restricts forwarding to the fixture backend, and fixes HOME, HERMES_HOME and shell initialization paths to its temporary tree. A real SSH command verifies those environment values before Electron starts. Host service commands are disabled in the fixture PATH.
+
+An owned client wrapper invokes the real OpenSSH binary with explicit temporary known-hosts and control-socket paths and no user SSH configuration. This isolates client state even when OpenSSH resolves its default paths from the account database instead of HOME.
+
+The recorded gateway PID is the real source backend owned by the runner; it avoids starting an unrelated messaging gateway. No database schema or conversation is seeded. Production SSH discovery, authentication, tunnelling, protocol handling and history reads remain active, followed by the same batch clarification, restored-history, About and native SQLite checks.
+
+The report identifies localhost and the fixture boundary explicitly. This tier does not certify an external host, SSH provisioning or an installed-system upgrade. Daemon, backend, app and fixture state belong only to the runner and are cleaned up after success.

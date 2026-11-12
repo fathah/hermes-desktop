@@ -35,10 +35,13 @@ const executablePath = path.resolve(
       ),
 );
 const mode = args.mode || "remote";
-assert.ok(["remote", "local"].includes(mode), "--mode must be remote or local");
+assert.ok(
+  ["remote", "local", "ssh"].includes(mode),
+  "--mode must be remote, local or ssh",
+);
 if (
   !args["preflight-only"] &&
-  mode === "remote" &&
+  mode !== "local" &&
   (typeof args["agent-repo"] !== "string" || typeof args.python !== "string")
 ) {
   throw new Error(
@@ -87,10 +90,18 @@ const output = path.resolve(
 );
 const evidence = path.dirname(output);
 fs.mkdirSync(evidence, { recursive: true });
-const trial = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-packaged-app-"));
+// macOS Unix-domain socket paths have a short limit; SSH's %C adds 40 bytes.
+const trialRoot =
+  mode === "ssh" && fs.existsSync("/private/tmp")
+    ? "/private/tmp"
+    : os.tmpdir();
+const trial = fs.mkdtempSync(path.join(trialRoot, "hermes-packaged-app-"));
 const localHome =
   mode === "local" && !args["preflight-only"] ? ownedLocalHome() : null;
-const agentHome = localHome || path.join(trial, "agent-home");
+const sshHome = mode === "ssh" ? path.join(trial, "ssh-home") : null;
+const agentHome =
+  localHome ||
+  (sshHome ? path.join(sshHome, ".hermes") : path.join(trial, "agent-home"));
 const desktopHome = localHome
   ? path.dirname(localHome)
   : path.join(trial, "desktop-home");
@@ -112,6 +123,7 @@ const fixtureSecrets = new Set([token]);
 let application;
 let page;
 let provider;
+let sshFixture;
 let mainLog = "";
 let stage = "archive preflight";
 const report = {
@@ -125,7 +137,9 @@ const report = {
     "The application is the supplied packaged executable; this does not install a signed DMG or exercise auto-update.",
     mode === "local"
       ? "The UI uses an explicitly marked temporary managed installation; installation provisioning has its own report."
-      : "The UI exercises direct Remote token setup on localhost. Local and SSH wire tiers have separate live runners.",
+      : mode === "ssh"
+        ? "The UI uses a disposable localhost OpenSSH daemon and actual source backend; this does not certify an external host or a fresh SSH installation."
+        : "The UI exercises direct Remote token setup on localhost. Local and SSH wire tiers have separate live runners.",
     "Agent construction and clarify tool execution are real; model responses are scripted localhost fixtures, not ML inference.",
     "No real account, OAuth identity, external deployment, user session or provider credential is used.",
   ],
@@ -336,6 +350,196 @@ async function screenshot(name) {
   report.screenshots.push(filename);
 }
 
+function shellQuote(value) {
+  return "'" + value.replace(/'/g, "'\\''") + "'";
+}
+
+function fixtureCommand(command, argv, options = {}) {
+  const result = spawnSync(command, argv, {
+    encoding: "utf8",
+    timeout: 30000,
+    ...options,
+  });
+  assert.equal(
+    result.status,
+    0,
+    safeText(`${command} failed: ${result.stderr || result.error}`),
+  );
+  return result.stdout;
+}
+
+async function startSshFixture(backendPort, backendPid, agentRepo, python) {
+  assert.ok(sshHome, "SSH fixture requires its own home");
+  assert.notEqual(
+    fs.realpathSync(sshHome),
+    fs.realpathSync(os.homedir()),
+    "SSH fixture cannot use the real home",
+  );
+  const bin = path.join(sshHome, "bin");
+  fs.mkdirSync(bin);
+  // OpenSSH expands ~ from the account database, independently of HOME.
+  // Keep both trust state and multiplex sockets inside this owned trial.
+  const clientBin = path.join(desktopHome, "bin");
+  fs.mkdirSync(clientBin);
+  const knownHosts = path.join(trial, "known_hosts");
+  const controlPath = path.join(trial, "control-%C");
+  const clientLog = path.join(trial, "ssh-client-used.log");
+  fs.writeFileSync(
+    path.join(clientBin, "ssh"),
+    `#!/bin/sh\nprintf '.\\n' >> ${shellQuote(clientLog)}\ncontrol=${shellQuote(controlPath)}\nfor argument do\n  case "$argument" in ControlPath=none|-oControlPath=none) control=none ;; esac\ndone\nexec /usr/bin/ssh -F /dev/null -o UserKnownHostsFile=${shellQuote(knownHosts)} -o GlobalKnownHostsFile=/dev/null -o "ControlPath=$control" -o IdentitiesOnly=yes "$@"\n`,
+    { mode: 0o700 },
+  );
+  fs.writeFileSync(
+    path.join(bin, "python3"),
+    `#!/bin/sh\nexec ${shellQuote(python)} "$@"\n`,
+    { mode: 0o700 },
+  );
+  // No fixture command may manage a host service, even on a systemd machine.
+  for (const name of ["systemctl", "launchctl", "service", "sudo"])
+    fs.writeFileSync(path.join(bin, name), "#!/bin/sh\nexit 1\n", {
+      mode: 0o700,
+    });
+  const remotePath = `${bin}:/usr/bin:/bin:/usr/sbin:/sbin`;
+  const launcherCode = `import sys,runpy;sys.path.insert(0,${JSON.stringify(agentRepo)});sys.argv=['hermes']+sys.argv[1:];runpy.run_module('hermes_cli.main',run_name='__main__')`;
+  fs.writeFileSync(
+    path.join(agentHome, "desktop-remote-hermes"),
+    `#!/bin/sh\nexec ${shellQuote(python)} -c ${shellQuote(launcherCode)} "$@"\n`,
+    { mode: 0o700 },
+  );
+  // The live PID belongs to the real backend created above; no session/schema is seeded.
+  fs.writeFileSync(
+    path.join(agentHome, "gateway.pid"),
+    JSON.stringify({ pid: backendPid }),
+  );
+  const commandLog = path.join(trial, "ssh-commands.log");
+  const forced = path.join(trial, "ssh-command");
+  fs.writeFileSync(
+    forced,
+    `#!/bin/sh\nexport HOME=${shellQuote(sshHome)} HERMES_HOME=${shellQuote(agentHome)} ZDOTDIR=${shellQuote(sshHome)} PATH=${shellQuote(remotePath)}\nexport PYTHONDONTWRITEBYTECODE=1 HERMES_IGNORE_RULES=1 HERMES_TUI_TOOLSETS=clarify\nunset ENV BASH_ENV\ncd "$HOME" || exit 1\nprintf '%s\\n' "$SSH_ORIGINAL_COMMAND" >> ${shellQuote(commandLog)}\nexec /bin/sh -c "$SSH_ORIGINAL_COMMAND"\n`,
+    { mode: 0o700 },
+  );
+  const hostKey = path.join(trial, "ssh-host");
+  const key = path.join(trial, "ssh-client");
+  fixtureCommand("ssh-keygen", [
+    "-q",
+    "-t",
+    "ed25519",
+    "-N",
+    "",
+    "-f",
+    hostKey,
+  ]);
+  fixtureCommand("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", key]);
+  const authorized = path.join(trial, "authorized_keys");
+  fs.copyFileSync(`${key}.pub`, authorized);
+  const port = await freePort();
+  const username = os.userInfo().username;
+  const config = path.join(trial, "sshd_config");
+  fs.writeFileSync(
+    config,
+    [
+      `Port ${port}`,
+      "ListenAddress 127.0.0.1",
+      `HostKey ${hostKey}`,
+      `PidFile ${path.join(trial, "sshd.pid")}`,
+      `AuthorizedKeysFile ${authorized}`,
+      "PasswordAuthentication no",
+      "KbdInteractiveAuthentication no",
+      "UsePAM no",
+      "StrictModes no",
+      `AllowUsers ${username}`,
+      "PermitUserEnvironment no",
+      "PermitUserRC no",
+      "PermitTTY no",
+      "X11Forwarding no",
+      "AllowAgentForwarding no",
+      "AllowTcpForwarding local",
+      `PermitOpen 127.0.0.1:${backendPort}`,
+      "MaxSessions 64",
+      `SetEnv HOME=${sshHome} HERMES_HOME=${agentHome} ZDOTDIR=${sshHome} PATH=${remotePath} PYTHONDONTWRITEBYTECODE=1`,
+      `ForceCommand ${forced}`,
+      "LogLevel ERROR",
+    ].join("\n") + "\n",
+  );
+  const daemon =
+    typeof args.sshd === "string" ? path.resolve(args.sshd) : "/usr/sbin/sshd";
+  fixtureCommand(daemon, ["-t", "-f", config]);
+  const log = fs.openSync(path.join(trial, "sshd.log"), "w");
+  const child = spawn(daemon, ["-D", "-e", "-f", config], {
+    env: { PATH: remotePath, HOME: sshHome, LANG: "en_US.UTF-8" },
+    stdio: ["ignore", log, log],
+  });
+  fs.closeSync(log);
+  child.once("error", (error) => {
+    child.fixtureError = error;
+  });
+  children.push(child);
+  await until(async () => {
+    if (child.fixtureError) throw child.fixtureError;
+    if (child.exitCode !== null)
+      throw new Error(`Fixture sshd exited ${child.exitCode}`);
+    return new Promise((resolve) => {
+      const socket = net.connect(port, "127.0.0.1");
+      socket.once("connect", () => {
+        socket.destroy();
+        resolve(true);
+      });
+      socket.once("error", () => {
+        socket.destroy();
+        resolve(false);
+      });
+    });
+  }, "disposable SSH daemon startup");
+  const verified = fixtureCommand(
+    path.join(clientBin, "ssh"),
+    [
+      "-F",
+      "/dev/null",
+      "-o",
+      "BatchMode=yes",
+      "-o",
+      "IdentitiesOnly=yes",
+      "-o",
+      "StrictHostKeyChecking=no",
+      "-o",
+      `UserKnownHostsFile=${knownHosts}`,
+      "-i",
+      key,
+      "-p",
+      String(port),
+      `${username}@127.0.0.1`,
+      'python3 -c \'import os,json;print(json.dumps({k:os.environ[k] for k in ["HOME","HERMES_HOME","ZDOTDIR"]}))\'',
+    ],
+    { env: { PATH: process.env.PATH, HOME: desktopHome } },
+  );
+  const scope = JSON.parse(verified.trim());
+  assert.deepEqual(
+    scope,
+    { HOME: sshHome, HERMES_HOME: agentHome, ZDOTDIR: sshHome },
+    "SSH execution escaped the owned home",
+  );
+  report.sshFixture = {
+    host: "127.0.0.1",
+    port,
+    username,
+    backendPort,
+    backendPid,
+    sshdPid: child.pid,
+    home: sshHome,
+    hermesHome: agentHome,
+    isolatedEnvironmentVerified: true,
+    clientIsolation: {
+      knownHosts,
+      controlPath,
+      ignoresUserSshConfig: true,
+      preservesStandaloneTunnels: true,
+    },
+    gatewayPidMetadata:
+      "Records the already owned real source backend; no messaging gateway or session database was seeded.",
+  };
+  return { host: "127.0.0.1", port, username, key, backendPort, clientLog };
+}
+
 /** Same deterministic clarify exchange as the separate actual-Agent chat tier. */
 function createProvider() {
   return http.createServer(async (request, response) => {
@@ -456,15 +660,18 @@ async function startBackend() {
     provider.once("error", reject).listen(0, "127.0.0.1", resolve),
   );
   const providerPort = provider.address().port;
-  if (localHome) {
+  const port = localHome ? null : await freePort();
+  if (localHome || mode === "ssh") {
     writeFixtureSetting(
       "config.yaml",
       `_config_version: 12\nmodel:\n  default: compat-local-model\n  provider: custom\n  base_url: "http://127.0.0.1:${providerPort}/v1"\n  context_length: 128000\nplatform_toolsets:\n  cli: [clarify]\nsecurity:\n  allow_lazy_installs: false\nnous:\n  guest: false\ncompression:\n  enabled: false\nterminal:\n  backend: local\n  cwd: ${JSON.stringify(agentHome)}\nagent:\n  max_turns: 5\n`,
     );
     writeFixtureSetting(
       ".env",
-      `CUSTOM_API_KEY=local-fixture-not-a-credential\nOPENAI_API_KEY=local-fixture-not-a-credential\nAPI_SERVER_KEY=${token}\n`,
+      `CUSTOM_API_KEY=local-fixture-not-a-credential\nOPENAI_API_KEY=local-fixture-not-a-credential\nAPI_SERVER_KEY=${token}\n${mode === "ssh" ? `HERMES_DASHBOARD_SESSION_TOKEN=${token}\nHERMES_DESKTOP_DASHBOARD_PORT=${port}\n` : ""}`,
     );
+  }
+  if (localHome) {
     report.localInstallation = {
       hermesHome: localHome,
       home: desktopHome,
@@ -485,35 +692,35 @@ async function startBackend() {
     fs.existsSync(path.join(agentRepo, "tui_gateway/server.py")),
     "Explicit Agent source is incomplete",
   );
-  writeFixtureSetting(
-    "config.yaml",
-    JSON.stringify(
-      {
-        model: {
-          default: "compat-local-model",
-          provider: "custom:fixture",
-          context_length: 128000,
-        },
-        providers: {
-          fixture: {
-            name: "fixture",
-            base_url: `http://127.0.0.1:${providerPort}/v1`,
-            api_key: "local-fixture-not-a-credential",
-            api_mode: "chat_completions",
+  if (mode !== "ssh")
+    writeFixtureSetting(
+      "config.yaml",
+      JSON.stringify(
+        {
+          model: {
+            default: "compat-local-model",
+            provider: "custom:fixture",
+            context_length: 128000,
           },
+          providers: {
+            fixture: {
+              name: "fixture",
+              base_url: `http://127.0.0.1:${providerPort}/v1`,
+              api_key: "local-fixture-not-a-credential",
+              api_mode: "chat_completions",
+            },
+          },
+          platform_toolsets: { cli: ["clarify"] },
+          security: { allow_lazy_installs: false },
+          nous: { guest: false },
+          compression: { enabled: false },
+          terminal: { backend: "local", cwd: agentHome },
+          agent: { max_turns: 5 },
         },
-        platform_toolsets: { cli: ["clarify"] },
-        security: { allow_lazy_installs: false },
-        nous: { guest: false },
-        compression: { enabled: false },
-        terminal: { backend: "local", cwd: agentHome },
-        agent: { max_turns: 5 },
-      },
-      null,
-      2,
-    ),
-  );
-  const port = await freePort();
+        null,
+        2,
+      ),
+    );
   const code = `import sys\nsys.path.insert(0, ${JSON.stringify(agentRepo)})\nfrom hermes_cli import web_server\nweb_server.start_server(host='127.0.0.1', port=${port}, open_browser=False, headless=True, isolated=True)\n`;
   report.backendStore =
     "Fresh home; no state.db schema or conversations seeded.";
@@ -523,7 +730,7 @@ async function startBackend() {
     env: {
       PATH: process.env.PATH,
       LANG: "en_US.UTF-8",
-      HOME: agentHome,
+      HOME: sshHome || agentHome,
       HERMES_HOME: agentHome,
       HERMES_DASHBOARD_SESSION_TOKEN: token,
       HERMES_SERVE_HEADLESS: "1",
@@ -579,6 +786,8 @@ async function startBackend() {
     });
     await result.arrayBuffer();
   }
+  if (mode === "ssh")
+    sshFixture = await startSshFixture(port, backend.pid, agentRepo, python);
   return endpoint;
 }
 
@@ -589,7 +798,10 @@ async function runUi(endpoint) {
     cwd: desktopHome,
     timeout: 60000,
     env: {
-      PATH: process.env.PATH,
+      PATH:
+        mode === "ssh"
+          ? `${path.join(desktopHome, "bin")}:${process.env.PATH}`
+          : process.env.PATH,
       LANG: "en_US.UTF-8",
       HOME: desktopHome,
       HERMES_HOME: localHome || desktopHome,
@@ -674,8 +886,11 @@ async function runUi(endpoint) {
   const composer = page
     .locator(".chat-container:visible textarea.chat-input")
     .first();
-  if (mode === "remote") {
-    stage = "Welcome and Remote connection UI";
+  if (mode !== "local") {
+    stage =
+      mode === "ssh"
+        ? "Welcome and SSH connection UI"
+        : "Welcome and Remote connection UI";
     await page
       .getByRole("heading", { name: "Welcome to Hermes One", exact: true })
       .waitFor({ state: "visible", timeout: 60000 });
@@ -683,26 +898,54 @@ async function runUi(endpoint) {
       .locator('.onboard-screen[data-phase="done"]')
       .waitFor({ state: "visible" });
     await screenshot("01-welcome");
-    await page
-      .getByRole("button", { name: "Connect to Remote Hermes", exact: true })
-      .click();
-    await page
-      .getByPlaceholder("http://192.168.1.100:8642", { exact: true })
-      .fill(endpoint);
-    await page
-      .getByPlaceholder("Bearer token (API_SERVER_KEY)", { exact: true })
-      .fill(token);
-    await page.getByRole("button", { name: "Connect", exact: true }).click();
+    if (mode === "ssh") {
+      assert.ok(sshFixture, "SSH fixture was not prepared");
+      await page
+        .getByRole("button", { name: "Connect via SSH", exact: true })
+        .click();
+      await page
+        .getByPlaceholder("192.168.1.100 or myserver.local", { exact: true })
+        .fill(sshFixture.host);
+      await page
+        .getByPlaceholder("22", { exact: true })
+        .fill(String(sshFixture.port));
+      await page
+        .getByPlaceholder("hermes", { exact: true })
+        .fill(sshFixture.username);
+      await page
+        .getByPlaceholder("~/.ssh/id_rsa", { exact: true })
+        .fill(sshFixture.key);
+      await page
+        .getByPlaceholder("8642", { exact: true })
+        .fill(String(sshFixture.backendPort));
+      await page
+        .getByRole("button", { name: "Connect via SSH", exact: true })
+        .click();
+    } else {
+      await page
+        .getByRole("button", { name: "Connect to Remote Hermes", exact: true })
+        .click();
+      await page
+        .getByPlaceholder("http://192.168.1.100:8642", { exact: true })
+        .fill(endpoint);
+      await page
+        .getByPlaceholder("Bearer token (API_SERVER_KEY)", { exact: true })
+        .fill(token);
+      await page.getByRole("button", { name: "Connect", exact: true }).click();
+    }
     await until(async () => {
       const failure = page.locator(".welcome-remote-error").first();
       if (await failure.isVisible())
         throw new Error(
-          `Remote connection UI rejected the fixture: ${await failure.innerText()}`,
+          `${mode} connection UI rejected the fixture: ${await failure.innerText()}`,
         );
       return composer.isVisible();
-    }, "Remote UI connection to composer");
+    }, `${mode} UI connection to composer`);
     report.checks.push({
-      name: "Welcome and Remote token connection through UI",
+      name:
+        mode === "ssh"
+          ? "Welcome and SSH connection selection through UI"
+          : "Welcome and Remote token connection through UI",
       passed: true,
     });
   } else {
@@ -746,6 +989,34 @@ async function runUi(endpoint) {
     previousSessions.map((session) => session.id),
   );
   report.existingSessions = previousSessions.length;
+  if (mode === "ssh") {
+    const connection = await page.evaluate(() =>
+      window.hermesAPI.getConnectionConfig(),
+    );
+    assert.equal(connection.mode, "ssh");
+    assert.equal(connection.ssh?.host, sshFixture.host);
+    assert.equal(connection.ssh?.port, sshFixture.port);
+    assert.equal(connection.ssh?.keyPath, sshFixture.key);
+    const status = await page.evaluate(() =>
+      window.hermesAPI.dashboardStatus(),
+    );
+    if (status.connection?.token) fixtureSecrets.add(status.connection.token);
+    assert.equal(status.running, true, status.error);
+    assert.equal(status.connection?.mode, "ssh");
+    const clientInvocations = fs
+      .readFileSync(sshFixture.clientLog, "utf8")
+      .trim()
+      .split("\n").length;
+    assert.ok(clientInvocations > 1, "Electron bypassed the owned SSH client");
+    report.sshFixture.clientIsolation.applicationInvocations =
+      clientInvocations - 1;
+    report.sshTunnel = {
+      mode: status.connection.mode,
+      baseUrl: status.connection.baseUrl,
+      host: connection.ssh.host,
+      port: connection.ssh.port,
+    };
+  }
 
   stage = "actual composer and multi-question clarification";
   const prompt =
@@ -1020,6 +1291,31 @@ try {
       application.process().kill("SIGTERM");
     }
   }
+  if (sshFixture) {
+    const sockets = fs
+      .readdirSync(trial)
+      .filter((name) => name.startsWith("control-"))
+      .map((name) => path.join(trial, name))
+      .filter((name) => fs.lstatSync(name).isSocket());
+    report.sshFixture.controlMastersStopped = sockets.map((socket) => {
+      const stopped = spawnSync(
+        "/usr/bin/ssh",
+        [
+          "-F",
+          "/dev/null",
+          "-S",
+          socket,
+          "-O",
+          "exit",
+          "-p",
+          String(sshFixture.port),
+          `${sshFixture.username}@127.0.0.1`,
+        ],
+        { encoding: "utf8", timeout: 5000 },
+      );
+      return { socket, status: stopped.status };
+    });
+  }
   for (const child of children) child.kill("SIGTERM");
   const deadline = Date.now() + 3000;
   while (
@@ -1032,6 +1328,12 @@ try {
   for (const child of children)
     if (child.exitCode === null && child.signalCode === null)
       child.kill("SIGKILL");
+  if (mode === "ssh")
+    report.fixtureProcesses = children.map((child) => ({
+      pid: child.pid,
+      exitCode: child.exitCode,
+      signalCode: child.signalCode,
+    }));
   if (provider) await new Promise((resolve) => provider.close(resolve));
   if (localHome && fs.existsSync(path.join(localHome, "dashboard-stderr.log")))
     fs.writeFileSync(
@@ -1050,6 +1352,12 @@ try {
       path.join(evidence, "agent.log"),
       safeText(fs.readFileSync(path.join(trial, "agent.log"), "utf8")),
     );
+  for (const name of ["sshd.log", "ssh-commands.log"])
+    if (fs.existsSync(path.join(trial, name)))
+      fs.writeFileSync(
+        path.join(evidence, name),
+        safeText(fs.readFileSync(path.join(trial, name), "utf8")),
+      );
 }
 report.pageErrors = pageErrors;
 report.consoleErrors = consoleErrors;
