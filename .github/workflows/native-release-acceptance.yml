@@ -3,6 +3,15 @@ name: Native Release Acceptance
 on:
   workflow_dispatch:
     inputs:
+      checks:
+        description: Acceptance targets to execute
+        required: true
+        type: choice
+        default: all
+        options:
+          - all
+          - native
+          - managed
       candidate_run_id:
         description: Successful dry-run Release workflow containing the exact candidate artifacts
         required: true
@@ -32,7 +41,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: native-release-acceptance-${{ inputs.candidate_run_id }}
+  group: native-release-acceptance-${{ inputs.candidate_run_id }}-${{ inputs.checks || 'all' }}
   cancel-in-progress: false
 
 jobs:
@@ -64,6 +73,7 @@ jobs:
             core.info(`Verified candidate run ${run.id} at ${run.head_sha}`);
 
   native:
+    if: ${{ inputs.checks != 'managed' }}
     name: Install and update (${{ matrix.id }})
     needs: validate
     timeout-minutes: 45
@@ -218,6 +228,7 @@ jobs:
           if-no-files-found: warn
 
   managed_agent:
+    if: ${{ inputs.checks != 'native' }}
     name: Fresh managed Agent (${{ matrix.id }})
     needs: validate
     timeout-minutes: 35
