@@ -358,3 +358,41 @@ API Route CLI fallback forwards the selected profile's resolved key from its vau
 The real Setup form saves API Route credentials and the chosen custom model to its selected profile, then real config readers reopen the files without changing another profile.
 
 An isolated fixture selects the preset and enters a model ID and fake key. Actual config writers persist `custom`, the unchanged model ID, the endpoint and `API_ROUTE_API_KEY`; fresh readers recover them and reverse branding remains API Route.
+
+## Runcrate provider preset
+
+Runcrate is an optional OpenAI-compatible preset for a GPU cloud that serves open models, with a dedicated API-key field and authenticated model discovery.
+
+Select **Local / OpenAI-Compatible** during setup, then **Runcrate** under remote APIs. Get a key from https://www.runcrate.ai/dashboard/api-keys?utm_source=hermes-desktop&utm_medium=directory&utm_campaign=gpu_pricing, paste it, fetch models and select a chat model such as `deepseek-ai/DeepSeek-V4.1-Flash`. The preset uses https://api.runcrate.ai/v1 and stores models as `custom` with that base URL. Model IDs are preserved. Open models are free with your GitHub account; see https://www.runcrate.ai/inference/free?utm_source=hermes-desktop&utm_medium=directory&utm_campaign=gpu_pricing.
+
+The key is stored as `RUNCRATE_API_KEY`, matching Hermes Agent's hostname-derived variable (the host label `runcrate` upper-cased). The existing CLI path forwards the selected endpoint's resolved key to this variable and the legacy `OPENAI_API_KEY` slot; no native agent provider id is required.
+
+### Credential host boundary
+
+Runcrate key lookup uses the parsed HTTP(S) hostname and accepts only api.runcrate.ai. URL credentials, paths, lookalike hosts and unrelated subdomains cannot identify the provider.
+
+[[src/shared/url-key-map.ts#matchesProviderUrl]] applies this boundary to shared key lookup and runtime hydration. Tests preserve valid ports, credentials and trailing DNS dots while rejecting userinfo spoofs and misleading paths.
+
+### Installer readiness
+
+Runcrate configurations stored as custom or auto resolve to their dedicated key at the configured endpoint, so a saved key is recognized on restart.
+
+[[src/main/installer.ts#expectedEnvKeyForModel]] uses the same strict hostname boundary. Tests cover the supported endpoint and reject misleading paths and lookalike hosts.
+
+### Setup persistence
+
+The Runcrate preset keeps its endpoint, credential field, discovery URL and display identity consistent after a model is saved as custom.
+
+Registry tests verify the preset against both endpoint registries, the compatible runtime provider set, the dedicated settings field and reverse branding.
+
+### Vault credentials reach CLI
+
+Runcrate CLI fallback forwards the selected profile's resolved key from its vault, profile or process environment using the existing compatible-provider path.
+
+[[src/main/hermes.ts#sendMessageViaCli]] supplies RUNCRATE_API_KEY and the legacy OPENAI_API_KEY slot. Tests verify credential precedence, URL credentials and paths, and a single vault enumeration.
+
+### Rendered setup save and reload
+
+The real Setup form saves Runcrate credentials and the chosen custom model to its selected profile, then real config readers reopen the files without changing another profile.
+
+An isolated fixture selects the preset and enters a model ID and fake key. Actual config writers persist `custom`, the unchanged model ID, the endpoint and `RUNCRATE_API_KEY`; fresh readers recover them and reverse branding remains Runcrate.

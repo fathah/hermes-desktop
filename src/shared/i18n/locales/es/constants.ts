@@ -45,6 +45,7 @@ export default {
   cerebras: "Cerebras",
   requesty: "Requesty",
   api_route: "API Route",
+  runcrate: "Runcrate",
   mistral: "Mistral",
   // Theme
   themeSystem: "Sistema",
@@ -100,6 +101,8 @@ export default {
   requestyApiKey: "API key de Requesty",
   apiRouteApiKey: "API key de API Route",
   apiRouteHint: "Gateway multimodelo compatible con OpenAI",
+  runcrateApiKey: "API key de Runcrate",
+  runcrateHint: "Modelos abiertos en una API compatible con OpenAI",
   requestyHint: "Gateway multimodelo compatible con OpenAI",
   mistralApiKey: "API key de Mistral",
   mistralHint: "Modelos Mistral y Codestral",
