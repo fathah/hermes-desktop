@@ -380,6 +380,7 @@ jobs:
             artifacts/*.blockmap
             artifacts/latest.yml
             artifacts/latest-linux.yml
+            artifacts/latest-linux-arm64.yml
             artifacts/latest-mac.yml
 
   rebuild_landing_page:

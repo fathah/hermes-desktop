@@ -27,6 +27,11 @@ const metadata = JSON.parse(
   readFileSync(join(projectDir, "package.json"), "utf8"),
 );
 const homes: string[] = [];
+// Real generated hooks spawn several native shell helpers. A five-second
+// ceiling repeatedly expires on macOS during a four-worker suite, despite the
+// unchanged fixture passing alone. Keep a hard process bound and time to assert
+// its actual exit status; this does not change application or package behavior.
+const HOOK_PROCESS_TIMEOUT_MS = 15_000;
 afterEach(() => {
   for (const home of homes.splice(0))
     rmSync(home, { recursive: true, force: true });
@@ -131,7 +136,7 @@ async function runHook(
       FIXTURE_COMMAND_LOG: commandLog,
     },
     encoding: "utf8",
-    timeout: 5000,
+    timeout: HOOK_PROCESS_TIMEOUT_MS,
   });
   return {
     result,
@@ -146,6 +151,7 @@ async function runHook(
 // Cross-platform packaging assertions remain in packaging-identity.test.ts.
 describe.skipIf(process.platform === "win32")(
   "POSIX Linux package hooks",
+  { timeout: HOOK_PROCESS_TIMEOUT_MS + 5_000 },
   () => {
     // @lat: [[desktop-updates#Desktop Updates#Stable and beta release channels#Linux package sandbox and AppArmor#Compatible profile installation]]
     it.each(["deb", "rpm"] as const)(
