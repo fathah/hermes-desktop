@@ -9,7 +9,18 @@ const RETRY_DELAY_MS = 5_000;
 // JavaScript return types without converting the release entry point to TS.
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 export function isTransientAuditFailure(output) {
-  return /\b(?:EAI_AGAIN|ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENETUNREACH|ENOTFOUND)\b|(?:HTTP\s*)?5\d\d\b|audit endpoint returned an error|service unavailable|socket hang up/i.test(
+  // A completed findings report is authoritative even when an advisory title or
+  // URL contains a network term, or registry warnings precede the report.
+  if (
+    /^\s*(?:#\s*)?npm audit report\b|^\s*Severity:\s*(?:low|moderate|high|critical)\b/im.test(
+      output,
+    )
+  ) {
+    return false;
+  }
+  // Status codes require HTTP/npm error context: advisory identifiers such
+  // as CVE-2026-115570 are not evidence of an unavailable registry.
+  return /\b(?:EAI_AGAIN|ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENETUNREACH|ENOTFOUND)\b|\bHTTP(?:\/\d(?:\.\d)?)?\s+5\d\d\b|\bnpm\s+(?:warn|error|ERR!)\s+audit\s+(?:E)?5\d\d\b|\bnpm\s+(?:error|ERR!)\s+(?:code\s+)?E5\d\d\b|audit endpoint returned an error|service unavailable|socket hang up/i.test(
     output,
   );
 }

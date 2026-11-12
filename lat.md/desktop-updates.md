@@ -134,11 +134,19 @@ Pull requests and main-branch pushes must have no lint warnings and no high-seve
 
 The CI workflow installs the locked dependency tree, runs `npm run audit:prod`, type-checks, tests, and treats lint as blocking. The audit wrapper retries only transient registry/network failures; a reported high-severity vulnerability still fails immediately. The install step fetches the pinned Electron runtime once before tests, and the suite uses four workers so parallel imports never race a lazy binary download or starve short tests. [[tests/audit-production-dependencies.test.ts]] covers retry classification, while [[tests/release-artifacts.test.ts]] protects these controls, the audit threshold, and the zero-warning lint policy from accidental removal.
 
+The v0.7.8 candidate keeps the existing Electron major, raises its security floor to 44.9.1, and scopes an exact `undici` 7.30.2 override to the unchanged `@electron/get` 5.1.0 downloader. [Package metadata](../package.json) and the [lockfile](../package-lock.json) keep this limited patch reproducible; unrelated dependencies and the independent Agent update channel are unchanged.
+
 #### Transient audit outages
 
 The production audit retries temporary npm registry and network failures without weakening vulnerability enforcement.
 
 HTTP 5xx responses, DNS failures, resets, timeouts, and unreachable-registry errors receive up to three attempts with short backoff. Audit findings are not classified as transient and fail on the first attempt. `scripts/audit-production-dependencies.mjs` implements the classification boundary.
+
+#### Audit findings take precedence
+
+A completed audit findings report fails immediately even if a warning, advisory title or URL resembles a transient network failure.
+
+HTTP status matching requires an explicit HTTP or npm error context; bare `5xx` numbers inside advisory identifiers cannot trigger retry. [[tests/audit-production-dependencies.test.ts]] covers mixed registry warnings and vulnerability findings so release enforcement stays authoritative.
 
 ### macOS signing keychain
 
