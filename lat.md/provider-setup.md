@@ -358,3 +358,41 @@ API Route CLI fallback forwards the selected profile's resolved key from its vau
 The real Setup form saves API Route credentials and the chosen custom model to its selected profile, then real config readers reopen the files without changing another profile.
 
 An isolated fixture selects the preset and enters a model ID and fake key. Actual config writers persist `custom`, the unchanged model ID, the endpoint and `API_ROUTE_API_KEY`; fresh readers recover them and reverse branding remains API Route.
+
+## UberLLM provider preset
+
+UberLLM is an optional paid OpenAI-compatible gateway preset, with a dedicated API-key field and model discovery. One key reaches text, image, video and speech models.
+
+Select **Local / OpenAI-Compatible** during setup, then **UberLLM** under remote APIs. Get a key from https://uberllm.dev/signup, paste it, fetch models and select a chat model such as `deepseek/deepseek-v4-flash`. The preset uses https://api.uberllm.dev/v1 and stores models as `custom` with that base URL. Model IDs use the `vendor/model` form and are preserved. Prices per model are at https://uberllm.dev/models and setup is at https://uberllm.dev/docs/quickstart.
+
+The key is stored as `UBERLLM_API_KEY`, matching Hermes Agent's hostname-derived variable for `api.uberllm.dev`. The existing CLI path forwards the selected endpoint's resolved key to this variable and the legacy `OPENAI_API_KEY` slot; no native agent provider id is required.
+
+### Credential host boundary
+
+UberLLM key lookup uses the parsed HTTP(S) hostname and accepts only api.uberllm.dev. URL credentials, paths, lookalike hosts and the bare uberllm.dev site cannot identify the provider.
+
+[[src/shared/url-key-map.ts#matchesProviderUrl]] applies this boundary to shared key lookup and runtime hydration. Tests preserve valid ports, credentials and trailing DNS dots while rejecting userinfo spoofs and misleading paths.
+
+### Installer readiness
+
+UberLLM configurations stored as custom or auto resolve to their dedicated key at the configured endpoint, so a saved key is recognized on restart.
+
+[[src/main/installer.ts#expectedEnvKeyForModel]] uses the same strict hostname boundary. Tests cover the supported endpoint and reject misleading paths and lookalike hosts.
+
+### Setup persistence
+
+The UberLLM preset keeps its endpoint, credential field, discovery URL and display identity consistent after a model is saved as custom.
+
+Registry tests verify the preset against both endpoint registries, the compatible runtime provider set, the dedicated settings field and reverse branding.
+
+### Vault credentials reach CLI
+
+UberLLM CLI fallback forwards the selected profile's resolved key from its vault, profile or process environment using the existing compatible-provider path.
+
+[[src/main/hermes.ts#sendMessageViaCli]] supplies UBERLLM_API_KEY and the legacy OPENAI_API_KEY slot. Tests verify credential precedence, URL credentials and paths, and a single vault enumeration.
+
+### Rendered setup save and reload
+
+The real Setup form saves UberLLM credentials and the chosen custom model to its selected profile, then real config readers reopen the files without changing another profile.
+
+An isolated fixture selects the preset and enters a model ID and fake key. Actual config writers persist `custom`, the unchanged model ID, the endpoint and `UBERLLM_API_KEY`; fresh readers recover them and reverse branding remains UberLLM.

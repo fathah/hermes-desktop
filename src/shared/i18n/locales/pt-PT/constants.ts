@@ -35,6 +35,7 @@ export default {
   cerebras: "Cerebras",
   requesty: "Requesty",
   api_route: "API Route",
+  uberllm: "UberLLM",
   mistral: "Mistral",
   // Theme
   themeSystem: "Sistema",
@@ -91,6 +92,8 @@ export default {
   requestyApiKey: "Chave de API da Requesty",
   apiRouteApiKey: "Chave de API da API Route",
   apiRouteHint: "Gateway multimodelo compatível com OpenAI",
+  uberllmApiKey: "Chave de API da UberLLM",
+  uberllmHint: "Gateway multimodelo compatível com OpenAI",
   requestyHint: "Gateway multimodelo compatível com OpenAI",
   mistralApiKey: "Chave de API da Mistral",
   mistralHint: "Modelos Mistral e Codestral",

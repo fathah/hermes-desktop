@@ -45,6 +45,26 @@ describe("URL_KEY_MAP", () => {
       );
     },
   );
+  // @lat: [[provider-setup#UberLLM provider preset#Credential host boundary]]
+  it.each([
+    ["https://api.uberllm.dev/v1", true],
+    ["https://API.UBERLLM.DEV:443/v1", true],
+    ["api.uberllm.dev/v1", true],
+    ["https://api.uberllm.dev.:443/v1", true],
+    ["https://openai.com:password@api.uberllm.dev/v1", true],
+    ["https://api.uberllm.dev/v1/api.openai.com", true],
+    ["https://api.uberllm.dev:443@evil.example/v1", false],
+    ["https://api.uberllm.dev.attacker.example/v1", false],
+    ["https://evil.example/api.uberllm.dev/v1", false],
+    ["https://uberllm.dev/v1", false],
+    ["ftp://api.uberllm.dev/v1", false],
+  ])("resolves UberLLM credentials only for its HTTP host %s", (url, known) => {
+    expect(expectedEnvKeyForUrl(url)).toBe(
+      known ? "UBERLLM_API_KEY" : CUSTOM_API_KEY_ENV,
+    );
+    expect(isKnownProviderUrl(url)).toBe(known);
+    expect(hostDerivedEnvKeyForUrl(url)).toBe(known ? "UBERLLM_API_KEY" : null);
+  });
   // @lat: [[provider-setup#Cheaper Inference provider preset#Credential host boundary]]
   it.each([
     ["https://user:pass@api.cheaperinference.com:443/v1", true],
@@ -114,6 +134,7 @@ describe("URL_KEY_MAP", () => {
       "https://api.novita.ai/openai/v1": "NOVITA_API_KEY",
       "https://router.requesty.ai/v1": "REQUESTY_API_KEY",
       "https://global.api-route.com/v1": "API_ROUTE_API_KEY",
+      "https://api.uberllm.dev/v1": "UBERLLM_API_KEY",
       "https://router.eu.requesty.ai/v1": "REQUESTY_API_KEY",
       "https://api.cheaperinference.com/v1": "CHEAPERINFERENCE_API_KEY",
     };
