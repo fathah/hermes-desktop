@@ -122,6 +122,8 @@ Local fixture configuration includes dummy custom-provider keys and a generated 
 
 The 2026-11-11 macOS arm64 candidate passed both native UI modes against Agent v0.23.1, including native SQLite 3.53.4 and complete restored tool activity. The [acceptance record](../docs/compatibility-acceptance-2026-11-11.md) retains archive identity, per-mode reports and screenshot evidence.
 
+The final 2026-11-12 signed CI candidate passed Local, direct token Remote and SSH UI acceptance serially, with nine checks per mode and independent cleanup audits. The [final record](../docs/compatibility-acceptance-2026-11-12.md) identifies the candidate and installed-updater evidence.
+
 ## Signed CI application acceptance
 
 A CI-built macOS arm64 app is verified against its public Developer ID and tested from an owned copy extracted from a read-only disk image.

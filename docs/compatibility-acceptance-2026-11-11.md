@@ -2,6 +2,8 @@
 
 Validation evidence for the compatibility catch-up against Agent v0.23.1, recorded November 11, 2026. A passed source transport test is distinct from packaged platform or external deployment acceptance.
 
+The [November 12 final record](compatibility-acceptance-2026-11-12.md) supersedes this investigation's pending-status statements and identifies the final merged and signed candidate. This document retains the earlier fixtures, artifacts and evidence boundaries.
+
 ## Tested baseline
 
 The live backend ran the exact tagged Agent source with isolated dependencies and an otherwise empty temporary Hermes home.
