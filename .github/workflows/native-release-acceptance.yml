@@ -3,6 +3,15 @@ name: Native Release Acceptance
 on:
   workflow_dispatch:
     inputs:
+      checks:
+        description: Acceptance targets to execute
+        required: true
+        type: choice
+        default: all
+        options:
+          - all
+          - native
+          - managed
       candidate_run_id:
         description: Successful dry-run Release workflow containing the exact candidate artifacts
         required: true
@@ -32,7 +41,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: native-release-acceptance-${{ inputs.candidate_run_id }}
+  group: native-release-acceptance-${{ inputs.candidate_run_id }}-${{ inputs.checks || 'all' }}
   cancel-in-progress: false
 
 jobs:
@@ -64,6 +73,7 @@ jobs:
             core.info(`Verified candidate run ${run.id} at ${run.head_sha}`);
 
   native:
+    if: ${{ inputs.checks != 'managed' }}
     name: Install and update (${{ matrix.id }})
     needs: validate
     timeout-minutes: 45
@@ -146,7 +156,8 @@ jobs:
             const {createHash} = require('node:crypto');
             const {Readable, Transform} = require('node:stream');
             const {pipeline} = require('node:stream/promises');
-            const extract = require(require.resolve('extract-zip', {paths:[process.env.GITHUB_WORKSPACE]}));
+            const workspaceRequire = require('node:module').createRequire(path.join(process.env.GITHUB_WORKSPACE, 'package.json'));
+            const {extract} = workspaceRequire('@electron-internal/extract-zip');
             const candidate = path.join(process.env.RUNNER_TEMP, 'native-candidate');
             const baseline = path.join(process.env.RUNNER_TEMP, 'native-baseline');
             const evidence = path.join(process.env.RUNNER_TEMP, 'native-evidence');
@@ -217,6 +228,7 @@ jobs:
           if-no-files-found: warn
 
   managed_agent:
+    if: ${{ inputs.checks != 'native' }}
     name: Fresh managed Agent (${{ matrix.id }})
     needs: validate
     timeout-minutes: 35

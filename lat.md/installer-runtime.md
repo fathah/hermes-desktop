@@ -8,7 +8,9 @@ Managed installations publish a canonical launcher that resolves their current i
 
 [[src/main/hermes-runtime.ts#resolveHermesRuntime]] queries `hermes-agent/.hermes/bin/hermes` (`hermes.exe` on Windows) with `--print-runtime-command --module hermes_cli.main`. The subprocess has bounded output and a timeout, receives the selected `HERMES_HOME`, and never uses a shell. Its JSON argv must name an existing absolute interpreter and a complete Agent source tree.
 
-Desktop reuses that exact bootstrap prefix for CLI calls. It does not cache a dependency-generation directory or reconstruct PM's store rules. A broken managed launcher fails closed instead of falling back to an old in-tree venv. Installations without a managed launcher retain the existing supported venv layout. On Windows, an existing sibling `pythonw.exe` avoids console flashing; otherwise the selected `python.exe` remains usable with hidden subprocess options.
+Desktop reuses that exact interpreter and bootstrap prefix for CLI calls. It does not cache a dependency-generation directory or reconstruct PM's store rules. A broken managed launcher fails closed instead of falling back to an old in-tree venv. Installations without a managed launcher retain the existing supported venv layout.
+
+Managed Windows retains the canonical `python.exe` even when a sibling `pythonw.exe` exists. Substituting interpreters makes Agent's bootstrap relaunch, which can lose captured stdout and stderr. Hidden subprocess options prevent console flashing without changing interpreter identity. Legacy Windows keeps its existing venv interpreter policy.
 
 A Windows managed installation that only publishes `hermes.cmd` requires Agent repair to restore the native `hermes.exe` launcher. Desktop reports this boundary rather than introducing a command-shell fallback or using an unrelated old venv.
 
@@ -52,7 +54,7 @@ Malformed output, relative or missing interpreters and launcher failures leave t
 
 ### Windows interpreter selection
 
-Windows managed discovery uses the selected store interpreter and prefers only its existing GUI sibling, never a pre-PM venv interpreter.
+A managed Windows runtime preserves the launcher's exact interpreter and bootstrap argv even when a sibling `pythonw.exe` exists. Native managed acceptance compares that full command to the live launcher's JSON before invoking it.
 
 ### Command-file-only runtime requires repair
 
@@ -61,6 +63,8 @@ A managed Windows installation with only a command-file launcher returns repair 
 ### Raw helper bootstraps dependencies
 
 A real Python subprocess loads an isolated bootstrap fixture and preserves arguments containing spaces and quotes while ignoring inherited Python import paths.
+
+The raw capture regression executes the resolver-selected interpreter, with a deliberate empty-output `pythonw.exe` sibling on POSIX. Both stdout and stderr must survive alongside bootstrap activation and quoted arguments; native Windows CI verifies the real managed-runtime boundary.
 
 ### Legacy runtime remains usable
 

@@ -8,6 +8,10 @@ The native installer runner refuses non-CI execution and paths outside the runne
 
 `scripts/verify-native-install.mjs` verifies a DMG-copied app and Gatekeeper on macOS, executes the real per-user NSIS installer on Windows, installs the DEB through the package manager on Linux x64, and places the arm64 AppImage in its user-owned executable location. Each run records installer identity, runtime architecture and version, a UI screenshot, and a native SQLite query from inside packaged Electron. It never installs Agent or calls a model.
 
+Fresh UI acceptance waits for Welcome's exact heading, completed onboarding phase and fully revealed title and controls before querying SQLite or taking its screenshot. Text mounted behind the opening animation cannot satisfy readiness.
+
+Stapler validation retries only exit 68 with the observed `NSURLErrorDomain Code=-1005` network-loss diagnostic. Three attempts use bounded commands and two- then four-second backoffs; ticket rejection, other failures and exhausted retries remain failures.
+
 An `--install-only` pass prepares the published baseline for the separate updater runner. Installation roots carry a native fixture marker; the updater requires its own explicit ownership marker before modifying that disposable baseline. AppImage baselines use a versionless filename so replacement is observed at the same path.
 
 ## Native startup diagnostics
@@ -23,6 +27,8 @@ The manually dispatched workflow verifies the candidate artifact's source commit
 Each job uses the candidate's actual release artifact and the previous published baseline. Linux UI runs use Xvfb. The workflow retains JSON reports and screenshots and has no release-publishing permissions. Build success alone cannot satisfy these jobs.
 
 Candidate ZIP archives and published baseline installers are checked against their GitHub SHA-256 digests before extraction or execution. The candidate source SHA must match a successful Release run from this repository. Acceptance tooling is checked out at the separate exact workflow-dispatch commit, so a previously built candidate need not already contain its later validation scripts; both SHAs are recorded. No app is rebuilt from the tooling checkout.
+
+Artifact acquisition resolves its ZIP dependency from the checked-out workspace with Node's module loader. It does not depend on `actions/github-script` exposing the full Node `require` API.
 
 Current macOS acceptance requires its known Developer ID team and stapled application ticket; a DMG ticket is not inferred. AppImage runs use the actual runtime's extract-and-run mode.
 
@@ -45,6 +51,22 @@ The workflow checks out exact acceptance tooling, verifies candidate provenance 
 ### Updater files use actual builder names
 
 The installed Linux packager expands shipping artifact configuration for x64 and arm64, and both results must match the workflow's updater filenames. AppImage maps x64 to x86_64, independently of the native runtime's architecture label.
+
+### Acquisition loads workspace dependencies under github-script
+
+The actual workflow acquisition script runs with a wrapped `require` lacking `resolve`, loads the workspace ZIP dependency and reaches mocked GitHub metadata before any download or installation.
+
+### Welcome reveal must finish before native inspection
+
+The actual Welcome helper remains pending on a completed phase while either title or body opacity is below one, and resolves only after both reveal in a controlled DOM.
+
+### Stapler retries only proven transient network loss
+
+The actual stapler helper executes bounded validation commands and retries the observed network loss with two- and four-second backoffs, requiring a successful final result.
+
+### Stapler rejects completed failures and exhausted retries
+
+The actual helper rejects ticket failures, other network codes, incorrect exits and process timeouts without retries. Three transient failures also reject, so retries cannot admit an unvalidated application.
 
 ## Managed Agent provisioning
 
@@ -71,3 +93,19 @@ Windows x64 and Linux x64 jobs require validated candidate provenance, exact too
 ### Timed-out installer descendants are stopped
 
 An actual POSIX child ignores SIGTERM after its parent exits. Timeout handling awaits bounded process-group cleanup, escalates to SIGKILL and checks for survivors before returning the original timeout failure.
+
+### Raw output and web import streams remain distinct
+
+A real Python subprocess executes the generated minimal probe with tiny dependency fixtures, checking output, home, quoted argv and its missing-stdout guard.
+
+The generated web probe preserves original stdout across redirection; stderr never substitutes for raw output.
+
+## Selected acceptance targets
+
+Dispatch selects all checks by default, or only native desktop installation/update or managed Agent provisioning; candidate provenance validation always runs.
+
+The dispatch choice scopes concurrency, allowing a managed-only diagnostic run alongside native acceptance for the same candidate. Selection changes only which independent CI jobs execute; it does not weaken their checks or rebuild the candidate.
+
+### Workflow target selection
+
+The workflow exposes the three supported targets, keeps the provenance gate unconditional, and routes native and managed jobs with separate choice-aware concurrency keys.
