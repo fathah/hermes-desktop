@@ -80,7 +80,9 @@ An actual POSIX child ignores SIGTERM after its parent exits. Timeout handling a
 
 ### Raw output and web import streams remain distinct
 
-A real Python subprocess verifies that basic raw output must be valid stdout JSON. A separate web import preserves the original stdout across module redirection and retains stdout, stderr and status; stderr never substitutes for missing raw output.
+A real Python subprocess executes the generated minimal probe with tiny dependency fixtures, checking output, home, quoted argv and its missing-stdout guard.
+
+The generated web probe preserves original stdout across redirection; stderr never substitutes for raw output.
 
 ## Selected acceptance targets
 

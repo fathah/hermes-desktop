@@ -199,6 +199,24 @@ it.skipIf(!python)(
   () => {
     const trial = mkdtempSync(join(tmpdir(), "hermes-managed-streams-"));
     try {
+      writeFileSync(
+        join(trial, "fastapi.py"),
+        "__version__ = 'fixture-fastapi'\n",
+      );
+      writeFileSync(
+        join(trial, "openai.py"),
+        "__version__ = 'fixture-openai'\n",
+      );
+      mkdirSync(join(trial, "pm"));
+      writeFileSync(join(trial, "pm", "__init__.py"), "");
+      writeFileSync(
+        join(trial, "pm", "paths.py"),
+        "from pathlib import Path\ndef repo_root(): return Path(__file__).parent.parent\ndef store_root(): return repo_root() / 'tools'\n",
+      );
+      writeFileSync(
+        join(trial, "pm", "environments.py"),
+        "def committed_venv(root): return root / 'venv'\ndef runtime_facts_path(root): return root / 'facts.json'\n",
+      );
       mkdirSync(join(trial, "hermes_cli"));
       writeFileSync(join(trial, "hermes_cli", "__init__.py"), "");
       writeFileSync(
@@ -227,15 +245,42 @@ it.skipIf(!python)(
         `${helpers}; ({ probeSource, captureProbe });`,
         context,
       );
+      const importFixture = `import sys\nsys.path.insert(0, ${JSON.stringify(trial)})\n`;
+      const quoted = "quoted ' argument with spaces";
+      const minimalSource = runner.probeSource("minimal");
       const minimal = runner.captureProbe("minimal", python, [
         "-c",
-        "import json; print(json.dumps({'raw': 'current stdout'}))",
+        importFixture + minimalSource,
+        quoted,
       ]);
-      expect(minimal.raw).toBe("current stdout");
+      expect(minimal.argv).toEqual([quoted]);
+      expect(minimal.home).toBe(trial);
+      expect(minimal.pythonVersion).toMatch(/^3\.\d+\.\d+$/);
+      expect(minimal.machine).toBeTruthy();
+      expect(minimal.fastapi).toBe("fixture-fastapi");
+      expect(minimal.openai).toBe("fixture-openai");
+      expect(minimal.fastapiModule).toBe(join(trial, "fastapi.py"));
+      expect(minimal.openaiModule).toBe(join(trial, "openai.py"));
+      expect(minimal.factsPath).toBe(join(trial, "facts.json"));
+      expect(minimal.environment).toBe(join(trial, "venv"));
+      expect(minimal.store).toBe(join(trial, "tools"));
+      expect(JSON.parse(report.probes!.minimal.stdout).argv).toEqual([quoted]);
+      expect(() =>
+        runner.captureProbe("missing-stdout-guard", python, [
+          "-c",
+          importFixture + "sys.stdout = None\n" + minimalSource,
+          quoted,
+        ]),
+      ).toThrow("Python probe failed");
+      expect(report.probes?.["missing-stdout-guard"].status).not.toBe(0);
+      expect(report.probes?.["missing-stdout-guard"].stdout).toBe("");
+      expect(report.probes?.["missing-stdout-guard"].stderr).toContain(
+        "Managed raw stdout is unavailable",
+      );
       const web = runner.captureProbe("web", python, [
         "-c",
-        `import sys\nsys.path.insert(0, ${JSON.stringify(trial)})\n${runner.probeSource("web")}`,
-        "quoted ' argument with spaces",
+        importFixture + runner.probeSource("web"),
+        quoted,
       ]);
       expect(web.stdoutRedirected).toBe(true);
       expect(web.stdoutIsStderr).toBe(true);
