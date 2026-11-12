@@ -12,6 +12,24 @@ Approval correlation, batched clarification, cancellation, main-only secrets and
 
 The smoke also verifies explicit refusal of unsupported window interactions, native-only secret restoration after reconnect and rejection of an invalid Remote token. It keeps sensitive replay entries out of the renderer's `open_requests`; matching-ID replies still settle the original Agent request.
 
+## Acceptance failure handling
+
+Acceptance runners report startup and observed renderer failures as failed evidence and preserve their normal fixture teardown.
+
+Spawn errors are captured immediately and surfaced through the runner's bounded waits, so the normal failure report and child cleanup still run. Packaged UI completion requires empty page-error and console-error collections alongside its main-process fatal-error check.
+
+### Missing child executable
+
+The actual transport-runner CLI returns a failed JSON report for a missing Python executable, with an ENOENT explanation and no uncaught process error.
+
+### Existing children after startup failure
+
+Real disposable children exercise the runner's process helpers and teardown: a later missing executable is surfaced by startup waiting and an already running child is terminated.
+
+### Caught renderer console errors
+
+The actual packaged completion gate rejects a caught console error even when there is no page exception or main-process fatal error; clean diagnostics still pass.
+
 ## Evidence boundaries
 
 An isolated live transport result proves wire behavior through those concrete paths; it does not prove OAuth sign-in, external provisioning, model inference or a packaged platform's installation.

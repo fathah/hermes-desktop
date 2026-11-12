@@ -973,13 +973,14 @@ async function runUi(endpoint) {
     sqliteVersion: sqlite.version,
   });
   assert.deepEqual(pageErrors, [], "Renderer page errors occurred");
+  assert.deepEqual(consoleErrors, [], "Renderer console errors occurred");
   assert.doesNotMatch(
     mainLog,
     /uncaught(?:exception| exception)|UnhandledPromiseRejection|ERR_DLOPEN_FAILED|Cannot find module|wrong architecture|mach-o.*incompatible/i,
     "Main-process fatal error occurred",
   );
   report.checks.push({
-    name: "No renderer page errors or main fatal errors",
+    name: "No renderer page/console errors or main fatal errors",
     passed: true,
   });
 }
