@@ -388,6 +388,10 @@ try {
     diagnostics = watchStartupDiagnostics(application);
     const page = await application.firstWindow({ timeout: 60000 });
     await page.locator("#root").waitFor({ state: "visible", timeout: 60000 });
+    await page
+      .locator("body")
+      .filter({ hasText: /Hermes/i })
+      .waitFor({ state: "visible", timeout: 60000 });
     assert.match(
       await page.locator("body").innerText(),
       /Hermes/i,

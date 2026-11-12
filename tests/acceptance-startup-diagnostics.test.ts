@@ -28,8 +28,13 @@ class Page extends EventEmitter {
   locator(): {
     waitFor: () => Promise<void>;
     innerText: () => Promise<string>;
+    filter: () => { waitFor: () => Promise<void> };
   } {
-    return { waitFor: async () => {}, innerText: async () => "Hermes One" };
+    return {
+      waitFor: async () => {},
+      innerText: async () => "Hermes One",
+      filter: () => ({ waitFor: async () => {} }),
+    };
   }
 }
 class Application extends EventEmitter {

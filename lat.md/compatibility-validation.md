@@ -52,6 +52,8 @@ Native installer and updater acceptance reject page exceptions, caught renderer 
 
 The shared `scripts/acceptance-diagnostics.mjs` records live windows and process streams, then reads Playwright's retained startup messages before each acceptance gate. A successful UI or SQLite query alone cannot hide an observed startup failure.
 
+Native startup waits for rendered Hermes content under a bounded timeout; an empty React root becoming visible is not sufficient readiness proof.
+
 ### Retained renderer failures
 
 Live console errors, messages retained before listener attachment, page exceptions and failures in later windows all fail native acceptance even when the app can render and query SQLite.

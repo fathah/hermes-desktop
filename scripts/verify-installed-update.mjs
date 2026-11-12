@@ -163,6 +163,10 @@ async function launch() {
 async function inspectUi(app) {
   const window = await app.firstWindow({ timeout: 60000 });
   await window.locator("#root").waitFor({ state: "visible", timeout: 60000 });
+  await window
+    .locator("body")
+    .filter({ hasText: /Hermes/i })
+    .waitFor({ state: "visible", timeout: 60000 });
   assert.match(
     await window.locator("body").innerText(),
     /Hermes/i,
