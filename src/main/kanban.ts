@@ -10,6 +10,7 @@ import { isRemoteOnlyMode } from "./hermes";
 import { getConnectionConfig } from "./config";
 import { sshRunKanban, sshListClaw3dHqTasks } from "./ssh-remote";
 import * as remote from "./remote-kanban";
+import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 
 export interface KanbanTask {
   id: string;
@@ -131,6 +132,7 @@ async function runKanban(
     timeout: opts.timeoutMs ?? KANBAN_TIMEOUT_MS,
     env: { ...process.env, PATH: getEnhancedPath() },
     maxBuffer: 16 * 1024 * 1024,
+    ...HIDDEN_SUBPROCESS_OPTIONS,
   };
 
   return new Promise((resolve) => {
