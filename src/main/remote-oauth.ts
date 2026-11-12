@@ -29,16 +29,18 @@ export type RemoteOAuthErrorCode =
 
 export class RemoteOAuthError extends Error {
   readonly needsOAuthLogin: boolean;
+  readonly responseIsHtml: boolean | undefined;
 
   constructor(
     message: string,
     readonly code: RemoteOAuthErrorCode,
     readonly statusCode?: number,
-    options?: ErrorOptions,
+    options?: ErrorOptions & { responseIsHtml?: boolean },
   ) {
     super(message, options);
     this.name = "RemoteOAuthError";
     this.needsOAuthLogin = code === "oauth_login_required";
+    this.responseIsHtml = options?.responseIsHtml;
   }
 }
 
@@ -288,12 +290,17 @@ export function requestRemoteOAuthJson(
       response.on("end", () => {
         const text = Buffer.concat(chunks).toString("utf8");
         const statusCode = response.statusCode ?? 500;
+        const contentType = String(response.headers["content-type"] ?? "");
+        const responseIsHtml =
+          /^\s*<(?:!doctype|html)/i.test(text) ||
+          contentType.toLowerCase().includes("text/html");
         if (statusCode === 401) {
           finish(
             new RemoteOAuthError(
               "Remote OAuth session expired. Sign in again.",
               "oauth_login_required",
               statusCode,
+              { responseIsHtml },
             ),
           );
           return;
@@ -304,26 +311,24 @@ export function requestRemoteOAuthJson(
               `Remote OAuth request failed (${statusCode}): ${text.slice(0, 200)}`,
               "oauth_request_failed",
               statusCode,
+              { responseIsHtml },
+            ),
+          );
+          return;
+        }
+        if (responseIsHtml) {
+          finish(
+            new RemoteOAuthError(
+              `Expected JSON from ${parsed.toString()} but received HTML.`,
+              "oauth_request_failed",
+              statusCode,
+              { responseIsHtml },
             ),
           );
           return;
         }
         if (!text) {
           finish(undefined, null);
-          return;
-        }
-        const contentType = String(response.headers["content-type"] ?? "");
-        if (
-          /^\s*<(?:!doctype|html)/i.test(text) ||
-          contentType.includes("text/html")
-        ) {
-          finish(
-            new RemoteOAuthError(
-              `Expected JSON from ${parsed.toString()} but received HTML.`,
-              "oauth_request_failed",
-              statusCode,
-            ),
-          );
           return;
         }
         try {

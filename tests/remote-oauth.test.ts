@@ -88,6 +88,7 @@ function connectionConfig(
 function mockNetJsonResponse(
   statusCode: number,
   body: unknown,
+  responseOptions: { contentType?: string; rawBody?: string } = {},
 ): {
   abort: ReturnType<typeof vi.fn>;
   setHeader: ReturnType<typeof vi.fn>;
@@ -109,9 +110,13 @@ function mockNetJsonResponse(
         statusCode: number;
       };
       response.statusCode = statusCode;
-      response.headers = { "content-type": "application/json" };
+      response.headers = {
+        "content-type": responseOptions.contentType ?? "application/json",
+      };
       request.emit("response", response);
-      if (body !== undefined) response.emit("data", JSON.stringify(body));
+      if (responseOptions.rawBody !== undefined)
+        response.emit("data", responseOptions.rawBody);
+      else if (body !== undefined) response.emit("data", JSON.stringify(body));
       response.emit("end");
     });
   };
@@ -220,6 +225,45 @@ describe("remote OAuth session boundary", () => {
       "application/json",
     );
   });
+
+  // @lat: [[scheduled-jobs#Test specifications#OAuth HTTP response classification]]
+  it.each([
+    {
+      status: 503,
+      type: "application/json",
+      body: '{"detail":"Fresh store"}',
+      html: false,
+    },
+    { status: 503, type: "text/html", body: "{}", html: true },
+    { status: 200, type: "Text/HTML", body: "", html: true },
+    {
+      status: 503,
+      type: "application/json",
+      body: "<html>Unavailable</html>",
+      html: true,
+    },
+    {
+      status: 401,
+      type: "application/json",
+      body: '{"detail":"Expired"}',
+      html: false,
+    },
+  ])(
+    "retains HTTP status and HTML classification ($status, $type, $html)",
+    async ({ status, type, body, html }) => {
+      mockNetJsonResponse(status, undefined, {
+        contentType: type,
+        rawBody: body,
+      });
+      await expect(
+        requestRemoteOAuthJson("https://hermes.example/api/sessions?limit=1"),
+      ).rejects.toMatchObject({
+        statusCode: status,
+        responseIsHtml: html,
+        needsOAuthLogin: status === 401,
+      });
+    },
+  );
 
   it("mints a single-use WebSocket ticket through the OAuth session", async () => {
     const request = mockNetJsonResponse(200, { ticket: "fresh-once" });

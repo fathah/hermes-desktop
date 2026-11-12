@@ -2632,6 +2632,7 @@ export async function sshDashboardRunning(
 // handing the target to callers; otherwise a stale dashboard (different token)
 // or another service on 9119 is mistaken for a usable dashboard, leading to
 // /api/* 401s and legacy /v1 chat being POSTed to the wrong server (405).
+// @lat: [[scheduled-jobs#Fresh dashboard transport readiness]]
 export async function sshDashboardAuthenticated(
   config: SshConfig,
   port: number,
@@ -2640,20 +2641,43 @@ export async function sshDashboardAuthenticated(
   const script = `
 import json
 import sys
+import urllib.error
 import urllib.request
 
 payload = json.loads(sys.stdin.read() or "{}")
 port = int(payload.get("port") or 0)
 token = str(payload.get("token") or "")
-request = urllib.request.Request(
-    f"http://127.0.0.1:{port}/api/sessions?limit=1",
-    headers={"X-Hermes-Session-Token": token},
-)
-try:
-    with urllib.request.urlopen(request, timeout=3) as response:
-        print(response.status)
-except Exception:
-    print(0)
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, message, headers, new_url):
+        return None
+
+opener = urllib.request.build_opener(NoRedirect)
+
+def probe(path):
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{port}{path}",
+        headers={"X-Hermes-Session-Token": token},
+    )
+    try:
+        try:
+            response = opener.open(request, timeout=3)
+        except urllib.error.HTTPError as error:
+            response = error
+        with response:
+            status = response.code
+            content_type = response.headers.get("Content-Type", "").lower()
+            body = response.read().decode("utf-8")
+        if "text/html" in content_type or body.lstrip().startswith("<"):
+            return status, False
+        json.loads(body)
+        return status, True
+    except Exception:
+        return None, False
+
+status, valid = probe("/api/sessions?limit=1")
+if status == 503 and valid:
+    status, valid = probe("/api/profiles")
+print(200 if status == 200 and valid else 0)
 `;
   try {
     const out = await sshPython(
