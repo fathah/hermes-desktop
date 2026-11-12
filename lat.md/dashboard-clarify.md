@@ -21,6 +21,10 @@ Legacy choice, free-text and skip answers use clarify.respond on the originating
 
 Composer answers share the card delivery path and resolve the visible question.
 
+## Resolved current composer answers
+
+A resolved current single-question card shows literal composer text, including JSON-looking text, while explicit skips and locked answers retain their meaning.
+
 ## Retry and duplicate answers
 
 Failed replies remain retryable and concurrent submissions cannot send two answers.

@@ -110,9 +110,14 @@ async function freePort() {
   await new Promise((resolve) => server.close(resolve));
   return port;
 }
+// @lat: [[compatibility-validation#Acceptance failure handling]]
 async function until(check, label, timeout = 15000) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
+    const startupError = children.find(
+      (proc) => proc.fixtureError,
+    )?.fixtureError;
+    if (startupError) throw startupError;
     const value = await check();
     if (value) return value;
     await delay(30);
@@ -128,6 +133,9 @@ function child(command, argv, options = {}) {
     ...options,
   });
   fs.closeSync(log);
+  proc.once("error", (error) => {
+    proc.fixtureError = error;
+  });
   children.push(proc);
   return proc;
 }

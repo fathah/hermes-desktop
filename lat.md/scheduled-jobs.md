@@ -24,6 +24,8 @@ Remote token, OAuth and SSH chat readiness verifies protected access before prob
 
 HTTP errors carry structured status and HTML classification; response text cannot authorize a fallback. A successful profiles probe still requires [[src/main/dashboard.ts#probeDashboardWebSocket]], with a freshly minted ticket for OAuth. HTML, interrupted responses and authentication failures remain errors.
 
+[[src/main/ssh-remote.ts#sshDashboardAuthenticated]] applies the same protected fallback before the SSH tunnel is admitted, so the later status check is reachable on a fresh store. Its Python probe reads complete JSON without redirects and keeps the token on the same loopback target. Welcome's token proof also reads complete session and profiles JSON; headers alone cannot admit malformed, mislabeled HTML or truncated replies.
+
 ## Run history
 
 An expanded job shows its newest runs and bounded plain-text output, owned by the selected connection and profile.
@@ -91,6 +93,18 @@ Session authentication denials, other server errors, HTML and network failures c
 ### Fresh profile probe refusals
 
 A fresh dashboard remains rejected when the fallback profiles probe denies authentication, returns HTML or a server error, or loses its connection. A session-list 503 alone never establishes readiness.
+
+### SSH early fresh-store admission
+
+The actual early SSH admission function executes its generated Python command against a loopback HTTP fixture and accepts fresh sessions only after profiles validates the same token. Existing stores retain direct session-list admission.
+
+### SSH early session refusals
+
+The pre-tunnel Python check rejects auth errors, other statuses, redirects, HTML, malformed JSON and interrupted responses before profiles can be queried.
+
+### SSH early profile refusals
+
+The pre-tunnel check rejects denied, malformed, HTML, interrupted and unreachable profiles responses after a valid fresh-store 503. The fixture runs production Python bytes locally and never uses a real SSH key or external host.
 
 ### OAuth discovery remains separate
 

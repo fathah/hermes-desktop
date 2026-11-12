@@ -174,6 +174,81 @@ describe("ClarifyCard", () => {
     expect(screen.getByText("chat.clarify.skip")).toBeDisabled();
   });
 
+  // @lat: [[dashboard-clarify#Resolved current composer answers]]
+  it.each(["Dubai", '{"city":"Dubai"}'])(
+    "shows a resolved single-question composer answer literally: %s",
+    (answer) => {
+      render(
+        <ClarifyCard
+          msg={baseMsg({
+            questions: [
+              {
+                qid: "region",
+                question: "Region?",
+                choices: [],
+                multi_select: false,
+              },
+            ],
+            resolved: true,
+            answer,
+          })}
+          onResolved={vi.fn()}
+        />,
+      );
+      expect(screen.getByText(answer)).toBeVisible();
+      expect(screen.queryByText("chat.clarify.skipped")).toBeNull();
+    },
+  );
+
+  it("keeps an explicit current single-question skip distinct from a literal answer", () => {
+    render(
+      <ClarifyCard
+        msg={baseMsg({
+          questions: [
+            {
+              qid: "region",
+              question: "Region?",
+              choices: [],
+              multi_select: false,
+            },
+          ],
+          resolved: true,
+          answer: JSON.stringify({ answers: { region: null } }),
+        })}
+        onResolved={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("chat.clarify.skipped")).toBeVisible();
+    expect(screen.queryByText(/\{"answers"/)).toBeNull();
+  });
+
+  it.each(["Dubai", JSON.stringify({ answers: { region: "Dubai" } })])(
+    "summarizes the locked answer retained over composer input: %s",
+    (answer) => {
+      render(
+        <ClarifyCard
+          msg={baseMsg({
+            questions: [
+              {
+                qid: "region",
+                question: "Region?",
+                choices: [],
+                multi_select: false,
+              },
+            ],
+            answers: { region: "Tokyo" },
+            resolved: true,
+            answer,
+          })}
+          onResolved={vi.fn()}
+        />,
+      );
+      expect(screen.getByText("Tokyo")).toBeVisible();
+      expect(screen.queryByText("Dubai")).toBeNull();
+      expect(screen.queryByText("chat.clarify.skipped")).toBeNull();
+    },
+  );
+
   it("renders one button per choice and answers with the clicked choice", async () => {
     const respondClarify = stubRespond();
     const onResolved = vi.fn();

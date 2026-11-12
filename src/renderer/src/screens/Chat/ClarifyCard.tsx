@@ -1,7 +1,10 @@
 import { memo, useRef, useState } from "react";
 import { useI18n } from "../../components/useI18n";
 import type { ClarifyMessage } from "./types";
-import { normalizeGatewayClarifyAnswers } from "../../../../shared/gateway-server-requests";
+import {
+  gatewayRequestRecord,
+  normalizeGatewayClarifyAnswers,
+} from "../../../../shared/gateway-server-requests";
 
 /**
  * Sentinel answer for "skip — let Hermes decide". Mirrors the gateway's
@@ -173,14 +176,25 @@ function BatchClarifyForm({
   const disabled = submitting || !!msg.unavailable || !!msg.resolved;
   let submitted: Record<string, string | null> = Object.create(null);
   if (msg.resolved && msg.answer) {
+    let answerMap: Record<string, unknown> | null = null;
     try {
-      submitted =
-        normalizeGatewayClarifyAnswers(
-          JSON.parse(msg.answer).answers,
-          questions,
-        ) ?? Object.create(null);
+      answerMap = gatewayRequestRecord(
+        gatewayRequestRecord(JSON.parse(msg.answer))?.answers,
+      );
     } catch {
-      /* Legacy free text has no batch summary. */
+      /* A single-question composer reply remains literal text. */
+    }
+    if (answerMap)
+      submitted = Object.assign(
+        Object.create(null),
+        normalizeGatewayClarifyAnswers(answerMap, questions),
+        lockedAnswers,
+      );
+    else if (questions.length === 1) {
+      const qid = questions[0].qid;
+      submitted[qid] = Object.hasOwn(lockedAnswers, qid)
+        ? lockedAnswers[qid]
+        : msg.answer;
     }
   }
   const readableAnswer = (qid: string, answer: string): string => {
