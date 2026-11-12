@@ -24,6 +24,8 @@ Windows downloads immutable bootstrap bytes and checks SHA-256 before converting
 
 [[src/main/installer-windows-download.ts#verifiedWindowsInstallerScript]] downloads to a unique temporary file, checks the build-pinned digest, converts verified text to a BOM-bearing script, and passes the matching Agent commit. Its finally block removes the staged file on download, verification and installer failures. Explicit Agent updates remain an upstream-managed operation.
 
+[[src/main/installer.ts#runInstallWindows]] writes the generated wrapper with exactly one UTF-8 BOM, because PowerShell 5.1 would otherwise read a non-ASCII profile path in it with the ANSI code page.
+
 [[tests/installer-windows-download.test.ts]] verifies the wrapper's order, digest and argument boundary. [[tests/installer-windows-verification-result.test.ts]] invokes the real Windows install result handler with a refused download and existing binaries. Native Windows installation remains a platform integration check; fixture tests never run an actual Agent installer.
 
 ## Reviewed registry snapshot
