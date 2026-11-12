@@ -20,7 +20,7 @@ Spawn errors are captured immediately and surfaced through the runner's bounded 
 
 ### Missing child executable
 
-The actual transport-runner CLI returns a failed JSON report for a missing Python executable, with an ENOENT explanation and no uncaught process error.
+The actual transport-runner CLI returns a failed JSON report for a missing Python executable, with an ENOENT explanation and no uncaught process error. Its logs stay inside the fixture's OS temporary directory on Windows and POSIX systems.
 
 ### Existing children after startup failure
 
@@ -29,6 +29,42 @@ Real disposable children exercise the runner's process helpers and teardown: a l
 ### Caught renderer console errors
 
 The actual packaged completion gate rejects a caught console error even when there is no page exception or main-process fatal error; clean diagnostics still pass.
+
+### Fresh protected backend probes
+
+Before UI connection, actual source backends must have no session database and return complete JSON with sessions 503, same-token profiles 200 and invalid-token profiles 401. Unexpected status, HTML and truncated responses fail acceptance.
+
+### Bounded owned process cleanup
+
+Packaged teardown bounds Electron close, signals only recorded child processes and waits after forced termination. A hung-close and real signal-resistant child regression verify that cleanup finishes and confirms exit.
+
+### Cleanup failure evidence
+
+Surviving owned processes fail an otherwise successful report. Cleanup failures are recorded separately when the UI already failed, preserving the original stage and diagnostic evidence.
+
+### Owned launcher descendants
+
+SSH teardown independently finds processes by exact fixture HOME, Hermes home and cwd, so reparented launchers cannot evade direct-child cleanup. Recorded CLI arguments also reject any unexpected messaging-gateway startup.
+
+## Startup diagnostics
+
+Native installer and updater acceptance reject page exceptions, caught renderer console errors and main-process fatal errors, including messages emitted before their first window listener attaches.
+
+The shared `scripts/acceptance-diagnostics.mjs` records live windows and process streams, then reads Playwright's retained startup messages before each acceptance gate. A successful UI or SQLite query alone cannot hide an observed startup failure.
+
+Native startup waits for rendered Hermes content under a bounded timeout; an empty React root becoming visible is not sufficient readiness proof.
+
+### Retained renderer failures
+
+Live console errors, messages retained before listener attachment, page exceptions and failures in later windows all fail native acceptance even when the app can render and query SQLite.
+
+### Main-process fatal failures
+
+Fatal process output, including uncaught exceptions and missing or unloadable native modules, fails both native acceptance runners.
+
+### Native runner completion gates
+
+The actual installer completion gate and updater UI inspection routine reject an injected caught console error before a successful acceptance result can be recorded.
 
 ## Evidence boundaries
 
@@ -53,6 +89,14 @@ A separate macOS arm64 acceptance run executes the production verified installer
 [[src/main/installer-download.ts#verifiedInstallerCommand]] supplied the downloaded/hash-verified script and pinned Agent commit. The run used its noninteractive setup skip plus upstream's browser/computer-use opt-outs. PM genuinely installed tools and locked application dependencies, published launchers and built products; no runtime facts or generations were fixture-created. Desktop's resolver, CLI version and [[src/main/installer.ts#hermesPythonArgs|raw helper]] then succeeded against that installation.
 
 An OS sandbox allowed writes only inside the disposable tree and blocked system package/service commands. Package caches, home and Hermes state were isolated, including the installer's temporary shell rc edits. The [acceptance record](../docs/compatibility-acceptance-2026-11-11.md) retains the exact flags and evidence boundaries. Native Windows/Linux provisioning, optional browser/computer-use tools, services and signed app installation remain separate checks.
+
+## Installed updater acceptance
+
+The installed-updater runner applies an unpublished candidate to an owned copy of the published baseline through the actual packaged updater.
+
+`scripts/verify-installed-update.mjs` requires an explicit installation root with a matching `.desktop-update-fixture.json` ownership marker. A loopback generic feed supplies the candidate bytes and SHA512 to the existing updater singleton; production source and feed configuration stay unchanged.
+
+Acceptance requires baseline launch and native SQLite, update discovery, real download, `quitAndInstall`, replacement of the installed payload, and a new launch at the candidate version. The same isolated user data, marker and automatic-upgrade preference must survive. The test uses full downloads and a controlled local feed; it does not certify public GitHub feed delivery or differential downloads.
 
 ## Packaged application acceptance
 
@@ -89,3 +133,21 @@ The copied app passed deep strict code-signature verification, Gatekeeper assess
 The verifier requires `--expected-team-id=WM6645CA5X` for this signed candidate. A wrong team and a modified resource in the owned copy were each rejected before launch; exact resource bytes were restored and the parent signature reverified. Unsigned default preflight still requires every header hash without signed exceptions.
 
 This evidence covers the notarized CI app and read-only DMG extraction. Installation into an existing system, account migration and in-place updater application remain operator acceptance. CI publishing was explicitly skipped.
+
+## SSH packaged application acceptance
+
+SSH mode drives the packaged Welcome connection form through a disposable localhost OpenSSH daemon to an explicit actual Agent source backend.
+
+`--mode=ssh` requires the source checkout and Python inputs used by Remote mode. The daemon owns temporary host and client keys, restricts forwarding to the fixture backend, and fixes HOME, HERMES_HOME and shell initialization paths to its temporary tree. A real SSH command verifies those environment values before Electron starts. Host service commands are disabled in the fixture PATH.
+
+An owned client wrapper invokes the real OpenSSH binary with explicit temporary known-hosts and control-socket paths and no user SSH configuration. This isolates client state even when OpenSSH resolves its default paths from the account database instead of HOME.
+
+The short SSH trial path leaves room for OpenSSH's socket suffix on macOS. Standalone tunnel options remain intact. Before Welcome, fresh-store and protected endpoint probes are asserted; teardown confirms owned multiplex sockets and processes have stopped.
+
+The recorded gateway PID and held advisory lock truthfully identify the owned source webserver. They keep Agent's stale-record cleanup from removing fixture liveness metadata and avoid ancillary messaging-gateway startup. No database or conversation is seeded.
+
+Production SSH discovery, authentication, tunnelling, protocol handling and history reads remain active, followed by the same batch clarification, restored-history, About and native SQLite checks. This liveness fixture does not certify messaging-gateway provisioning. An independent process sweep verifies exact fixture environment and cwd before stopping any orphaned descendants.
+
+The report identifies localhost and the fixture boundary explicitly. This tier does not certify an external host, SSH provisioning or an installed-system upgrade. Daemon, backend, app and fixture state belong only to the runner and are cleaned up after success.
+
+On 2026-11-12 the updated unsigned macOS arm64 candidate passed all nine SSH UI checks against Agent v0.23.1, with three scripted provider requests, four restored transcript rows and SQLite 3.53.4. The final held-lock fixture started no messaging gateway; the independent sweep stopped three late CLI descendants and found none remaining. Fresh-store/auth probes, native process exit and socket cleanup passed. The earlier signed candidate reproduced the fresh SSH readiness bug; this result covers its rebuilt fix, not a newly signed artifact.

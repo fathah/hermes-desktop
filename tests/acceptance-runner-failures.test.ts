@@ -42,6 +42,8 @@ describe("acceptance runner failure evidence", () => {
           ...process.env,
           HOME: home,
           HERMES_HOME: home,
+          TEMP: temporary,
+          TMP: temporary,
           TMPDIR: temporary,
         },
         encoding: "utf8",

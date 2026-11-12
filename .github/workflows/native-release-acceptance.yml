@@ -1,0 +1,262 @@
+name: Native Release Acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_run_id:
+        description: Successful dry-run Release workflow containing the exact candidate artifacts
+        required: true
+        type: string
+      source_sha:
+        description: Exact 40-character source commit built by that candidate run
+        required: true
+        type: string
+      expected_version:
+        description: Candidate desktop version
+        default: 0.7.8
+        required: true
+        type: string
+      baseline_version:
+        description: Published stable desktop version to upgrade
+        default: 0.7.7
+        required: true
+        type: string
+      signing_team_id:
+        description: Expected macOS Developer ID team
+        default: WM6645CA5X
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: native-release-acceptance-${{ inputs.candidate_run_id }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate candidate provenance
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/github-script@v7
+        env:
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+          BASELINE_VERSION: ${{ inputs.baseline_version }}
+          SIGNING_TEAM_ID: ${{ inputs.signing_team_id }}
+        with:
+          script: |
+            const assert = require('node:assert/strict');
+            assert.match(process.env.CANDIDATE_RUN_ID, /^\d+$/);
+            assert.match(process.env.SOURCE_SHA, /^[a-f0-9]{40}$/);
+            for (const value of [process.env.EXPECTED_VERSION, process.env.BASELINE_VERSION]) {
+              assert.match(value, /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/);
+            }
+            assert.match(process.env.SIGNING_TEAM_ID, /^[A-Z0-9]{10}$/);
+            const {data: run} = await github.rest.actions.getWorkflowRun({...context.repo, run_id: Number(process.env.CANDIDATE_RUN_ID)});
+            assert.equal(run.conclusion, 'success');
+            assert.equal(run.name, 'Release');
+            assert.equal(run.head_repository.full_name, `${context.repo.owner}/${context.repo.repo}`);
+            assert.equal(run.head_sha, process.env.SOURCE_SHA);
+            core.info(`Verified candidate run ${run.id} at ${run.head_sha}`);
+
+  native:
+    name: Install and update (${{ matrix.id }})
+    needs: validate
+    timeout-minutes: 45
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: windows-x64
+            runner: windows-2025
+            arch: x64
+            artifact: windows-artifacts
+            candidate_install: hermes-desktop-VERSION-setup.exe
+            candidate_update: hermes-desktop-VERSION-setup.exe
+            baseline_install: hermes-desktop-VERSION-setup.exe
+          - id: linux-x64
+            runner: ubuntu-24.04
+            arch: x64
+            artifact: linux-x64-artifacts
+            candidate_install: hermes-desktop_VERSION_amd64.deb
+            candidate_update: hermes-desktop-VERSION-x86_64.AppImage
+            baseline_install: hermes-desktop-VERSION-x86_64.AppImage
+          - id: linux-arm64
+            runner: ubuntu-24.04-arm
+            arch: arm64
+            artifact: linux-arm64-artifacts
+            candidate_install: hermes-desktop-VERSION-arm64.AppImage
+            candidate_update: hermes-desktop-VERSION-arm64.AppImage
+            baseline_install: hermes-desktop-VERSION-arm64.AppImage
+          - id: macos-intel
+            runner: macos-15-intel
+            arch: x64
+            artifact: mac-x64-artifacts
+            candidate_install: hermes-desktop-VERSION-x64.dmg
+            candidate_update: hermes-desktop-VERSION-x64-mac.zip
+            baseline_install: hermes-desktop-VERSION-x64.dmg
+    env:
+      EXPECTED_VERSION: ${{ inputs.expected_version }}
+      BASELINE_VERSION: ${{ inputs.baseline_version }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      TOOLING_SHA: ${{ github.sha }}
+      CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+      EXPECTED_ARCH: ${{ matrix.arch }}
+      CANDIDATE_ARTIFACT: ${{ matrix.artifact }}
+      CANDIDATE_INSTALL_TEMPLATE: ${{ matrix.candidate_install }}
+      CANDIDATE_UPDATE_TEMPLATE: ${{ matrix.candidate_update }}
+      BASELINE_INSTALL_TEMPLATE: ${{ matrix.baseline_install }}
+      SIGNING_TEAM_ID: ${{ inputs.signing_team_id }}
+    steps:
+      - name: Check out exact acceptance tooling
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install acceptance tooling without rebuilding an app
+        run: npm ci --ignore-scripts
+
+      - name: Prepare Linux display and package dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xauth libfuse2t64
+          npx playwright install-deps chromium
+
+      - name: Download and verify exact candidate and baseline bytes
+        uses: actions/github-script@v7
+        env:
+          GH_READ_TOKEN: ${{ github.token }}
+        with:
+          script: |
+            const assert = require('node:assert/strict');
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const {createHash} = require('node:crypto');
+            const {Readable, Transform} = require('node:stream');
+            const {pipeline} = require('node:stream/promises');
+            const extract = require(require.resolve('extract-zip', {paths:[process.env.GITHUB_WORKSPACE]}));
+            const candidate = path.join(process.env.RUNNER_TEMP, 'native-candidate');
+            const baseline = path.join(process.env.RUNNER_TEMP, 'native-baseline');
+            const evidence = path.join(process.env.RUNNER_TEMP, 'native-evidence');
+            for (const dir of [candidate, baseline, evidence]) fs.mkdirSync(dir, {recursive:true});
+            async function download(url, destination, digest, authenticated=false) {
+              assert.match(digest || '', /^sha256:[a-f0-9]{64}$/);
+              const response = await fetch(url, {headers: authenticated ? {Authorization:`Bearer ${process.env.GH_READ_TOKEN}`, 'User-Agent':'hermes-native-acceptance'} : {}, signal:AbortSignal.timeout(600000)});
+              assert.equal(response.status, 200, `Download failed: ${response.status}`);
+              const hash = createHash('sha256');
+              const meter = new Transform({transform(chunk, _encoding, callback) {hash.update(chunk); callback(null, chunk);}});
+              await pipeline(Readable.fromWeb(response.body), meter, fs.createWriteStream(destination));
+              assert.equal(`sha256:${hash.digest('hex')}`, digest, 'Downloaded artifact digest mismatch');
+            }
+            const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {...context.repo, run_id:Number(process.env.CANDIDATE_RUN_ID), per_page:100});
+            const matches = artifacts.filter(item => item.name === process.env.CANDIDATE_ARTIFACT && !item.expired);
+            assert.equal(matches.length, 1, 'Expected one live matching candidate artifact');
+            const artifact = matches[0];
+            const archive = path.join(process.env.RUNNER_TEMP, 'native-candidate.zip');
+            await download(artifact.archive_download_url, archive, artifact.digest, true);
+            await extract(archive, {dir:candidate});
+            const {data: release} = await github.rest.repos.getReleaseByTag({...context.repo, tag:`v${process.env.BASELINE_VERSION}`});
+            assert.equal(release.draft, false);
+            assert.equal(release.prerelease, false);
+            const filename = process.env.BASELINE_INSTALL_TEMPLATE.replace('VERSION', process.env.BASELINE_VERSION);
+            const assets = release.assets.filter(asset => asset.name === filename);
+            assert.equal(assets.length, 1, `Missing exact baseline asset ${filename}`);
+            await download(assets[0].browser_download_url, path.join(baseline, filename), assets[0].digest);
+            fs.writeFileSync(path.join(evidence, 'provenance.json'), JSON.stringify({candidateSourceSha:process.env.SOURCE_SHA, toolingSha:process.env.TOOLING_SHA, candidateRun:Number(process.env.CANDIDATE_RUN_ID), artifact:{id:artifact.id,name:artifact.name,digest:artifact.digest}, baseline:{tag:release.tag_name,asset:assets[0].name,digest:assets[0].digest}}, null, 2));
+
+      - name: Install, launch, query SQLite and apply an actual update
+        shell: bash
+        run: |
+          node <<'NODE'
+          const assert = require('node:assert/strict');
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const {spawnSync} = require('node:child_process');
+          const candidate = path.join(process.env.RUNNER_TEMP, 'native-candidate');
+          const baseline = path.join(process.env.RUNNER_TEMP, 'native-baseline');
+          const evidence = path.join(process.env.RUNNER_TEMP, 'native-evidence');
+          const upgradeRoot = path.join(process.env.RUNNER_TEMP, 'native-upgrade');
+          const candidateInstaller = path.join(candidate, process.env.CANDIDATE_INSTALL_TEMPLATE.replace('VERSION', process.env.EXPECTED_VERSION));
+          const candidateUpdate = path.join(candidate, process.env.CANDIDATE_UPDATE_TEMPLATE.replace('VERSION', process.env.EXPECTED_VERSION));
+          const baselineInstaller = path.join(baseline, process.env.BASELINE_INSTALL_TEMPLATE.replace('VERSION', process.env.BASELINE_VERSION));
+          for (const file of [candidateInstaller, candidateUpdate, baselineInstaller]) assert.ok(fs.statSync(file).isFile(), `Missing exact shipping artifact ${file}`);
+          function run(file, args) {
+            const command = process.platform === 'linux' ? 'xvfb-run' : process.execPath;
+            const commandArgs = process.platform === 'linux' ? ['-a', process.execPath, file, ...args] : [file, ...args];
+            const result = spawnSync(command, commandArgs, {stdio:'inherit', env:process.env, timeout:1200000});
+            assert.equal(result.status, 0, `${file} failed: ${result.error || result.status}`);
+          }
+          const common = [`--expected-arch=${process.env.EXPECTED_ARCH}`, `--expected-team-id=${process.env.SIGNING_TEAM_ID}`];
+          run('scripts/verify-native-install.mjs', [`--installer-path=${candidateInstaller}`, `--install-dir=${path.join(process.env.RUNNER_TEMP,'native-fresh')}`, `--expected-version=${process.env.EXPECTED_VERSION}`, `--output=${path.join(evidence,'fresh-install.json')}`, ...common]);
+          const baselineReport = path.join(evidence, 'baseline-install.json');
+          run('scripts/verify-native-install.mjs', [`--installer-path=${baselineInstaller}`, `--install-dir=${upgradeRoot}`, `--expected-version=${process.env.BASELINE_VERSION}`, `--output=${baselineReport}`, '--install-only', ...common]);
+          const installed = JSON.parse(fs.readFileSync(baselineReport, 'utf8'));
+          assert.equal(installed.passed, true);
+          fs.writeFileSync(path.join(upgradeRoot,'.desktop-update-fixture.json'), JSON.stringify({purpose:'hermes-desktop-installed-update',ownedRoot:fs.realpathSync(upgradeRoot)}));
+          run('scripts/verify-installed-update.mjs', [`--owned-root=${upgradeRoot}`, `--executable-path=${installed.executablePath}`, `--candidate-file=${candidateUpdate}`, `--baseline-version=${process.env.BASELINE_VERSION}`, `--expected-version=${process.env.EXPECTED_VERSION}`, `--output=${path.join(evidence,'actual-update.json')}`]);
+          NODE
+
+      - name: Retain native acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.id }}-acceptance
+          path: ${{ runner.temp }}/native-evidence/
+          if-no-files-found: warn
+
+  managed_agent:
+    name: Fresh managed Agent (${{ matrix.id }})
+    needs: validate
+    timeout-minutes: 35
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: windows-x64
+            runner: windows-2025
+          - id: linux-x64
+            runner: ubuntu-24.04
+    steps:
+      - name: Check out exact acceptance tooling
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install acceptance tooling without rebuilding an app
+        run: npm ci --ignore-scripts
+
+      - name: Provision and verify the actual pinned managed Agent
+        shell: bash
+        run: >-
+          node scripts/verify-managed-install.mjs
+          --owned-root="$RUNNER_TEMP/managed-agent"
+          --output="$RUNNER_TEMP/managed-agent/result.json"
+
+      - name: Retain managed Agent acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: managed-agent-${{ matrix.id }}-acceptance
+          path: |
+            ${{ runner.temp }}/managed-agent/result.json
+            ${{ runner.temp }}/managed-agent/installer.log
+          if-no-files-found: warn
