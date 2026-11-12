@@ -288,6 +288,61 @@ function readJson(filename) {
   return JSON.parse(fs.readFileSync(filename, "utf8").replace(/^\uFEFF/, ""));
 }
 
+function probeSource(kind) {
+  const common = [
+    "import json, os, platform, sys",
+    "assert sys.stdout is not None and not sys.stdout.closed, 'Managed raw stdout is unavailable'",
+  ];
+  if (kind === "minimal")
+    return [
+      ...common,
+      "import fastapi, openai",
+      "from pm.environments import committed_venv, runtime_facts_path",
+      "from pm.paths import repo_root, store_root",
+      "assert sys.stdout is not None and not sys.stdout.closed, 'Managed raw stdout was lost during dependency imports'",
+      "print(json.dumps({'pythonVersion': platform.python_version(), 'machine': platform.machine(), 'argv': sys.argv[1:], 'home': os.environ['HERMES_HOME'], 'fastapi': fastapi.__version__, 'fastapiModule': fastapi.__file__, 'openai': openai.__version__, 'openaiModule': openai.__file__, 'factsPath': str(runtime_facts_path(repo_root())), 'environment': str(committed_venv(repo_root())), 'store': str(store_root())}), flush=True)",
+    ].join("\n");
+  assert.equal(kind, "web");
+  return [
+    ...common,
+    "original_stdout = sys.stdout",
+    "from hermes_cli import web_server",
+    "gateway = sys.modules.get('tui_gateway.server')",
+    "print(json.dumps({'machine': platform.machine(), 'argv': sys.argv[1:], 'home': os.environ['HERMES_HOME'], 'webServer': web_server.__file__, 'stdoutRedirected': sys.stdout is not original_stdout, 'stdoutIsStderr': sys.stdout is sys.stderr, 'gatewayServerLoaded': gateway is not None, 'gatewayServer': getattr(gateway, '__file__', None)}), file=original_stdout, flush=True)",
+  ].join("\n");
+}
+
+function captureProbe(name, python, argv) {
+  const result = spawnSync(python, argv, {
+    cwd: repo,
+    env,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+    timeout: 60000,
+    maxBuffer: 4 * 1024 * 1024,
+  });
+  const captured = {
+    status: result.status,
+    signal: result.signal,
+    error: result.error ? String(result.error) : null,
+    stdout: result.stdout || "",
+    stderr: result.stderr || "",
+  };
+  (report.probes ??= {})[name] = captured;
+  assert.equal(captured.error, null, `${name} Python probe could not run`);
+  assert.equal(
+    captured.status,
+    0,
+    `${name} Python probe failed; see captured stderr`,
+  );
+  assert.ok(
+    captured.stdout.trim(),
+    `${name} Python probe returned no stdout; see captured streams`,
+  );
+  return JSON.parse(captured.stdout.trim());
+}
+
 try {
   const {
     PINNED_INSTALL_COMMIT,
@@ -390,23 +445,15 @@ try {
   );
   checkpoint("managed raw Python bootstrap");
   const quoted = "quoted ' argument with spaces";
-  const raw = execute(
+  report.raw = captureProbe(
+    "minimal",
     runtime.python,
     buildHermesPythonArgs(runtime, repo, [
       "-c",
-      [
-        "import json, os, platform, sys",
-        "from pathlib import Path",
-        "import fastapi, openai",
-        "from hermes_cli import web_server",
-        "from pm.environments import committed_venv, runtime_facts_path",
-        "from pm.paths import repo_root, store_root",
-        "print(json.dumps({'pythonVersion': platform.python_version(), 'machine': platform.machine(), 'argv': sys.argv[1:], 'home': os.environ['HERMES_HOME'], 'fastapi': fastapi.__version__, 'fastapiModule': fastapi.__file__, 'openai': openai.__version__, 'openaiModule': openai.__file__, 'webServer': web_server.__file__, 'factsPath': str(runtime_facts_path(repo_root())), 'environment': str(committed_venv(repo_root())), 'store': str(store_root())}))",
-      ].join("\n"),
+      probeSource("minimal"),
       quoted,
     ]),
   );
-  report.raw = JSON.parse(raw);
   assert.deepEqual(report.raw.argv, [quoted]);
   assert.equal(report.raw.home, hermesHome);
   assert.ok(
@@ -425,7 +472,6 @@ try {
   ownedPath(report.raw.store, ownedRoot, "PM store");
   ownedPath(report.raw.fastapiModule, selected, "FastAPI dependency");
   ownedPath(report.raw.openaiModule, selected, "OpenAI dependency");
-  ownedPath(report.raw.webServer, repo, "Agent web module");
   const facts = readJson(factsPath);
   assert.equal(
     path.resolve(facts.packages.venv.environment),
@@ -448,7 +494,22 @@ try {
   );
   report.pmFacts = facts;
   report.checks.push(
-    "PM committed generation supplies core/web imports and preserves raw helper arguments and selected home",
+    "PM committed generation supplies core dependencies through valid raw stdout and preserves quoted arguments and selected home",
+  );
+  checkpoint("managed web server import streams");
+  report.webImport = captureProbe(
+    "web",
+    runtime.python,
+    buildHermesPythonArgs(runtime, repo, ["-c", probeSource("web"), quoted]),
+  );
+  assert.deepEqual(report.webImport.argv, [quoted]);
+  assert.equal(report.webImport.home, hermesHome);
+  assert.equal(report.webImport.machine, report.raw.machine);
+  ownedPath(report.webImport.webServer, repo, "Agent web module");
+  if (report.webImport.gatewayServerLoaded)
+    ownedPath(report.webImport.gatewayServer, repo, "Agent gateway module");
+  report.checks.push(
+    "Full web-server import succeeds with original stdout preserved and stream redirection recorded separately",
   );
   report.passed = true;
 } catch (error) {

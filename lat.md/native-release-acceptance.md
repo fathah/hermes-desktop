@@ -77,3 +77,19 @@ Windows x64 and Linux x64 jobs require validated candidate provenance, exact too
 ### Timed-out installer descendants are stopped
 
 An actual POSIX child ignores SIGTERM after its parent exits. Timeout handling awaits bounded process-group cleanup, escalates to SIGKILL and checks for survivors before returning the original timeout failure.
+
+### Raw output and web import streams remain distinct
+
+A real Python subprocess executes the generated minimal probe with tiny dependency fixtures, checking output, home, quoted argv and its missing-stdout guard.
+
+The generated web probe preserves original stdout across redirection; stderr never substitutes for raw output.
+
+## Selected acceptance targets
+
+Dispatch selects all checks by default, or only native desktop installation/update or managed Agent provisioning; candidate provenance validation always runs.
+
+The dispatch choice scopes concurrency, allowing a managed-only diagnostic run alongside native acceptance for the same candidate. Selection changes only which independent CI jobs execute; it does not weaken their checks or rebuild the candidate.
+
+### Workflow target selection
+
+The workflow exposes the three supported targets, keeps the provenance gate unconditional, and routes native and managed jobs with separate choice-aware concurrency keys.
