@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildAgentCapabilitySnapshot,
+  MAX_SUPPORTED_AGENT_DESKTOP_CONTRACT,
   RECOMMENDED_AGENT_DESKTOP_CONTRACT,
   sanitizeAgentCommandInventory,
   sanitizeAgentRuntimeInfo,
@@ -42,11 +43,11 @@ describe("buildAgentCapabilitySnapshot", () => {
       ],
       connectionMode: "local",
       runtimeInfo: {
-        desktop_contract: 6,
-        release_date: "2026.08.20",
+        desktop_contract: 8,
+        release_date: "2026.11.09",
         update_behind: 0,
         update_command: "hermes update",
-        version: "0.20.5",
+        version: "0.23.1",
       },
     });
 
@@ -55,10 +56,10 @@ describe("buildAgentCapabilitySnapshot", () => {
       checkedAt: 123,
       compatibility: "compatible",
       desktopContract: RECOMMENDED_AGENT_DESKTOP_CONTRACT,
-      releaseDate: "2026.08.20",
+      releaseDate: "2026.11.09",
       updateAvailable: false,
       updateCommand: "hermes update",
-      version: "0.20.5",
+      version: "0.23.1",
     });
     expect(
       Object.values(snapshot.features).every(
@@ -66,6 +67,38 @@ describe("buildAgentCapabilitySnapshot", () => {
       ),
     ).toBe(true);
   });
+
+  it.each(["local", "ssh", "remote"] as const)(
+    "does not certify newer contracts or infer their contract features over %s",
+    (connectionMode) => {
+      // @lat: [[agent-capabilities#Test specifications#Future Agent contract]]
+      const snapshot = buildAgentCapabilitySnapshot({
+        apiRunsTransport: true,
+        commandNames: ["queue"],
+        connectionMode,
+        runtimeInfo: {
+          desktop_contract: MAX_SUPPORTED_AGENT_DESKTOP_CONTRACT + 1,
+          update_behind: 0,
+          version: "0.24.0",
+        },
+      });
+
+      expect(snapshot).toMatchObject({
+        compatibility: "desktop-update-recommended",
+        desktopContract: 9,
+        canUpdate: connectionMode !== "remote",
+        updateAvailable: false,
+        recommendedDesktopContract: 8,
+      });
+      expect(snapshot.features.dashboardChat.state).toBe("unknown");
+      expect(snapshot.features.fileAttach.state).toBe("unknown");
+      expect(snapshot.features.approvalsMode.state).toBe("unknown");
+      expect(snapshot.features.keyedPluginManagement.state).toBe("unknown");
+      // Independent, explicit API and command evidence remains valid.
+      expect(snapshot.features.runsTransport.state).toBe("supported");
+      expect(snapshot.features.promptQueue.state).toBe("supported");
+    },
+  );
 
   it("uses a bounded command catalog for command-specific gates", () => {
     // @lat: [[agent-capabilities#Test specifications#Command inventory gates]]

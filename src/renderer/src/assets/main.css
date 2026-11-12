@@ -5536,6 +5536,18 @@ body:has(.shell-vibrant),
   word-break: break-word;
 }
 
+.chat-clarify-group fieldset {
+  min-width: 0;
+  padding: 0;
+  margin: 0 0 16px;
+  border: 0;
+}
+
+.chat-clarify-group .chat-clarify-choice[aria-pressed="true"] {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+
 .chat-clarify-choices {
   display: flex;
   flex-direction: column;

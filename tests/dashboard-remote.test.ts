@@ -1,6 +1,9 @@
 import http from "http";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConnectionConfig } from "../src/main/config";
+import * as relay from "../src/main/dashboard-websocket-relay";
+
+const relaySpy = vi.spyOn(relay, "dashboardWebSocketUrlForRenderer");
 
 const oauthMocks = vi.hoisted(() => ({
   buildRemoteOAuthWsUrl: vi.fn((baseUrl: string, ticket: string) => {
@@ -230,7 +233,10 @@ describe("freshDashboardWebSocketUrl", () => {
 
     await expect(
       freshDashboardWebSocketUrl("work", "connection-two"),
-    ).resolves.toBe("wss://second.example/api/ws?token=dashboard-token");
+    ).resolves.toMatch(/^ws:\/\/127\.0\.0\.1:\d+\/[a-f0-9]{64}$/);
+    expect(relaySpy).toHaveBeenCalledWith(
+      "wss://second.example/api/ws?token=dashboard-token",
+    );
     expect(configMocks.getConnectionConfig).toHaveBeenCalledWith(
       "connection-two",
     );
@@ -249,23 +255,32 @@ describe("freshDashboardWebSocketUrl", () => {
       .mockResolvedValueOnce("first")
       .mockResolvedValueOnce("second");
 
-    await expect(freshDashboardWebSocketUrl()).resolves.toContain(
-      "ticket=first",
+    const first = await freshDashboardWebSocketUrl();
+    const second = await freshDashboardWebSocketUrl();
+    expect(first).toMatch(/^ws:\/\/127\.0\.0\.1:\d+\/[a-f0-9]{64}$/);
+    expect(second).not.toBe(first);
+    expect(relaySpy).toHaveBeenNthCalledWith(
+      1,
+      "wss://hermes.example/api/ws?ticket=first",
     );
-    await expect(freshDashboardWebSocketUrl()).resolves.toContain(
-      "ticket=second",
+    expect(relaySpy).toHaveBeenNthCalledWith(
+      2,
+      "wss://hermes.example/api/ws?ticket=second",
     );
     expect(oauthMocks.mintRemoteOAuthWsTicket).toHaveBeenCalledTimes(2);
   });
 
-  it("returns the stable token URL without minting", async () => {
+  it("keeps the stable token upstream without minting an OAuth ticket", async () => {
     configMocks.getConnectionConfig.mockReturnValue(remoteConnection({}));
     oauthMocks.probeRemoteAuthMode.mockResolvedValue({
       authMode: "token",
       version: null,
     });
 
-    await expect(freshDashboardWebSocketUrl()).resolves.toBe(
+    await expect(freshDashboardWebSocketUrl()).resolves.toMatch(
+      /^ws:\/\/127\.0\.0\.1:\d+\/[a-f0-9]{64}$/,
+    );
+    expect(relaySpy).toHaveBeenCalledWith(
       "wss://hermes.example/api/ws?token=dashboard-token",
     );
     expect(oauthMocks.mintRemoteOAuthWsTicket).not.toHaveBeenCalled();

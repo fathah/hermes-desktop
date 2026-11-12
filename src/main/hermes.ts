@@ -50,7 +50,11 @@ import {
 } from "./utils";
 import { getProfilePort } from "./gateway-ports";
 import { isMultiplexGatewayRunning } from "./gateway-liveness";
-import { promptSudoPassword, promptSecretValue } from "./gatewayPrompt";
+import {
+  collectGatewayRequestValue,
+  promptSudoPassword,
+  promptSecretValue,
+} from "./gatewayPrompt";
 import { getSecret } from "./secrets";
 import { readModels } from "./models";
 import { normalizeModelEndpointUrl } from "../shared/model-endpoint";
@@ -98,6 +102,15 @@ import {
   sanitizeAgentCommandInventory,
   sanitizeAgentRuntimeInfo,
 } from "../shared/agent-capabilities";
+import {
+  GATEWAY_WINDOW_REQUESTS,
+  gatewayClarifyResult,
+  gatewayRequestRecord,
+  normalizeGatewayServerRequestEvent,
+  parseGatewayServerRequest,
+  type GatewayClarifyQuestion,
+  type GatewayServerRequest,
+} from "../shared/gateway-server-requests";
 
 /**
  * Resolve which profile a gateway call targets. An explicit profile always
@@ -506,7 +519,7 @@ interface GatewayRpcFrame {
   error?: { message?: string };
   id?: string | number | null;
   method?: string;
-  params?: GatewayEvent;
+  params?: GatewayEvent & Record<string, unknown>;
   result?: unknown;
 }
 
@@ -517,6 +530,9 @@ interface GatewayPending {
 }
 
 type GatewayEventHandler = (event: GatewayEvent) => void;
+type GatewayServerRequestHandler = (
+  request: GatewayServerRequest,
+) => boolean | "defer";
 
 const DASHBOARD_GATEWAY_PORT_FLOOR = 9120;
 const DASHBOARD_GATEWAY_PORT_CEILING = 9199;
@@ -581,8 +597,13 @@ async function waitForDashboardReady(
   throw new Error("Hermes dashboard gateway did not become ready");
 }
 
+// @lat: [[main-server-requests#Main process server requests]]
 class TuiGatewayClient {
   private handlers = new Set<GatewayEventHandler>();
+  private requestHandlers = new Set<GatewayServerRequestHandler>();
+  private serverRequests = new Map<string, GatewayServerRequest>();
+  private settledServerRequests = new Set<string>();
+  private dispatchedServerRequests = new Set<string>();
   private nextId = 0;
   private pending = new Map<string, GatewayPending>();
   private port = 0;
@@ -602,6 +623,118 @@ class TuiGatewayClient {
   onEvent(handler: GatewayEventHandler): () => void {
     this.handlers.add(handler);
     return () => this.handlers.delete(handler);
+  }
+
+  onServerRequest(handler: GatewayServerRequestHandler): () => void {
+    this.requestHandlers.add(handler);
+    return () => this.requestHandlers.delete(handler);
+  }
+
+  private rememberSettled(id: string): void {
+    this.settledServerRequests.add(id);
+    if (this.settledServerRequests.size > 512) {
+      this.settledServerRequests.delete(
+        this.settledServerRequests.values().next().value!,
+      );
+    }
+  }
+
+  respondServerRequest(id: string, result: Record<string, unknown>): boolean {
+    if (!this.serverRequests.has(id) || this.ws?.readyState !== WebSocket.OPEN)
+      return false;
+    try {
+      this.ws.send(JSON.stringify({ jsonrpc: "2.0", id, result }));
+    } catch {
+      return false;
+    }
+    this.serverRequests.delete(id);
+    this.dispatchedServerRequests.delete(id);
+    this.rememberSettled(id);
+    return true;
+  }
+
+  rejectServerRequest(id: string, code: number, message: string): void {
+    if (this.serverRequests.has(id))
+      this.declineServerRequest(id, code, message);
+  }
+
+  private declineServerRequest(
+    id: string,
+    code: number,
+    message: string,
+  ): void {
+    this.serverRequests.delete(id);
+    this.dispatchedServerRequests.delete(id);
+    this.rememberSettled(id);
+    if (this.ws?.readyState !== WebSocket.OPEN) return;
+    try {
+      this.ws.send(
+        JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } }),
+      );
+    } catch {
+      // A disconnected peer cannot receive a refusal; the request stays retired.
+    }
+  }
+
+  private receiveServerRequest(request: GatewayServerRequest): void {
+    if (
+      this.serverRequests.has(request.id) ||
+      this.settledServerRequests.has(request.id)
+    )
+      return;
+    if (this.serverRequests.size >= 128) {
+      this.declineServerRequest(
+        request.id,
+        -32000,
+        "Too many pending interactive requests.",
+      );
+      return;
+    }
+    this.serverRequests.set(request.id, request);
+    this.dispatchServerRequest(request);
+  }
+
+  private dispatchServerRequest(request: GatewayServerRequest): void {
+    if (this.dispatchedServerRequests.has(request.id)) return;
+    let deferred = false;
+    for (const handler of this.requestHandlers) {
+      try {
+        const handled = handler(request);
+        if (handled === true) {
+          if (this.serverRequests.has(request.id))
+            this.dispatchedServerRequests.add(request.id);
+          return;
+        }
+        if (handled === "defer") deferred = true;
+      } catch {
+        this.declineServerRequest(
+          request.id,
+          -32603,
+          "The interaction could not be displayed.",
+        );
+        return;
+      }
+    }
+    if (deferred) return;
+    this.declineServerRequest(
+      request.id,
+      GATEWAY_WINDOW_REQUESTS.has(request.method) ? 4404 : -32601,
+      "This chat client cannot answer the requested interaction.",
+    );
+  }
+
+  activateServerRequests(): void {
+    for (const request of this.serverRequests.values())
+      this.dispatchServerRequest(request);
+  }
+
+  restoreServerRequests(result: unknown): void {
+    const requests = gatewayRequestRecord(result)?.open_requests;
+    if (!Array.isArray(requests)) return;
+    for (const frame of requests.slice(0, 128)) {
+      const request = parseGatewayServerRequest(frame);
+      if (request) this.receiveServerRequest(request);
+    }
   }
 
   findRecentEvent(
@@ -765,6 +898,16 @@ class TuiGatewayClient {
 
       ws.on("open", () => {
         clearTimeout(timer);
+        // Send before any session RPC; old Agents may reject the capability
+        // probe, which is harmless and must not disable their legacy events.
+        ws.send(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: `cap-${++this.nextId}`,
+            method: "client.capabilities",
+            params: { server_requests: true },
+          }),
+        );
         resolve();
       });
       ws.on("message", (data) => this.handleFrame(wsDataToString(data)));
@@ -789,6 +932,19 @@ class TuiGatewayClient {
       return;
     }
 
+    if (frame.id != null && typeof frame.method === "string") {
+      const request = parseGatewayServerRequest(frame);
+      if (request) this.receiveServerRequest(request);
+      else if (typeof frame.id === "string" && frame.id.startsWith("srq-")) {
+        this.declineServerRequest(
+          frame.id,
+          -32602,
+          "Invalid interactive request.",
+        );
+      }
+      return;
+    }
+
     if (frame.id != null) {
       const pending = this.pending.get(String(frame.id));
       if (!pending) return;
@@ -803,6 +959,21 @@ class TuiGatewayClient {
     }
 
     if (frame.method !== "event" || !frame.params?.type) return;
+    if (frame.params.type === "request.cancel") {
+      const id = frame.params.payload?.id;
+      if (typeof id === "string") {
+        const request = this.serverRequests.get(id);
+        if (
+          !request ||
+          !frame.params.session_id ||
+          request.sessionId === frame.params.session_id
+        ) {
+          this.serverRequests.delete(id);
+          this.dispatchedServerRequests.delete(id);
+          this.rememberSettled(id);
+        }
+      }
+    }
     this.recentEvents.push(frame.params);
     if (this.recentEvents.length > 50) {
       this.recentEvents.splice(0, this.recentEvents.length - 50);
@@ -841,6 +1012,9 @@ class TuiGatewayClient {
     }
     this.port = 0;
     this.recentEvents = [];
+    this.serverRequests.clear();
+    this.dispatchedServerRequests.clear();
+    this.settledServerRequests.clear();
     this.ready = null;
     this.readyReject = null;
     this.readyResolve = null;
@@ -1213,11 +1387,11 @@ export function extractReasoningDelta(delta: unknown): string {
  * handler also clears any leftover on turn end so an abandoned turn can't leak a
  * stale resolver.
  */
-const pendingClarify = new Map<string, (answer: string) => void>();
+const pendingClarify = new Map<string, (answer: string) => void | boolean>();
 
 export function registerPendingClarify(
   requestId: string,
-  resolver: (answer: string) => void,
+  resolver: (answer: string) => void | boolean,
 ): void {
   pendingClarify.set(requestId, resolver);
 }
@@ -1229,8 +1403,9 @@ export function resolvePendingClarify(
 ): boolean {
   const resolver = pendingClarify.get(requestId);
   if (!resolver) return false;
-  pendingClarify.delete(requestId);
-  resolver(answer);
+  if (resolver(answer) === false) return false;
+  if (pendingClarify.get(requestId) === resolver)
+    pendingClarify.delete(requestId);
   return true;
 }
 
@@ -1351,8 +1526,14 @@ export interface ChatCallbacks {
     requestId: string;
     question: string;
     choices: string[];
+    questions?: GatewayClarifyQuestion[];
+    answers?: Record<string, string | null>;
   }) => void;
   onApproval?: (req: ChatApprovalRequest) => boolean | void;
+  onRequestCancelled?: (req: {
+    requestId: string;
+    kind: "approval" | "clarify";
+  }) => void;
 }
 
 type ChatContent =
@@ -2193,11 +2374,18 @@ async function sendMessageViaTuiGateway(
   let fallbackStarted = false;
   let promptSubmitted = false;
   let approvalInteraction = false;
+  let interactiveRequestSeen = false;
   let cleanup = (): void => undefined;
   // request_id of an in-flight clarify question, if the agent is awaiting an
   // answer. Cleared on turn end so an abandoned turn leaks no stale resolver.
   let pendingClarifyId: string | null = null;
   const pendingApprovalIds = new Set<string>();
+  const interactiveServerRequests = new Map<string, GatewayServerRequest>();
+  const interactiveCards = new Map<
+    string,
+    { requestId: string; kind: "approval" | "clarify" }
+  >();
+  const sensitiveRequests = new Map<string, AbortController>();
   let announcedSessionId = "";
 
   // @lat: [[sidebar-navigation#Provisional fresh sessions#Live first-turn rows]]
@@ -2223,6 +2411,24 @@ async function sendMessageViaTuiGateway(
     pendingApprovalIds.clear();
   }
 
+  function clearServerInteractions(): void {
+    for (const controller of sensitiveRequests.values()) controller.abort();
+    sensitiveRequests.clear();
+    for (const id of interactiveServerRequests.keys()) {
+      client.rejectServerRequest(
+        id,
+        -32000,
+        "The originating chat turn has ended.",
+      );
+    }
+    for (const [id, card] of interactiveCards) {
+      cb.onRequestCancelled?.(card);
+      interactiveCards.delete(id);
+    }
+    interactiveCards.clear();
+    interactiveServerRequests.clear();
+  }
+
   function finish(error?: string): void {
     if (finished) return;
     finished = true;
@@ -2231,6 +2437,7 @@ async function sendMessageViaTuiGateway(
       pendingClarifyId = null;
     }
     clearApprovals();
+    clearServerInteractions();
     cleanup();
     if (error) {
       cb.onError(
@@ -2249,14 +2456,15 @@ async function sendMessageViaTuiGateway(
       pendingClarifyId = null;
     }
     clearApprovals();
+    clearServerInteractions();
     cleanup();
   }
 
   function startApiFallback(reason: string): void {
     if (finished || fallbackStarted) return;
-    if (approvalInteraction) {
+    if (interactiveRequestSeen || approvalInteraction) {
       finish(
-        `${reason} The prompt was not replayed after the approval request.`,
+        `${reason} The prompt was not replayed after the interactive request.`,
       );
       return;
     }
@@ -2287,15 +2495,38 @@ async function sendMessageViaTuiGateway(
       });
   }
 
-  cleanup = client.onEvent((event) => {
+  const handleGatewayEvent = (event: GatewayEvent): void => {
     if (finished || fallbackStarted) return;
-    if (event.type === "gateway.disconnected" && approvalInteraction) {
+    if (
+      event.type === "gateway.disconnected" &&
+      (approvalInteraction || interactiveRequestSeen)
+    ) {
       finish(
-        "The gateway disconnected after requesting approval. The prompt was not replayed.",
+        "The gateway disconnected after requesting user input. The prompt was not replayed.",
       );
       return;
     }
     if (event.session_id && event.session_id !== activeSessionId) return;
+
+    if (event.type === "request.cancel") {
+      const id = event.payload?.id;
+      if (typeof id !== "string") return;
+      sensitiveRequests.get(id)?.abort();
+      sensitiveRequests.delete(id);
+      interactiveServerRequests.delete(id);
+      const card = interactiveCards.get(id);
+      if (!card) return;
+      interactiveCards.delete(id);
+      if (card.kind === "approval") {
+        clearPendingApproval(card.requestId);
+        pendingApprovalIds.delete(card.requestId);
+      } else {
+        clearPendingClarify(card.requestId);
+        if (pendingClarifyId === card.requestId) pendingClarifyId = null;
+      }
+      cb.onRequestCancelled?.(card);
+      return;
+    }
 
     if (event.type === "session.info") {
       if (connectionId) {
@@ -2360,7 +2591,12 @@ async function sendMessageViaTuiGateway(
 
     if (event.type === "approval.request") {
       approvalInteraction = true;
+      interactiveRequestSeen = true;
       const gatewayRequestId = gatewayApprovalRequestId(event.payload);
+      const serverRequestId =
+        typeof event.payload?.server_request_id === "string"
+          ? event.payload.server_request_id
+          : null;
       if (!gatewayRequestId) {
         void client
           .request("session.interrupt", { session_id: activeSessionId }, 5_000)
@@ -2377,6 +2613,18 @@ async function sendMessageViaTuiGateway(
         async (choice) => {
           if (pendingApprovalIds.values().next().value !== requestId) {
             return false;
+          }
+          if (serverRequestId) {
+            const sent = client.respondServerRequest(serverRequestId, {
+              choice,
+              all: false,
+            });
+            if (sent) {
+              pendingApprovalIds.delete(requestId);
+              interactiveCards.delete(serverRequestId);
+              interactiveServerRequests.delete(serverRequestId);
+            }
+            return sent;
           }
           const result = await client.request<{ resolved?: unknown }>(
             "approval.respond",
@@ -2406,6 +2654,8 @@ async function sendMessageViaTuiGateway(
         },
       );
       pendingApprovalIds.add(requestId);
+      if (serverRequestId)
+        interactiveCards.set(serverRequestId, { requestId, kind: "approval" });
       const request = { ...normalized, requestId };
       let delivered = false;
       try {
@@ -2427,11 +2677,19 @@ async function sendMessageViaTuiGateway(
     }
 
     if (event.type === "clarify.request") {
-      const requestId =
+      interactiveRequestSeen = true;
+      const gatewayRequestId =
         typeof event.payload?.request_id === "string"
           ? event.payload.request_id
           : "";
-      if (!requestId) {
+      const serverRequestId =
+        typeof event.payload?.server_request_id === "string"
+          ? event.payload.server_request_id
+          : null;
+      const requestId = serverRequestId
+        ? `clarify-${randomUUID()}`
+        : gatewayRequestId;
+      if (!gatewayRequestId) {
         // No id to answer — fall back to the legacy interrupt so the turn ends
         // cleanly rather than hanging on a question we can never resolve.
         void client
@@ -2446,11 +2704,21 @@ async function sendMessageViaTuiGateway(
       // The resolver closes over the live gateway client; the renderer's answer
       // (via the clarify-respond IPC handler) forwards it to clarify.respond.
       registerPendingClarify(requestId, (answer: string) => {
+        if (serverRequestId) {
+          const request = interactiveServerRequests.get(serverRequestId);
+          const result = request && gatewayClarifyResult(request, answer);
+          if (!result || !client.respondServerRequest(serverRequestId, result))
+            return false;
+          interactiveCards.delete(serverRequestId);
+          interactiveServerRequests.delete(serverRequestId);
+          if (pendingClarifyId === requestId) pendingClarifyId = null;
+          return true;
+        }
         if (pendingClarifyId === requestId) pendingClarifyId = null;
         void client
           .request(
             "clarify.respond",
-            { request_id: requestId, answer },
+            { request_id: gatewayRequestId, answer },
             300_000,
           )
           .catch((error) => {
@@ -2462,9 +2730,18 @@ async function sendMessageViaTuiGateway(
             }
             finish(message);
           });
+        return undefined;
       });
+      if (serverRequestId)
+        interactiveCards.set(serverRequestId, { requestId, kind: "clarify" });
       const payload = event.payload as
-        | { question?: string; prompt?: string; choices?: unknown }
+        | {
+            question?: string;
+            prompt?: string;
+            choices?: unknown;
+            questions?: GatewayClarifyQuestion[];
+            answers?: Record<string, string | null>;
+          }
         | undefined;
       cb.onClarify?.({
         requestId,
@@ -2472,11 +2749,18 @@ async function sendMessageViaTuiGateway(
         choices: Array.isArray(payload?.choices)
           ? payload.choices.map((c) => String(c))
           : [],
+        ...(serverRequestId && payload?.questions
+          ? { questions: payload.questions }
+          : {}),
+        ...(serverRequestId && payload?.answers
+          ? { answers: payload.answers }
+          : {}),
       });
       return;
     }
 
     if (event.type === "sudo.request" || event.type === "secret.request") {
+      interactiveRequestSeen = true;
       const isSudo = event.type === "sudo.request";
       const requestId =
         typeof event.payload?.request_id === "string"
@@ -2534,7 +2818,70 @@ async function sendMessageViaTuiGateway(
         });
       return;
     }
+  };
+
+  const unsubscribeEvents = client.onEvent(handleGatewayEvent);
+  const unsubscribeRequests = client.onServerRequest((request) => {
+    if (finished || fallbackStarted) return false;
+    if (!activeSessionId) return "defer";
+    if (request.sessionId !== activeSessionId) return false;
+    if (request.method === "clarify" && !cb.onClarify) return false;
+    interactiveRequestSeen = true;
+    interactiveServerRequests.set(request.id, request);
+    if (
+      ["sudo", "secret", "vault.unlock_prompt", "vault.code"].includes(
+        request.method,
+      )
+    ) {
+      const controller = new AbortController();
+      sensitiveRequests.set(request.id, controller);
+      const envVar =
+        request.method === "secret" &&
+        typeof request.params.env_var === "string"
+          ? request.params.env_var
+          : "";
+      const localValue = envVar ? getSecret(envVar, profile) : null;
+      const collect =
+        localValue !== null
+          ? Promise.resolve({ value: localValue })
+          : collectGatewayRequestValue(request, controller.signal);
+      void collect
+        .then((result) => {
+          if (finished || controller.signal.aborted) return;
+          if (result) client.respondServerRequest(request.id, result);
+          else
+            client.rejectServerRequest(
+              request.id,
+              -32601,
+              "This sensitive interaction is not supported.",
+            );
+        })
+        .catch(() => {
+          client.rejectServerRequest(
+            request.id,
+            -32603,
+            "The sensitive interaction could not be completed.",
+          );
+        })
+        .finally(() => {
+          if (sensitiveRequests.get(request.id) === controller)
+            sensitiveRequests.delete(request.id);
+          interactiveServerRequests.delete(request.id);
+        });
+      return true;
+    }
+    const event = normalizeGatewayServerRequestEvent(request);
+    if (!event) {
+      interactiveServerRequests.delete(request.id);
+      return false;
+    }
+    handleGatewayEvent(event);
+    return true;
   });
+  cleanup = (): void => {
+    unsubscribeEvents();
+    unsubscribeRequests();
+  };
 
   try {
     if (resumeSessionId) {
@@ -2552,6 +2899,8 @@ async function sendMessageViaTuiGateway(
       if (connectionId) {
         recordAgentRuntimeInfo(resumed.info, profile, connectionId);
       }
+      client.activateServerRequests();
+      client.restoreServerRequests(resumed);
     } else {
       const created = await client.request<{
         info?: unknown;
@@ -2568,6 +2917,7 @@ async function sendMessageViaTuiGateway(
       if (connectionId) {
         recordAgentRuntimeInfo(created.info, profile, connectionId);
       }
+      client.activateServerRequests();
     }
 
     if (!activeSessionId) {
@@ -2589,12 +2939,12 @@ async function sendMessageViaTuiGateway(
       text: message,
     });
   } catch (error) {
-    if (approvalInteraction) {
+    if (approvalInteraction || interactiveRequestSeen) {
       void client
         .request("session.interrupt", { session_id: activeSessionId }, 5_000)
         .catch(() => undefined);
       finish(
-        "The gateway lost the prompt acknowledgment after requesting approval. The prompt was not replayed.",
+        "The gateway lost the prompt acknowledgment after requesting user input. The prompt was not replayed.",
       );
     } else {
       cleanup();

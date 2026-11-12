@@ -5,6 +5,7 @@ export type {
 
 import type { Attachment } from "../../../../shared/attachments";
 import type { ApprovalChoice } from "../../../../shared/chat-approval";
+import type { GatewayClarifyQuestion } from "../../../../shared/gateway-server-requests";
 
 /**
  * Visible chat bubble (user or assistant). Used for live streaming and as
@@ -79,6 +80,8 @@ export interface ClarifyMessage {
   unavailable?: boolean;
   question: string;
   choices: string[];
+  questions?: GatewayClarifyQuestion[];
+  answers?: Record<string, string | null>;
   answer?: string;
   resolved?: boolean;
 }

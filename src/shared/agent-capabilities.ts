@@ -1,5 +1,6 @@
 export const MIN_AGENT_DESKTOP_CONTRACT = 1;
-export const RECOMMENDED_AGENT_DESKTOP_CONTRACT = 6;
+export const RECOMMENDED_AGENT_DESKTOP_CONTRACT = 8;
+export const MAX_SUPPORTED_AGENT_DESKTOP_CONTRACT = 8;
 
 export type AgentCapabilityState = "supported" | "unsupported" | "unknown";
 export type AgentCapabilitySource =
@@ -33,7 +34,12 @@ export interface AgentFeatureCapabilities {
 export interface AgentCapabilitySnapshot {
   canUpdate: boolean;
   checkedAt: number;
-  compatibility: "compatible" | "legacy" | "unknown" | "update-recommended";
+  compatibility:
+    | "compatible"
+    | "legacy"
+    | "unknown"
+    | "update-recommended"
+    | "desktop-update-recommended";
   desktopContract: number | null;
   features: AgentFeatureCapabilities;
   minimumDesktopContract: number;
@@ -133,7 +139,12 @@ function contractFeature(
   desktopContract: number | null,
   minimum: number,
 ): AgentFeatureCapability {
-  if (desktopContract === null) return { state: "unknown", source: "unknown" };
+  if (
+    desktopContract === null ||
+    desktopContract > MAX_SUPPORTED_AGENT_DESKTOP_CONTRACT
+  ) {
+    return { state: "unknown", source: "unknown" };
+  }
   return {
     state: desktopContract >= minimum ? "supported" : "unsupported",
     source: "desktop-contract",
@@ -195,10 +206,14 @@ export function buildAgentCapabilitySnapshot(
 
   let compatibility: AgentCapabilitySnapshot["compatibility"] = "unknown";
   if (desktopContract !== null) {
-    compatibility =
-      desktopContract >= RECOMMENDED_AGENT_DESKTOP_CONTRACT
-        ? "compatible"
-        : "update-recommended";
+    if (desktopContract > MAX_SUPPORTED_AGENT_DESKTOP_CONTRACT) {
+      compatibility = "desktop-update-recommended";
+    } else {
+      compatibility =
+        desktopContract >= RECOMMENDED_AGENT_DESKTOP_CONTRACT
+          ? "compatible"
+          : "update-recommended";
+    }
   } else if (runtimeObserved || version) {
     compatibility = "legacy";
   }
