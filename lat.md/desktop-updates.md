@@ -134,6 +134,12 @@ Pull requests and main-branch pushes must have no lint warnings and no high-seve
 
 The CI workflow installs the locked dependency tree, runs `npm run audit:prod`, type-checks, tests, and treats lint as blocking. The audit wrapper retries only transient registry/network failures; a reported high-severity vulnerability still fails immediately. The install step fetches the pinned Electron runtime once before tests, and the suite uses four workers so parallel imports never race a lazy binary download or starve short tests. [[tests/audit-production-dependencies.test.ts]] covers retry classification, while [[tests/release-artifacts.test.ts]] protects these controls, the audit threshold, and the zero-warning lint policy from accidental removal.
 
+#### Patched Electron dependency baseline
+
+Electron stays on major 44 with a 44.9.3 minimum. The locked downloader uses undici 7.30.1; the development rebuild chain uses undici 6.29.1, retaining their existing compatible major versions.
+
+The refresh addresses published [Electron certificate-trust](https://github.com/advisories/GHSA-jr5w-w6x2-84p9) and [undici parser](https://github.com/advisories/GHSA-4qv8-2p9j-2685) advisories without changing the audit threshold, retry policy or application configuration. Validate a clean locked install, production audit, Electron TLS runtime checks, typechecks, tests, lint and build before submitting dependency updates.
+
 #### Transient audit outages
 
 The production audit retries temporary npm registry and network failures without weakening vulnerability enforcement.
