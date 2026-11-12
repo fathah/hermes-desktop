@@ -120,6 +120,7 @@ import {
   contextFolderSystemMessage,
 } from "../src/main/hermes";
 import http from "http";
+import { EventEmitter } from "events";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -699,10 +700,16 @@ describe("testRemoteConnection candidate probing", () => {
         seen.push(url);
         const cb = rest[rest.length - 1] as (res: unknown) => void;
         const r = reply(url, rest[0] as { headers: Record<string, string> });
-        cb({
+        const response = Object.assign(new EventEmitter(), {
           statusCode: r.status,
           headers: { "content-type": r.type },
+          complete: true,
           resume: () => {},
+        });
+        cb(response);
+        queueMicrotask(() => {
+          response.emit("data", Buffer.from("{}"));
+          response.emit("end");
         });
         return {
           on: () => {},
@@ -760,7 +767,12 @@ describe("testRemoteConnection candidate probing", () => {
     reply: (
       path: string,
       headers: http.IncomingHttpHeaders,
-    ) => { status: number; type: string } | null,
+    ) => {
+      status: number;
+      type: string;
+      body?: string;
+      interrupted?: boolean;
+    } | null,
     check: (url: string, seen: string[]) => Promise<void>,
   ): Promise<void> {
     const seen: string[] = [];
@@ -772,8 +784,18 @@ describe("testRemoteConnection candidate probing", () => {
         req.socket.destroy();
         return;
       }
-      res.writeHead(response.status, { "Content-Type": response.type });
-      res.end(response.type.includes("text/html") ? "<html>SPA</html>" : "{}");
+      res.writeHead(response.status, {
+        "Content-Type": response.type,
+        ...(response.interrupted ? { "Content-Length": "1000" } : {}),
+      });
+      const body =
+        response.body ??
+        (response.type.includes("text/html") ? "<html>SPA</html>" : "{}");
+      if (response.interrupted) {
+        res.flushHeaders();
+        res.write(body);
+        setImmediate(() => res.destroy());
+      } else res.end(body);
     });
     await new Promise<void>((resolve, reject) => {
       server.once("error", reject);
@@ -851,6 +873,22 @@ describe("testRemoteConnection candidate probing", () => {
     },
     { name: "SPA", response: { status: 200, type: "text/html" } },
     { name: "HTML unavailable", response: { status: 503, type: "text/html" } },
+    {
+      name: "mislabeled HTML unavailable",
+      response: {
+        status: 503,
+        type: "application/json",
+        body: "<html>Unavailable</html>",
+      },
+    },
+    {
+      name: "malformed JSON unavailable",
+      response: { status: 503, type: "application/json", body: "invalid" },
+    },
+    {
+      name: "interrupted unavailable",
+      response: { status: 503, type: "application/json", interrupted: true },
+    },
     { name: "network error", response: null },
   ])("does not retry profiles after a session $name", async ({ response }) => {
     await withDashboard(
@@ -888,6 +926,30 @@ describe("testRemoteConnection candidate probing", () => {
       response: { status: 503, type: "application/json" },
     },
     { name: "SPA", response: { status: 200, type: "text/html" } },
+    {
+      name: "mislabeled HTML",
+      response: {
+        status: 200,
+        type: "application/json",
+        body: "<html>SPA</html>",
+      },
+    },
+    {
+      name: "HTML without a content type",
+      response: { status: 200, type: "", body: "<html>SPA</html>" },
+    },
+    {
+      name: "malformed JSON",
+      response: { status: 200, type: "application/json", body: "invalid" },
+    },
+    {
+      name: "empty body",
+      response: { status: 200, type: "application/json", body: "" },
+    },
+    {
+      name: "interrupted body",
+      response: { status: 200, type: "application/json", interrupted: true },
+    },
     { name: "network error", response: null },
   ])(
     "rejects a fresh dashboard when profiles returns $name",

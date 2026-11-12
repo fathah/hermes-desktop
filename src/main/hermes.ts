@@ -4223,12 +4223,16 @@ export function testRemoteConnection(
   const probeResponse = (
     path: string,
     probeHeaders = headers,
+    requireJson = false,
   ): Promise<{
     ok: boolean;
     statusCode: number | undefined;
     looksLikeHtml: boolean;
+    validJson?: boolean;
   }> =>
     new Promise((resolve) => {
+      const failed = (): void =>
+        resolve({ ok: false, statusCode: undefined, looksLikeHtml: false });
       const target = `${normalized}${path}`;
       const mod = target.startsWith("https") ? https : http;
       const req = mod.request(
@@ -4237,16 +4241,41 @@ export function testRemoteConnection(
         (res) => {
           const contentType = String(res.headers?.["content-type"] || "");
           const looksLikeHtml = contentType.toLowerCase().includes("text/html");
-          resolve({
-            ok: res.statusCode === 200 && !looksLikeHtml,
-            statusCode: res.statusCode,
-            looksLikeHtml,
+          if (!requireJson) {
+            resolve({
+              ok: res.statusCode === 200 && !looksLikeHtml,
+              statusCode: res.statusCode,
+              looksLikeHtml,
+            });
+            res.resume();
+            return;
+          }
+          const chunks: Buffer[] = [];
+          res.on("data", (chunk: Buffer) => chunks.push(chunk));
+          res.on("error", failed);
+          res.on("aborted", failed);
+          res.on("close", () => {
+            if (!res.complete) failed();
           });
-          res.resume();
+          res.on("end", () => {
+            const text = Buffer.concat(chunks).toString("utf8");
+            const html = looksLikeHtml || /^\s*</.test(text);
+            let validJson = false;
+            try {
+              JSON.parse(text);
+              validJson = true;
+            } catch {
+              // A header-only success cannot prove protected JSON access.
+            }
+            resolve({
+              ok: res.statusCode === 200 && !html && validJson,
+              statusCode: res.statusCode,
+              looksLikeHtml: html,
+              validJson,
+            });
+          });
         },
       );
-      const failed = (): void =>
-        resolve({ ok: false, statusCode: undefined, looksLikeHtml: false });
       req.on("error", failed);
       req.on("timeout", () => {
         req.destroy();
@@ -4284,13 +4313,20 @@ export function testRemoteConnection(
         const sessions = await probeResponse(
           "/api/sessions?limit=1",
           dashboardHeaders,
+          true,
         );
         if (sessions.ok) return true;
         // A fresh Agent may not have state.db until its first session is
         // created. Only that service-unavailable response permits a second,
         // read-only protected endpoint to verify the same candidate token.
-        if (sessions.statusCode !== 503 || sessions.looksLikeHtml) return false;
-        return probe("/api/profiles", dashboardHeaders);
+        if (
+          sessions.statusCode !== 503 ||
+          sessions.looksLikeHtml ||
+          !sessions.validJson
+        )
+          return false;
+        return (await probeResponse("/api/profiles", dashboardHeaders, true))
+          .ok;
       }),
     Promise.resolve(false),
   );
