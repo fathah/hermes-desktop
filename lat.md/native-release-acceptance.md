@@ -24,6 +24,8 @@ Each job uses the candidate's actual release artifact and the previous published
 
 Candidate ZIP archives and published baseline installers are checked against their GitHub SHA-256 digests before extraction or execution. The candidate source SHA must match a successful Release run from this repository. Acceptance tooling is checked out at the separate exact workflow-dispatch commit, so a previously built candidate need not already contain its later validation scripts; both SHAs are recorded. No app is rebuilt from the tooling checkout.
 
+Artifact acquisition resolves its ZIP dependency from the checked-out workspace with Node's module loader. It does not depend on `actions/github-script` exposing the full Node `require` API.
+
 Current macOS acceptance requires its known Developer ID team and stapled application ticket; a DMG ticket is not inferred. AppImage runs use the actual runtime's extract-and-run mode.
 
 ## Test specifications
@@ -45,6 +47,10 @@ The workflow checks out exact acceptance tooling, verifies candidate provenance 
 ### Updater files use actual builder names
 
 The installed Linux packager expands shipping artifact configuration for x64 and arm64, and both results must match the workflow's updater filenames. AppImage maps x64 to x86_64, independently of the native runtime's architecture label.
+
+### Acquisition loads workspace dependencies under github-script
+
+The actual workflow acquisition script runs with a wrapped `require` lacking `resolve`, loads the workspace ZIP dependency and reaches mocked GitHub metadata before any download or installation.
 
 ## Managed Agent provisioning
 
