@@ -2,37 +2,42 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ── Shared state for capturing HTTP requests (hoisted before mocks) ──
 
-const { capturedRequests, makeMockRequest } = vi.hoisted(() => {
-  const capturedRequests: Array<{
-    url: string;
-    options: Record<string, unknown>;
-    body: string;
-  }> = [];
+const { capturedRequests, makeMockRequest, configuredModel, reasoning } =
+  vi.hoisted(() => {
+    const configuredModel = { model: "test-model", provider: "openrouter" };
+    const reasoning = { effort: "" };
+    const capturedRequests: Array<{
+      url: string;
+      options: Record<string, unknown>;
+      body: string;
+    }> = [];
 
-  function makeMockRequest(
-    url: string,
-    options: Record<string, unknown>,
-  ): {
-    write: (body: string) => void;
-    end: () => void;
-    on: (event: string, cb: () => void) => void;
-    destroy: () => void;
-  } {
+    function makeMockRequest(
+      url: string,
+      options: Record<string, unknown>,
+    ): {
+      write: (body: string) => void;
+      end: () => void;
+      on: (event: string, cb: () => void) => void;
+      destroy: () => void;
+    } {
+      return {
+        write: (body: string) => {
+          capturedRequests.push({ url, options, body });
+        },
+        end: () => {},
+        on: (_event: string, _cb: () => void) => {},
+        destroy: () => {},
+      };
+    }
+
     return {
-      write: (body: string) => {
-        capturedRequests.push({ url, options, body });
-      },
-      end: () => {},
-      on: (_event: string, _cb: () => void) => {},
-      destroy: () => {},
+      capturedRequests,
+      makeMockRequest,
+      configuredModel,
+      reasoning,
     };
-  }
-
-  return {
-    capturedRequests,
-    makeMockRequest,
-  };
-});
+  });
 
 // ── Mock Node.js http/https modules ──
 
@@ -71,8 +76,9 @@ vi.mock("../src/main/installer", () => ({
 }));
 
 vi.mock("../src/main/config", () => ({
-  getModelConfig: () => ({ model: "test-model", provider: "openrouter" }),
-  getConfigValue: () => "",
+  getModelConfig: () => ({ ...configuredModel }),
+  getConfigValue: (key: string) =>
+    key === "agent.reasoning_effort" ? reasoning.effort : "",
   readEnv: () => ({}),
   getConnectionConfig: () => ({
     mode: "remote" as const,
@@ -119,12 +125,131 @@ import type { ConnectionConfig } from "../src/main/config";
 describe("sendMessageViaApi forwards resumeSessionId", () => {
   beforeEach(() => {
     capturedRequests.length = 0;
+    configuredModel.model = "test-model";
+    configuredModel.provider = "openrouter";
+    reasoning.effort = "";
   });
 
   afterEach(() => {
     realStopHealthPolling();
     capturedRequests.length = 0;
   });
+
+  // @lat: [[provider-setup#Provider setup#MiniMax text model choices]]
+  it.each([
+    ["minimax", "MiniMax-M3.1-Flash"],
+    ["minimax", "MiniMax-M3"],
+    ["minimax-cn", "MiniMax-M3.1-Flash"],
+    ["openrouter", "minimax/minimax-m3.1-flash:free"],
+    ["opencode-zen", "minimax-m3.1-flash-free"],
+    ["minimax-oauth", "MiniMax-M2.7"],
+    ["custom", "my-legacy-MiniMax-M1"],
+  ])(
+    "serializes the selected %s / %s unchanged at the final HTTP boundary",
+    async (provider, model) => {
+      const history = [
+        {
+          role: "user",
+          content: "Keep MiniMax-M2.7 in this historical message.",
+        },
+      ];
+      await sendMessage(
+        "next turn",
+        { onChunk: vi.fn(), onDone: vi.fn(), onError: vi.fn() },
+        "default",
+        "saved-session",
+        history,
+        undefined,
+        undefined,
+        { provider, model, baseUrl: "" },
+      );
+      const request = capturedRequests.find((r) =>
+        r.url.endsWith("/v1/chat/completions"),
+      );
+      expect(request).toBeDefined();
+      expect(request!.url).toBe(
+        "http://test-api.example.com/v1/chat/completions",
+      );
+      expect(request!.options.headers).toMatchObject({
+        Authorization: "Bearer test-key",
+      });
+      const payload = JSON.parse(request!.body);
+      expect(payload).toEqual({
+        model,
+        messages: [...history, { role: "user", content: "next turn" }],
+        stream: true,
+        session_id: "saved-session",
+      });
+      expect(payload).not.toHaveProperty("thinking");
+      expect(payload).not.toHaveProperty("reasoning_effort");
+      expect(payload).not.toHaveProperty("max_tokens");
+    },
+  );
+
+  it.each(["MiniMax-M3.1-Flash", "MiniMax-M3", "MiniMax-M2.7"])(
+    "keeps configured default %s and image contents in the outgoing request",
+    async (model) => {
+      configuredModel.model = model;
+      configuredModel.provider = "minimax";
+      const dataUrl = "data:image/png;base64,aW1hZ2U=";
+      await sendMessage(
+        "describe",
+        { onChunk: vi.fn(), onDone: vi.fn(), onError: vi.fn() },
+        "default",
+        undefined,
+        undefined,
+        [
+          {
+            id: "image",
+            kind: "image",
+            name: "sample.png",
+            mime: "image/png",
+            size: 5,
+            dataUrl,
+          },
+        ],
+      );
+      const request = capturedRequests.find((r) =>
+        r.url.endsWith("/v1/chat/completions"),
+      );
+      expect(JSON.parse(request!.body)).toEqual({
+        model,
+        stream: true,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "describe" },
+              { type: "image_url", image_url: { url: dataUrl } },
+            ],
+          },
+        ],
+      });
+      expect(configuredModel.model).toBe(model);
+    },
+  );
+
+  it.each(["low", "medium", "high", "xhigh"])(
+    "preserves configured reasoning effort %s in the Hermes HTTP payload",
+    async (effort) => {
+      configuredModel.model = "MiniMax-M3.1-Flash";
+      configuredModel.provider = "minimax";
+      reasoning.effort = effort;
+      await sendMessage(
+        "hello",
+        { onChunk: vi.fn(), onDone: vi.fn(), onError: vi.fn() },
+        "default",
+      );
+      const request = capturedRequests.find((r) =>
+        r.url.endsWith("/v1/chat/completions"),
+      );
+      const payload = JSON.parse(request!.body);
+      expect(payload.model).toBe("MiniMax-M3.1-Flash");
+      expect(payload.reasoning_effort).toBe(effort);
+      expect(payload).not.toHaveProperty("thinking");
+      expect(payload).not.toHaveProperty("service_tier");
+    },
+  );
 
   it("includes session_id in request body when resumeSessionId is provided", async () => {
     const testSessionId = "session-abc-123";

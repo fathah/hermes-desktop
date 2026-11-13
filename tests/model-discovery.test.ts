@@ -174,6 +174,77 @@ describe("model-discovery", () => {
     expect(result.models).toEqual(["mimo-v2.5-pro"]);
   });
 
+  // @lat: [[provider-setup#Provider setup#MiniMax text model choices]]
+  it.each(["minimax", "minimax-cn"])(
+    "offers current %s models without claiming key verification",
+    async (provider) => {
+      const { discoverProviderModels } = await loadDiscovery();
+      expect(
+        await discoverProviderModels(
+          provider,
+          undefined,
+          "dummy-key",
+          undefined,
+        ),
+      ).toEqual({
+        models: ["MiniMax-M3.1-Flash", "MiniMax-M3"],
+        status: "unsupported",
+        cached: false,
+      });
+    },
+  );
+
+  it.each(["openrouter", "custom"])(
+    "preserves %s route identities at the HTTP discovery boundary",
+    async (provider) => {
+      const ids = [
+        "minimax/minimax-m3",
+        "minimax/minimax-01",
+        "minimax/minimax-m2.7",
+        "minimax/minimax-m3.1-flash:free",
+        "minimax/minimax-m3.1-flash-preview",
+        "speech-2.6-hd",
+        "other/model",
+      ];
+      let receivedAuth = "";
+      server = http.createServer((req, res) => {
+        receivedAuth = String(req.headers.authorization);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ data: ids.map((id) => ({ id })) }));
+      });
+      await listen();
+      const { discoverProviderModels } = await loadDiscovery();
+      const result = await discoverProviderModels(
+        provider,
+        baseUrl,
+        "dummy-key",
+        undefined,
+      );
+      expect(receivedAuth).toBe("Bearer dummy-key");
+      expect(result.status).toBe("ok");
+      expect(result.models).toEqual(
+        provider === "custom"
+          ? [...ids].sort()
+          : [
+              "minimax/minimax-m3.1-flash:free",
+              "minimax/minimax-m3",
+              "other/model",
+              "speech-2.6-hd",
+            ],
+      );
+      expect(
+        (
+          await discoverProviderModels(
+            provider,
+            baseUrl,
+            "dummy-key",
+            undefined,
+          )
+        ).models,
+      ).toEqual(result.models);
+    },
+  );
+
   it("returns status=unsupported for known no-discovery providers", async () => {
     const { discoverProviderModels } = await loadDiscovery();
     // openai-codex / qwen-oauth / nous are no longer here — OAuth

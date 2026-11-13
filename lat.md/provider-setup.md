@@ -245,11 +245,17 @@ Each card's logo is resolved by [[src/renderer/src/components/common/BrandLogo.t
 
 The Local/Remote preset chips are also branded: each renders the same `BrandLogo` (by preset id) to the left of its name in a row. `llama.cpp` is mapped off the Meta logo to the generic API mark (the `/llama/` substring would otherwise tag it, and Ollama, as Meta); any preset without a bundled logo falls back to the generic mark.
 
-## MiniMax OAuth discovery fallback
+## MiniMax text model choices
 
-When live OAuth discovery is unavailable, MiniMax keeps a usable model list aligned with Hermes Agent’s curated OAuth choices.
+New MiniMax text choices prefer Flash on direct APIs, retain runtime-supported OAuth models, and preserve saved selections and media models.
 
-[[src/main/model-discovery.ts#discoverProviderModels]] falls back to `MiniMax-M3`, `MiniMax-M2.7`, and `MiniMax-M2.7-highspeed` if the Python query fails. Regression coverage preserves all three entries; successful live discovery still takes precedence.
+[[src/main/minimax-models.ts]] supplies `MiniMax-M3.1-Flash` first and `MiniMax-M3` second for direct global and China API suggestions. [[src/main/model-discovery.ts#discoverProviderModels]] returns these with `unsupported` status because a curated list does not verify credentials. [[src/main/registry.ts#fetchModelRegistry]] refreshes the same choices after the pinned registry snapshot passes integrity verification. Both models have a 1,000,000-token context window; these catalog values are not per-request generation budgets.
+
+OAuth remains constrained by Hermes Agent's provider metadata. Its current catalog explicitly lists M3; the fallback therefore offers only `MiniMax-M3`. A successful runtime list containing Flash offers it before M3, without inventing Flash entitlement for global or China OAuth accounts. Older MiniMax text models and preview aliases are omitted from new catalog choices. Third-party IDs are filtered and ordered as received, never renamed or synthesized; custom endpoint discovery is unchanged.
+
+Saved model-library entries, manually entered IDs, profile selections, session overrides, and conversation history are never migrated or filtered. Speech, image, video, and music model choices are unaffected. HTTP transport tests capture the actual Hermes Agent request with dummy credentials and verify selected current, legacy, and custom IDs survive serialization; they do not claim to validate the separately installed Agent's provider SDK or account entitlement.
+
+Sources checked for this refresh: [MiniMax model overview](https://platform.minimax.io/docs/guides/models-intro.md), [Anthropic-compatible API](https://platform.minimax.io/docs/api-reference/text-anthropic-api.md), and [Hermes Agent's OAuth catalog at dfe7874](https://github.com/NousResearch/hermes-agent/blob/dfe787496a0ace8f3163c3bf86261c5bdf432253/hermes_cli/models_catalog_static.py).
 
 ## Novita provider preset
 
