@@ -1,9 +1,10 @@
+import { load } from "js-yaml";
+
 // Tiny indentation-aware YAML reader that resolves a dotted key path against
 // a YAML document and returns the leaf scalar as a string, or null if the
 // path is missing.
 //
-// Built deliberately small to avoid pulling js-yaml into the main bundle for
-// a one-line lookup. Hermes config.yaml is plain key: value pairs nested by
+// Keep path traversal small; quoted scalars use the existing js-yaml dependency. Hermes config.yaml is plain key: value pairs nested by
 // indentation — no anchors, no merge keys, no multi-line scalars in the
 // fields we read. Edge cases we DO handle:
 //
@@ -105,10 +106,12 @@ function parseScalar(remainderAfterColon: string): string | null {
     return null;
   }
   if (value.startsWith('"') || value.startsWith("'")) {
-    const quote = value[0];
-    const end = value.indexOf(quote, 1);
-    if (end > 0) value = value.slice(1, end);
-    else value = value.slice(1); // unterminated — best effort
+    try {
+      const decoded: unknown = load(value);
+      return typeof decoded === "string" ? decoded : null;
+    } catch {
+      return null;
+    }
   } else {
     const commentIdx = value.search(/\s+#/);
     if (commentIdx >= 0) value = value.slice(0, commentIdx);
