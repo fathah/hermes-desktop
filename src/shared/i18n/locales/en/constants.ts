@@ -44,6 +44,7 @@ export default {
   novita: "NovitaAI",
   requesty: "Requesty",
   api_route: "API Route",
+  standardcompute: "Standard Compute",
   cheaperinference: "Cheaper Inference",
   mistral: "Mistral",
   // Theme
@@ -109,6 +110,8 @@ export default {
   requestyApiKey: "Requesty API Key",
   apiRouteApiKey: "API Route API Key",
   apiRouteHint: "OpenAI-compatible multi-model gateway",
+  standardcomputeApiKey: "Standard Compute API Key",
+  standardcomputeHint: "OpenAI-compatible multi-model gateway",
   requestyHint: "OpenAI-compatible multi-model gateway",
   cheaperinferenceApiKey: "Cheaper Inference API Key",
   cheaperinferenceHint:
