@@ -302,3 +302,63 @@ describe("cron run history boundaries", () => {
     ).toEqual(["file:new.md", "file:old.md"]);
   });
 });
+
+it("keeps a Unicode character intact at the local output limit", async () => {
+  state.conn = { ...state.conn, mode: "local" };
+  const dir = join(state.home, "cron", "output", "job1");
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, "unicode.md"), "x".repeat(199_999) + "😀tail");
+  const result = await getCronRunOutput("job1", "file:unicode.md");
+  expect(result).toMatchObject({ success: true, truncated: true });
+  expect(result.output).toHaveLength(199_999);
+  expect(result.output).toBe("x".repeat(199_999));
+});
+
+it("keeps Unicode intact at the remote output limit", async () => {
+  const prefix = "[assistant]\n";
+  state.request.mockImplementation(async (_conn, path: string) =>
+    path.startsWith("/api/sessions/")
+      ? {
+          messages: [
+            {
+              role: "assistant",
+              content: "x".repeat(199_999 - prefix.length) + "😀tail",
+            },
+          ],
+        }
+      : { runs: [run] },
+  );
+  const result = await getCronRunOutput("job1", run.id);
+  expect(result).toMatchObject({ success: true, truncated: true });
+  expect(result.output).toHaveLength(199_999);
+  expect(result.output).toBe(prefix + "x".repeat(199_999 - prefix.length));
+});
+
+it("keeps a Unicode character intact in a local run preview", async () => {
+  state.conn = { ...state.conn, mode: "local" };
+  const dir = join(state.home, "cron", "output", "job1");
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, "unicode.md"), "x".repeat(299) + "😀tail");
+  const result = await listCronRuns("job1");
+  expect(result.success).toBe(true);
+  expect(result.runs[0].preview).toHaveLength(299);
+  expect(result.runs[0].preview).toBe("x".repeat(299));
+});
+
+it.each([199_998, 200_000])(
+  "reports truncation accurately when a Unicode pair starts at %s",
+  async (prefixLength) => {
+    state.conn = { ...state.conn, mode: "local" };
+    const dir = join(state.home, "cron", "output", "job1");
+    await mkdir(dir, { recursive: true });
+    const text = "x".repeat(prefixLength) + "😀";
+    await writeFile(join(dir, "unicode.md"), text);
+    const result = await getCronRunOutput("job1", "file:unicode.md");
+    expect(result).toMatchObject({
+      success: true,
+      truncated: prefixLength === 200_000,
+    });
+    expect(result.output.length).toBe(200_000);
+    expect(result.output.endsWith("😀")).toBe(prefixLength === 199_998);
+  },
+);
