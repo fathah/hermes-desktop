@@ -412,7 +412,7 @@ function buildUrl(base: string): string {
 
 interface FetchModelsResult {
   models: string[];
-  reachable: boolean;
+  ok: boolean;
   /** Per-model context-window sizes parsed from the response, when present. */
   contextLengths?: Record<string, number>;
 }
@@ -449,7 +449,7 @@ function fetchModelsHttp(
     try {
       u = new URL(url);
     } catch {
-      resolve({ models: [], reachable: false });
+      resolve({ models: [], ok: false });
       return;
     }
     const mod = u.protocol === "https:" ? https : http;
@@ -464,9 +464,9 @@ function fetchModelsHttp(
         timeout: timeoutMs,
       },
       (res) => {
-        if (!res.statusCode || res.statusCode >= 400) {
+        if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
           res.resume();
-          resolve({ models: [], reachable: true });
+          resolve({ models: [], ok: false });
           return;
         }
         let body = "";
@@ -477,17 +477,17 @@ function fetchModelsHttp(
         res.on("end", () =>
           resolve({
             models: parseModelIds(body),
-            reachable: true,
+            ok: true,
             contextLengths: parseModelContextLengths(body),
           }),
         );
-        res.on("error", () => resolve({ models: [], reachable: false }));
+        res.on("error", () => resolve({ models: [], ok: false }));
       },
     );
-    req.on("error", () => resolve({ models: [], reachable: false }));
+    req.on("error", () => resolve({ models: [], ok: false }));
     req.on("timeout", () => {
       req.destroy();
-      resolve({ models: [], reachable: false });
+      resolve({ models: [], ok: false });
     });
     req.end();
   });
@@ -497,8 +497,8 @@ export interface DiscoverModelsResult {
   models: string[];
   /** ``"ok"`` when the call succeeded (even if zero models came back).
    *  ``"no-key"`` when the caller didn't pass one and we couldn't find a
-   *  matching ``<NAME>_API_KEY``.  ``"error"`` when the provider could not
-   *  be reached.  ``"unsupported"`` for providers we know don't expose this
+   *  matching ``<NAME>_API_KEY``.  ``"error"`` when the provider request failed.
+   *  ``"unsupported"`` for providers we know don't expose this
    *  endpoint.  ``"unknown-host"`` when neither caller nor mapping table can
    *  resolve a base URL. */
   status: "ok" | "no-key" | "error" | "unsupported" | "unknown-host";
@@ -581,7 +581,7 @@ export async function discoverProviderModels(
   }
 
   const result = await fetchAndCacheModels(lowerProvider, baseUrl, apiKey);
-  if (!result.reachable) {
+  if (!result.ok) {
     return { models: [], status: "error", cached: false };
   }
   return { models: result.models, status: "ok", cached: false };
@@ -590,7 +590,7 @@ export async function discoverProviderModels(
 /**
  * Fetch a provider's `/models` over HTTP and populate BOTH caches together.
  *
- * `_ctxCache` is always written when the endpoint is reachable — even when no
+ * `_ctxCache` is always written when the request succeeds — even when no
  * model advertises a `context_length` (OpenAI, DeepSeek) — so an empty map
  * doubles as a "already fetched, none advertised" marker. That lets
  * `getModelContextWindow` tell a genuine miss (don't re-fetch) from a
@@ -605,7 +605,7 @@ async function fetchAndCacheModels(
   const url = buildUrl(baseUrl);
   const headers = authHeaders(lowerProvider, apiKey);
   const result = await fetchModelsHttp(url, headers, 10_000);
-  if (result.reachable) {
+  if (result.ok) {
     setCache(lowerProvider, baseUrl, result.models);
     _ctxCache.set(
       cacheKey(lowerProvider, baseUrl),

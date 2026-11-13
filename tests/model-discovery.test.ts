@@ -247,22 +247,32 @@ describe("model-discovery", () => {
     expect(result.models).toEqual([]);
   });
 
-  it("returns status=ok with empty list when upstream returns 4xx/5xx", async () => {
-    server = http.createServer((_req, res) => {
-      res.writeHead(401);
-      res.end(JSON.stringify({ error: "unauthorized" }));
-    });
-    await listen();
-    const { discoverProviderModels } = await loadDiscovery();
-    const result = await discoverProviderModels(
-      "custom",
-      baseUrl,
-      "sk-bad",
-      undefined,
-    );
-    expect(result.status).toBe("ok");
-    expect(result.models).toEqual([]);
-  });
+  it.each([401, 403, 429, 500, 503])(
+    "reports HTTP %s as an error and allows recovery",
+    async (status) => {
+      let requests = 0;
+      server = http.createServer((_req, res) => {
+        requests++;
+        res.writeHead(requests === 1 ? status : 200);
+        res.end(
+          JSON.stringify(
+            requests === 1
+              ? { error: "failed" }
+              : { data: [{ id: "recovered" }] },
+          ),
+        );
+      });
+      await listen();
+      const { discoverProviderModels } = await loadDiscovery();
+      expect(
+        await discoverProviderModels("custom", baseUrl, "sk-test", undefined),
+      ).toMatchObject({ status: "error", cached: false, models: [] });
+      expect(
+        await discoverProviderModels("custom", baseUrl, "sk-test", undefined),
+      ).toMatchObject({ status: "ok", cached: false, models: ["recovered"] });
+      expect(requests).toBe(2);
+    },
+  );
 
   it("returns status=error when the local provider cannot be reached", async () => {
     server = http.createServer((_req, res) => {
@@ -361,22 +371,14 @@ describe("model-discovery", () => {
 
     const { discoverProviderModels } = await loadDiscovery();
     const result = await discoverProviderModels(
-      "custom",
-      "https://api.deepseek.com/v1",
+      "deepseek",
+      baseUrl,
       undefined,
       undefined,
     );
-    // The fetch shouldn't reach our server because the canonical URL
-    // isn't loopback — but the resolver should still produce the right
-    // shape.  Since the canonical URL is unreachable in tests, status
-    // ends up "ok" with an empty list (network failure → empty).
-    // What we *do* care about is that the resolver picked up the .env
-    // key (not that the request succeeded against the real DeepSeek).
-    expect(["ok"]).toContain(result.status);
-    // No assertion on receivedAuth — the real call goes to the canonical
-    // URL which isn't our loopback server.  Sanity check the .env load
-    // path separately:
-    expect(receivedAuth).toBe(""); // confirms the canonical URL was used, not our test server
+    expect(result.status).toBe("ok");
+    expect(result.models).toEqual(["m"]);
+    expect(receivedAuth).toBe("Bearer sk-from-dotenv");
   });
 
   // Issue #367 — Nous Portal model discovery routes through the
