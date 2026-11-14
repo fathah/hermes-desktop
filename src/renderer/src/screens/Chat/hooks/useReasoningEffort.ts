@@ -32,36 +32,40 @@ export function useReasoningEffort(profile?: string): UseReasoningEffortResult {
   );
   const reasoningEffortRef = useRef<ReasoningEffort>(DEFAULT_REASONING_EFFORT);
 
+  const revisionRef = useRef(0);
+  const lifetimeRef = useRef({ active: false });
   useEffect(() => {
-    reasoningEffortRef.current = reasoningEffort;
-  }, [reasoningEffort]);
-
-  useEffect(() => {
-    let cancelled = false;
+    const lifetime = { active: true };
+    lifetimeRef.current = lifetime;
+    const revision = ++revisionRef.current;
+    reasoningEffortRef.current = DEFAULT_REASONING_EFFORT;
+    setReasoningEffortState(DEFAULT_REASONING_EFFORT);
     window.hermesAPI
       .getConfig("agent.reasoning_effort", profile)
       .then((value) => {
-        if (!cancelled) {
+        if (lifetime.active && revision === revisionRef.current) {
           const next = normalizeReasoningEffort(value);
           reasoningEffortRef.current = next;
           setReasoningEffortState(next);
         }
       })
       .catch(() => {
-        if (!cancelled) {
+        if (lifetime.active && revision === revisionRef.current) {
           reasoningEffortRef.current = DEFAULT_REASONING_EFFORT;
           setReasoningEffortState(DEFAULT_REASONING_EFFORT);
         }
       });
 
     return (): void => {
-      cancelled = true;
+      lifetime.active = false;
     };
   }, [profile]);
 
   const setReasoningEffort = useCallback(
     async (next: ReasoningEffort): Promise<void> => {
       const previous = reasoningEffortRef.current;
+      const lifetime = lifetimeRef.current;
+      const revision = ++revisionRef.current;
       reasoningEffortRef.current = next;
       setReasoningEffortState(next);
 
@@ -72,8 +76,10 @@ export function useReasoningEffort(profile?: string): UseReasoningEffortResult {
           profile,
         );
       } catch (error) {
-        reasoningEffortRef.current = previous;
-        setReasoningEffortState(previous);
+        if (lifetime.active && revision === revisionRef.current) {
+          reasoningEffortRef.current = previous;
+          setReasoningEffortState(previous);
+        }
         throw error;
       }
     },

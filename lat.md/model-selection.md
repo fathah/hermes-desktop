@@ -91,3 +91,9 @@ A selected model replaces the local default without inheriting another providerâ
 ### Remote credential boundary
 
 Remote and SSH selections remain usable without local provider secrets. Missing remote model selections cannot be filled from an unrelated local default.
+
+## Reasoning selection rollback ownership
+
+A failed reasoning-effort save rolls back only its own current choice. Superseded saves and requests from a previous profile or an unmounted picker cannot alter the visible selection.
+
+[[src/renderer/src/screens/Chat/hooks/useReasoningEffort.ts#useReasoningEffort]] fences reads and rollbacks by request revision and profile lifetime. [[src/renderer/src/screens/Chat/hooks/useReasoningEffort.test.ts]] controls delayed failures across newer choices and profile switches.
