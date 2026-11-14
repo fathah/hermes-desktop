@@ -1,11 +1,10 @@
-<img width="100%" alt="HERMES DESKTOP" src="previews/header.webp" />
+<img width="100%" alt="HERMES DESKTOP" src="assets/header.webp" />
 
 <br/>
 <p align="center">
-  <a href="https://hermes-agent.nousresearch.com/docs/"><img src="https://img.shields.io/badge/Docs-hermes--agent.nousresearch.com-FFD700?style=for-the-badge" alt="Documentation"></a>
-  <a href="https://t.me/hermes_agent_desktop"><img src="https://img.shields.io/badge/Telegram-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram"></a>
+  <a href="https://discord.gg/HtZNeyJjJ"><img src="https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
   <a href="https://github.com/fathah/hermes-desktop/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License: MIT"></a>
-  <a href="https://hermesone.org/"><img src="https://img.shields.io/badge/Download-Releases-FF6600?style=for-the-badge" alt="Releases"></a>
+  <a href="https://hermesone.org"><img src="https://img.shields.io/badge/Download-Releases-FF6600?style=for-the-badge" alt="Releases"></a>
 <a href="https://github.com/fathah/hermes-desktop/stargazers">
   <img src="https://img.shields.io/github/stars/fathah/hermes-desktop?style=for-the-badge&color=FFD700&label=Stars" alt="Stars">
 </a>
@@ -14,23 +13,60 @@
 </a>
 </p>
 
+<p align="center">
+  <a href="README.md">English</a> ·
+  <a href="README.zh-CN.md">简体中文</a> ·
+  <a href="README.ja-JP.md">日本語</a> ·
+  <a href="README.es-LATAM.md">Español (LATAM)</a>
+</p>
+
+<p align="center">
+ <a href="https://www.star-history.com/fathah/hermes-desktop">
+  <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/badge?repo=fathah/hermes-desktop&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/badge?repo=fathah/hermes-desktop" />
+   <img alt="Star History Rank" src="https://api.star-history.com/badge?repo=fathah/hermes-desktop" />
+  </picture>
+ </a>
+</p>
+
 > **本プロジェクトは現在も活発に開発中です。** 機能は変更される可能性があり、一部が動作しなくなることもあります。問題に遭遇した場合や、アイデアがある場合は[Issue を作成してください](https://github.com/fathah/hermes-desktop/issues)。コントリビューションも歓迎しています！
 
-## 言語
-
-- English: `README.md`
-- 简体中文: `README.zh-CN.md`
-- 日本語: `README.ja-JP.md`
-
-Hermes Desktop は、[Hermes Agent](https://github.com/NousResearch/hermes-agent)（ツール使用、マルチプラットフォームメッセージング、クローズドな学習ループを備えた、自己改善型 AI アシスタント）のインストール・設定・チャットを行うためのネイティブデスクトップアプリです。
+Hermes One は、[Hermes Agent](https://github.com/NousResearch/hermes-agent)（ツール使用、マルチプラットフォームメッセージング、クローズドな学習ループを備えた、自己改善型 AI アシスタント）のインストール・設定・チャットを行うための、コミュニティがメンテナンスするネイティブデスクトップアプリです。
 
 CLI を手作業で管理する代わりに、本アプリではインストール、プロバイダのセットアップ、日常的な利用までを一箇所でガイドします。公式の Hermes インストールスクリプトを使用し、Hermes を `~/.hermes` に保存し、チャット、セッション、プロファイル、メモリ、スキル、ツール、スケジューリング、メッセージングゲートウェイなどを GUI で操作できます。
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/D1D41ZEKFO)
+
+## スポンサー
+
+> [ここに掲載をご希望の方はこちら](mailto:fathah@hermesone.org)
+
+<details open>
+<summary>クリックで折りたたむ</summary>
+<br/>
+<table>
+
+<tr>
+<td width="180"><a href="https://www.greptile.com/?utm_source=hermes-desktop"><img src="assets/partners/greptile.webp" alt="Greptile" width=""></a></td>
+<td> <a href="https://www.greptile.com/?utm_source=hermes-desktop">Greptile</a> は AI コードレビューツールです。コードベース全体のコンテキストを踏まえてプルリクエストをレビュー・テストし、バグの検出やリグレッションの指摘を行い、すべての PR に自動でインラインレビューコメントを残します。 </td>
+</tr>
+
+</table>
+
+</details>
+
 ## インストール
 
-<a href="https://hermesone.org/"><img width="380" alt="Download Now" src="previews/download.webp" /></a>
+<a href="https://hermesone.org"><img width="380" alt="Download Now" src="previews/download.webp" /></a>
 
-### Windows
+お使いの OS 向けのデスクトップアプリを [hermesone.org](https://hermesone.org) または [GitHub Releases](https://github.com/fathah/hermes-desktop/releases) からダウンロードしてください。`npm install hermes-desktop` はデスクトップアプリのインストール方法としてサポートされていません。
+
+開発モードでアプリを実行するには、このリポジトリをクローンし、[コントリビューションガイド](CONTRIBUTING.md#getting-started)に従ってください。そこに記載されている `npm install` の手順は、ソースのチェックアウト内に依存関係をインストールするためのものです。
+
+<details>
+<summary>Windows</summary>
+<br/>
 
 > **Windows ユーザーへ:** インストーラはコード署名されていません。初回起動時に Windows SmartScreen の警告が表示されます。「詳細情報」→「実行」をクリックしてください。
 
@@ -44,13 +80,19 @@ CLI を手作業で管理する代わりに、本アプリではインストー�
 >
 > [#109](https://github.com/fathah/hermes-desktop/issues/109) で追跡しています。
 
-### Fedora (RPM)
+</details>
+
+<details>
+<summary>Fedora (RPM)</summary>
+<br/>
 
 ```bash
 sudo dnf install ./hermes-desktop-<version>.rpm
 ```
 
 > **Fedora ユーザーへ:** `.rpm` は GPG 署名されていません。署名検証を強制する設定の場合は、インストールコマンドに `--nogpgcheck` を追加してください。`.rpm` ビルドは自動アップデートに対応していません（`electron-updater` の制約）。アップデートする場合は新しい `.rpm` を再インストールしてください。
+
+</details>
 
 ## プレビュー
 
@@ -65,7 +107,7 @@ sudo dnf install ./hermes-desktop-<version>.rpm
 </tr>
 <tr>
 <td width="50%" align="center"><b>Tools</b><br/><img width="100%" alt="Tools" src="previews/tools.png" /></td>
-<td width="50%" align="center"><b>Skills</b><br/><img width="100%" alt="Skills" src="previews/skills.png" /></td>
+<td width="50%" align="center"><b>Discover</b><br/><img width="100%" alt="Skills" src="previews/discover.png" /></td>
 </tr>
 <tr>
 <td width="50%" align="center"><b>Schedules</b><br/><img width="100%" alt="Schedules" src="previews/schedules.png" /></td>
@@ -85,7 +127,7 @@ sudo dnf install ./hermes-desktop-<version>.rpm
 
 - **初回起動時のガイド付きインストール** — Hermes Agent のインストールを進捗表示と依存関係解決付きで案内します
 - **ローカル / リモートバックエンド** — Hermes をローカル (`127.0.0.1:8642`) で実行するか、URL + API キーを使ってリモートの Hermes API サーバーに接続できます
-- **マルチプロバイダ対応** — OpenRouter, Anthropic, OpenAI, Google (Gemini), xAI (Grok), Nous Portal, Qwen, MiniMax, Hugging Face, Groq、そしてローカルの OpenAI 互換エンドポイント (LM Studio, Ollama, vLLM, llama.cpp)
+- **マルチプロバイダ対応** — OpenRouter, Anthropic, OpenAI, Google (Gemini), xAI (Grok), Nous Portal, Qwen, MiniMax, Hugging Face, Groq、そしてローカルの OpenAI 互換エンドポイント (LM Studio, Atomic Chat, Ollama, vLLM, llama.cpp)
 - **ストリーミングチャット UI** — SSE ストリーミング、ツール進捗インジケータ、Markdown レンダリング、シンタックスハイライト対応
 - **トークン使用量のトラッキング** — プロンプト / 出力トークン数とコストをチャットフッターにリアルタイム表示。`/usage` スラッシュコマンドも利用可能
 - **22 種類のスラッシュコマンド** — `/new`, `/clear`, `/fast`, `/web`, `/image`, `/browse`, `/code`, `/shell`, `/usage`, `/help`, `/tools`, `/skills`, `/model`, `/memory`, `/persona`, `/version`, `/compact`, `/compress`, `/undo`, `/retry`, `/debug`, `/status` など
@@ -136,6 +178,12 @@ sudo dnf install ./hermes-desktop-<version>.rpm
 
 ## 対応プロバイダ
 
+### スポンサー
+
+| プロバイダ      | 備考                                                                                                                                                                                       |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Atlas Cloud** | OpenAI 互換ゲートウェイ — DeepSeek、Qwen、GLM、Kimi、MiniMax など ([atlascloud.ai](https://www.atlascloud.ai/?utm_source=github&utm_medium=link&utm_campaign=hermes-desktop)) |
+
 ### LLM プロバイダ
 
 | プロバイダ          | 備考                                           |
@@ -152,7 +200,7 @@ sudo dnf install ./hermes-desktop-<version>.rpm
 | **Groq**            | 高速推論 (Voice/STT)                           |
 | **Local/Custom**    | 任意の OpenAI 互換エンドポイント               |
 
-LM Studio、Ollama、vLLM、llama.cpp 用のローカルプリセットが付属しています。
+LM Studio、Atomic Chat、Ollama、vLLM、llama.cpp 用のローカルプリセットが付属しています。
 
 ### メッセージングプラットフォーム
 
@@ -161,55 +209,6 @@ Telegram、Discord、Slack、WhatsApp、Signal、Matrix/Element、Mattermost、E
 ### ツール統合
 
 Exa Search、Parallel API、Tavily、Firecrawl、FAL.ai (画像生成)、Honcho、Browserbase、Weights & Biases、Tinker。
-
-## 開発
-
-### 前提条件
-
-- Node.js と npm
-- Hermes インストーラ用の Unix 系シェル環境
-- 初回起動時に Hermes をダウンロードするためのネットワークアクセス
-
-### 依存関係のインストール
-
-```bash
-npm install
-```
-
-### 開発モードでアプリを起動
-
-```bash
-npm run dev
-```
-
-### チェック実行
-
-```bash
-npm run lint
-npm run typecheck
-```
-
-### テスト実行
-
-```bash
-npm run test
-npm run test:watch
-```
-
-### デスクトップアプリのビルド
-
-```bash
-npm run build
-```
-
-プラットフォーム別パッケージング:
-
-```bash
-npm run build:mac
-npm run build:win
-npm run build:linux
-npm run build:rpm    # Fedora/RHEL .rpm のみ
-```
 
 ## 初回セットアップ
 
@@ -225,6 +224,7 @@ UI でサポートされているセットアップパス:
 以下のローカルプリセットが付属しています。
 
 - LM Studio
+- Atomic Chat
 - Ollama
 - vLLM
 - llama.cpp
@@ -239,29 +239,69 @@ Hermes のファイルは以下の場所で管理されます。
 - `~/.hermes/state.db` — セッション履歴データベース
 - `~/.hermes/cron/jobs.json` — スケジュールタスク
 
-## 技術スタック
+## シークレットプロバイダ
 
-- **Electron** 39 — クロスプラットフォームのデスクトップシェル
-- **React** 19 — UI フレームワーク
-- **TypeScript** 5.9 — main / renderer プロセス間で型安全性を確保
-- **Tailwind CSS** 4 — ユーティリティファーストのスタイリング
-- **Vite** 7 + electron-vite — 高速な開発サーバーとビルドツール
-- **better-sqlite3** — FTS5 全文検索付きのローカルセッションストレージ
-- **i18next** — 国際化フレームワーク
-- **Vitest** — テストランナー
+デフォルトでは、API キーは `~/.hermes/.env` に保存されます（**env** プロバイダ）。設定は不要です。これは従来の動作とバイト単位で同一であり、何も変わりません。
+
+キーを平文の `.env` に置きたくない場合は、オプトインの **command** プロバイダを使うと、設定したヘルパーコマンドを実行してキーを解決できます。解決順序はどこでも `process.env` → `.env` → プロバイダ → 未設定 です。
+
+キーごとのヘルパー（要求されたキー名は `$HERMES_SECRET_KEY` として渡されます）:
+
+```yaml
+# ~/.hermes/config.yaml
+secrets:
+  provider: command
+  command: secret-tool lookup hermes "$HERMES_SECRET_KEY"
+```
+
+または、dotenv 形式の内容をまとめて出力するヘルパー（例: tmpfs に展開される vault）:
+
+```yaml
+secrets:
+  provider: command
+  command: "cat /run/user/1000/hermes-secrets.env"
+```
+
+ヘルパーの標準出力は、単一の値（キーごとのヘルパー）でも `KEY=VALUE` 形式の行（dotenv ダンプ）でも構いません。どちらの形式も自動判別されます。
+
+### Vault / シークレットマネージャーとの連携（TPM 不要）
+
+`command` プロバイダは **vault に依存しません**。設定されたヘルパーを実行し、その標準出力を読み取るだけです。シークレットストアとやり取りする必要があるのはヘルパーだけです。TPM で保護されたキーファイルがなくても、以下のいずれも Hermes のコードを変更せずに利用できます。
+
+- **KeePassXC（パスワードのみの DB、キーファイルなし）:** `secrets.command` に小さな `kpxc-export.sh` スクリプトを指定します。このスクリプトで `keepassxc-cli ls ~/secrets/hermes.kdbx <<<"$KPXC_PASSWORD"` を実行し、該当グループを dotenv 形式で出力します。マスターパスワードはセッションごとに一度ユーザーに尋ねます。
+- **パスフレーズのみの鍵を使う GnuPG:** `gpg --batch --passphrase-fd 0 --decrypt ~/.keys/api-keys.gpg` をそのまま `command` の値として使えます。パスフレーズはファイルディスクリプタまたは環境変数で渡し、コマンドライン引数では決して渡さないでください。
+- **`pass`（標準的な Unix パスワードマネージャー）:** キーごとのヘルパーなら `command: "pass show hermes/$HERMES_SECRET_KEY"`、dotenv ダンプなら小さなラッパースクリプトを使います。
+- **`secret-tool`（libsecret / GNOME Keyring）:** `command: "secret-tool lookup hermes $HERMES_SECRET_KEY"`（上記の代表的なキーごとの例と同じです）。
+- **Bitwarden CLI:** `bw get item "$HERMES_SECRET_KEY" | jq -r .notes`（セッション内で `bw unlock` を実行した後）。
+- **1Password CLI:** `op read "op://vault/$HERMES_SECRET_KEY/credential"`。
+- **ユーザーが権限を管理するプレーンな env ファイル:** `command: "cat ~/.config/hermes/secrets.env"`。ファイルは `chmod 600` にし、自分のユーザーが所有するようにします。vault ほど安全ではありませんが、誰でも読める `.env` よりは安全です。
+
+要するに、**標準出力に値（キーごと）または dotenv 形式の内容（リストモード）を出力するヘルパーであれば何でも動作します**。Hermes はヘルパーに 3 秒のタイムアウトと 1 MiB の出力上限を課しているため、異常なヘルパーがアプリを固まらせることはありません。プロバイダは TPM、FIDO2、スマートカード、プラットフォームのキーチェーンについて一切の前提を置きません。
+
+セキュリティモデル:
+
+- コマンド文字列はユーザー自身の設定であり、`.env` と同じ信頼レベルです。`/bin/sh -c` 経由で実行されるため、command プロバイダは POSIX 環境（Linux / macOS）専用です。Windows では env プロバイダのままです。
+- ヘルパーはプロセスの環境変数と `HERMES_SECRET_KEY` を継承します。キー名はデータとして渡され、シェル文字列に埋め込まれることはありません。
+- 3 秒の厳格なタイムアウト（解決はメインプロセス上で同期的に行われるため、ヘルパーは高速かつ非対話的にしてください）、1 MiB の出力上限があり、標準エラー出力は破棄されます。
+- 解決された値がログに記録されたりディスクに書き込まれたりすることはありません。失敗した場合は「キー未設定」として扱われ、終了コード / シグナルのみがログに記録されます。
+- ゲートウェイ起動時のブロードキャストでは、キーごとのヘルパーをループで呼び出すのではなく、`list()` を 1 回だけ呼び出します。
+
+実装の正: [`src/main/secrets/`](src/main/secrets/)。
 
 ## 補足
 
 - 本デスクトップアプリはエージェントの動作やツール実行を上流の Hermes Agent プロジェクトに依存しています。
 - 内蔵インストーラは公式の Hermes インストールスクリプトを `--skip-setup` 付きで実行し、その後 GUI でプロバイダ設定を完了します。
 - ローカルモデルプロバイダには API キーは不要ですが、互換サーバーが事前に起動している必要があります。
-- ネットワーク制限のある環境向けに、代替の npm レジストリ経路をサポートしています。
+- コントリビューションガイドに記載されている npm コマンドは、ソースのチェックアウトにおける依存関係と開発ワークフロー向けのものです。
 
 ## コントリビューション
 
 コントリビューションを歓迎します！始め方は[コントリビューションガイド](CONTRIBUTING.md)をご覧ください。どこから手を付ければよいか分からない場合は、[Open Issues](https://github.com/fathah/hermes-desktop/issues) を確認してください。バグを見つけた、または機能要望がある場合は [Issue を作成してください](https://github.com/fathah/hermes-desktop/issues/new)。
 
 ## 関連プロジェクト
+
+このリポジトリは **Nous Research** とは無関係です。コミュニティがメンテナンスするプロジェクトです。
 
 コアエージェント、ドキュメント、CLI ワークフローについては、Hermes Agent 本体のリポジトリを参照してください。
 
