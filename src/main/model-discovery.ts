@@ -23,7 +23,6 @@ import {
   expectedEnvKeyForModel,
   HERMES_PYTHON,
   HERMES_REPO,
-  HERMES_HOME,
   getEnhancedPath,
   hermesPythonArgs,
 } from "./installer";
@@ -102,14 +101,17 @@ const PROVIDER_MODELS_SNIPPET =
 /** Ask hermes-agent's `provider_model_ids` for a provider's models by
  *  running a short Python snippet against the bundled venv. Returns the
  *  parsed list, or null on any failure (so the caller can fall back). */
-function runProviderModelIdsPython(provider: string): Promise<string[] | null> {
+function runProviderModelIdsPython(
+  provider: string,
+  home: string,
+): Promise<string[] | null> {
   return new Promise((resolve) => {
     execFile(
       HERMES_PYTHON,
       hermesPythonArgs(["-c", PROVIDER_MODELS_SNIPPET, provider]),
       {
         cwd: HERMES_REPO,
-        env: { ...process.env, PATH: getEnhancedPath(), HERMES_HOME },
+        env: { ...process.env, PATH: getEnhancedPath(), HERMES_HOME: home },
         timeout: 20_000,
         windowsHide: true,
       },
@@ -135,8 +137,11 @@ function runProviderModelIdsPython(provider: string): Promise<string[] | null> {
 
 /** Resolve an OAuth provider's models: hermes-agent's live list first,
  *  curated fallback when that's unavailable. */
-async function discoverOAuthModels(provider: string): Promise<string[]> {
-  const live = await runProviderModelIdsPython(provider);
+async function discoverOAuthModels(
+  provider: string,
+  home: string,
+): Promise<string[]> {
+  const live = await runProviderModelIdsPython(provider, home);
   if (live && live.length > 0) return uniqueSorted(live);
   return OAUTH_PROVIDER_CURATED[provider] ?? [];
 }
@@ -246,7 +251,7 @@ interface CacheEntry {
 }
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const _cache = new Map<string, CacheEntry>();
-// Parallel cache of free-model ids, keyed by provider. Cleared together
+// Parallel cache of free-model ids, keyed by provider and profile home. Cleared together
 // with the main cache via `_clearCache` for test isolation.
 const _freeCache = new Map<string, string[]>();
 // Parallel cache of per-model context-window sizes (tokens), keyed the same
@@ -264,12 +269,22 @@ const LOCAL_NO_KEY_PROVIDERS = new Set([
   "llamacpp",
 ]);
 
-function cacheKey(provider: string, baseUrl: string): string {
+function cacheKey(provider: string, baseUrl: string, scope = ""): string {
+  if (scope)
+    return JSON.stringify([
+      provider.toLowerCase(),
+      normalizeModelEndpointUrl(baseUrl),
+      scope,
+    ]);
   return `${provider.toLowerCase()}|${normalizeModelEndpointUrl(baseUrl)}`;
 }
 
-function fromCache(provider: string, baseUrl: string): string[] | null {
-  const key = cacheKey(provider, baseUrl);
+function fromCache(
+  provider: string,
+  baseUrl: string,
+  scope = "",
+): string[] | null {
+  const key = cacheKey(provider, baseUrl, scope);
   const entry = _cache.get(key);
   if (!entry) return null;
   if (Date.now() - entry.ts > CACHE_TTL_MS) {
@@ -279,8 +294,13 @@ function fromCache(provider: string, baseUrl: string): string[] | null {
   return entry.models;
 }
 
-function setCache(provider: string, baseUrl: string, models: string[]): void {
-  _cache.set(cacheKey(provider, baseUrl), { models, ts: Date.now() });
+function setCache(
+  provider: string,
+  baseUrl: string,
+  models: string[],
+  scope = "",
+): void {
+  _cache.set(cacheKey(provider, baseUrl, scope), { models, ts: Date.now() });
 }
 
 /** Resolve the canonical base URL for a provider name, or null if we
@@ -524,7 +544,9 @@ export async function discoverProviderModels(
   // OAuth/subscription providers don't have a static-key /v1/models
   // endpoint — route them through hermes-agent's provider_model_ids.
   if (OAUTH_DISCOVERY_PROVIDERS.has(lowerProvider)) {
-    const hit = fromCache(lowerProvider, "");
+    const home = profileHome(profile);
+    const freeKey = cacheKey(lowerProvider, "", home);
+    const hit = fromCache(lowerProvider, "", home);
     if (hit) {
       // Re-attach free flags from cache. Pricing is fetched fresh on
       // the next non-cache hit; meanwhile the renderer keeps the
@@ -533,11 +555,11 @@ export async function discoverProviderModels(
         models: hit,
         status: "ok",
         cached: true,
-        freeModels: _freeCache.get(lowerProvider) || [],
+        freeModels: _freeCache.get(freeKey) || [],
       };
     }
-    const models = await discoverOAuthModels(lowerProvider);
-    setCache(lowerProvider, "", models);
+    const models = await discoverOAuthModels(lowerProvider, home);
+    setCache(lowerProvider, "", models, home);
     // Nous Portal exposes pricing in its catalog — enrich with the
     // subset of models that are free, so the renderer can badge them.
     // Other OAuth providers have no equivalent yet.
@@ -550,7 +572,7 @@ export async function discoverProviderModels(
       // some free ones, fall back to the full live list.
       const inCurated = allFree.filter((id) => models.includes(id));
       freeModels = inCurated.length > 0 ? inCurated : allFree;
-      _freeCache.set(lowerProvider, freeModels);
+      _freeCache.set(freeKey, freeModels);
     }
     return { models, status: "ok", cached: false, freeModels };
   }

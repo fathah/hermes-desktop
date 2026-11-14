@@ -358,3 +358,9 @@ API Route CLI fallback forwards the selected profile's resolved key from its vau
 The real Setup form saves API Route credentials and the chosen custom model to its selected profile, then real config readers reopen the files without changing another profile.
 
 An isolated fixture selects the preset and enters a model ID and fake key. Actual config writers persist `custom`, the unchanged model ID, the endpoint and `API_ROUTE_API_KEY`; fresh readers recover them and reverse branding remains API Route.
+
+## OAuth discovery profile scope
+
+OAuth catalogue subprocesses use the requested profile home. Their model lists and free-model annotations are cached per provider and normalized profile home, so another profile cannot reuse them.
+
+[[src/main/model-discovery.ts#discoverProviderModels]] uses [[src/main/utils.ts#profileHome]] for both subprocess configuration and cache identity. Default and omitted profiles share the root home. [[tests/oauth-model-discovery.test.ts]] verifies the subprocess boundary and switching back to a previously cached profile.

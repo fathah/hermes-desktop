@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import http from "http";
@@ -385,6 +385,51 @@ describe("model-discovery", () => {
   // at `inference_base_url`. The Python call can be unreachable in
   // tests, but the live /v1/models fetch using the auth.json token
   // is testable end-to-end against the loopback server.
+
+  it("keeps Nous free-model annotations scoped to the requested profile", async () => {
+    let requests = 0;
+    server = http.createServer((req, res) => {
+      requests++;
+      const id =
+        req.headers.authorization === "Bearer work-token"
+          ? "work-free"
+          : "personal-free";
+      res.end(
+        JSON.stringify({
+          data: [{ id, pricing: { prompt: "0", completion: "0" } }],
+        }),
+      );
+    });
+    await listen();
+    mkdirSync(join(testHome, "profiles", "work"), { recursive: true });
+    for (const [home, token] of [
+      [testHome, "personal-token"],
+      [join(testHome, "profiles", "work"), "work-token"],
+    ]) {
+      writeFileSync(
+        join(home, "auth.json"),
+        JSON.stringify({
+          providers: {
+            nous: { access_token: token, inference_base_url: baseUrl },
+          },
+        }),
+      );
+    }
+    const { discoverProviderModels } = await loadDiscovery();
+    expect(
+      (await discoverProviderModels("nous", undefined, undefined, undefined))
+        .freeModels,
+    ).toEqual(["personal-free"]);
+    expect(
+      (await discoverProviderModels("nous", undefined, undefined, "work"))
+        .freeModels,
+    ).toEqual(["work-free"]);
+    expect(
+      (await discoverProviderModels("nous", undefined, undefined, "default"))
+        .freeModels,
+    ).toEqual(["personal-free"]);
+    expect(requests).toBe(2);
+  });
 
   it("nous discovery flags free models from the live /v1/models pricing data (#367)", async () => {
     let receivedAuth = "";
