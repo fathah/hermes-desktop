@@ -41,3 +41,9 @@ Actual composer Send and Quick Ask keep the exact draft and prepared attachment 
 ### Accepted snapshots preserve newer drafts
 
 An accepted earlier submission removes only its staged files and leaves a newer draft or file intact. An imperative composer reset also excludes delayed acknowledgements.
+
+## Attachment compression dimensions
+
+Each downsampling step applies its cumulative scale to the original image once. The 64-pixel minimum checks the next actual dimensions, allowing useful smaller attachments instead of rejecting them early.
+
+[[src/renderer/src/screens/Chat/attachmentUtils.ts#compressImageToFit]] preserves the size target and alpha format policy. [[src/renderer/src/screens/Chat/imageCompression.test.ts]] verifies continued reduction to 104 pixels and refusal when a sub-64-pixel image would be required.
