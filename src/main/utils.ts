@@ -227,18 +227,15 @@ export function safeWriteFile(
       .slice(2)}.tmp`,
   );
 
-  let tempWritten = false;
   try {
     writeFileSync(tempPath, content, "utf-8");
-    tempWritten = true;
     renameSync(tempPath, filePath);
   } catch (err) {
-    if (tempWritten) {
-      try {
-        unlinkSync(tempPath);
-      } catch {
-        // Best-effort cleanup. Preserve the original write/rename error.
-      }
+    // writeFileSync can create a partial file before throwing (e.g. ENOSPC).
+    try {
+      unlinkSync(tempPath);
+    } catch {
+      // It may not exist or may be locked. Keep the original write error.
     }
     throw err;
   }
