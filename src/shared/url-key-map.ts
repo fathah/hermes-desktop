@@ -58,6 +58,11 @@ export const URL_KEY_MAP: ReadonlyArray<UrlKeyMapping> = [
     envKey: "CHEAPERINFERENCE_API_KEY",
     matchHostname: true,
   },
+  {
+    pattern: /^api\.opper\.ai$/i,
+    envKey: "OPPER_API_KEY",
+    matchHostname: true,
+  },
   { pattern: /inference\.hermesone\.org/i, envKey: "HERMESONE_API_KEY" },
   { pattern: /openrouter\.ai/i, envKey: "OPENROUTER_API_KEY" },
   { pattern: /anthropic\.com/i, envKey: "ANTHROPIC_API_KEY" },
@@ -169,5 +174,6 @@ export const OPENAI_COMPAT_PROVIDERS: ReadonlySet<string> = new Set([
   "requesty",
   "api_route",
   "cheaperinference",
+  "opper",
   "mistral",
 ]);

@@ -35,6 +35,7 @@ export default {
   fireworks: "Fireworks",
   cerebras: "Cerebras",
   requesty: "Requesty",
+  opper: "Opper",
   api_route: "API Route",
   mistral: "Mistral",
   // Theme
@@ -90,6 +91,8 @@ export default {
   apiRouteApiKey: "API Route API キー",
   apiRouteHint: "OpenAI 互換のマルチモデルゲートウェイ",
   requestyHint: "OpenAI 互換のマルチモデルゲートウェイ",
+  opperApiKey: "Opper API キー",
+  opperHint: "OpenAI 互換のマルチモデルゲートウェイ",
   mistralApiKey: "Mistral API キー",
   mistralHint: "Mistral と Codestral モデル",
   perplexityApiKey: "Perplexity API キー",

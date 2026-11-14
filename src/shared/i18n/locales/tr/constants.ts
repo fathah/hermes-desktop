@@ -38,6 +38,7 @@ export default {
   fireworks: "Fireworks",
   cerebras: "Cerebras",
   requesty: "Requesty",
+  opper: "Opper",
   api_route: "API Route",
   mistral: "Mistral",
   // Theme
@@ -96,6 +97,8 @@ export default {
   apiRouteApiKey: "API Route API Anahtarı",
   apiRouteHint: "OpenAI uyumlu çok modelli ağ geçidi",
   requestyHint: "OpenAI uyumlu çok modelli ağ geçidi",
+  opperApiKey: "Opper API Anahtarı",
+  opperHint: "OpenAI uyumlu çok modelli ağ geçidi",
   mistralApiKey: "Mistral API Anahtarı",
   mistralHint: "Mistral ve Codestral modelleri",
   perplexityApiKey: "Perplexity API Anahtarı",

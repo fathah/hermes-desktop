@@ -277,6 +277,26 @@ Cheaper Inference CLI fallback accepts the selected profile's enumerated vault k
 
 [[src/main/hermes.ts#sendMessageViaCli]] reuses the single secret-provider enumeration for the host-derived key, then supplies both `CHEAPERINFERENCE_API_KEY` and the legacy `OPENAI_API_KEY` to the child. Spawn regressions cover URL credentials, default ports and credential precedence.
 
+## Opper provider preset
+
+Opper is available as a remote OpenAI-compatible preset, with a dedicated API-key field. It is an EU-hosted gateway that serves models from many providers behind one key.
+
+The desktop stores the model as `custom` at `https://api.opper.ai/v3/compat`. Setup, the provider picker, installer readiness and key lookup use `OPPER_API_KEY`, which matches the name Hermes Agent derives from the endpoint host. Model ids are pool names such as `claude-sonnet-4-6`; a `provider/model` id such as `anthropic/claude-sonnet-4-6` pins one route.
+
+### Credential host boundary
+
+Opper key lookup matches the parsed HTTP(S) hostname exactly. Credentials, ports and paths do not identify the provider, so unrelated hosts cannot select its saved key through userinfo or lookalike names.
+
+Strict hostname entries precede legacy URL-substring mappings, so credentials or paths naming another vendor cannot shadow the Opper host.
+
+[[src/shared/url-key-map.ts#matchesProviderUrl]] applies this boundary to shared lookup, runtime environment hydration and installer readiness. Tests cover valid credentials and default ports, DNS trailing dots, lookalikes and userinfo spoofs.
+
+### Vault credentials reach CLI
+
+Opper CLI fallback accepts the selected profile's enumerated vault key without writing it to plaintext. Profile-file and process values retain precedence over the vault.
+
+[[src/main/hermes.ts#sendMessageViaCli]] reuses the single secret-provider enumeration for the host-derived key, then supplies both `OPPER_API_KEY` and the legacy `OPENAI_API_KEY` to the child. Spawn regressions cover URL credentials, default ports and credential precedence.
+
 ## Auxiliary credential ownership
 
 Auxiliary credentials belong to the selected provider and endpoint. Switching either clears stale task-level secrets and pointers; model-only changes preserve them.

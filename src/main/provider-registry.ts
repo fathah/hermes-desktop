@@ -29,6 +29,7 @@ export const PROVIDER_BASE_URLS: Record<string, string> = {
   requesty: "https://router.requesty.ai/v1",
   api_route: "https://global.api-route.com/v1",
   cheaperinference: "https://api.cheaperinference.com/v1",
+  opper: "https://api.opper.ai/v3/compat",
   cerebras: "https://api.cerebras.ai/v1",
   perplexity: "https://api.perplexity.ai",
   huggingface: "https://router.huggingface.co/v1",

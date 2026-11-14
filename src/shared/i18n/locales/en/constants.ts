@@ -43,6 +43,7 @@ export default {
   atlascloud: "AtlasCloud",
   novita: "NovitaAI",
   requesty: "Requesty",
+  opper: "Opper",
   api_route: "API Route",
   cheaperinference: "Cheaper Inference",
   mistral: "Mistral",
@@ -110,6 +111,8 @@ export default {
   apiRouteApiKey: "API Route API Key",
   apiRouteHint: "OpenAI-compatible multi-model gateway",
   requestyHint: "OpenAI-compatible multi-model gateway",
+  opperApiKey: "Opper API Key",
+  opperHint: "OpenAI-compatible multi-model gateway",
   cheaperinferenceApiKey: "Cheaper Inference API Key",
   cheaperinferenceHint:
     "GPT, Claude, Gemini & open models via Cheaper Inference. Each model costs 15–60% less than the list price of its lab.",
