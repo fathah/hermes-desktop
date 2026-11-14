@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { join } from "path";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
+import { load } from "js-yaml";
 
 // Regression tests for issue #247: getConfigValue/setConfigValue used
 // a loose `^\s*<key>:` regex against the whole file, so:
@@ -34,6 +35,69 @@ afterEach(() => {
   delete process.env.HERMES_HOME;
   vi.resetModules();
   rmSync(TEST_DIR, { recursive: true, force: true });
+});
+
+describe("safe nested scalar insertion", () => {
+  it.each([
+    "network: {}\nother: true\n",
+    "network: {} # keep\r\nother: true\r\n",
+    "network:\n  timeout: 20",
+    "network:\n    timeout: 20\nother: true\n",
+  ])("inserts one child into a valid existing document: %j", async (before) => {
+    writeFileSync(join(TEST_DIR, "config.yaml"), before);
+    const { setConfigValue } = await importConfigWithHome(TEST_DIR);
+    setConfigValue("network.proxy", "http://localhost:8080");
+    const after = readFileSync(join(TEST_DIR, "config.yaml"), "utf8");
+    const parsed = load(after) as {
+      network: { proxy: string; timeout?: number };
+      other?: boolean;
+    };
+    expect(parsed.network.proxy).toBe("http://localhost:8080");
+    if (before.includes("timeout")) expect(parsed.network.timeout).toBe(20);
+    if (before.includes("other")) expect(parsed.other).toBe(true);
+    if (before.includes("# keep")) expect(after).toContain("# keep");
+  });
+
+  it.each([
+    "network: {timeout: 20}\n",
+    "network: disabled\n",
+    '"network": {}\n',
+    "network:\n  - one\n",
+    "network:\n- one\n",
+    "network:\r\n# keep comment\r\n- one\r\n",
+    'network:\n  "proxy": old\n',
+  ])(
+    "refuses unsupported parent syntax without replacing it: %j",
+    async (before) => {
+      writeFileSync(join(TEST_DIR, "config.yaml"), before);
+      const { setConfigValue } = await importConfigWithHome(TEST_DIR);
+      expect(() =>
+        setConfigValue("network.proxy", "http://localhost:8080"),
+      ).toThrow();
+      expect(readFileSync(join(TEST_DIR, "config.yaml"), "utf8")).toBe(before);
+    },
+  );
+});
+
+describe("nested insertion respects YAML ownership", () => {
+  it.each([
+    'network:\n  fallback:\n    "proxy": nested\n',
+    'network:\n  note: |\n    "proxy": text\n',
+    `network:\n  note: "first\n  'proxy': text\n  last"\n`,
+  ])(
+    "keeps unrelated nested or multiline text when inserting: %j",
+    async (before) => {
+      const parsedBefore = load(before) as { network: Record<string, unknown> };
+      writeFileSync(join(TEST_DIR, "config.yaml"), before);
+      const { setConfigValue } = await importConfigWithHome(TEST_DIR);
+      setConfigValue("network.proxy", "http://localhost:8080");
+      const after = readFileSync(join(TEST_DIR, "config.yaml"), "utf8");
+      expect(load(after)).toEqual({
+        network: { ...parsedBefore.network, proxy: "http://localhost:8080" },
+      });
+      expect(after).toContain(before.trimEnd());
+    },
+  );
 });
 
 describe("getConfigValue — dotted paths (issue #247)", () => {

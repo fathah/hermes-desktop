@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { randomBytes } from "crypto";
 import { dirname, join } from "path";
+import { load as loadYaml } from "js-yaml";
 import type { SpeechConfigSetting } from "../shared/minimax-speech";
 import { HERMES_HOME, expectedEnvKeyForModel } from "./installer";
 import {
@@ -623,8 +624,43 @@ function appendDirectNestedYamlValue(
   const [parent, child] = segments;
   if (!parent || !child) return null;
 
+  // The source layout decides where to splice, but only YAML semantics can
+  // distinguish direct keys from grandchildren or text in multiline scalars.
+  const document: unknown = loadYaml(content);
+  if (
+    document != null &&
+    (typeof document !== "object" || Array.isArray(document))
+  )
+    throw new Error("Cannot edit config.yaml: use a block mapping.");
+  const parentValue = (document as Record<string, unknown> | null)?.[parent];
+  if (
+    parentValue != null &&
+    (typeof parentValue !== "object" || Array.isArray(parentValue))
+  )
+    throw new Error(
+      `Cannot edit ${parent}: use a block mapping in config.yaml.`,
+    );
+  if (
+    parentValue != null &&
+    Object.prototype.hasOwnProperty.call(parentValue, child)
+  )
+    throw new Error(
+      `Cannot edit quoted ${child}: use a plain key in config.yaml.`,
+    );
+
   const newline = content.includes("\r\n") ? "\r\n" : "\n";
   const quotedValue = quoteYamlScalar(value);
+  // Expand an empty flow map before locating the insertion point.
+  const emptyParent = new RegExp(
+    `^(${escapeRegex(parent)}:[ \\t]*)\\{\\}([ \\t]*(?:#[^\\n]*)?)(\\r?\\n|$)`,
+    "m",
+  );
+  content = content.replace(
+    emptyParent,
+    (_match, prefix: string, suffix: string, ending: string) =>
+      `${prefix.trimEnd()}${suffix}${ending}`,
+  );
+
   const parentRe = new RegExp(
     `^${escapeRegex(parent)}:[ \\t]*(#.*)?(?:\\r?\\n|$)`,
     "m",
@@ -632,6 +668,14 @@ function appendDirectNestedYamlValue(
   const parentMatch = parentRe.exec(content);
 
   if (!parentMatch || parentMatch.index === undefined) {
+    const existingParent = new RegExp(
+      `^(?:${escapeRegex(parent)}|"${escapeRegex(parent)}"|'${escapeRegex(parent)}')[ \\t]*:`,
+      "m",
+    );
+    if (existingParent.test(content))
+      throw new Error(
+        `Cannot edit ${parent}: use a block mapping in config.yaml.`,
+      );
     const sep = content === "" || content.endsWith("\n") ? "" : newline;
     return `${content}${sep}${parent}:${newline}  ${child}: ${quotedValue}${newline}`;
   }
@@ -639,6 +683,7 @@ function appendDirectNestedYamlValue(
   const blockStart = parentMatch.index + parentMatch[0].length;
   let blockEnd = blockStart;
   let cursor = blockStart;
+  let childIndent: number | null = null;
 
   while (cursor < content.length) {
     const lineEnd = content.indexOf("\n", cursor);
@@ -649,6 +694,20 @@ function appendDirectNestedYamlValue(
       break;
     }
 
+    if (line.trim() && !line.trimStart().startsWith("#")) {
+      const indent = line.length - line.trimStart().length;
+      if (childIndent === null) {
+        if (
+          !/^(?:[a-zA-Z_][a-zA-Z0-9_-]*|"(?:\\.|[^"\\])*"|'(?:''|[^'])*')[ \t]*:/.test(
+            line.trimStart(),
+          )
+        )
+          throw new Error(
+            `Cannot edit ${parent}: use a block mapping in config.yaml.`,
+          );
+        childIndent = indent;
+      }
+    }
     blockEnd =
       lineEndExclusive === content.length
         ? content.length
@@ -656,7 +715,9 @@ function appendDirectNestedYamlValue(
     cursor = blockEnd;
   }
 
-  const insertion = `  ${child}: ${quotedValue}${newline}`;
+  const separator =
+    blockEnd > 0 && !content.slice(0, blockEnd).endsWith("\n") ? newline : "";
+  const insertion = `${separator}${" ".repeat(childIndent ?? 2)}${child}: ${quotedValue}${newline}`;
   return `${content.slice(0, blockEnd)}${insertion}${content.slice(blockEnd)}`;
 }
 
