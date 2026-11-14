@@ -54,19 +54,32 @@ export async function readProfileMeta(name: string): Promise<ProfileMeta> {
   }
 }
 
+const pendingMetaWrites = new Map<string, Promise<void>>();
+
 async function writeProfileMeta(
   name: string,
   patch: Partial<ProfileMeta>,
 ): Promise<void> {
   if (!isValidProfileName(name)) throw new Error(PROFILE_NAME_ERROR);
-  const current = await readProfileMeta(name);
-  const next: ProfileMeta = { ...current, ...patch };
-  // Drop keys explicitly cleared with undefined.
-  for (const k of Object.keys(next) as (keyof ProfileMeta)[]) {
-    if (next[k] === undefined) delete next[k];
+  const file = metaPath(name);
+  const previous = pendingMetaWrites.get(file) ?? Promise.resolve();
+  const write = previous
+    .catch(() => {})
+    .then(async () => {
+      const current = await readProfileMeta(name);
+      const next: ProfileMeta = { ...current, ...patch };
+      for (const k of Object.keys(next) as (keyof ProfileMeta)[]) {
+        if (next[k] === undefined) delete next[k];
+      }
+      await fs.mkdir(profileHome(name), { recursive: true });
+      await fs.writeFile(file, JSON.stringify(next, null, 2), "utf-8");
+    });
+  pendingMetaWrites.set(file, write);
+  try {
+    await write;
+  } finally {
+    if (pendingMetaWrites.get(file) === write) pendingMetaWrites.delete(file);
   }
-  await fs.mkdir(profileHome(name), { recursive: true });
-  await fs.writeFile(metaPath(name), JSON.stringify(next, null, 2), "utf-8");
 }
 
 export async function setProfileColor(
