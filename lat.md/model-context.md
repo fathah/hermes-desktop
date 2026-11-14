@@ -113,3 +113,9 @@ A missing requested profile cannot borrow another active profile's model or gate
 ### Current profile removal clears metadata
 
 A current successful profile poll that no longer contains the requested profile clears old model and gateway chips. Session usage remains visible while profile metadata is unavailable.
+
+## Catalogue metadata expiry
+
+Advertised context lengths and negative lookups share the model catalogue's five-minute lifetime. A later lookup re-fetches expired metadata instead of retaining a stale length until restart.
+
+[[src/main/model-discovery.ts#getModelContextWindow]] checks catalogue freshness before returning cached metadata. [[tests/model-discovery.test.ts]] advances the clock with real loopback HTTP and verifies both a changed length and a previously absent length refresh, while fresh reads avoid extra requests.

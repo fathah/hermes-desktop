@@ -46,6 +46,7 @@ describe("model-discovery", () => {
 
   afterEach(async () => {
     vi.unstubAllEnvs();
+    vi.restoreAllMocks();
     if (server && server.listening) await close();
     rmSync(testHome, { recursive: true, force: true });
   });
@@ -80,6 +81,47 @@ describe("model-discovery", () => {
     // Sorted alphabetically
     expect(result.models).toEqual(["alpha", "beta", "gamma"]);
   });
+
+  it.each([4096, undefined])(
+    "refreshes expired context metadata initially %s",
+    async (initial) => {
+      let requests = 0;
+      let now = 1_000_000;
+      vi.spyOn(Date, "now").mockImplementation(() => now);
+      server = http.createServer((_req, res) => {
+        requests++;
+        res.end(
+          JSON.stringify({
+            data: [
+              {
+                id: "resizable",
+                context_length: requests === 1 ? initial : 16384,
+              },
+            ],
+          }),
+        );
+      });
+      await listen();
+      const { getModelContextWindow } = await loadDiscovery();
+      const read = (): Promise<number | null> =>
+        getModelContextWindow(
+          "custom",
+          "resizable",
+          baseUrl,
+          undefined,
+          undefined,
+        );
+      expect(await read()).toBe(initial ?? null);
+      now += 60_000;
+      expect(await read()).toBe(initial ?? null);
+      expect(requests).toBe(1);
+      now += 5 * 60_000;
+      expect(await read()).toBe(16384);
+      expect(requests).toBe(2);
+      expect(await read()).toBe(16384);
+      expect(requests).toBe(2);
+    },
+  );
 
   it("returns status=no-key for public custom endpoints when no apiKey is provided or in .env", async () => {
     server = http.createServer(() => {
