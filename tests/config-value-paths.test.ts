@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { join } from "path";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
+import { load } from "js-yaml";
 
 // Regression tests for issue #247: getConfigValue/setConfigValue used
 // a loose `^\s*<key>:` regex against the whole file, so:
@@ -34,6 +35,28 @@ afterEach(() => {
   delete process.env.HERMES_HOME;
   vi.resetModules();
   rmSync(TEST_DIR, { recursive: true, force: true });
+});
+
+describe("quoted config write boundaries", () => {
+  it.each(["proxy", "network.proxy"])(
+    "replaces the complete quoted scalar at %s",
+    async (key) => {
+      const nested = key.includes(".");
+      const before = `${nested ? "network:\n  " : ""}proxy: ${JSON.stringify('https://old.test/?q="a # b"#fragment')}  # keep this comment\n${nested ? "  " : ""}timeout: 20\n`;
+      writeFileSync(join(TEST_DIR, "config.yaml"), before);
+      const { setConfigValue } = await importConfigWithHome(TEST_DIR);
+      setConfigValue(key, "https://new.test/#new");
+      const after = readFileSync(join(TEST_DIR, "config.yaml"), "utf8");
+      expect(after).toContain(
+        'proxy: "https://new.test/#new"  # keep this comment',
+      );
+      expect(load(after)).toEqual(
+        nested
+          ? { network: { proxy: "https://new.test/#new", timeout: 20 } }
+          : { proxy: "https://new.test/#new", timeout: 20 },
+      );
+    },
+  );
 });
 
 describe("getConfigValue — dotted paths (issue #247)", () => {
@@ -342,5 +365,23 @@ describe("setConfigValue — flat keys", () => {
     expect(after).toContain("service_tier: fast");
     // The flat key is appended at top level instead.
     expect(after).toMatch(/^service_tier: "PROBE"$/m);
+  });
+});
+
+describe("additional scalar write forms", () => {
+  it.each([
+    "https://old.test/#fragment  # keep",
+    "'it''s #literal'  # keep",
+    "  # keep",
+  ])("preserves only the external comment from %s", async (raw) => {
+    writeFileSync(
+      join(TEST_DIR, "config.yaml"),
+      `network:\r\n  proxy: ${raw}\r\n  timeout: 20\r\n`,
+    );
+    const { setConfigValue } = await importConfigWithHome(TEST_DIR);
+    setConfigValue("network.proxy", "new");
+    const after = readFileSync(join(TEST_DIR, "config.yaml"), "utf8");
+    expect(load(after)).toEqual({ network: { proxy: "new", timeout: 20 } });
+    expect(after).toContain("# keep\r\n");
   });
 });

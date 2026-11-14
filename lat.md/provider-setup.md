@@ -358,3 +358,9 @@ API Route CLI fallback forwards the selected profile's resolved key from its vau
 The real Setup form saves API Route credentials and the chosen custom model to its selected profile, then real config readers reopen the files without changing another profile.
 
 An isolated fixture selects the preset and enters a model ID and fake key. Actual config writers persist `custom`, the unchanged model ID, the endpoint and `API_ROUTE_API_KEY`; fresh readers recover them and reverse branding remains API Route.
+
+## Configuration write comment boundaries
+
+Replacing a configuration value removes the entire old scalar, including hashes inside plain URL fragments or quoted strings. Only a whitespace-separated comment outside the scalar is preserved.
+
+[[src/main/config.ts#inlineYamlValueLength]] handles escaped double quotes and doubled YAML single quotes for both nested and top-level updates. [[tests/config-value-paths.test.ts]] validates the resulting document with the YAML parser and checks sibling/comment preservation.
