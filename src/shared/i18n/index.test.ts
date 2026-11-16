@@ -33,6 +33,21 @@ describe("shared i18n", () => {
     expect(t("welcome.title", "zh-CN")).toBe("欢迎使用 Hermes");
   });
 
+  it("returns Chinese Discover translations instead of falling back to English", () => {
+    expect(t("discover.title", "zh-CN")).toBe("发现");
+    expect(t("discover.refresh", "zh-CN")).toBe("刷新");
+    expect(t("discover.searchPlaceholder", "zh-CN", { kind: "技能" })).toBe(
+      "搜索技能...",
+    );
+    expect(t("discover.uninstallConfirm", "zh-CN", { name: "foo" })).toContain(
+      "foo",
+    );
+    expect(t("discover.title", "zh-TW")).not.toBe(t("discover.title", "en"));
+    expect(t("discover.refresh", "zh-TW")).not.toBe(
+      t("discover.refresh", "en"),
+    );
+  });
+
   it("returns zh-TW text when available", () => {
     expect(t("welcome.title", "zh-TW")).toBe("歡迎使用 Hermes");
   });

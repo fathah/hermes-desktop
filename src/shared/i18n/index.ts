@@ -143,6 +143,7 @@ import memoryZh from "./locales/zh-CN/memory";
 import installZh from "./locales/zh-CN/install";
 import constantsZh from "./locales/zh-CN/constants";
 import kanbanZh from "./locales/zh-CN/kanban";
+import discoverZh from "./locales/zh-CN/discover";
 import commonZhTw from "./locales/zh-TW/common";
 import navigationZhTw from "./locales/zh-TW/navigation";
 import welcomeZhTw from "./locales/zh-TW/welcome";
@@ -164,6 +165,7 @@ import memoryZhTw from "./locales/zh-TW/memory";
 import installZhTw from "./locales/zh-TW/install";
 import constantsZhTw from "./locales/zh-TW/constants";
 import kanbanZhTw from "./locales/zh-TW/kanban";
+import discoverZhTw from "./locales/zh-TW/discover";
 import commonJa from "./locales/ja/common";
 import navigationJa from "./locales/ja/navigation";
 import welcomeJa from "./locales/ja/welcome";
@@ -434,6 +436,7 @@ export const resources = {
       install: installZh,
       constants: constantsZh,
       kanban: kanbanZh,
+      discover: discoverZh,
     },
   },
   "zh-TW": {
@@ -459,6 +462,7 @@ export const resources = {
       install: installZhTw,
       constants: constantsZhTw,
       kanban: kanbanZhTw,
+      discover: discoverZhTw,
     },
   },
   "pt-BR": {
