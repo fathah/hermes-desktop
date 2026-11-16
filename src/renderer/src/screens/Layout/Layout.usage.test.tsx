@@ -39,6 +39,7 @@ const gateway = vi.hoisted(() => ({
 }));
 vi.mock("../Chat/dashboardGatewayClient", () => ({
   DashboardGatewayClient: class {
+    activateServerRequests = vi.fn();
     connected = true;
     owner: { onEvent?: (event: unknown) => void; closed: boolean };
     constructor(options: { onEvent?: (event: unknown) => void }) {
