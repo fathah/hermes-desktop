@@ -8,21 +8,31 @@ import {
   type Mock,
 } from "vitest";
 import { EventEmitter } from "events";
+import { spawn } from "child_process";
 import type { ConnectionConfig } from "../src/main/config";
 
 const transport = vi.hoisted(() => ({
   http: [] as Array<{ url: string; headers: Record<string, string> }>,
-  rpc: [] as Array<{ method: string; params: Record<string, unknown> }>,
+  rpc: [] as Array<{
+    id?: string;
+    method?: string;
+    params?: Record<string, unknown>;
+    result?: unknown;
+    error?: unknown;
+  }>,
   sockets: [] as Array<{ emit: (name: string, value?: string) => boolean }>,
   respond: vi.fn(),
   runsEvent: null as ((event: Record<string, unknown>) => void) | null,
+  runtimeKind: "legacy" as "legacy" | "managed",
 }));
 
 vi.mock("../src/main/installer", () => ({
   HERMES_HOME: "/tmp/approval-test",
   HERMES_PYTHON: "/usr/bin/true",
   HERMES_REPO: "/tmp",
-  hermesCliArgs: () => [],
+  hermesCliArgs: (args: string[] = []) => args,
+  hermesPythonArgs: (args: string[]) => args,
+  hermesRuntimeKind: () => transport.runtimeKind,
   getEnhancedPath: () => "",
 }));
 vi.mock("../src/main/config", () => ({
@@ -52,7 +62,10 @@ vi.mock("../src/main/ssh-tunnel", () => ({
   isSshTunnelActive: () => false,
 }));
 vi.mock("../src/main/gateway-ports", () => ({ getProfilePort: () => 8642 }));
-vi.mock("../src/main/secrets", () => ({ providerListSafe: () => ({}) }));
+vi.mock("../src/main/secrets", () => ({
+  providerListSafe: () => ({}),
+  getSecret: () => null,
+}));
 vi.mock("../src/main/models", () => ({ readModels: () => [] }));
 vi.mock("child_process", async () => {
   const { EventEmitter } = await import("events");
@@ -99,6 +112,7 @@ vi.mock("ws", async () => {
       send(raw: string): void {
         const frame = JSON.parse(raw);
         transport.rpc.push(frame);
+        if (typeof frame.method !== "string") return;
         queueMicrotask(() => {
           const result = transport.respond(frame.method, frame.params, this);
           this.emit(
@@ -174,6 +188,7 @@ import {
   bindPendingApproval,
   clearAllPendingApprovals,
   resolvePendingApproval,
+  resolvePendingClarify,
   sendMessage,
   stopHealthPolling,
   type ChatCallbacks,
@@ -212,6 +227,35 @@ function emitApproval(payload: Record<string, unknown>): void {
     }),
   );
 }
+function emitServerRequest(
+  method: string,
+  id: string,
+  params: Record<string, unknown> = {},
+): void {
+  transport.sockets.at(-1)!.emit(
+    "message",
+    JSON.stringify({
+      jsonrpc: "2.0",
+      id,
+      method,
+      params: { session_id: "live-1", ...params },
+    }),
+  );
+}
+function cancelServerRequest(id: string, sessionId = "live-1"): void {
+  transport.sockets.at(-1)!.emit(
+    "message",
+    JSON.stringify({
+      jsonrpc: "2.0",
+      method: "event",
+      params: {
+        type: "request.cancel",
+        session_id: sessionId,
+        payload: { id, method: "approval", reason: "timeout" },
+      },
+    }),
+  );
+}
 async function send(
   cb: ReturnType<typeof callbacks>,
   conn = local,
@@ -238,6 +282,7 @@ beforeEach(() => {
   transport.rpc.length = 0;
   transport.sockets.length = 0;
   transport.runsEvent = null;
+  transport.runtimeKind = "legacy";
   transport.respond.mockReset();
   transport.respond.mockImplementation((method: string) =>
     method === "session.create"
@@ -382,5 +427,290 @@ describe("approval transport safety", () => {
           url.endsWith("/approval") || url.endsWith("/chat/completions"),
       ),
     ).toBe(false);
+  });
+});
+
+describe("main-process peer-to-peer Agent requests", () => {
+  // @lat: [[main-server-requests#Managed backend ownership]]
+  it("starts managed chat as a desktop-owned headless isolated backend", async () => {
+    transport.runtimeKind = "managed";
+    const handle = await send(callbacks());
+    expect(spawn).toHaveBeenLastCalledWith(
+      "/usr/bin/true",
+      expect.arrayContaining(["serve", "--isolated", "--no-open"]),
+      expect.objectContaining({
+        env: expect.objectContaining({
+          HERMES_DESKTOP: "1",
+          HERMES_DASHBOARD_SESSION_TOKEN: expect.any(String),
+        }),
+      }),
+    );
+    handle.abort();
+  });
+  // @lat: [[main-server-requests#Correlated replies]]
+  it("advertises before creating a session and answers the exact server id once", async () => {
+    const cb = callbacks();
+    const handle = await send(cb);
+    expect(
+      transport.rpc.findIndex(({ method }) => method === "client.capabilities"),
+    ).toBeLessThan(
+      transport.rpc.findIndex(({ method }) => method === "session.create"),
+    );
+    emitServerRequest("approval", "srq-current1", {
+      request_id: "queue-entry-1",
+      command: "npm publish",
+      choices: ["once", "deny"],
+    });
+    emitServerRequest("approval", "srq-current1", {
+      request_id: "queue-entry-1",
+      command: "npm publish",
+      choices: ["once", "deny"],
+    });
+    expect(cb.onApproval).toHaveBeenCalledTimes(1);
+    const requestId = cb.onApproval.mock.calls[0][0].requestId;
+    expect(
+      await resolvePendingApproval(requestId, "once", {
+        ownerId: 1,
+        runId: "chat-run",
+      }),
+    ).toBe(true);
+    expect(
+      await resolvePendingApproval(requestId, "once", {
+        ownerId: 1,
+        runId: "chat-run",
+      }),
+    ).toBe(false);
+    expect(transport.rpc).toContainEqual({
+      jsonrpc: "2.0",
+      id: "srq-current1",
+      result: { choice: "once", all: false },
+    });
+    expect(
+      transport.rpc.some(({ method }) => method === "approval.respond"),
+    ).toBe(false);
+    handle.abort();
+  });
+
+  // @lat: [[main-server-requests#Batch clarification]]
+  it("retains invalid batch answers for retry and returns one complete answer map", async () => {
+    const cb = { ...callbacks(), onClarify: vi.fn() };
+    const handle = await send(cb);
+    const questions = [
+      {
+        qid: "first",
+        question: "Which folder?",
+        choices: [],
+        multi_select: false,
+      },
+      {
+        qid: "second",
+        question: "Which format?",
+        choices: ["PDF", "HTML"],
+        multi_select: false,
+      },
+    ];
+    emitServerRequest("clarify", "srq-batch1", { questions });
+    const card = cb.onClarify.mock.calls[0][0];
+    expect(card.questions).toEqual(questions);
+    expect(card.requestId).not.toBe("srq-batch1");
+    expect(resolvePendingClarify(card.requestId, "not a complete batch")).toBe(
+      false,
+    );
+    expect(
+      resolvePendingClarify(
+        card.requestId,
+        JSON.stringify({ answers: { first: "/tmp/report", second: "PDF" } }),
+      ),
+    ).toBe(true);
+    expect(transport.rpc).toContainEqual({
+      jsonrpc: "2.0",
+      id: "srq-batch1",
+      result: { answers: { first: "/tmp/report", second: "PDF" } },
+    });
+    expect(
+      transport.rpc.some(({ method }) => method === "clarify.respond"),
+    ).toBe(false);
+    handle.abort();
+  });
+
+  // @lat: [[main-server-requests#Cancellation isolation]]
+  it("expires only the matching live request and refuses its stale response", async () => {
+    const cb = {
+      ...callbacks(),
+      onClarify: vi.fn(),
+      onRequestCancelled: vi.fn(),
+    };
+    const handle = await send(cb);
+    emitServerRequest("approval", "srq-cancel1", {
+      request_id: "queue-1",
+      choices: ["once"],
+    });
+    const approvalId = cb.onApproval.mock.calls[0][0].requestId;
+    cancelServerRequest("srq-cancel1", "another-session");
+    expect(cb.onRequestCancelled).not.toHaveBeenCalled();
+    cancelServerRequest("srq-cancel1");
+    expect(cb.onRequestCancelled).toHaveBeenCalledExactlyOnceWith({
+      requestId: approvalId,
+      kind: "approval",
+    });
+    expect(
+      await resolvePendingApproval(approvalId, "once", {
+        ownerId: 1,
+        runId: "chat-run",
+      }),
+    ).toBe(false);
+    emitServerRequest("clarify", "srq-cancel2", {
+      questions: [{ qid: "q", question: "Where?" }],
+    });
+    const clarifyId = cb.onClarify.mock.calls[0][0].requestId;
+    cancelServerRequest("srq-cancel2");
+    expect(resolvePendingClarify(clarifyId, "here")).toBe(false);
+    expect(cb.onError).not.toHaveBeenCalled();
+    handle.abort();
+  });
+
+  // @lat: [[main-server-requests#Resume restoration]]
+  it("restores unanswered requests after the resumed session owns the transport", async () => {
+    const cb = callbacks();
+    transport.respond.mockImplementation((method: string) =>
+      method === "session.resume"
+        ? {
+            session_id: "live-1",
+            resumed: "stored-1",
+            info: {},
+            open_requests: [
+              {
+                id: "srq-restored1",
+                method: "approval",
+                params: {
+                  session_id: "live-1",
+                  request_id: "queue-1",
+                  choices: ["deny"],
+                },
+              },
+            ],
+          }
+        : {},
+    );
+    const handle = await sendMessage(
+      "hello",
+      cb,
+      `resume-${crypto.randomUUID()}`,
+      "stored-1",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      local,
+      "original",
+    );
+    expect(cb.onApproval).toHaveBeenCalledTimes(1);
+    expect(
+      await resolvePendingApproval(
+        cb.onApproval.mock.calls[0][0].requestId,
+        "deny",
+        { ownerId: 1, runId: "chat-run" },
+      ),
+    ).toBe(true);
+    expect(transport.rpc).toContainEqual({
+      jsonrpc: "2.0",
+      id: "srq-restored1",
+      result: { choice: "deny", all: false },
+    });
+    handle.abort();
+  });
+
+  it("defers a live request arriving before session.resume acknowledges its runtime id", async () => {
+    const cb = callbacks();
+    transport.respond.mockImplementation(
+      (method: string, _params: unknown, socket: EventEmitter) => {
+        if (method !== "session.resume") return {};
+        socket.emit(
+          "message",
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: "srq-before-resume",
+            method: "approval",
+            params: {
+              session_id: "live-1",
+              request_id: "queue-1",
+              choices: ["deny"],
+            },
+          }),
+        );
+        return { session_id: "live-1", resumed: "stored-1", info: {} };
+      },
+    );
+    const handle = await sendMessage(
+      "hello",
+      cb,
+      `resume-${crypto.randomUUID()}`,
+      "stored-1",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      local,
+      "original",
+    );
+    expect(cb.onApproval).toHaveBeenCalledTimes(1);
+    expect(
+      transport.rpc.find(({ id }) => id === "srq-before-resume"),
+    ).toBeUndefined();
+    handle.abort();
+  });
+
+  // @lat: [[main-server-requests#Unsupported interactions]]
+  it("explicitly refuses unsupported, malformed and unrelated-session requests", async () => {
+    const cb = callbacks();
+    const handle = await send(cb);
+    emitServerRequest("setup_beat", "srq-unsupported1");
+    emitServerRequest("approval", "srq-other1", {
+      session_id: "other-session",
+      request_id: "other",
+      choices: ["once"],
+    });
+    emitServerRequest("clarify", "srq-malformed1", { questions: [] });
+    expect(cb.onApproval).not.toHaveBeenCalled();
+    for (const id of ["srq-unsupported1", "srq-other1", "srq-malformed1"]) {
+      expect(transport.rpc).toContainEqual(
+        expect.objectContaining({
+          id,
+          error: expect.objectContaining({ code: -32601 }),
+        }),
+      );
+    }
+    handle.abort();
+  });
+
+  // @lat: [[main-server-requests#Interactive turns never replay]]
+  it("never replays a prompt after clarification precedes a lost submit acknowledgment", async () => {
+    const cb = { ...callbacks(), onClarify: vi.fn() };
+    transport.respond.mockImplementation(
+      (method: string, _params: unknown, socket: EventEmitter) => {
+        if (method === "session.create")
+          return { session_id: "live-1", info: {} };
+        if (method !== "prompt.submit") return {};
+        socket.emit(
+          "message",
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: "srq-no-replay",
+            method: "clarify",
+            params: {
+              session_id: "live-1",
+              questions: [{ qid: "q", question: "Where?" }],
+            },
+          }),
+        );
+        return new Error("lost acknowledgment");
+      },
+    );
+    await send(cb);
+    expect(cb.onClarify).toHaveBeenCalledTimes(1);
+    expect(cb.onError).toHaveBeenCalledWith(
+      expect.stringContaining("not replayed"),
+    );
+    expect(transport.http.some(({ url }) => url.includes("/v1/"))).toBe(false);
   });
 });
