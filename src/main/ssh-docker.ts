@@ -130,6 +130,7 @@ def expanded(path):
 host_install_found = any(
     os.path.isfile(expanded(p)) and os.access(expanded(p), os.X_OK)
     for p in cli_candidates
+    if not p.startswith("$HERMES_HOME/") or os.environ.get("HERMES_HOME")
 )
 
 home = expanded("$HOME/.hermes")
