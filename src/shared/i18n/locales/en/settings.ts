@@ -29,6 +29,9 @@ export default {
   statusUpToDate: "Up to date",
   statusUpdateAvailable: "Update available",
   statusUpdateReady: "Update ready",
+  statusDesktopUpdateRequired: "Desktop update needed",
+  agentNewerThanDesktop:
+    "This Agent uses a newer interface than this desktop supports. Check for a desktop update below to restore full compatibility.",
   checkForUpdates: "Check for updates",
   checkingUpdates: "Checking…",
   downloadUpdate: "Download update",

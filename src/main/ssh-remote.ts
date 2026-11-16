@@ -2632,6 +2632,7 @@ export async function sshDashboardRunning(
 // handing the target to callers; otherwise a stale dashboard (different token)
 // or another service on 9119 is mistaken for a usable dashboard, leading to
 // /api/* 401s and legacy /v1 chat being POSTed to the wrong server (405).
+// @lat: [[scheduled-jobs#Fresh dashboard transport readiness]]
 export async function sshDashboardAuthenticated(
   config: SshConfig,
   port: number,
@@ -2640,20 +2641,43 @@ export async function sshDashboardAuthenticated(
   const script = `
 import json
 import sys
+import urllib.error
 import urllib.request
 
 payload = json.loads(sys.stdin.read() or "{}")
 port = int(payload.get("port") or 0)
 token = str(payload.get("token") or "")
-request = urllib.request.Request(
-    f"http://127.0.0.1:{port}/api/sessions?limit=1",
-    headers={"X-Hermes-Session-Token": token},
-)
-try:
-    with urllib.request.urlopen(request, timeout=3) as response:
-        print(response.status)
-except Exception:
-    print(0)
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, message, headers, new_url):
+        return None
+
+opener = urllib.request.build_opener(NoRedirect)
+
+def probe(path):
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{port}{path}",
+        headers={"X-Hermes-Session-Token": token},
+    )
+    try:
+        try:
+            response = opener.open(request, timeout=3)
+        except urllib.error.HTTPError as error:
+            response = error
+        with response:
+            status = response.code
+            content_type = response.headers.get("Content-Type", "").lower()
+            body = response.read().decode("utf-8")
+        if "text/html" in content_type or body.lstrip().startswith("<"):
+            return status, False
+        json.loads(body)
+        return status, True
+    except Exception:
+        return None, False
+
+status, valid = probe("/api/sessions?limit=1")
+if status == 503 and valid:
+    status, valid = probe("/api/profiles")
+print(200 if status == 200 and valid else 0)
 `;
   try {
     const out = await sshPython(
@@ -3311,7 +3335,7 @@ export async function sshListCachedSessions(
 // `hermes update`, `hermes dump`, and `hermes --version` when called over
 // SSH as the hermes user.
 //
-// Probe the well-known venv install paths first; fall back to bare `hermes`
+// Probe canonical PM launchers before legacy venv install paths; fall back to bare `hermes`
 // on PATH only if none of those exist, preserving the old behavior for
 // non-installer deployments.
 //
@@ -3332,6 +3356,10 @@ export async function sshListCachedSessions(
 // Shared with the SSH target inspection in ssh-docker.ts so "is Hermes
 // installed on the host?" uses the exact same probe list as command execution.
 export const REMOTE_HERMES_CLI_CANDIDATES = [
+  "$HERMES_HOME/hermes-agent/.hermes/bin/hermes",
+  "$HOME/hermes-agent/.hermes/bin/hermes",
+  "$HOME/.hermes/hermes-agent/.hermes/bin/hermes",
+  "/opt/hermes/hermes-agent/.hermes/bin/hermes",
   "$HOME/hermes-agent/.venv/bin/hermes",
   "$HOME/hermes-agent/venv/bin/hermes",
   "$HOME/.hermes/hermes-agent/.venv/bin/hermes",
@@ -3341,17 +3369,22 @@ export const REMOTE_HERMES_CLI_CANDIDATES = [
   "$HOME/.local/bin/hermes",
 ];
 
+// @lat: [[installer-runtime#SSH managed launcher discovery]]
 export function buildRemoteHermesCmd(args: string[], extraShell = ""): string {
   const launcherCandidates = REMOTE_HERMES_LAUNCHER_CANDIDATES;
   const candidates = REMOTE_HERMES_CLI_CANDIDATES;
   const quotedArgs = args.map((a) => shellQuote(a)).join(" ");
-  const launcherProbe = launcherCandidates
-    .map((p) => `[ -x ${p} ] && exec ${p} ${quotedArgs}${extraShell}`)
-    .join("; ");
-  const probe = candidates
-    .map((p) => `[ -x ${p} ] && exec ${p} ${quotedArgs}${extraShell}`)
-    .join("; ");
-  const script = `${launcherProbe}; ${probe}; command -v hermes >/dev/null && exec hermes ${quotedArgs}${extraShell}; echo "ERR: hermes CLI not found on remote PATH, configured launcher, or in any known venv location" >&2; exit 1`;
+  const probeCandidate = (path: string): string => {
+    // These are fixed templates: expand only the intended remote home variable,
+    // keeping spaces, quotes and shell metacharacters inside one executable path.
+    const guard = path.startsWith("$HERMES_HOME/")
+      ? '[ -n "${HERMES_HOME:-}" ] && '
+      : "";
+    return `${guard}[ -x "${path}" ] && exec "${path}" ${quotedArgs}${extraShell}`;
+  };
+  const launcherProbe = launcherCandidates.map(probeCandidate).join("; ");
+  const probe = candidates.map(probeCandidate).join("; ");
+  const script = `${launcherProbe}; ${probe}; command -v hermes >/dev/null && exec hermes ${quotedArgs}${extraShell}; echo "ERR: hermes CLI not found on remote PATH, configured launcher, or in any known managed or legacy installation" >&2; exit 1`;
   return `sh -c ${shellQuote(script)}`;
 }
 

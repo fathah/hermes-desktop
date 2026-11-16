@@ -34,6 +34,221 @@ function baseMsg(overrides: Partial<ClarifyMessage> = {}): ClarifyMessage {
 }
 
 describe("ClarifyCard", () => {
+  // @lat: [[server-requests#Batch clarification]]
+  it("submits a complete multi-question form once and preserves locked replay answers", async () => {
+    const respond = vi.fn().mockResolvedValue(true);
+    const resolved = vi.fn();
+    render(
+      <ClarifyCard
+        msg={baseMsg({
+          requestId: "srq-batch",
+          responsePath: "dashboard",
+          questions: [
+            {
+              qid: "environment",
+              question: "Environment?",
+              choices: ["staging", "production"],
+              multi_select: false,
+            },
+            {
+              qid: "region",
+              question: "Region?",
+              choices: [],
+              multi_select: false,
+            },
+          ],
+          answers: { environment: "staging" },
+        })}
+        onRespond={respond}
+        onResolved={resolved}
+      />,
+    );
+    expect(
+      screen.getByRole("textbox", { name: "Environment?" }),
+    ).toBeDisabled();
+    fireEvent.change(screen.getByRole("textbox", { name: "Region?" }), {
+      target: { value: "Dubai" },
+    });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Region?" }), {
+      key: "Enter",
+      ctrlKey: true,
+    });
+    await vi.waitFor(() => expect(resolved).toHaveBeenCalledTimes(1));
+    expect(respond).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(respond.mock.calls[0][1])).toEqual({
+      answers: { environment: "staging", region: "Dubai" },
+    });
+  });
+
+  it("collects multiple choices without sending until the whole form is submitted", async () => {
+    const respond = vi.fn().mockResolvedValue(true);
+    render(
+      <ClarifyCard
+        msg={baseMsg({
+          questions: [
+            {
+              qid: "platforms",
+              question: "Platforms?",
+              choices: ["Local", "SSH", "Remote"],
+              multi_select: true,
+            },
+          ],
+        })}
+        onRespond={respond}
+        onResolved={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByText("Local"));
+    fireEvent.click(screen.getByText("SSH"));
+    expect(respond).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "SSH" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    fireEvent.click(screen.getByText("chat.clarify.send"));
+    await vi.waitFor(() => expect(respond).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(respond.mock.calls[0][1])).toEqual({
+      answers: { platforms: '["Local","SSH"]' },
+    });
+  });
+
+  it("treats prototype-looking question IDs as ordinary form data", async () => {
+    const respond = vi.fn().mockResolvedValue(true);
+    render(
+      <ClarifyCard
+        msg={baseMsg({
+          questions: [
+            {
+              qid: "constructor",
+              question: "Constructor value?",
+              choices: ["Local"],
+              multi_select: true,
+            },
+            {
+              qid: "__proto__",
+              question: "Prototype value?",
+              choices: [],
+              multi_select: false,
+            },
+          ],
+        })}
+        onRespond={respond}
+        onResolved={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByText("Local"));
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Prototype value?" }),
+      { target: { value: "retained" } },
+    );
+    fireEvent.click(screen.getByText("chat.clarify.send"));
+    await vi.waitFor(() => expect(respond).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(respond.mock.calls[0][1]).answers).toEqual(
+      JSON.parse('{"constructor":"[\\"Local\\"]","__proto__":"retained"}'),
+    );
+  });
+
+  it("shows readable batch answers after resolution and disables a cancelled batch", () => {
+    const questions = [
+      { qid: "region", question: "Region?", choices: [], multi_select: false },
+    ];
+    const { rerender } = render(
+      <ClarifyCard
+        msg={baseMsg({
+          questions,
+          resolved: true,
+          answer: JSON.stringify({ answers: { region: "Dubai" } }),
+        })}
+        onResolved={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Dubai")).toBeTruthy();
+    expect(screen.queryByText(/\{"answers"/)).toBeNull();
+    rerender(
+      <ClarifyCard
+        msg={baseMsg({ questions, unavailable: true })}
+        onResolved={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("textbox")).toBeDisabled();
+    expect(screen.getByText("chat.clarify.skip")).toBeDisabled();
+  });
+
+  // @lat: [[dashboard-clarify#Resolved current composer answers]]
+  it.each(["Dubai", '{"city":"Dubai"}'])(
+    "shows a resolved single-question composer answer literally: %s",
+    (answer) => {
+      render(
+        <ClarifyCard
+          msg={baseMsg({
+            questions: [
+              {
+                qid: "region",
+                question: "Region?",
+                choices: [],
+                multi_select: false,
+              },
+            ],
+            resolved: true,
+            answer,
+          })}
+          onResolved={vi.fn()}
+        />,
+      );
+      expect(screen.getByText(answer)).toBeVisible();
+      expect(screen.queryByText("chat.clarify.skipped")).toBeNull();
+    },
+  );
+
+  it("keeps an explicit current single-question skip distinct from a literal answer", () => {
+    render(
+      <ClarifyCard
+        msg={baseMsg({
+          questions: [
+            {
+              qid: "region",
+              question: "Region?",
+              choices: [],
+              multi_select: false,
+            },
+          ],
+          resolved: true,
+          answer: JSON.stringify({ answers: { region: null } }),
+        })}
+        onResolved={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("chat.clarify.skipped")).toBeVisible();
+    expect(screen.queryByText(/\{"answers"/)).toBeNull();
+  });
+
+  it.each(["Dubai", JSON.stringify({ answers: { region: "Dubai" } })])(
+    "summarizes the locked answer retained over composer input: %s",
+    (answer) => {
+      render(
+        <ClarifyCard
+          msg={baseMsg({
+            questions: [
+              {
+                qid: "region",
+                question: "Region?",
+                choices: [],
+                multi_select: false,
+              },
+            ],
+            answers: { region: "Tokyo" },
+            resolved: true,
+            answer,
+          })}
+          onResolved={vi.fn()}
+        />,
+      );
+      expect(screen.getByText("Tokyo")).toBeVisible();
+      expect(screen.queryByText("Dubai")).toBeNull();
+      expect(screen.queryByText("chat.clarify.skipped")).toBeNull();
+    },
+  );
+
   it("renders one button per choice and answers with the clicked choice", async () => {
     const respondClarify = stubRespond();
     const onResolved = vi.fn();
