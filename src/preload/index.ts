@@ -54,6 +54,7 @@ import type { GpuPreferenceMode, GpuStatus } from "../shared/gpu";
 import type { AgentCapabilitySnapshot } from "../shared/agent-capabilities";
 import type { ConnectionStatusSnapshot } from "../shared/connection-status";
 import type { SessionLocation } from "../shared/session-location";
+import type { GatewayClarifyQuestion } from "../shared/gateway-server-requests";
 import type {
   SshHermesTargetInspection,
   SshDockerProvisionResult,
@@ -865,13 +866,21 @@ const hermesAPI = {
         requestId: string;
         question: string;
         choices: string[];
+        questions?: GatewayClarifyQuestion[];
+        answers?: Record<string, string | null>;
       },
     ) => void,
   ): (() => void) => {
     const handler = (
       _event: Electron.IpcRendererEvent,
       runId: string,
-      req: { requestId: string; question: string; choices: string[] },
+      req: {
+        requestId: string;
+        question: string;
+        choices: string[];
+        questions?: GatewayClarifyQuestion[];
+        answers?: Record<string, string | null>;
+      },
     ): void => callback(runId, req);
     ipcRenderer.on("chat-clarify-request", handler);
     return () => ipcRenderer.removeListener("chat-clarify-request", handler);
@@ -881,6 +890,21 @@ const hermesAPI = {
    *  autonomously (the gateway treats it as "you decide"). */
   respondClarify: (requestId: string, answer: string): Promise<boolean> =>
     ipcRenderer.invoke("clarify-respond", { requestId, answer }),
+
+  onChatRequestCancelled: (
+    callback: (
+      runId: string,
+      req: { requestId: string; kind: "approval" | "clarify" },
+    ) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      runId: string,
+      req: { requestId: string; kind: "approval" | "clarify" },
+    ): void => callback(runId, req);
+    ipcRenderer.on("chat-request-cancelled", handler);
+    return () => ipcRenderer.removeListener("chat-request-cancelled", handler);
+  },
 
   onApprovalRequest: (
     callback: (runId: string, req: ChatApprovalRequest) => void,

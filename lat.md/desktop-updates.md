@@ -128,17 +128,31 @@ Linux AppImage names include `${arch}` between version and extension, so x64 and
 
 The isolation is structural: the updater ([[src/main/app/updater.ts#setupUpdater]]) leaves `allowPrerelease` off, so electron-updater's GitHub provider only ever resolves the latest **non-prerelease** release's `latest.yml`. A beta prerelease is therefore invisible to stable clients — testers download the beta installer manually from the prerelease. The beta workflow skips winget + the landing-page rebuild and uses a separate `beta-release` concurrency group so it never cancels a stable release. Cutting a beta for the _next_ version requires bumping `package.json` first (a beta of an already-released version sorts lower than its stable tag).
 
+### Architecture-specific Linux feeds
+
+Both release channels must attach the arm64 Linux updater feed to the GitHub release, in addition to preserving it between build jobs.
+
+The artifact regression parses the actual publish action's file list and checks its architecture-specific feed, preventing a successful CI upload from masking a missing public updater file. AppImage filenames remain distinct across architectures.
+
 ### Release security and quality gates
 
 Pull requests and main-branch pushes must have no lint warnings and no high-severity production dependency advisories before release work can proceed.
 
 The CI workflow installs the locked dependency tree, runs `npm run audit:prod`, type-checks, tests, and treats lint as blocking. The audit wrapper retries only transient registry/network failures; a reported high-severity vulnerability still fails immediately. The install step fetches the pinned Electron runtime once before tests, and the suite uses four workers so parallel imports never race a lazy binary download or starve short tests. [[tests/audit-production-dependencies.test.ts]] covers retry classification, while [[tests/release-artifacts.test.ts]] protects these controls, the audit threshold, and the zero-warning lint policy from accidental removal.
 
+The v0.7.8 candidate keeps the existing Electron major, raises its security floor to 44.9.1, and scopes an exact `undici` 7.30.2 override to the unchanged `@electron/get` 5.1.0 downloader. [Package metadata](../package.json) and the [lockfile](../package-lock.json) keep this limited patch reproducible; unrelated dependencies and the independent Agent update channel are unchanged.
+
 #### Transient audit outages
 
 The production audit retries temporary npm registry and network failures without weakening vulnerability enforcement.
 
 HTTP 5xx responses, DNS failures, resets, timeouts, and unreachable-registry errors receive up to three attempts with short backoff. Audit findings are not classified as transient and fail on the first attempt. `scripts/audit-production-dependencies.mjs` implements the classification boundary.
+
+#### Audit findings take precedence
+
+A completed audit findings report fails immediately even if a warning, advisory title or URL resembles a transient network failure.
+
+HTTP status matching requires an explicit HTTP or npm error context; bare `5xx` numbers inside advisory identifiers cannot trigger retry. [[tests/audit-production-dependencies.test.ts]] covers mixed registry warnings and vulnerability findings so release enforcement stays authoritative.
 
 ### macOS signing keychain
 
@@ -158,6 +172,14 @@ Stable and beta macOS builds verify the exact architecture-specific `better-sqli
 
 Electron Builder explicitly unpacks `node_modules/better-sqlite3/prebuilds/*.node` from ASAR. After signing and notarization, `scripts/verify-native-module-architecture.sh` locates `darwin-x64.node` or `darwin-arm64.node` inside the packaged app and rejects a missing or mismatched binary. [[tests/release-artifacts.test.ts]] keeps the package rule and both release workflows aligned with the dependency's runtime layout.
 
+### Production package contents
+
+The application archive contains compiled outputs, runtime resources, package metadata, the project license and production dependencies; repository development material is excluded.
+
+The explicit file allowlist prevents local agent settings, test fixtures, alternate applications and mutable documentation from entering releases. Electron Builder still collects production dependencies separately, including unpacked native prebuilds. Nested environment files and npm configuration stay excluded even inside an allowed directory. [[tests/packaging-identity.test.ts]] exercises the installed builder's real application and dependency matchers.
+
+Archive inputs must remain unchanged while packaging: a file whose length changes between header generation and streaming can invalidate offsets for every following entry. A completed package requires archive integrity and entrypoint checks before launch acceptance.
+
 ### Platform package identity
 
 Linux packages use the space-free `/opt/HermesOne` directory while macOS keeps the existing `Hermes One.app` bundle and executable name. RPM filenames retain the `.rpm` extension expected by release uploads.
@@ -171,6 +193,8 @@ DEB and RPM packages use Electron Builder's complete default post-install hook s
 The builder supplies `resources/apparmor-profile`, validates it against the installed parser, copies compatible policy into `/etc/apparmor.d/hermes-desktop`, and reloads it outside chroots. Disabled AppArmor and unsupported older parsers skip policy installation. Working user namespaces keep `chrome-sandbox` at 0755; other hosts use its SUID mode. The previous custom hook replaced this setup with an unconditional permission change and omitted policy installation.
 
 [[tests/linux-post-install.test.ts]] generates the actual DEB/RPM scripts through the installed builder and executes them with temporary paths and harmless command fixtures. The POSIX execution suite skips Windows, where `/bin/bash` and shell fixtures are unavailable; cross-platform packaging/schema assertions remain active. No system policy, package installation, or native Ubuntu launch is exercised; packaged Ubuntu 24.04 acceptance remains necessary.
+
+Each native fixture subprocess has a 15-second hard deadline and its test has a 20-second ceiling. This accommodates measured shell-helper startup under parallel macOS test load while retaining exact output, policy and exit-code assertions; product timeouts are unchanged.
 
 #### Compatible profile installation
 
