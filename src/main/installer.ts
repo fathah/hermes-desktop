@@ -38,6 +38,7 @@ import {
 import { setupAskpass, AskpassHandle } from "./askpass";
 import { precacheSudoCredentials } from "./sudoCreds";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
+import { buildHermesPythonArgs, resolveHermesRuntime } from "./hermes-runtime";
 import { matchesProviderUrl } from "../shared/url-key-map";
 import {
   INSTALLER_VERIFICATION_FAILED,
@@ -196,48 +197,41 @@ export const HERMES_HOME =
   defaultHermesHome();
 export const HERMES_REPO = join(HERMES_HOME, "hermes-agent");
 export const HERMES_VENV = join(HERMES_REPO, "venv");
-// On Windows, use `pythonw.exe` (the GUI-subsystem interpreter that ships in
-// every venv) instead of `python.exe` so that subprocess spawns don't flash
-// a blank console window before `windowsHide: true` / CREATE_NO_WINDOW takes
-// effect. Issue #342: on every chat send the `sendMessageViaCli` fallback
-// path spawned `python.exe`, and the console appeared for a few hundred ms
-// despite `windowsHide: true` — a well-known race between console allocation
-// and CREATE_NO_WINDOW on console-subsystem child binaries. `pythonw.exe`
-// is linked as Windows subsystem, so the OS can never allocate a console
-// for it regardless of creation flags. It's a bit-identical interpreter
-// otherwise — same modules, same stdout/stderr behaviour over piped stdio
-// (which is what every call site here uses).
-export const HERMES_PYTHON = IS_WINDOWS
-  ? join(HERMES_VENV, "Scripts", "pythonw.exe")
-  : join(HERMES_VENV, "bin", "python");
-export const HERMES_SCRIPT = IS_WINDOWS
-  ? join(HERMES_VENV, "Scripts", "hermes.exe")
-  : join(HERMES_REPO, "hermes");
+let hermesRuntime = resolveHermesRuntime(HERMES_HOME);
+// Live bindings change after install/update so consumers don't keep a removed
+// PM Python generation or the pre-install legacy fallback for the whole app run.
+export let HERMES_PYTHON = hermesRuntime.python;
+export let HERMES_SCRIPT = hermesRuntime.script;
 export const HERMES_ENV_FILE = join(HERMES_HOME, ".env");
 export const HERMES_CONFIG_FILE = join(HERMES_HOME, "config.yaml");
 export const HERMES_AUTH_FILE = join(HERMES_HOME, "auth.json");
 
-/** The Python + hermes-script paths for a Hermes install rooted at `home`,
- *  in the layout the desktop's own installer produces. */
-function installBinariesFor(home: string): { python: string; script: string } {
-  const repo = join(home, "hermes-agent");
-  const venv = join(repo, "venv");
-  return IS_WINDOWS
-    ? {
-        python: join(venv, "Scripts", "python.exe"),
-        script: join(venv, "Scripts", "hermes.exe"),
-      }
-    : { python: join(venv, "bin", "python"), script: join(repo, "hermes") };
+export function refreshHermesRuntime(): void {
+  hermesRuntime = resolveHermesRuntime(HERMES_HOME);
+  HERMES_PYTHON = hermesRuntime.python;
+  HERMES_SCRIPT = hermesRuntime.script;
+  _cachedVersion = null;
+  _verifyCache = null;
 }
 
 export function hermesCliArgs(args: string[] = []): string[] {
-  if (process.platform === "win32") {
-    return ["-m", "hermes_cli.main", ...args];
-  }
-  return [HERMES_SCRIPT, ...args];
+  return [...hermesRuntime.cliPrefix, ...args];
+}
+
+export function hermesPythonArgs(args: string[]): string[] {
+  return buildHermesPythonArgs(hermesRuntime, HERMES_REPO, args);
+}
+
+export function hermesRuntimeKind(): "legacy" | "managed" {
+  return hermesRuntime.kind;
+}
+
+export function hermesRuntimeError(): string | undefined {
+  return hermesRuntime.error;
 }
 
 function canInvokeHermesCli(): boolean {
+  if (hermesRuntime.kind === "managed") return hermesRuntime.available;
   if (!existsSync(HERMES_PYTHON)) return false;
   if (IS_WINDOWS) {
     return existsSync(join(HERMES_REPO, "hermes_cli", "main.py"));
@@ -258,13 +252,17 @@ export function getEnhancedPath(): string {
   const extra = (
     IS_WINDOWS
       ? [
+          join(HERMES_REPO, ".hermes", "bin"),
+          join(HERMES_HOME, "bin"),
           // Bundled by install.ps1 inside HERMES_HOME — these matter when the
           // user's system PATH doesn't include git or node yet.
           join(HERMES_HOME, "git", "bin"),
           join(HERMES_HOME, "git", "cmd"),
           join(HERMES_HOME, "git", "usr", "bin"),
           join(HERMES_HOME, "node"),
-          join(HERMES_VENV, "Scripts"),
+          ...(hermesRuntime.kind === "legacy"
+            ? [join(HERMES_VENV, "Scripts")]
+            : []),
           // Common user/system installs used when Claw3D setup runs before or
           // outside the bundled installer.
           process.env.NVM_SYMLINK,
@@ -286,9 +284,13 @@ export function getEnhancedPath(): string {
           join(home, ".cargo", "bin"),
         ]
       : [
+          join(HERMES_REPO, ".hermes", "bin"),
+          join(HERMES_HOME, "bin"),
           join(home, ".local", "bin"),
           join(home, ".cargo", "bin"),
-          join(HERMES_VENV, "bin"),
+          ...(hermesRuntime.kind === "legacy"
+            ? [join(HERMES_VENV, "bin")]
+            : []),
           // Node version manager shim directories
           join(home, ".volta", "bin"),
           join(home, ".asdf", "shims"),
@@ -519,15 +521,12 @@ export function inspectInstallTarget(): InstallTargetInfo {
   };
 }
 
-/** True when `dir` is a Hermes home the desktop can drive as-is — it must
- *  contain a `hermes-agent` install with the venv binaries in the layout the
- *  desktop expects. A hand-rolled install with a different layout fails here
- *  rather than being silently adopted into a broken state (issue #272). */
+/** Adopt only a complete installation with an installation-bound managed
+ *  launcher or the supported legacy venv layout. */
 export function validateHermesHome(dir: string): boolean {
   const home = dir?.trim();
   if (!home || !existsSync(home)) return false;
-  const { python, script } = installBinariesFor(home);
-  return existsSync(python) && existsSync(script);
+  return resolveHermesRuntime(home).available;
 }
 
 export function checkInstallStatus(): InstallStatus {
@@ -853,6 +852,16 @@ export async function runHermesUpdate(
 
     proc.on("close", (code) => {
       if (code === 0) {
+        refreshHermesRuntime();
+        if (!canInvokeHermesCli()) {
+          reject(
+            new Error(
+              hermesRuntime.error ||
+                "The updated Hermes runtime is incomplete. Repair Hermes Agent and retry.",
+            ),
+          );
+          return;
+        }
         emit("\nUpdate command finished.\n");
         resolve();
       } else {
@@ -1015,6 +1024,7 @@ export async function runInstall(
           ...process.env,
           PATH: askpass ? `${askpass.pathPrepend}:${basePath}` : basePath,
           HOME: home,
+          HERMES_HOME,
           TERM: "dumb",
           ...(askpass?.env ?? {}),
         },
@@ -1039,7 +1049,17 @@ export async function runInstall(
           );
           return;
         }
+        refreshHermesRuntime();
         if (code === 0) {
+          if (!canInvokeHermesCli()) {
+            reject(
+              new Error(
+                hermesRuntime.error ||
+                  "The installer finished without a usable Hermes runtime. Check the installation log and retry.",
+              ),
+            );
+            return;
+          }
           emit("\nInstallation complete!\n");
           resolve();
         } else {
@@ -1175,7 +1195,17 @@ async function runInstallWindows(emit: (t: string) => void): Promise<void> {
       } catch {
         /* best-effort */
       }
+      if (code !== INSTALLER_VERIFICATION_FAILED) refreshHermesRuntime();
       if (code === 0) {
+        if (!canInvokeHermesCli()) {
+          reject(
+            new Error(
+              hermesRuntime.error ||
+                "The installer finished without a usable Hermes runtime. Check the installation log and retry.",
+            ),
+          );
+          return;
+        }
         emit("\nInstallation complete!\n");
         resolve();
         return;
