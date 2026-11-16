@@ -4,6 +4,12 @@ The Kanban tab ([[src/renderer/src/screens/Kanban/Kanban.tsx]]) is a JIRA-style 
 
 Local and SSH modes use the `hermes kanban` CLI through [[src/main/kanban.ts]]. Direct Remote mode uses the authenticated dashboard Kanban plugin through [[src/main/remote-kanban.ts]]. The renderer holds no domain logic; it renders board state and routes actions to the selected target.
 
+## Local CLI capture stays hidden
+
+Local board reads keep managed runtime arguments and named-profile selection while capturing JSON without showing a Windows console.
+
+[[src/main/kanban.ts#runKanban]] uses the shared hidden subprocess options with its canonical interpreter and CLI prefix. The local runtime regression verifies board JSON parsing, named-profile argument order and `windowsHide` together.
+
 ## Remote HTTP board
 
 The dashboard plugin exposes board and task operations over HTTP, with server workspace paths entered as text rather than chosen from the desktop filesystem.

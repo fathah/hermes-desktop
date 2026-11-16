@@ -189,6 +189,31 @@ mount_spa(app)
     ).toBeLessThan(result.source.indexOf("mount_spa(app)"));
   });
 
+  // @lat: [[main-server-requests#Current Agent model-library extension]]
+  it("extends current model-router assembly without changing always-on embedded chat", () => {
+    const source = `
+_DASHBOARD_EMBEDDED_CHAT_ENABLED = True
+app.include_router(_models_routes.router)
+mount_spa(app)
+`;
+    const first = patchDashboardCompatibilitySource(source);
+    expect(first.compatible).toBe(true);
+    expect(first.source).toContain("_DASHBOARD_EMBEDDED_CHAT_ENABLED = True");
+    expect(first.source).not.toContain("embedded_chat: bool");
+    expect(first.source).toContain(
+      "from hermes_constants import get_hermes_home",
+    );
+    expect(first.source.indexOf('@app.get("/api/model/library")')).toBeLessThan(
+      first.source.indexOf("mount_spa(app)"),
+    );
+    const second = patchDashboardCompatibilitySource(first.source);
+    expect(second).toMatchObject({
+      compatible: true,
+      changed: false,
+      source: first.source,
+    });
+  });
+
   itPython("normalizes path dot segments like the desktop URL parser", () => {
     const values = [
       "https://host/a/../v1",

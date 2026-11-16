@@ -32,12 +32,12 @@ describe("Hermes Agent capability contract integration", () => {
   it("enables current contract and command features from Agent evidence", () => {
     // @lat: [[agent-capabilities#Test specifications#Current Agent contract]]
     const runtimeInfo = sanitizeAgentRuntimeInfo({
-      desktop_contract: 6,
+      desktop_contract: 8,
       model: "not-retained",
-      release_date: "2026.08.20",
+      release_date: "2026.11.09",
       update_behind: 0,
       update_command: "hermes update",
-      version: "0.20.5",
+      version: "0.23.1",
     });
     const commandNames = sanitizeAgentCommandInventory({
       pairs: [
@@ -58,9 +58,9 @@ describe("Hermes Agent capability contract integration", () => {
 
     expect(snapshot).toMatchObject({
       compatibility: "compatible",
-      desktopContract: 6,
+      desktopContract: 8,
       updateAvailable: false,
-      version: "0.20.5",
+      version: "0.23.1",
     });
     expect(
       Object.values(snapshot.features).every(

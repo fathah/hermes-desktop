@@ -66,9 +66,12 @@ export default function AboutPane({
     desktopUpdateState === "downloading",
   );
 
+  const desktopNeedsUpdate =
+    agentCapabilities?.compatibility === "desktop-update-recommended";
   const engineHasUpdate =
-    !!parsedVersion?.updateInfo ||
-    agentCapabilities?.compatibility === "update-recommended";
+    !desktopNeedsUpdate &&
+    (!!parsedVersion?.updateInfo ||
+      agentCapabilities?.compatibility === "update-recommended");
   const canUpdateEngine = agentCapabilities?.canUpdate !== false;
   const loading = hermesVersion === null;
 
@@ -96,11 +99,13 @@ export default function AboutPane({
           </div>
           {!loading && (
             <span
-              className={`settings-card-badge ${engineHasUpdate ? "is-update" : "is-ok"}`}
+              className={`settings-card-badge ${engineHasUpdate || desktopNeedsUpdate ? "is-update" : "is-ok"}`}
             >
-              {engineHasUpdate
-                ? t("settings.statusUpdateAvailable")
-                : t("settings.statusUpToDate")}
+              {desktopNeedsUpdate
+                ? t("settings.statusDesktopUpdateRequired")
+                : engineHasUpdate
+                  ? t("settings.statusUpdateAvailable")
+                  : t("settings.statusUpToDate")}
             </span>
           )}
         </header>
@@ -163,6 +168,12 @@ export default function AboutPane({
             </div>
           )}
 
+          {desktopNeedsUpdate && (
+            <div className="settings-hermes-update-badge" role="status">
+              {t("settings.agentNewerThanDesktop")}
+            </div>
+          )}
+
           <div className="settings-card-actions">
             {engineHasUpdate ? (
               <button
@@ -183,11 +194,11 @@ export default function AboutPane({
                 )}
                 {updating ? t("settings.updating") : t("settings.updateEngine")}
               </button>
-            ) : (
+            ) : !desktopNeedsUpdate ? (
               <button className="btn btn-secondary" disabled>
                 {t("settings.latestVersion")}
               </button>
-            )}
+            ) : null}
             <button
               className="btn btn-secondary"
               onClick={handleDoctor}

@@ -12,6 +12,8 @@ vi.mock("../src/main/installer", () => ({
   HERMES_PYTHON: "/usr/bin/true",
   HERMES_REPO: "/tmp",
   hermesCliArgs: () => [],
+  hermesRuntimeKind: () => "legacy",
+  hermesPythonArgs: (args: string[]) => args,
   getEnhancedPath: () => "",
 }));
 vi.mock("../src/main/config", () => ({
