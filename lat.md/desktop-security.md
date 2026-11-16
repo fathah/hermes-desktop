@@ -8,7 +8,7 @@ Unix installation downloads a commit-pinned Agent bootstrap script, verifies its
 
 [[src/main/installer-download.ts#verifiedInstallerCommand]] stages the file under a unique temporary path and removes it on success, download failure, checksum mismatch, or installer failure. [[src/main/installer.ts#runInstall]] preserves verification failures instead of applying its legacy installed-binary warning fallback.
 
-The pin is upstream commit `503d863fcd2cbfc0be5a6d6c536fae2e98aa4204`, whose `scripts/install.sh` hash is `0582d9b1562efcb6e0ac62f4451021667830b830a72ce7d91eaea9fee8b6c09b`. Bump the commit and digest together after reviewing upstream bootstrap changes and compatibility with the Agent it installs. This pins the bootstrap only; its Agent/dependency updates and the Windows bootstrap retain their separate update behavior.
+The reviewed Agent v0.23.1 commit and matching POSIX/Windows bootstrap digests follow [[installer-runtime#Reviewed installation baseline]]. Each verified bootstrap receives that same Agent commit for fresh installation; existing newer checkouts retain upstream's rollback guard. Bump the commit and both digests together after review. Explicit Agent and dependency updates remain upstream-owned.
 
 [[tests/installer-download.test.ts]] executes the shell pipeline with real checksum tools and a harmless downloaded fixture. [[tests/installer-verification-result.test.ts]] checks that verification failure cannot become a successful install result merely because binaries already exist.
 

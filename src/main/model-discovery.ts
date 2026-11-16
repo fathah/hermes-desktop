@@ -25,6 +25,7 @@ import {
   HERMES_REPO,
   HERMES_HOME,
   getEnhancedPath,
+  hermesPythonArgs,
 } from "./installer";
 // PROVIDER_BASE_URLS lives in its own module so `config.ts` can use the
 // same lookup without pulling in this whole file (and triggering a
@@ -105,7 +106,7 @@ function runProviderModelIdsPython(provider: string): Promise<string[] | null> {
   return new Promise((resolve) => {
     execFile(
       HERMES_PYTHON,
-      ["-c", PROVIDER_MODELS_SNIPPET, provider],
+      hermesPythonArgs(["-c", PROVIDER_MODELS_SNIPPET, provider]),
       {
         cwd: HERMES_REPO,
         env: { ...process.env, PATH: getEnhancedPath(), HERMES_HOME },

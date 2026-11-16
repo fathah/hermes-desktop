@@ -4,7 +4,7 @@ import {
 } from "./installer-download";
 
 export const PINNED_WINDOWS_INSTALL_SHA256 =
-  "e7521626d40f2d9fc2c51968244f22b3441dc4d5efebb28a0af4b335e91aecdf";
+  "44bb5b021498c0bba95f77ac30b6c4676f3ffb7aa92ea48c731cd0940e941cdc";
 function psQuote(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
 }
