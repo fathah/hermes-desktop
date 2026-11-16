@@ -17,6 +17,7 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[loading-indicators]] — the thinking-orbs dotted-orb loaders behind every loading state, and the OrbLoader wrapper that pins dark/light from the Hermes theme registry instead of the library's auto-detection.
 - [[window-chrome]] — the browser-style title bar where open-conversation tabs sit on top of the window drag region, clickable while empty space still drags.
 - [[desktop-updates]] — GitHub release checks, startup upgrade button behavior, and the Settings auto-upgrade preference.
+- [[installer-runtime]] — installation-bound managed Python discovery, upstream bootstrap delegation, legacy fallback and the reviewed installer baseline.
 - [[desktop-security]] — verified Unix bootstrap execution and safe rendering of runtime provider names.
 - [[agent-capabilities]] — capability-based compatibility between the independent desktop and system-installed Hermes Agent, including bounded runtime evidence and update gating.
 - [[connections]] — the versioned main-process connection registry, stable active connection identity, and lossless migration from the legacy singleton configuration.
@@ -62,3 +63,7 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[external-memory-providers]] — Optional external memory discovery and Local Graphnosis registration.
 - [[external-memory-providers-tests]] — Isolated discovery and captured-registration tests.
 - [[backup-import]] — Native consent, explicit captured Local profile and diagnostic preservation for backup restore.
+- [[server-requests]] — Current Agent blocking-request replies, cancellation, replay and batch clarification.
+- [[main-server-requests]] — Main-process request correlation, native secret collection, cancellation and safe replay restoration.
+- [[compatibility-validation]] — Current and legacy Agent evidence with Local, SSH and Remote validation boundaries.
+- [[native-release-acceptance]] — Disposable native installer, launch, SQLite and actual updater acceptance across shipping platforms.
