@@ -5,13 +5,19 @@ import { patchDashboardModelLibrarySource } from "../src/main/hermes-agent-compa
 
 describe("Dashboard model profile isolation", () => {
   // @lat: [[model-context#Model context window#Dashboard default profile isolation]]
-  it.skipIf(process.platform === "win32")(
-    "reads the root config for default while retaining the current named profile",
-    () => {
+  it.skipIf(process.platform === "win32").each(["legacy", "managed"])(
+    "reads the root config for default while retaining the current named profile (%s)",
+    (mode) => {
       const source = patchDashboardModelLibrarySource(`
+${
+  mode === "managed"
+    ? "app.include_router(_models_routes.router)"
+    : `
 @app.post("/api/model/set")
 async def set_model_assignment(body):
     return {"ok": True}
+`
+}
 
 mount_spa(app)
 `).source;
@@ -27,6 +33,7 @@ class App:
         return lambda *args, **kwargs: lambda handler: handler
 
 app = App()
+_models_routes = types.SimpleNamespace(router=object())
 mount_spa = lambda app: None
 override = contextvars.ContextVar("home", default=None)
 constants = types.ModuleType("hermes_constants")
@@ -40,6 +47,7 @@ with tempfile.TemporaryDirectory() as temporary:
     process_home.mkdir(parents=True)
     def get_hermes_home():
         return override.get() or process_home
+    constants.get_hermes_home = get_hermes_home
     def load_config():
         return json.loads((get_hermes_home() / "config.yaml").read_text())
     for home, window in [(root, 32768), (process_home, 1000000)]:

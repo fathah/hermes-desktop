@@ -29,6 +29,7 @@ vi.mock("../src/main/installer", () => ({
   HERMES_PYTHON: process.execPath,
   getEnhancedPath: () => process.env.PATH,
   hermesCliArgs: (args: string[]) => args,
+  hermesRuntimeKind: () => "legacy",
 }));
 vi.mock("../src/main/utils", async (original) => ({
   ...(await original<typeof import("../src/main/utils")>()),

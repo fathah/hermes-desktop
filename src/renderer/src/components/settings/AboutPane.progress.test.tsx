@@ -128,6 +128,7 @@ beforeEach(async () => {
             resolveAgent = resolve;
           }),
       ),
+      checkForUpdates: vi.fn(async () => null),
     },
   });
 });
@@ -139,6 +140,40 @@ async function ready(): Promise<void> {
     expect(screen.getByRole("button", { name: "Update Engine" })).toBeEnabled(),
   );
 }
+
+// @lat: [[agent-capabilities#Test specifications#Future contract update direction]]
+it.each(["en", "he"])(
+  "directs a newer Agent contract to the desktop updater in %s",
+  async (locale) => {
+    await sharedI18n.changeLanguage(locale);
+    vi.mocked(window.hermesAPI.getAgentCapabilities).mockResolvedValue({
+      compatibility: "desktop-update-recommended",
+      canUpdate: true,
+      desktopContract: 9,
+      recommendedDesktopContract: 8,
+    } as Awaited<ReturnType<typeof window.hermesAPI.getAgentCapabilities>>);
+    render(<Harness />);
+
+    await screen.findByText("Desktop update needed");
+    expect(
+      screen.getByText(/This Agent uses a newer interface/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: sharedI18n.t("settings.updateEngine"),
+      }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: sharedI18n.t("settings.checkForUpdates"),
+      }),
+    );
+    await waitFor(() =>
+      expect(window.hermesAPI.checkForUpdates).toHaveBeenCalledTimes(1),
+    );
+    expect(window.hermesAPI.runHermesUpdate).not.toHaveBeenCalled();
+  },
+);
 
 // @lat: [[desktop-updates#Progress evidence#About download measurements]]
 it("retains bytes, speed and fractional progress in the actual About pane", async () => {
