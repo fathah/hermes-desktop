@@ -15,6 +15,7 @@ import {
 import {
   getEnhancedPath,
   hermesCliArgs,
+  hermesRuntimeKind,
   HERMES_HOME,
   HERMES_PYTHON,
   HERMES_REPO,
@@ -27,6 +28,7 @@ import {
   buildRemoteOAuthWsUrl,
   mintRemoteOAuthWsTicket,
   probeRemoteAuthMode,
+  RemoteOAuthError,
   remoteOAuthSessionState,
   requestRemoteOAuthJson,
 } from "./remote-oauth";
@@ -285,6 +287,17 @@ function isPortFree(port: number): Promise<boolean> {
   });
 }
 
+class DashboardHttpError extends Error {
+  constructor(
+    message: string,
+    readonly statusCode: number,
+    readonly responseIsHtml: boolean,
+  ) {
+    super(message);
+    this.name = "DashboardHttpError";
+  }
+}
+
 function requestJson(
   url: string,
   token: string,
@@ -310,10 +323,23 @@ function requestJson(
         res.on("data", (chunk: Buffer) => chunks.push(chunk));
         res.on("end", () => {
           const text = Buffer.concat(chunks).toString("utf8");
-          if ((res.statusCode ?? 500) >= 400) {
+          const statusCode = res.statusCode ?? 500;
+          const responseIsHtml =
+            String(res.headers["content-type"] ?? "")
+              .toLowerCase()
+              .includes("text/html") || /^\s*<(?:!doctype|html)/i.test(text);
+          if (statusCode >= 400) {
             reject(
-              new Error(`${res.statusCode}: ${text || res.statusMessage}`),
+              new DashboardHttpError(
+                `${res.statusCode}: ${text || res.statusMessage}`,
+                statusCode,
+                responseIsHtml,
+              ),
             );
+            return;
+          }
+          if (responseIsHtml) {
+            reject(new Error(`Expected JSON from ${url} but received HTML.`));
             return;
           }
           if (!text) {
@@ -345,6 +371,30 @@ function requestJson(
     });
     req.end();
   });
+}
+
+// @lat: [[scheduled-jobs#Fresh dashboard transport readiness]]
+async function verifyDashboardProtectedAccess(
+  baseUrl: string,
+  request: (url: string) => Promise<unknown>,
+): Promise<void> {
+  try {
+    await request(`${baseUrl}/api/sessions?limit=1`);
+  } catch (error) {
+    if (
+      !(
+        error instanceof DashboardHttpError || error instanceof RemoteOAuthError
+      ) ||
+      error.statusCode !== 503 ||
+      error.responseIsHtml !== false
+    ) {
+      throw error;
+    }
+    // Fresh Agent stores have no state.db before their first session. Keep
+    // verification on this exact authenticated transport; 503 alone is not
+    // readiness, and the caller must still verify the chat WebSocket.
+    await request(`${baseUrl}/api/profiles`);
+  }
 }
 
 export function probeDashboardWebSocket(
@@ -497,7 +547,7 @@ export async function getRemoteDashboardStatusForConfig(
         };
       }
 
-      await requestRemoteOAuthJson(`${baseUrl}/api/sessions?limit=1`);
+      await verifyDashboardProtectedAccess(baseUrl, requestRemoteOAuthJson);
       const ticket = await mintRemoteOAuthWsTicket(baseUrl);
       await probeDashboardWebSocket({
         ...connection,
@@ -515,9 +565,9 @@ export async function getRemoteDashboardStatusForConfig(
       };
     }
 
-    await requestJson(
-      `${connection.baseUrl}/api/sessions?limit=1`,
-      connection.token,
+    const sessionToken = connection.token;
+    await verifyDashboardProtectedAccess(connection.baseUrl, (url) =>
+      requestJson(url, sessionToken),
     );
     await probeDashboardWebSocket(connection);
 
@@ -588,9 +638,8 @@ async function getSshDashboardStatusForConfig(
       };
     }
 
-    await requestJson(
-      `${connection.baseUrl}/api/sessions?limit=1`,
-      connection.token,
+    await verifyDashboardProtectedAccess(connection.baseUrl, (url) =>
+      requestJson(url, connection.token),
     );
     await probeDashboardWebSocket(connection);
 
@@ -752,6 +801,9 @@ async function startLocalDashboard(
   const hasPrebuiltWebDist = dashboardHasPrebuiltWebDist();
   const cliArgs = buildLocalDashboardCliArgs(resolvedProfile, port, {
     skipBuild: hasPrebuiltWebDist,
+    headless:
+      typeof hermesRuntimeKind === "function" &&
+      hermesRuntimeKind() === "managed",
   });
 
   let proc: ChildProcess;
