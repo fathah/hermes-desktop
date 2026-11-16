@@ -4,11 +4,19 @@
 
 **Created:** 2026-08-23
 
-**Last updated:** 2026-08-24
+**Last updated:** 2026-11-11
 
 **Upstream reference:** `NousResearch/hermes-agent` desktop and release notes through the audit baseline
 
 **Owner:** hermes-desktop maintainers
+
+## November 11 upstream refresh
+
+The [current gap review](../../upstream-gap-review-2026-11-11.md) compares published desktop v0.7.7, desktop main, the sibling Agent checkout, and upstream Agent v0.23.1.
+
+M0's original completion below records the contract-6 implementation. The [compatibility acceptance record](../../compatibility-acceptance-2026-11-11.md) now tracks the contract-8 catch-up, current blocking-prompt replies, cancellation/replay, native secret handling and managed-runtime baseline. It distinguishes source transport evidence from packaged-platform and deployment acceptance.
+
+M1 still lacks complete simultaneous connection lifecycles, while M4 has an experimental local-only groups slice rather than production cross-machine Bot Mode. Newer work also supplies in-chat subagents, schedule history, remote settings and transcript performance improvements; the dated review separates that progress from remaining gaps without checking off unverified milestone gates. The next compatibility candidate has [draft v0.7.8 release notes](../../releases/v0.7.8.md).
 
 ## Goal
 

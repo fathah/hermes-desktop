@@ -26,10 +26,12 @@ interface RecordedRequest {
 describe("remote session REST bridge", () => {
   let server: http.Server;
   let baseUrl = "";
+  let historyToolCalls: unknown;
   const requests: RecordedRequest[] = [];
 
   beforeEach(async () => {
     requests.length = 0;
+    historyToolCalls = null;
     requestRemoteOAuthJson.mockReset();
     server = http.createServer((req, res) => {
       const chunks: Buffer[] = [];
@@ -180,6 +182,43 @@ describe("remote session REST bridge", () => {
                   timestamp: 12,
                   tool_call_id: "call-1",
                   tool_name: "skill_view",
+                },
+              ],
+            }),
+          );
+          return;
+        }
+
+        if (req.url === "/api/sessions/sess-tool-history/messages") {
+          res.end(
+            JSON.stringify({
+              messages: [
+                {
+                  id: 1,
+                  role: "user",
+                  content: "Which transport and city?",
+                  timestamp: 10,
+                },
+                {
+                  id: 2,
+                  role: "assistant",
+                  content: null,
+                  tool_calls: historyToolCalls,
+                  timestamp: 11,
+                },
+                {
+                  id: 3,
+                  role: "tool",
+                  content: '{"transport":"Local","city":"Dubai"}',
+                  tool_call_id: "call-clarify",
+                  tool_name: "clarify",
+                  timestamp: 12,
+                },
+                {
+                  id: 4,
+                  role: "assistant",
+                  content: "The selected transport is Local in Dubai.",
+                  timestamp: 13,
                 },
               ],
             }),
@@ -480,6 +519,92 @@ describe("remote session REST bridge", () => {
       content: '{"success":true}',
     });
   });
+
+  // @lat: [[chat-commands#Restored REST tool activity#Decoded arrays retain legacy history]]
+  it("restores decoded REST tool calls identically to legacy strings, including arguments and final text", async () => {
+    const args = {
+      questions: [
+        {
+          qid: "transport",
+          question: "Which transport?",
+          choices: ["Local", "Remote"],
+        },
+        { qid: "city", question: "Which city?" },
+      ],
+    };
+    const calls = [
+      {
+        id: "call-clarify",
+        type: "function",
+        function: { name: "clarify", arguments: JSON.stringify(args) },
+      },
+    ];
+    historyToolCalls = calls;
+    const decoded = await remoteGetSessionMessages(
+      config(),
+      "sess-tool-history",
+    );
+    historyToolCalls = JSON.stringify(calls);
+    const legacy = await remoteGetSessionMessages(
+      config(),
+      "sess-tool-history",
+    );
+
+    expect(decoded).toEqual(legacy);
+    expect(decoded.map((item) => item.kind)).toEqual([
+      "user",
+      "tool_call",
+      "tool_result",
+      "assistant",
+    ]);
+    expect(decoded[1]).toMatchObject({
+      kind: "tool_call",
+      callId: "call-clarify",
+      name: "clarify",
+      args: JSON.stringify(args, null, 2),
+    });
+    expect(decoded[2]).toMatchObject({
+      kind: "tool_result",
+      callId: "call-clarify",
+      content: '{"transport":"Local","city":"Dubai"}',
+    });
+    expect(decoded[3]).toMatchObject({
+      kind: "assistant",
+      content: "The selected transport is Local in Dubai.",
+    });
+    expect(requests).toHaveLength(2);
+    for (const request of requests)
+      expect(request).toMatchObject({
+        url: "/api/sessions/sess-tool-history/messages",
+        token: "test-token",
+      });
+  });
+
+  // @lat: [[chat-commands#Restored REST tool activity#Unrelated tool-call values remain ignored]]
+  it.each([
+    null,
+    true,
+    42,
+    { id: "not-an-array", function: { name: "clarify", arguments: "{}" } },
+  ])(
+    "ignores a non-array non-string tool_calls value %j without losing final text",
+    async (value) => {
+      historyToolCalls = value;
+      const items = await remoteGetSessionMessages(
+        config(),
+        "sess-tool-history",
+      );
+      expect(items.map((item) => item.kind)).toEqual([
+        "user",
+        "tool_result",
+        "assistant",
+      ]);
+      expect(items.at(-1)).toMatchObject({
+        kind: "assistant",
+        content: "The selected transport is Local in Dubai.",
+      });
+    },
+  );
 
   it("rehydrates remote pasted-image prompts from Hermes vision fallback text", async () => {
     const items = await remoteGetSessionMessages(config(), "sess-image");

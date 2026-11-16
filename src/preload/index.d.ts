@@ -60,6 +60,7 @@ import type {
 import type { GpuPreferenceMode, GpuStatus } from "../shared/gpu";
 import type { AgentCapabilitySnapshot } from "../shared/agent-capabilities";
 import type { SessionLocation } from "../shared/session-location";
+import type { GatewayClarifyQuestion } from "../shared/gateway-server-requests";
 
 interface ElectronAPI {
   process: {
@@ -614,10 +615,18 @@ interface HermesAPI {
         requestId: string;
         question: string;
         choices: string[];
+        questions?: GatewayClarifyQuestion[];
+        answers?: Record<string, string | null>;
       },
     ) => void,
   ) => () => void;
   respondClarify: (requestId: string, answer: string) => Promise<boolean>;
+  onChatRequestCancelled: (
+    callback: (
+      runId: string,
+      req: { requestId: string; kind: "approval" | "clarify" },
+    ) => void,
+  ) => () => void;
   onApprovalRequest: (
     callback: (runId: string, req: ChatApprovalRequest) => void,
   ) => () => void;
