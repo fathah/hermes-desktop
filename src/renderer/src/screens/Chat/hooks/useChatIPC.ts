@@ -11,6 +11,7 @@ import {
   upsertLiveToolEvent,
 } from "../liveToolEvents";
 import { upsertLiveReasoningChunk } from "../liveReasoningEvents";
+import { normalizeGatewayClarifyQuestions } from "../../../../../shared/gateway-server-requests";
 
 interface UseChatIPCArgs {
   /** This conversation's run id. Events tagged with a different runId belong
@@ -284,9 +285,32 @@ export function useChatIPC({
               requestId: req.requestId,
               question: req.question,
               choices: Array.isArray(req.choices) ? req.choices : [],
+              ...(req.questions
+                ? {
+                    questions: normalizeGatewayClarifyQuestions(req.questions),
+                    answers: req.answers,
+                  }
+                : {}),
             },
           ];
         });
+      },
+    );
+
+    const cleanupCancelled = window.hermesAPI.onChatRequestCancelled?.(
+      (eventRunId, request) => {
+        if (!eventMatchesRun(eventRunId, runId)) return;
+        setMessages((current) =>
+          current.map((message) =>
+            message.kind === request.kind &&
+            message.requestId === request.requestId &&
+            (message.responsePath === "ipc" ||
+              message.responsePath === undefined) &&
+            !message.resolved
+              ? { ...message, unavailable: true }
+              : message,
+          ),
+        );
       },
     );
 
@@ -414,6 +438,7 @@ export function useChatIPC({
       cleanupDone();
       cleanupError();
       cleanupClarify();
+      cleanupCancelled?.();
       cleanupApproval();
       cleanupToolProgress();
       cleanupToolEvent();

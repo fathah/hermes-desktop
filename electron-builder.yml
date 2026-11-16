@@ -12,12 +12,13 @@ productName: HermesOne
 directories:
   buildResources: build
 files:
-  - "!**/.vscode/*"
-  - "!src/*"
-  - "!electron.vite.config.{js,ts,mjs,cjs}"
-  - "!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}"
-  - "!{.env,.env.*,.npmrc,pnpm-lock.yaml}"
-  - "!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}"
+  # Production dependencies are collected by Electron Builder separately.
+  # Keep repository tooling, tests and mutable release documentation out of ASAR.
+  - out/**/*
+  - resources/**/*
+  - package.json
+  - LICENSE
+  - "!**/{.env,.env.*,.npmrc}"
 asarUnpack:
   - resources/**
   - node_modules/better-sqlite3/prebuilds/*.node
