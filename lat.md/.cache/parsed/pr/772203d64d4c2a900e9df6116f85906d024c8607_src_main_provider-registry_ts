@@ -1,0 +1,2 @@
+v6:a77b7a39cee285746dda58940bdbe32ef53ba77f
+{"path":"src/main/provider-registry.ts","symbols":[{"name":"PROVIDER_BASE_URLS","kind":"const","startLine":15,"endLine":50,"signature":"const PROVIDER_BASE_URLS: Record<string, string> = {"},{"name":"canonicalProviderBaseUrl","kind":"function","startLine":57,"endLine":60,"signature":"function canonicalProviderBaseUrl(provider: string): string | null {"}],"timings":{"readMs":0.12250899999980902,"hashMs":0.018641999999999825,"cacheReadMs":0.05447099999992133,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.24929599999995844}}

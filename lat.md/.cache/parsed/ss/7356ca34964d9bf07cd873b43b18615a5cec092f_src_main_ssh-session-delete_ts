@@ -1,0 +1,2 @@
+v6:a8580bef91f2937b38a0c1c4da0a3923f305e04e
+{"path":"src/main/ssh-session-delete.ts","symbols":[{"name":"SSH_SESSION_DELETE_SCRIPT","kind":"const","startLine":4,"endLine":55,"signature":"const SSH_SESSION_DELETE_SCRIPT = String.raw`"}],"timings":{"readMs":0.09192299999995157,"hashMs":0.016667000000097687,"cacheReadMs":0.04790899999989051,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.13124100000004546}}

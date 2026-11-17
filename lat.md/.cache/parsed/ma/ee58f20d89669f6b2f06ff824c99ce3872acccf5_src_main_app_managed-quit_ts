@@ -1,0 +1,2 @@
+v6:75e02156392e7735f6ae6b0f95ec006057972743
+{"path":"src/main/app/managed-quit.ts","symbols":[{"name":"registerManagedQuit","kind":"function","startLine":4,"endLine":25,"signature":"function registerManagedQuit("}],"timings":{"readMs":0.11669800000004216,"hashMs":0.015613000000030297,"cacheReadMs":0.05285099999991871,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.18696899999986272}}

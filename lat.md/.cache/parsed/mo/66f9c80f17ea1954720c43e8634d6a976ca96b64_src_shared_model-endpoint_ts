@@ -1,0 +1,2 @@
+v6:678ed3691703b6929ca05c81dceb0380828b6730
+{"path":"src/shared/model-endpoint.ts","symbols":[{"name":"normalizeModelEndpointUrl","kind":"function","startLine":8,"endLine":32,"signature":"function normalizeModelEndpointUrl("}],"timings":{"readMs":0.10280000000011569,"hashMs":0.016305000000102154,"cacheReadMs":0.04998399999999492,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.24108799999999064}}

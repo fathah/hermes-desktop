@@ -1,0 +1,2 @@
+v6:27e75129431ba50887d0ceb33109b6802e593600
+{"path":"src/renderer/src/components/common/useUpdateDownloadText.ts","symbols":[{"name":"INACTIVITY_MS","kind":"const","startLine":5,"endLine":5,"signature":"const INACTIVITY_MS = 15000;"},{"name":"useUpdateDownloadText","kind":"function","startLine":8,"endLine":52,"signature":"function useUpdateDownloadText("}],"timings":{"readMs":0.1388409999999567,"hashMs":0.01940100000001621,"cacheReadMs":0.055041999999957625,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.4459940000001552}}

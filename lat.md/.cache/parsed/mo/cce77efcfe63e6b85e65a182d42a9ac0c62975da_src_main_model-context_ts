@@ -1,0 +1,2 @@
+v6:7a67f826889cc53768d9179c4ed292df49507bf2
+{"path":"src/main/model-context.ts","symbols":[{"name":"ActiveModelContextConfig","kind":"interface","startLine":1,"endLine":4,"signature":"interface ActiveModelContextConfig {"},{"name":"resolveActiveModelContextWindow","kind":"function","startLine":12,"endLine":30,"signature":"async function resolveActiveModelContextWindow("}],"timings":{"readMs":0.13156099999991966,"hashMs":0.016975000000002183,"cacheReadMs":0.05905000000007021,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.19037900000012087}}

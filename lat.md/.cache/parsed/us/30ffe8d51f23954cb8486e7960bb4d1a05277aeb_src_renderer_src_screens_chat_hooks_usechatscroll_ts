@@ -1,0 +1,2 @@
+v6:57a2f1e7e6365e3630862029b777b2af52e9aad8
+{"path":"src/renderer/src/screens/Chat/hooks/useChatScroll.ts","symbols":[{"name":"useChatScroll","kind":"function","startLine":5,"endLine":142,"signature":"function useChatScroll("}],"timings":{"readMs":0.12729699999999866,"hashMs":0.028238999999985026,"cacheReadMs":0.06460600000013983,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.8579359999998815}}

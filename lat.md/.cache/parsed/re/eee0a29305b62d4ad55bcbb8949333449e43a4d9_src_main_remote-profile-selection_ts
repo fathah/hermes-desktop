@@ -1,0 +1,2 @@
+v6:38953aac7ffeb15ab4305af36e4a626973d46b0a
+{"path":"src/main/remote-profile-selection.ts","symbols":[{"name":"getRemoteSelectedProfile","kind":"function","startLine":9,"endLine":22,"signature":"function getRemoteSelectedProfile("},{"name":"setRemoteSelectedProfile","kind":"function","startLine":24,"endLine":44,"signature":"function setRemoteSelectedProfile("}],"timings":{"readMs":0.13724499999989348,"hashMs":0.016651000000138083,"cacheReadMs":0.05488599999989674,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.32282900000018344}}

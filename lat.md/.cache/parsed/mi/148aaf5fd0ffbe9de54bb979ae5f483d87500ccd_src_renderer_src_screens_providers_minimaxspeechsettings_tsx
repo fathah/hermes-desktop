@@ -1,0 +1,2 @@
+v6:1831959e4ea1114f448235616d136b834f02630e
+{"path":"src/renderer/src/screens/Providers/MiniMaxSpeechSettings.tsx","symbols":[{"name":"MiniMaxSpeechSettings","kind":"function","startLine":11,"endLine":160,"signature":"function MiniMaxSpeechSettings({"}],"timings":{"readMs":0.10518500000011954,"hashMs":0.01777500000002874,"cacheReadMs":0.048549000000093656,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.8043989999998757}}

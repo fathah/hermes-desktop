@@ -1,0 +1,2 @@
+v6:480d3b839dcc12a0f087f3902e383221e056be75
+{"path":"src/renderer/src/screens/Memory/MemoryEntries.tsx","symbols":[{"name":"MemoryEntriesProps","kind":"interface","startLine":11,"endLine":16,"signature":"interface MemoryEntriesProps extends ProfileEditorScope {"},{"name":"MemoryEntries","kind":"function","startLine":18,"endLine":244,"signature":"function MemoryEntries({"}],"timings":{"readMs":0.1067449999998189,"hashMs":0.019457999999985987,"cacheReadMs":0.058741999999938344,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":1.107151000000158}}

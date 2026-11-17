@@ -1,0 +1,2 @@
+v6:7eceebcb5de998e12808eb32948458662d613f04
+{"path":"src/shared/profile-name.ts","symbols":[{"name":"PROFILE_NAME_RE","kind":"const","startLine":2,"endLine":2,"signature":"const PROFILE_NAME_RE = /^[a-z0-9_][a-z0-9_-]{0,63}$/;"}],"timings":{"readMs":0.13247599999999693,"hashMs":0.016158000000132233,"cacheReadMs":0.058853999999882944,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.06862200000000485}}

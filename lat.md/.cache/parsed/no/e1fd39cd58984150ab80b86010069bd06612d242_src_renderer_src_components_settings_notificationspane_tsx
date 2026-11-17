@@ -1,0 +1,2 @@
+v6:50b1a869769f4d4401f4e4d39e497f9b0dcdf399
+{"path":"src/renderer/src/components/settings/NotificationsPane.tsx","symbols":[{"name":"NotificationsPane","kind":"function","startLine":6,"endLine":30,"signature":"function NotificationsPane(): React.JSX.Element {"}],"timings":{"readMs":0.3552319999998872,"hashMs":0.01728400000001784,"cacheReadMs":0.060787000000118496,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.18449699999996483}}

@@ -1,0 +1,2 @@
+v6:68a82d4aed2d286acfaa2b23d426bd27691d00ff
+{"path":"src/main/bot-groups.ts","symbols":[{"name":"botGroupsRequest","kind":"function","startLine":9,"endLine":91,"signature":"async function botGroupsRequest("}],"timings":{"readMs":0.12378100000000813,"hashMs":0.019040999999788255,"cacheReadMs":0.06262599999990925,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.5263529999999719}}

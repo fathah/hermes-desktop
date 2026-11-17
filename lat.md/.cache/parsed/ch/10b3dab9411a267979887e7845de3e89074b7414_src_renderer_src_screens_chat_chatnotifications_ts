@@ -1,0 +1,2 @@
+v6:6d8962b7a49aaa19fe04e3b19ac5b2ee89772567
+{"path":"src/renderer/src/screens/Chat/chatNotifications.ts","symbols":[{"name":"shouldPlayCompletionSound","kind":"function","startLine":2,"endLine":8,"signature":"function shouldPlayCompletionSound("}],"timings":{"readMs":0.12216300000000047,"hashMs":0.01435300000002826,"cacheReadMs":0.05297600000017155,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.08779499999991458}}

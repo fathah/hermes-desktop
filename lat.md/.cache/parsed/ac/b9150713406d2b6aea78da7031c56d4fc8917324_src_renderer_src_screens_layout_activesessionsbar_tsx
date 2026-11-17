@@ -1,0 +1,2 @@
+v6:dfadc124636548df7c1619c0980474f4afab9d59
+{"path":"src/renderer/src/screens/Layout/ActiveSessionsBar.tsx","symbols":[{"name":"ProfileAppearance","kind":"interface","startLine":8,"endLine":11,"signature":"interface ProfileAppearance {"},{"name":"ActiveSessionsBar","kind":"const","startLine":21,"endLine":108,"signature":"const ActiveSessionsBar = memo(function ActiveSessionsBar({"}],"timings":{"readMs":0.10251100000004953,"hashMs":0.019162999999934982,"cacheReadMs":0.046113000000104876,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.5344010000001163}}

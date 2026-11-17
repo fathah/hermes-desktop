@@ -912,8 +912,8 @@ export function reconcileStreamedWithDb(
  * Match keys use the first 200 normalized characters, so a live reply cut
  * off before 200 characters ("Hello") never meets its database row
  * ("Hello world") and both survive (#1089). Within one turn (between user
- * rows), an unmatched live assistant bubble whose readable text the unmatched
- * database bubble strictly extends takes that row's content and metadata via
+ * rows, and between tool rows), an unmatched live assistant bubble whose
+ * readable text the unmatched database bubble strictly extends takes that row's content and metadata via
  * [[mergeDbMetadataIntoStreamed]], keeping the live id and position; the
  * database copy is dropped. Each database row completes at most one live row.
  */
@@ -951,9 +951,13 @@ function foldShortPartialReplies(
     }
   };
 
+  // A tool row also closes the span, so a reply never borrows text from the
+  // other side of a tool call.
   for (let i = 0; i < output.length; i++) {
     const m = output[i];
-    if (isBubbleMessage(m) && m.role === "user") {
+    const isTool =
+      "kind" in m && (m.kind === "tool_call" || m.kind === "tool_result");
+    if (isTool || (isBubbleMessage(m) && m.role === "user")) {
       scanTurn(i);
       turnStart = i + 1;
     }

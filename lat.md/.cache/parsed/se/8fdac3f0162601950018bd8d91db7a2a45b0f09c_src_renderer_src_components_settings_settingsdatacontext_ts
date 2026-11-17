@@ -1,0 +1,2 @@
+v6:981904a1f25d426df6f5241e6ade7074a6796594
+{"path":"src/renderer/src/components/settings/SettingsDataContext.ts","symbols":[{"name":"SettingsDataContext","kind":"const","startLine":9,"endLine":9,"signature":"const SettingsDataContext = createContext<SettingsData | null>(null);"},{"name":"useSettings","kind":"function","startLine":12,"endLine":18,"signature":"function useSettings(): SettingsData {"}],"timings":{"readMs":0.11062600000013845,"hashMs":0.01513899999986279,"cacheReadMs":0.047139999999899374,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.14917799999989256}}

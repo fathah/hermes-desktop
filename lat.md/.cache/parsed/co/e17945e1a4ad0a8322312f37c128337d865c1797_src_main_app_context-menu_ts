@@ -1,0 +1,2 @@
+v6:00c0c05e91d1e526158a727d1743663e0a41dc90
+{"path":"src/main/app/context-menu.ts","symbols":[{"name":"showChatContextMenu","kind":"function","startLine":3,"endLine":45,"signature":"function showChatContextMenu("}],"timings":{"readMs":0.09895899999992253,"hashMs":0.016772000000173648,"cacheReadMs":0.05212000000005901,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.27864599999998063}}

@@ -1,0 +1,2 @@
+v6:f282a106a2112e7c2e2293e2c9c651de05349e9e
+{"path":"src/renderer/src/hooks/useLightboxClose.ts","symbols":[{"name":"useLightboxClose","kind":"function","startLine":14,"endLine":27,"signature":"function useLightboxClose(active: boolean, close: () => void): void {"}],"timings":{"readMs":0.11742400000002817,"hashMs":0.018849999999929423,"cacheReadMs":0.05835499999989224,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.19083000000000538}}

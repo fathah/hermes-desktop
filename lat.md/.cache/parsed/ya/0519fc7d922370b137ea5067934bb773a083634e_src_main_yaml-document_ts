@@ -1,0 +1,2 @@
+v6:e42c3a2594c2608b4d4b363b9b3479b915677b09
+{"path":"src/main/yaml-document.ts","symbols":[{"name":"splitSingleYamlDocument","kind":"function","startLine":2,"endLine":39,"signature":"function splitSingleYamlDocument(content: string): {"}],"timings":{"readMs":0.11626799999999093,"hashMs":0.016005999999833875,"cacheReadMs":0.06372099999998682,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.29090500000006614}}

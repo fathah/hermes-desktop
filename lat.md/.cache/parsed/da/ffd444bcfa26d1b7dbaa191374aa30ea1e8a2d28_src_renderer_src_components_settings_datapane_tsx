@@ -1,0 +1,2 @@
+v6:44dc1ea4f96ef74497f96f1a2196a75cc566b679
+{"path":"src/renderer/src/components/settings/DataPane.tsx","symbols":[{"name":"escapeHtml","kind":"function","startLine":5,"endLine":12,"signature":"function escapeHtml(value: string): string {"},{"name":"DataPane","kind":"function","startLine":19,"endLine":139,"signature":"function DataPane(): React.JSX.Element {"}],"timings":{"readMs":0.13014399999997295,"hashMs":0.02119799999991301,"cacheReadMs":0.05445299999996678,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.5741539999999077}}

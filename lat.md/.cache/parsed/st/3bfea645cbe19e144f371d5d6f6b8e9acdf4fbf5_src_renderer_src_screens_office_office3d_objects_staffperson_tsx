@@ -1,0 +1,2 @@
+v6:de54834a2ba682fd1624cf8746fcdaf571825bed
+{"path":"src/renderer/src/screens/Office/office3d/objects/StaffPerson.tsx","symbols":[{"name":"StaffPerson","kind":"const","startLine":18,"endLine":71,"signature":"const StaffPerson = memo(function StaffPerson({"}],"timings":{"readMs":0.10566000000017084,"hashMs":0.017485999999962587,"cacheReadMs":0.056700999999975465,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.4906470000000809}}
