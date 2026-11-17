@@ -90,6 +90,12 @@ A shared match-key prefix alone does not authorize a content replacement. Diverg
 
 A longer database record cannot rewrite an optimistic user submission, preserving its original visible request and attachment presentation.
 
+### Short partial reply folds into its turn
+
+A live reply cut off before the 200-character match key never meets its database row. The unmatched database reply that strictly extends it in the same turn completes the live row once.
+
+[[src/renderer/src/screens/Chat/sessionHistory.ts#foldShortPartialReplies]] keeps the live id and position. Replies in other turns, or that diverge, stay separate.
+
 ## Busy refusal preserves conversation
 
 A Dashboard busy refusal ends only the attempted desktop turn. Its saved conversation and runtime remain available for retry after the upstream work finishes.

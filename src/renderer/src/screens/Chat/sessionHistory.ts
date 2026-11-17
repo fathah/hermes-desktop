@@ -898,9 +898,70 @@ export function reconcileStreamedWithDb(
   // answered (the reverse of what the user saw live). Re-anchor each card
   // immediately after the streamed message that preceded it.
   return repositionInteractiveCards(
-    dropLossyStreamedReasoning(dedupeMessageIds(merged)),
+    dropLossyStreamedReasoning(
+      foldShortPartialReplies(dedupeMessageIds(merged), streamed, consumedIds),
+    ),
     streamed,
   );
+}
+
+/**
+ * Fold a short, unmatched live assistant reply into the database reply that
+ * completes it in the same turn.
+ *
+ * Match keys use the first 200 normalized characters, so a live reply cut
+ * off before 200 characters ("Hello") never meets its database row
+ * ("Hello world") and both survive (#1089). Within one turn (between user
+ * rows), an unmatched live assistant bubble whose readable text the unmatched
+ * database bubble strictly extends takes that row's content and metadata via
+ * [[mergeDbMetadataIntoStreamed]], keeping the live id and position; the
+ * database copy is dropped. Each database row completes at most one live row.
+ */
+function foldShortPartialReplies(
+  messages: ReadonlyArray<ChatMessage>,
+  streamed: ReadonlyArray<ChatMessage>,
+  consumedIds: ReadonlySet<string>,
+): ChatMessage[] {
+  const streamedIds = new Set(streamed.map((m) => m.id));
+  const isAgentBubble = (m: ChatMessage): m is ChatBubbleMessage =>
+    isBubbleMessage(m) && m.role === "agent" && !m.error && !m.localOnly;
+
+  const output = [...messages];
+  const drop = new Set<string>();
+  let turnStart = 0;
+  const scanTurn = (end: number): void => {
+    for (let i = turnStart; i < end; i++) {
+      const live = output[i];
+      if (!isAgentBubble(live)) continue;
+      if (!streamedIds.has(live.id) || consumedIds.has(live.id)) continue;
+      const liveText = normalizeBubbleContentForMatch(live.content || "");
+      if (!liveText) continue;
+      for (let j = turnStart; j < end; j++) {
+        const db = output[j];
+        if (j === i || drop.has(db.id) || !isAgentBubble(db)) continue;
+        if (streamedIds.has(db.id)) continue;
+        const dbText = normalizeBubbleContentForMatch(db.content || "");
+        if (dbText.length <= liveText.length || !dbText.startsWith(liveText)) {
+          continue;
+        }
+        output[i] = mergeDbMetadataIntoStreamed(live, db);
+        drop.add(db.id);
+        break;
+      }
+    }
+  };
+
+  for (let i = 0; i < output.length; i++) {
+    const m = output[i];
+    if (isBubbleMessage(m) && m.role === "user") {
+      scanTurn(i);
+      turnStart = i + 1;
+    }
+  }
+  scanTurn(output.length);
+
+  if (drop.size === 0) return output;
+  return output.filter((m) => !drop.has(m.id));
 }
 
 const normalizeReasoningText = (text: string): string =>
