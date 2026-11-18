@@ -128,6 +128,14 @@ Linux AppImage names include `${arch}` between version and extension, so x64 and
 
 The isolation is structural: the updater ([[src/main/app/updater.ts#setupUpdater]]) leaves `allowPrerelease` off, so electron-updater's GitHub provider only ever resolves the latest **non-prerelease** release's `latest.yml`. A beta prerelease is therefore invisible to stable clients — testers download the beta installer manually from the prerelease. The beta workflow skips winget + the landing-page rebuild and uses a separate `beta-release` concurrency group so it never cancels a stable release. Cutting a beta for the _next_ version requires bumping `package.json` first (a beta of an already-released version sorts lower than its stable tag).
 
+### Stable version and tag identity
+
+Stable releases require matching manifest and lockfile versions and a previously unused version tag; published tags retain their original commits.
+
+The stable workflow checks for `v<version>` before building and skips an existing tag. Its publish job creates a new tag only after all five platform builds and winget generation succeed. A manually created tag would preempt those checks, so version preparation commits the metadata and lets the workflow create the tag.
+
+Synchronizing the release branch with already published main does not create another release of the same version. A new publication uses a fresh stable version, with the package manifest and both lockfile version fields updated together. The [v0.7.9 notes](../docs/releases/v0.7.9.md) distinguish this metadata promotion from the earlier application's acceptance evidence.
+
 ### Architecture-specific Linux feeds
 
 Both release channels must attach the arm64 Linux updater feed to the GitHub release, in addition to preserving it between build jobs.
