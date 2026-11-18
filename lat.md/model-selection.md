@@ -66,6 +66,24 @@ The selected model/provider is saved in a desktop-owned table keyed by session i
 
 [[src/main/session-model-override-store.ts]] holds `desktop_session_model_overrides` with `provider`, `model`, and `base_url` only. [[src/renderer/src/screens/Chat/Chat.tsx#Chat]] restores the saved value for a resumed session, applies it to the local picker with `persist:false`, and saves later changes once a gateway session id exists. Deleting a session removes the row through [[src/main/sessions.ts#deleteSessionRows]].
 
+## Live model reconciliation
+
+Before submitting a Dashboard prompt, the selected provider and model are checked against fresh runtime options even when the selection was already applied to that session.
+
+[[src/renderer/src/screens/Chat/hooks/useDashboardChatTransport.ts#useDashboardChatTransport]] reapplies `/model` when the live identity drifts, such as after an automatic provider fallback. It validates the refreshed options before submission and retains the existing provider-alias equivalence rules.
+
+### Fallback drift is reconciled before submission
+
+A completed turn can leave the runtime on a different provider, model, or both. The next send switches and validates that same runtime before submitting its prompt, without first requiring a failed send or replacing the conversation.
+
+### Matching runtime preserves the no-op path
+
+An already-applied selection that still matches fresh options needs no additional `/model` command or second options read.
+
+### Refused drift repair cannot submit to the fallback
+
+A busy rejection or deferred switch that leaves the wrong live identity fails through the existing transport error path. It cannot submit the new prompt to the fallback, replay the previous prompt, or interrupt another running turn.
+
 ## Text-only legacy fallback routes via CLI
 
 Text-only legacy turns can use the CLI fallback when a session override changes provider or base URL away from `config.yaml`.
