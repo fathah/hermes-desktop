@@ -71,7 +71,7 @@ const DEFAULT_MODELS: DefaultModel[] = [
   //             moonshotai/kimi-k2.5, moonshotai/kimi-k2.6
   //   Zhipu: zai-org/GLM-4.6, zai-org/glm-4.7, zai-org/glm-5, zai-org/glm-5-turbo, zai-org/glm-5.1,
   //          zai-org/glm-5v-turbo
-  //   MiniMax: MiniMaxAI/MiniMax-M2, minimaxai/minimax-m2.1, minimaxai/minimax-m2.5, minimaxai/minimax-m2.7
+  //   MiniMax: consult live provider discovery for current routes.
   //   xAI: xai/grok-4.3
   //   Kwaipilot: kwaipilot/kat-coder-pro-v2
   //   Other: owl

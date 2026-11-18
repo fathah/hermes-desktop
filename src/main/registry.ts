@@ -6,6 +6,7 @@ import { createProfile } from "./profiles";
 import { writeSoul } from "./soul";
 import { listMcpServers } from "./installer";
 import { registrySnapshot, REGISTRY_COMMIT } from "./registry-integrity";
+import { currentMiniMaxChoices, miniMaxRegistryModels } from "./minimax-models";
 import type {
   RegistryKind,
   RegistryItem,
@@ -178,8 +179,41 @@ export async function fetchModelRegistry(
       generated: raw.generated,
       providerCount: raw.providerCount,
       modelCount: raw.modelCount,
-      providers: Array.isArray(raw.providers) ? raw.providers : [],
+      // @lat: [[provider-setup#Provider setup#MiniMax text model choices]]
+      // Refresh choices after integrity verification; never rewrite the user's
+      // model library or manufacture third-party routes absent from the snapshot.
+      providers: (Array.isArray(raw.providers) ? raw.providers : []).map(
+        (provider) => {
+          const names = currentMiniMaxChoices(
+            provider.models.map((model) => model.name),
+          );
+          const models = names.map(
+            (name) => provider.models.find((model) => model.name === name)!,
+          );
+          if (
+            ["minimax", "minimax-cn", "minimax-oauth"].includes(provider.id)
+          ) {
+            const current = miniMaxRegistryModels(
+              provider.id === "minimax-oauth",
+            );
+            return {
+              ...provider,
+              models: [
+                ...current,
+                ...models.filter(
+                  (model) => !/^MiniMax-M3(?:\.1-Flash)?$/i.test(model.name),
+                ),
+              ],
+            };
+          }
+          return { ...provider, models };
+        },
+      ),
     };
+    data.modelCount = data.providers.reduce(
+      (count, provider) => count + provider.models.length,
+      0,
+    );
     modelCache = { at: Date.now(), data };
     return data;
   } catch (err) {
