@@ -358,3 +358,11 @@ API Route CLI fallback forwards the selected profile's resolved key from its vau
 The real Setup form saves API Route credentials and the chosen custom model to its selected profile, then real config readers reopen the files without changing another profile.
 
 An isolated fixture selects the preset and enters a model ID and fake key. Actual config writers persist `custom`, the unchanged model ID, the endpoint and `API_ROUTE_API_KEY`; fresh readers recover them and reverse branding remains API Route.
+
+## Model discovery HTTP failures
+
+Failed catalogue requests report an error and remain retryable instead of caching an empty successful result for five minutes.
+
+[[src/main/model-discovery.ts#discoverProviderModels]] accepts only successful HTTP responses for caching. Authentication failures, rate limits and server failures reach the existing error UI; a later successful request populates the cache normally.
+
+[[tests/model-discovery.test.ts]] exercises real HTTP 401, 403, 429, 500 and 503 responses followed by recovery on the same endpoint.
