@@ -1,2 +1,0 @@
-v6:a54e3e0e7cde353523b028bdf7bc0b7fe8403e9c
-{"path":"src/main/installer-errors.ts","symbols":[{"name":"buildInstallErrorMessage","kind":"function","startLine":2,"endLine":10,"signature":"function buildInstallErrorMessage("}],"timings":{"readMs":0.09832699999992656,"hashMs":0.015212000000019543,"cacheReadMs":0.059159000000136075,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.3165050000000065}}

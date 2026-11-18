@@ -1,2 +1,0 @@
-v6:959201e23b1799f4151c43ce8c55123f63b160ce
-{"path":"src/main/dashboard-api-url.ts","symbols":[{"name":"normalizeRemoteDashboardBaseUrl","kind":"function","startLine":3,"endLine":14,"signature":"function normalizeRemoteDashboardBaseUrl(value: string): string {"},{"name":"dashboardApiUrl","kind":"function","startLine":18,"endLine":32,"signature":"function dashboardApiUrl("}],"timings":{"readMs":0.10591300000010051,"hashMs":0.018219000000044616,"cacheReadMs":0.0573989999998048,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.25928099999987353}}

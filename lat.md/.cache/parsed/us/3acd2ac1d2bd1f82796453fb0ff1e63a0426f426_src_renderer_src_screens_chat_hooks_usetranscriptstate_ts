@@ -1,2 +1,0 @@
-v6:93f7e9128a81aee3681a0b4643d07d121405db47
-{"path":"src/renderer/src/screens/Chat/hooks/useTranscriptState.ts","symbols":[{"name":"useTranscriptState","kind":"function","startLine":29,"endLine":46,"signature":"function useTranscriptState(initial?: ChatMessage[]): {"}],"timings":{"readMs":0.09319399999981215,"hashMs":0.018954000000121596,"cacheReadMs":0.049567000000024564,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.3349460000001727}}

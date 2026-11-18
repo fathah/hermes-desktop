@@ -86,4 +86,28 @@ describe("short partial live replies (#1089)", () => {
     expect(merged.some((m) => m.id === "s3")).toBe(true);
     expect(merged.some((m) => m.id === "d4")).toBe(false);
   });
+
+  // @lat: [[chat-commands#Canonical database tail recovery#Short partial reply folds into its turn]]
+  it("folds across saved tool rows that the live feed never showed", () => {
+    const merged = reconcileStreamedWithDb(
+      [user("s1", "Say hello"), agent("s2", "Hello")],
+      [
+        user("d1", "Say hello"),
+        {
+          id: "d2",
+          kind: "tool_call",
+          role: "agent",
+          callId: "c1",
+          name: "search",
+          args: "{}",
+        } as ChatMessage,
+        agent("d3", "Hello world"),
+      ],
+    );
+    const agentText = merged
+      .filter((m) => !("kind" in m) && m.role === "agent")
+      .map((m) => ("content" in m ? m.content : ""));
+    expect(agentText).toEqual(["Hello world"]);
+    expect(merged.some((m) => m.id === "d3")).toBe(false);
+  });
 });

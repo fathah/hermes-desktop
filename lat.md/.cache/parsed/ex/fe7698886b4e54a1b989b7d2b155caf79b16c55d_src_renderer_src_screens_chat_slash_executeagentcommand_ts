@@ -1,2 +1,0 @@
-v6:716e85b92043dd94785bba49aa1d739124d9854b
-{"path":"src/renderer/src/screens/Chat/slash/executeAgentCommand.ts","symbols":[{"name":"executeAgentCommand","kind":"function","startLine":13,"endLine":52,"signature":"async function executeAgentCommand("}],"timings":{"readMs":0.10272099999997408,"hashMs":0.01618899999994028,"cacheReadMs":0.05561099999999897,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.28449799999998504}}

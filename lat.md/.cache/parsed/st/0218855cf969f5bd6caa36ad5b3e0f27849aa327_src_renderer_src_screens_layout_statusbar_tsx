@@ -1,2 +1,0 @@
-v6:f6f9f600e0ee5921b941a7536bde405550fd746a
-{"path":"src/renderer/src/screens/Layout/StatusBar.tsx","symbols":[{"name":"StatusInfo","kind":"interface","startLine":6,"endLine":11,"signature":"interface StatusInfo {"},{"name":"StatusBar","kind":"function","startLine":20,"endLine":144,"signature":"function StatusBar({"}],"timings":{"readMs":0.10275100000012571,"hashMs":0.020359000000098604,"cacheReadMs":0.055932999999868116,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.7332639999999628}}

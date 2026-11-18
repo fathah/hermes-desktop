@@ -1,2 +1,0 @@
-v6:d7837fcb9080ae488e570bf8c48fac586303cee4
-{"path":"src/renderer/src/hooks/useProfileEditorTarget.ts","symbols":[{"name":"useProfileEditorTarget","kind":"function","startLine":4,"endLine":63,"signature":"function useProfileEditorTarget("}],"timings":{"readMs":1.0911759999999049,"hashMs":0.12622800000008283,"cacheReadMs":0.1254269999999451,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.44800099999997656}}

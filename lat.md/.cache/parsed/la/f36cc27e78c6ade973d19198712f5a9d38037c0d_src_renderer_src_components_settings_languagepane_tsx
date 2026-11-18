@@ -1,2 +1,0 @@
-v6:8dfeb885c21e874aeac5632e1903ef9e4e71cccb
-{"path":"src/renderer/src/components/settings/LanguagePane.tsx","symbols":[{"name":"LanguagePane","kind":"function","startLine":10,"endLine":113,"signature":"function LanguagePane(): React.JSX.Element {"},{"name":"LanguageSelect","kind":"function","startLine":115,"endLine":180,"signature":"function LanguageSelect({"}],"timings":{"readMs":0.10491499999989173,"hashMs":0.017579000000068845,"cacheReadMs":0.062480999999934284,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.8706710000001294}}

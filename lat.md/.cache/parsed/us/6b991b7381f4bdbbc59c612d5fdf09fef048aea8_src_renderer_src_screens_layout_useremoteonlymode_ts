@@ -1,2 +1,0 @@
-v6:b8c56c11580addd92c2ac354eeca0b3e141839f0
-{"path":"src/renderer/src/screens/Layout/useRemoteOnlyMode.ts","symbols":[{"name":"ModeSnapshot","kind":"interface","startLine":3,"endLine":6,"signature":"interface ModeSnapshot {"},{"name":"useRemoteOnlyMode","kind":"function","startLine":9,"endLine":40,"signature":"function useRemoteOnlyMode(connectionId: string, view: string): boolean {"}],"timings":{"readMs":0.1461100000001352,"hashMs":0.016918000000032407,"cacheReadMs":0.05565000000001419,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.3073530000001483}}

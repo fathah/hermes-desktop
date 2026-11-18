@@ -1,2 +1,0 @@
-v6:df2f8d4da9bb80691f1e2eef7e9c7a74e7586a6b
-{"path":"src/renderer/src/components/settings/PrivacyPane.tsx","symbols":[{"name":"PrivacyPane","kind":"function","startLine":7,"endLine":33,"signature":"function PrivacyPane(): React.JSX.Element {"}],"timings":{"readMs":0.1258909999999105,"hashMs":0.015174000000001797,"cacheReadMs":0.05572599999993599,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.2208940000000439}}

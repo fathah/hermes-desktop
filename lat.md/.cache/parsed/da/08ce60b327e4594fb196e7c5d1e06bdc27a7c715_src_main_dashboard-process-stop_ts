@@ -1,2 +1,0 @@
-v6:e684bd1e9d5a31bbd5249da276922daa635942e0
-{"path":"src/main/dashboard-process-stop.ts","symbols":[{"name":"stopDashboardProcess","kind":"function","startLine":5,"endLine":58,"signature":"function stopDashboardProcess("}],"timings":{"readMs":0.11661899999990055,"hashMs":0.016955000000052678,"cacheReadMs":0.048021999999946274,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.37944999999990614}}

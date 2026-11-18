@@ -1,2 +1,0 @@
-v6:38e8523eece2649417c13d055c78c37c20f1b164
-{"path":"src/renderer/src/screens/Chat/slash/handleSlashCommand.ts","symbols":[{"name":"handleSlashCommand","kind":"function","startLine":14,"endLine":110,"signature":"async function handleSlashCommand("}],"timings":{"readMs":0.13343299999996816,"hashMs":0.0197889999999461,"cacheReadMs":0.054623999999876105,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.5154430000000048}}

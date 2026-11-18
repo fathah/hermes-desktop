@@ -1,2 +1,0 @@
-v6:072580a0ecb3c18dcba2f40d3ceb0b2e42161adb
-{"path":"src/renderer/src/components/settings/SettingsModalProvider.tsx","symbols":[{"name":"OpenState","kind":"interface","startLine":8,"endLine":13,"signature":"interface OpenState {"},{"name":"SettingsModalProvider","kind":"function","startLine":20,"endLine":64,"signature":"function SettingsModalProvider({"}],"timings":{"readMs":0.10040000000003602,"hashMs":0.015086999999994077,"cacheReadMs":0.05840800000009949,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.35171700000000783}}

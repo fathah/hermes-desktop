@@ -94,7 +94,7 @@ A longer database record cannot rewrite an optimistic user submission, preservin
 
 A live reply cut off before the 200-character match key never meets its database row. The unmatched database reply that strictly extends it in the same turn completes the live row once.
 
-[[src/renderer/src/screens/Chat/sessionHistory.ts#foldShortPartialReplies]] keeps the live id and position. Replies in other turns, across a tool call, or that diverge stay separate.
+[[src/renderer/src/screens/Chat/sessionHistory.ts#foldShortPartialReplies]] keeps the live id and position. Replies in other turns, across a tool call the live feed showed, or that diverge stay separate.
 
 ## Busy refusal preserves conversation
 

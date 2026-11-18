@@ -1,2 +1,0 @@
-v6:9844cabdf66de9717d81957b5cd39cff92b56c48
-{"path":"src/main/app/menu.ts","symbols":[{"name":"MenuDeps","kind":"interface","startLine":4,"endLine":7,"signature":"interface MenuDeps {"},{"name":"buildMenu","kind":"function","startLine":9,"endLine":113,"signature":"function buildMenu({ getMainWindow, openExternalUrl }: MenuDeps): void {"}],"timings":{"readMs":0.10558999999989283,"hashMs":0.01788899999996829,"cacheReadMs":0.30066899999997077,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.5057890000000498}}

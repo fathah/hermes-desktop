@@ -1,2 +1,0 @@
-v6:b903ff31770e4bb40400abb375d0bcc61f4d02d7
-{"path":"src/renderer/src/screens/Chat/slash/prepareModelSubmission.ts","symbols":[{"name":"PrepareSubmissionResult","kind":"type","startLine":8,"endLine":10,"signature":"type PrepareSubmissionResult ="},{"name":"prepareModelSubmission","kind":"function","startLine":16,"endLine":43,"signature":"async function prepareModelSubmission("}],"timings":{"readMs":0.09635000000002947,"hashMs":0.015392999999903623,"cacheReadMs":0.04732899999999063,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.22413899999992282}}

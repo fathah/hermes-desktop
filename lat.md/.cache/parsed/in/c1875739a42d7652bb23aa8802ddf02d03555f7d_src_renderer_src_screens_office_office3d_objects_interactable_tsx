@@ -1,2 +1,0 @@
-v6:fc04c589cde54ef514cc4d292369235a868f7259
-{"path":"src/renderer/src/screens/Office/office3d/objects/Interactable.tsx","symbols":[{"name":"Interactable","kind":"function","startLine":12,"endLine":98,"signature":"function Interactable({"}],"timings":{"readMs":0.1071399999998448,"hashMs":0.01713400000016918,"cacheReadMs":0.06378199999994649,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.47929199999998673}}

@@ -1,2 +1,0 @@
-v6:518b628e303ed1d81988bba9458d47773d782cff
-{"path":"src/main/ssh-command.ts","symbols":[{"name":"buildSshRemoteCommand","kind":"function","startLine":2,"endLine":8,"signature":"function buildSshRemoteCommand(command: string): string {"}],"timings":{"readMs":0.10035599999991973,"hashMs":0.015578000000004977,"cacheReadMs":0.05134100000009312,"cacheStatus":"miss","cacheWriteMs":0,"parseMs":0.12822600000004059}}
