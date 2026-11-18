@@ -720,9 +720,20 @@ export interface CronRunOutputResult {
 const MAX_RUN_OUTPUT_CHARS = 200_000;
 const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 
+/** Keep bounded text valid when a UTF-16 limit falls inside a surrogate pair. */
+function runTextPrefix(text: string, limit: number): string {
+  const end =
+    text.length > limit &&
+    /[\uD800-\uDBFF]/.test(text[limit - 1]) &&
+    /[\uDC00-\uDFFF]/.test(text[limit])
+      ? limit - 1
+      : limit;
+  return text.slice(0, end);
+}
+
 function clampRunOutput(text: string): { output: string; truncated: boolean } {
   return text.length > MAX_RUN_OUTPUT_CHARS
-    ? { output: text.slice(0, MAX_RUN_OUTPUT_CHARS), truncated: true }
+    ? { output: runTextPrefix(text, MAX_RUN_OUTPUT_CHARS), truncated: true }
     : { output: text, truncated: false };
 }
 
@@ -764,7 +775,7 @@ async function readFilePreview(path: string, chars: number): Promise<string> {
       throw new Error("Run output is not a file.");
     const buf = Buffer.alloc(chars * 4);
     const { bytesRead } = await handle.read(buf, 0, buf.length, 0);
-    return buf.toString("utf-8", 0, bytesRead).slice(0, chars);
+    return runTextPrefix(buf.toString("utf-8", 0, bytesRead), chars);
   } finally {
     await handle.close();
   }
@@ -1007,7 +1018,8 @@ export async function getCronRunOutput(
     if (!name.endsWith(".md")) throw new Error("Invalid run ID");
     const text = await readFilePreview(
       join(localRunDir(jobId, resolved.profile), name),
-      MAX_RUN_OUTPUT_CHARS + 1,
+      // Two extra UTF-16 units preserve overflow after trimming a split pair.
+      MAX_RUN_OUTPUT_CHARS + 2,
     );
     assertCurrent();
     return { success: true, ...clampRunOutput(text) };
