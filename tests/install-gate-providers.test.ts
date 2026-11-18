@@ -97,6 +97,20 @@ describe("expectedEnvKeyForModel — URL fallback for custom/auto providers", ()
       expect(expectedEnvKeyForModel("custom", url)).toBe(expected);
     },
   );
+  it.each([
+    ["https://user:pass@api.opper.ai:443/v3/compat", "OPPER_API_KEY"],
+    ["https://API.OPPER.AI:443/v3/compat", "OPPER_API_KEY"],
+    ["https://openai.com:password@api.opper.ai/v3/compat", "OPPER_API_KEY"],
+    ["https://api.opper.ai/v3/compat/api.openai.com", "OPPER_API_KEY"],
+    ["https://api.opper.ai/api.deepseek.com/v3/compat", "OPPER_API_KEY"],
+    ["https://api.opper.ai:443@evil.example/v3/compat", null],
+    ["https://user:pass@api.opper.ai.attacker.example/v3/compat", null],
+  ])(
+    "uses the parsed Opper hostname for installer readiness %s",
+    (url, expected) => {
+      expect(expectedEnvKeyForModel("custom", url)).toBe(expected);
+    },
+  );
 
   it.each([
     ["https://user:pass@router.requesty.ai:443/v1", "REQUESTY_API_KEY"],

@@ -34,6 +34,7 @@ export default {
   fireworks: "Fireworks",
   cerebras: "Cerebras",
   requesty: "Requesty",
+  opper: "Opper",
   api_route: "API Route",
   mistral: "Mistral",
   // Theme
@@ -89,6 +90,8 @@ export default {
   apiRouteApiKey: "API Route API Key",
   apiRouteHint: "相容 OpenAI 的多模型閘道",
   requestyHint: "相容 OpenAI 的多模型閘道",
+  opperApiKey: "Opper API Key",
+  opperHint: "相容 OpenAI 的多模型閘道",
   mistralApiKey: "Mistral API Key",
   mistralHint: "Mistral 與 Codestral 模型",
   perplexityApiKey: "Perplexity API Key",

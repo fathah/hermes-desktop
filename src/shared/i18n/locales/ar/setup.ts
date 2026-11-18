@@ -28,6 +28,7 @@ export default {
     cerebras: "Cerebras",
     atlascloud: "AtlasCloud",
     requesty: "Requesty",
+    opper: "Opper",
     api_route: "API Route",
     mistral: "Mistral",
     aimlapi: "AIML API",

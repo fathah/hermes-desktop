@@ -95,6 +95,7 @@ export const PROVIDERS = {
     requesty: "Requesty",
     api_route: "API Route",
     cheaperinference: "Cheaper Inference",
+    opper: "Opper",
     openrouter: "constants.openrouterName",
     aimlapi: "constants.aimlapiName",
     anthropic: "constants.anthropicName",
@@ -420,6 +421,7 @@ export const OPENAI_COMPATIBLE_BASE_URLS: Record<string, string> = {
   requesty: "https://router.requesty.ai/v1",
   api_route: "https://global.api-route.com/v1",
   cheaperinference: "https://api.cheaperinference.com/v1",
+  opper: "https://api.opper.ai/v3/compat",
   perplexity: "https://api.perplexity.ai",
   lmstudio: "http://localhost:1234/v1",
   atomicchat: "http://localhost:1337/v1",
@@ -559,6 +561,13 @@ export const LOCAL_PRESETS: LocalPreset[] = [
     baseUrl: "https://api.cheaperinference.com/v1",
     group: "remote",
     envKey: "CHEAPERINFERENCE_API_KEY",
+  },
+  {
+    id: "opper",
+    name: "constants.opper",
+    baseUrl: "https://api.opper.ai/v3/compat",
+    group: "remote",
+    envKey: "OPPER_API_KEY",
   },
   {
     id: "mistral",
@@ -951,6 +960,12 @@ export const SETTINGS_SECTIONS: SectionDef[] = [
         label: "constants.cheaperinferenceApiKey",
         type: "password",
         hint: "constants.cheaperinferenceHint",
+      },
+      {
+        key: "OPPER_API_KEY",
+        label: "constants.opperApiKey",
+        type: "password",
+        hint: "constants.opperHint",
       },
       {
         key: "MISTRAL_API_KEY",

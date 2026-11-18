@@ -23,6 +23,7 @@ export default {
     fireworks: "Fireworks",
     cerebras: "Cerebras",
     requesty: "Requesty",
+    opper: "Opper",
     api_route: "API Route",
     mistral: "Mistral",
   },
