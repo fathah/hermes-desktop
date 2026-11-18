@@ -36,6 +36,7 @@ export default {
   cerebras: "Cerebras",
   requesty: "Requesty",
   api_route: "API Route",
+  uberllm: "UberLLM",
   mistral: "Mistral",
   // Theme
   themeSystem: "Sistem",
@@ -89,6 +90,8 @@ export default {
   requestyApiKey: "Requesty API Key",
   apiRouteApiKey: "API Route API Key",
   apiRouteHint: "Gateway multi-model yang kompatibel dengan OpenAI",
+  uberllmApiKey: "UberLLM API Key",
+  uberllmHint: "Gateway multi-model yang kompatibel dengan OpenAI",
   requestyHint: "Gateway multi-model yang kompatibel dengan OpenAI",
   mistralApiKey: "Mistral API Key",
   mistralHint: "Model Mistral dan Codestral",

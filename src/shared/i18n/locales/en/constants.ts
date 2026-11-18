@@ -44,6 +44,7 @@ export default {
   novita: "NovitaAI",
   requesty: "Requesty",
   api_route: "API Route",
+  uberllm: "UberLLM",
   cheaperinference: "Cheaper Inference",
   mistral: "Mistral",
   // Theme
@@ -109,6 +110,8 @@ export default {
   requestyApiKey: "Requesty API Key",
   apiRouteApiKey: "API Route API Key",
   apiRouteHint: "OpenAI-compatible multi-model gateway",
+  uberllmApiKey: "UberLLM API Key",
+  uberllmHint: "OpenAI-compatible multi-model gateway",
   requestyHint: "OpenAI-compatible multi-model gateway",
   cheaperinferenceApiKey: "Cheaper Inference API Key",
   cheaperinferenceHint:

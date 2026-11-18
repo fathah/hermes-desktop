@@ -29,6 +29,7 @@ export default {
     atlascloud: "AtlasCloud",
     requesty: "Requesty",
     api_route: "API Route",
+    uberllm: "UberLLM",
     mistral: "Mistral",
     aimlapi: "AIML API",
   },
