@@ -799,6 +799,50 @@ describe("sendMessage session model override routing", () => {
     },
   );
 
+  // @lat: [[provider-setup#Runcrate provider preset#Vault credentials reach CLI]]
+  it.each([
+    ["https://api.runcrate.ai/v1", "vault"],
+    ["https://user:pass@api.runcrate.ai:443/v1", "vault"],
+    ["https://openai.com:password@api.runcrate.ai/v1", "vault"],
+    ["https://api.runcrate.ai/api.deepseek.com/v1", "vault"],
+    ["https://api.runcrate.ai/v1", "profile"],
+    ["https://api.runcrate.ai/v1", "process"],
+  ])(
+    "passes Runcrate CLI credentials for %s from %s",
+    async (baseUrl, source) => {
+      vi.stubEnv("RUNCRATE_API_KEY", "");
+      vi.stubEnv("OPENAI_API_KEY", "");
+      vi.stubEnv("CUSTOM_API_KEY", "");
+      mockedProviderListSafe.mockReturnValue({
+        RUNCRATE_API_KEY: "vault-key",
+      });
+      if (source === "profile")
+        mockedReadEnv.mockReturnValue({
+          RUNCRATE_API_KEY: "profile-key",
+        });
+      if (source === "process") vi.stubEnv("RUNCRATE_API_KEY", "process-key");
+      try {
+        await sendMessage(
+          "hello",
+          noopCallbacks,
+          "work",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          { provider: "custom", model: "claude-haiku-4-5", baseUrl },
+        );
+        const env = mockedSpawn.mock.calls[0][2]?.env;
+        expect(env?.RUNCRATE_API_KEY).toBe(`${source}-key`);
+        expect(env?.OPENAI_API_KEY).toBe(`${source}-key`);
+        expect(env?.OPENAI_BASE_URL).toBe(baseUrl);
+        expect(mockedProviderListSafe).toHaveBeenCalledExactlyOnceWith("work");
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
   // @lat: [[provider-setup#Cheaper Inference provider preset#Vault credentials reach CLI]]
   it.each([
     ["https://api.cheaperinference.com/v1", "vault"],

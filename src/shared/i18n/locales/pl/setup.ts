@@ -24,6 +24,7 @@ export default {
     cerebras: "Cerebras",
     requesty: "Requesty",
     api_route: "API Route",
+    runcrate: "Runcrate",
     mistral: "Mistral",
   },
   serverPreset: "Preset serwera",

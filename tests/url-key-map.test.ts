@@ -45,6 +45,31 @@ describe("URL_KEY_MAP", () => {
       );
     },
   );
+  // @lat: [[provider-setup#Runcrate provider preset#Credential host boundary]]
+  it.each([
+    ["https://api.runcrate.ai/v1", true],
+    ["https://API.RUNCRATE.AI:443/v1", true],
+    ["api.runcrate.ai/v1", true],
+    ["https://api.runcrate.ai.:443/v1", true],
+    ["https://openai.com:password@api.runcrate.ai/v1", true],
+    ["https://api.runcrate.ai/v1/api.openai.com", true],
+    ["https://api.runcrate.ai:443@evil.example/v1", false],
+    ["https://api.runcrate.ai.attacker.example/v1", false],
+    ["https://evil.example/api.runcrate.ai/v1", false],
+    ["https://www.runcrate.ai/v1", false],
+    ["ftp://api.runcrate.ai/v1", false],
+  ])(
+    "resolves Runcrate credentials only for its HTTP host %s",
+    (url, known) => {
+      expect(expectedEnvKeyForUrl(url)).toBe(
+        known ? "RUNCRATE_API_KEY" : CUSTOM_API_KEY_ENV,
+      );
+      expect(isKnownProviderUrl(url)).toBe(known);
+      expect(hostDerivedEnvKeyForUrl(url)).toBe(
+        known ? "RUNCRATE_API_KEY" : null,
+      );
+    },
+  );
   // @lat: [[provider-setup#Cheaper Inference provider preset#Credential host boundary]]
   it.each([
     ["https://user:pass@api.cheaperinference.com:443/v1", true],
@@ -114,6 +139,7 @@ describe("URL_KEY_MAP", () => {
       "https://api.novita.ai/openai/v1": "NOVITA_API_KEY",
       "https://router.requesty.ai/v1": "REQUESTY_API_KEY",
       "https://global.api-route.com/v1": "API_ROUTE_API_KEY",
+      "https://api.runcrate.ai/v1": "RUNCRATE_API_KEY",
       "https://router.eu.requesty.ai/v1": "REQUESTY_API_KEY",
       "https://api.cheaperinference.com/v1": "CHEAPERINFERENCE_API_KEY",
     };

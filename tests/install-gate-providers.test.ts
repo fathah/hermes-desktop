@@ -71,6 +71,18 @@ describe("expectedEnvKeyForModel — URL fallback for custom/auto providers", ()
     expect(expectedEnvKeyForModel("custom", url)).toBe(expected);
     expect(expectedEnvKeyForModel("auto", url)).toBe(expected);
   });
+  // @lat: [[provider-setup#Runcrate provider preset#Installer readiness]]
+  it.each([
+    ["https://api.runcrate.ai/v1", "RUNCRATE_API_KEY"],
+    ["https://openai.com:password@api.runcrate.ai:443/v1", "RUNCRATE_API_KEY"],
+    ["https://API.RUNCRATE.AI/v1", "RUNCRATE_API_KEY"],
+    ["https://api.runcrate.ai.attacker.example/v1", null],
+    ["https://api.runcrate.ai@evil.example/v1", null],
+    ["https://evil.example/api.runcrate.ai/v1", null],
+  ])("resolves Runcrate installer credentials for %s", (url, expected) => {
+    expect(expectedEnvKeyForModel("custom", url)).toBe(expected);
+    expect(expectedEnvKeyForModel("auto", url)).toBe(expected);
+  });
   it.each([
     [
       "https://user:pass@api.cheaperinference.com:443/v1",

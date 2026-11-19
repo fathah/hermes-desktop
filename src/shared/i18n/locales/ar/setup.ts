@@ -29,6 +29,7 @@ export default {
     atlascloud: "AtlasCloud",
     requesty: "Requesty",
     api_route: "API Route",
+    runcrate: "Runcrate",
     mistral: "Mistral",
     aimlapi: "AIML API",
   },
