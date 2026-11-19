@@ -39,6 +39,7 @@ export default {
   cerebras: "Cerebras",
   requesty: "Requesty",
   api_route: "API Route",
+  aistupidlevel: "AI Stupid Level",
   mistral: "Mistral",
   // Theme
   themeSystem: "מערכת",
@@ -96,6 +97,8 @@ export default {
   apiRouteApiKey: "מפתח API של API Route",
   apiRouteHint: "שער רב-מודלים תואם OpenAI",
   requestyHint: "שער רב-מודלים תואם OpenAI",
+  aistupidlevelApiKey: "מפתח API של AI Stupid Level",
+  aistupidlevelHint: "שער רב-מודלים תואם OpenAI",
   mistralApiKey: "מפתח API של Mistral",
   mistralHint: "מודלים של Mistral ו-Codestral",
   perplexityApiKey: "מפתח API של Perplexity",

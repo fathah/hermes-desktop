@@ -45,6 +45,7 @@ export default {
   requesty: "Requesty",
   api_route: "API Route",
   cheaperinference: "Cheaper Inference",
+  aistupidlevel: "AI Stupid Level",
   mistral: "Mistral",
   // Theme
   themeSystem: "System",
@@ -113,6 +114,8 @@ export default {
   cheaperinferenceApiKey: "Cheaper Inference API Key",
   cheaperinferenceHint:
     "GPT, Claude, Gemini & open models via Cheaper Inference. Each model costs 15–60% less than the list price of its lab.",
+  aistupidlevelApiKey: "AI Stupid Level API Key",
+  aistupidlevelHint: "OpenAI-compatible multi-model gateway",
   mistralApiKey: "Mistral API Key",
   mistralHint: "Mistral and Codestral models",
   perplexityApiKey: "Perplexity API Key",

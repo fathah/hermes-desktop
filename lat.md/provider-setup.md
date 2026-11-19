@@ -358,3 +358,41 @@ API Route CLI fallback forwards the selected profile's resolved key from its vau
 The real Setup form saves API Route credentials and the chosen custom model to its selected profile, then real config readers reopen the files without changing another profile.
 
 An isolated fixture selects the preset and enters a model ID and fake key. Actual config writers persist `custom`, the unchanged model ID, the endpoint and `API_ROUTE_API_KEY`; fresh readers recover them and reverse branding remains API Route.
+
+## AI Stupid Level provider preset
+
+AI Stupid Level is an optional OpenAI-compatible router preset, with a dedicated API-key field and authenticated model discovery. Routing modes pick a model per request from measured benchmark results.
+
+Select **Local / OpenAI-Compatible** during setup, then **AI Stupid Level** under remote APIs. Create a router key at https://aistupidlevel.info/router/keys and add your own provider keys to that account, paste the router key, then enter a routing mode such as `auto-tooling` or pick an ID from the fetched list. The preset uses https://aistupidlevel.info/v1 and stores models as `custom` with that base URL. Model IDs are preserved. Routing modes are described at https://aistupidlevel.info/router/docs#strategies. The router accepts text input only.
+
+The key is stored as `AISTUPIDLEVEL_API_KEY`, matching Hermes Agent's hostname-derived variable for `aistupidlevel.info`. The existing CLI path forwards the selected endpoint's resolved key to this variable and the legacy `OPENAI_API_KEY` slot; no native agent provider id is required.
+
+### Credential host boundary
+
+AI Stupid Level key lookup uses the parsed HTTP(S) hostname and accepts only aistupidlevel.info. URL credentials, paths, lookalike hosts and subdomains cannot identify the provider.
+
+[[src/shared/url-key-map.ts#matchesProviderUrl]] applies this boundary to shared key lookup and runtime hydration. Tests preserve valid ports, credentials and trailing DNS dots while rejecting userinfo spoofs and misleading paths.
+
+### Installer readiness
+
+AI Stupid Level configurations stored as custom or auto resolve to their dedicated key at the configured endpoint, so a saved key is recognized on restart.
+
+[[src/main/installer.ts#expectedEnvKeyForModel]] uses the same strict hostname boundary. Tests cover the supported endpoint and reject misleading paths and lookalike hosts.
+
+### Setup persistence
+
+The AI Stupid Level preset keeps its endpoint, credential field, discovery URL and display identity consistent after a model is saved as custom.
+
+Registry tests verify the preset against both endpoint registries, the compatible runtime provider set, the dedicated settings field and reverse branding.
+
+### Vault credentials reach CLI
+
+AI Stupid Level CLI fallback forwards the selected profile's resolved key from its vault, profile or process environment using the existing compatible-provider path.
+
+[[src/main/hermes.ts#sendMessageViaCli]] supplies AISTUPIDLEVEL_API_KEY and the legacy OPENAI_API_KEY slot. Tests verify credential precedence, URL credentials and paths, and a single vault enumeration.
+
+### Rendered setup save and reload
+
+The real Setup form saves AI Stupid Level credentials and the chosen custom model to its selected profile, then real config readers reopen the files without changing another profile.
+
+An isolated fixture selects the preset and enters `auto-tooling` and a fake key. Actual config writers persist `custom`, the unchanged model ID, the endpoint and `AISTUPIDLEVEL_API_KEY`; fresh readers recover them and reverse branding remains AI Stupid Level.

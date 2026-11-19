@@ -27,6 +27,7 @@ export default {
     requesty: "Requesty",
     api_route: "API Route",
     cheaperinference: "Cheaper Inference",
+    aistupidlevel: "AI Stupid Level",
     mistral: "Mistral",
     aimlapi: "AIML API",
   },
