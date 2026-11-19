@@ -733,6 +733,35 @@ interface SegmentMatch {
   afterLine: number;
 }
 
+/** End of an inline value, excluding only a real YAML comment and padding. */
+function inlineYamlValueLength(value: string): number {
+  let cursor = 0;
+  const quote = value[0];
+  if (quote === '"' || quote === "'") {
+    cursor = 1;
+    while (cursor < value.length) {
+      if (quote === '"' && value[cursor] === "\\") {
+        cursor += 2;
+        continue;
+      }
+      if (value[cursor] === quote) {
+        if (quote === "'" && value[cursor + 1] === "'") {
+          cursor += 2;
+          continue;
+        }
+        ++cursor;
+        break;
+      }
+      ++cursor;
+    }
+  }
+  for (; cursor < value.length; ++cursor) {
+    if (value[cursor] === "#" && (cursor === 0 || /\s/.test(value[cursor - 1])))
+      return value.slice(0, cursor).trimEnd().length;
+  }
+  return value.trimEnd().length;
+}
+
 function findSegmentInBlock(
   content: string,
   startAt: number,
@@ -780,14 +809,12 @@ function findSegmentInBlock(
       // leading whitespace. The `indent === directChildIndent` gate
       // above already enforces depth.
       const m = line.match(
-        new RegExp(
-          `^([ \\t]*)(${escapedSegment}):([ \\t]*)([^\\n#]*?)([ \\t]*)(#.*)?$`,
-        ),
+        new RegExp(`^([ \\t]*)(${escapedSegment}):([ \\t]*)([^\\n]*)$`),
       );
       if (m) {
         const indentStr = m[1];
         const gapBeforeValue = m[3];
-        const rawValue = m[4];
+        const rawValue = m[4].slice(0, inlineYamlValueLength(m[4]));
         const keyEnd = cursor + indentStr.length + segment.length + 1; // past `:`
         const valueStart = keyEnd + gapBeforeValue.length;
         const valueEnd = valueStart + rawValue.length;
@@ -819,21 +846,15 @@ function findSegmentInBlock(
  * a nested occurrence with the same name.
  */
 function findTopLevelKey(content: string, key: string): YamlPathHit | null {
-  const re = new RegExp(
-    `^(${escapeRegex(key)}):([ \\t]*)([^\\n#]*?)([ \\t]*)(#.*)?$`,
-    "m",
-  );
+  const re = new RegExp(`^${escapeRegex(key)}:([ \\t]*)([^\\n]*)$`, "m");
   const m = content.match(re);
   if (!m || m.index === undefined) return null;
-  const gap = m[2];
-  const rawValue = m[3];
-  const lineStart = m.index;
-  const valueStart = lineStart + key.length + 1 + gap.length; // past `:` and gap
-  const valueEnd = valueStart + rawValue.length;
+  const rawValue = m[2].slice(0, inlineYamlValueLength(m[2]));
+  const valueStart = m.index + key.length + 1 + m[1].length;
   return {
     value: stripYamlQuotes(rawValue),
     valueStart,
-    valueEnd,
+    valueEnd: valueStart + rawValue.length,
   };
 }
 
@@ -885,6 +906,7 @@ export function setConfigValue(
     content =
       content.slice(0, hit.valueStart) +
       quoteYamlScalar(value) +
+      (content[hit.valueEnd] === "#" ? " " : "") +
       content.slice(hit.valueEnd);
     safeWriteFile(configFile, content);
     return;
