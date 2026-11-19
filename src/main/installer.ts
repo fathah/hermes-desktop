@@ -409,6 +409,7 @@ const URL_TO_ENV_KEY: Array<[RegExp, string, boolean?]> = [
   // Strict hosts take precedence over legacy URL-substring mappings.
   [/(?:^|\.)requesty\.ai$/i, "REQUESTY_API_KEY", true],
   [/^global\.api-route\.com$/i, "API_ROUTE_API_KEY", true],
+  [/^api\.stdcmpt\.com$/i, "STDCMPT_API_KEY", true],
   [/^api\.cheaperinference\.com$/i, "CHEAPERINFERENCE_API_KEY", true],
   [/openrouter\.ai/i, "OPENROUTER_API_KEY"],
   [/anthropic\.com/i, "ANTHROPIC_API_KEY"],

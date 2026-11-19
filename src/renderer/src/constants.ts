@@ -94,6 +94,7 @@ export const PROVIDERS = {
     novita: "NovitaAI",
     requesty: "Requesty",
     api_route: "API Route",
+    standardcompute: "Standard Compute",
     cheaperinference: "Cheaper Inference",
     openrouter: "constants.openrouterName",
     aimlapi: "constants.aimlapiName",
@@ -419,6 +420,7 @@ export const OPENAI_COMPATIBLE_BASE_URLS: Record<string, string> = {
   novita: "https://api.novita.ai/openai/v1",
   requesty: "https://router.requesty.ai/v1",
   api_route: "https://global.api-route.com/v1",
+  standardcompute: "https://api.stdcmpt.com/v1",
   cheaperinference: "https://api.cheaperinference.com/v1",
   perplexity: "https://api.perplexity.ai",
   lmstudio: "http://localhost:1234/v1",
@@ -545,6 +547,13 @@ export const LOCAL_PRESETS: LocalPreset[] = [
     baseUrl: "https://global.api-route.com/v1",
     group: "remote",
     envKey: "API_ROUTE_API_KEY",
+  },
+  {
+    id: "standardcompute",
+    name: "constants.standardcompute",
+    baseUrl: "https://api.stdcmpt.com/v1",
+    group: "remote",
+    envKey: "STDCMPT_API_KEY",
   },
   {
     id: "requesty",
@@ -939,6 +948,12 @@ export const SETTINGS_SECTIONS: SectionDef[] = [
         label: "constants.apiRouteApiKey",
         type: "password",
         hint: "constants.apiRouteHint",
+      },
+      {
+        key: "STDCMPT_API_KEY",
+        label: "constants.standardcomputeApiKey",
+        type: "password",
+        hint: "constants.standardcomputeHint",
       },
       {
         key: "REQUESTY_API_KEY",

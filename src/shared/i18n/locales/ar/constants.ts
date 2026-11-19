@@ -43,6 +43,7 @@ export default {
   atlascloud: "AtlasCloud",
   requesty: "Requesty",
   api_route: "API Route",
+  standardcompute: "Standard Compute",
   mistral: "Mistral",
   // Theme
   themeSystem: "النظام",
@@ -103,6 +104,8 @@ export default {
   requestyApiKey: "مفتاح Requesty API",
   apiRouteApiKey: "مفتاح API Route API",
   apiRouteHint: "بوابة نماذج متعددة متوافقة مع OpenAI",
+  standardcomputeApiKey: "مفتاح Standard Compute API",
+  standardcomputeHint: "بوابة نماذج متعددة متوافقة مع OpenAI",
   requestyHint: "بوابة نماذج متعددة متوافقة مع OpenAI",
   mistralApiKey: "مفتاح Mistral API",
   mistralHint: "نماذج Mistral و Codestral",

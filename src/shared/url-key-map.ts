@@ -49,6 +49,11 @@ export const URL_KEY_MAP: ReadonlyArray<UrlKeyMapping> = [
     matchHostname: true,
   },
   {
+    pattern: /^api\.stdcmpt\.com$/i,
+    envKey: "STDCMPT_API_KEY",
+    matchHostname: true,
+  },
+  {
     pattern: /(?:^|\.)requesty\.ai$/i,
     envKey: "REQUESTY_API_KEY",
     matchHostname: true,
@@ -168,6 +173,7 @@ export const OPENAI_COMPAT_PROVIDERS: ReadonlySet<string> = new Set([
   "novita",
   "requesty",
   "api_route",
+  "standardcompute",
   "cheaperinference",
   "mistral",
 ]);

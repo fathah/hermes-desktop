@@ -26,6 +26,7 @@ export default {
     novita: "NovitaAI",
     requesty: "Requesty",
     api_route: "API Route",
+    standardcompute: "Standard Compute",
     cheaperinference: "Cheaper Inference",
     mistral: "Mistral",
     aimlapi: "AIML API",
