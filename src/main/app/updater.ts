@@ -89,7 +89,9 @@ export function setupUpdater({ getMainWindow }: UpdaterDeps): void {
   ipcMain.handle("check-for-updates", async () => {
     try {
       const result = await autoUpdater.checkForUpdates();
-      return result?.updateInfo?.version || null;
+      // electron-updater fills `updateInfo` with the latest release even when
+      // it is not newer, so only `isUpdateAvailable` means there is an update.
+      return result?.isUpdateAvailable ? result.updateInfo.version : null;
     } catch {
       return null;
     }
