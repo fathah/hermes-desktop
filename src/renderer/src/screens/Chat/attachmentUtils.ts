@@ -271,15 +271,17 @@ export async function compressImageToFit(
 
     // Need to scale down. PNG path always lands here (no quality knob).
     scale *= 0.8;
-    if (workingCanvas.width * scale < 64 || workingCanvas.height * scale < 64) {
+    const nextWidth = Math.floor(img.naturalWidth * scale);
+    const nextHeight = Math.floor(img.naturalHeight * scale);
+    if (nextWidth < 64 || nextHeight < 64) {
       // Below 64 px we'd be unrecognisable even to vision models —
       // refuse rather than silently emit a useless thumbnail.
       throw new Error("image-uncompressible");
     }
 
     const scaled = document.createElement("canvas");
-    scaled.width = Math.max(64, Math.floor(img.naturalWidth * scale));
-    scaled.height = Math.max(64, Math.floor(img.naturalHeight * scale));
+    scaled.width = nextWidth;
+    scaled.height = nextHeight;
     const sctx = scaled.getContext("2d");
     if (!sctx) throw new Error("canvas-unavailable");
     sctx.drawImage(img, 0, 0, scaled.width, scaled.height);
