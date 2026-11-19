@@ -7,17 +7,20 @@ import { runInNewContext } from "vm";
 import ts from "typescript";
 import { expect, it, vi } from "vitest";
 
-function updaterFixture(): {
+function updaterFixture(checkResult: unknown = null): {
   emit: (progress: unknown) => void;
+  invoke: (channel: string) => unknown;
   send: ReturnType<typeof vi.fn>;
   cleanup: () => void;
 } {
   const dir = mkdtempSync(path.join(tmpdir(), "hermes-updater-progress-"));
   const events = new Map<string, (value: unknown) => void>();
+  const handlers = new Map<string, () => unknown>();
   const send = vi.fn();
   const updater = {
     on: (name: string, listener: (value: unknown) => void) =>
       events.set(name, listener),
+    checkForUpdates: async () => checkResult,
   };
   const load = (file: string): Record<string, unknown> => {
     const output = ts.transpileModule(readFileSync(file, "utf8"), {
@@ -35,7 +38,10 @@ function updaterFixture(): {
         if (name === "electron")
           return {
             app: { isPackaged: true, getPath: () => dir },
-            ipcMain: { handle: vi.fn() },
+            ipcMain: {
+              handle: (channel: string, handler: () => unknown) =>
+                handlers.set(channel, handler),
+            },
           };
         if (name === "electron-updater") return { autoUpdater: updater };
         if (name === "fs") return fs;
@@ -56,6 +62,7 @@ function updaterFixture(): {
   });
   return {
     emit: (progress) => events.get("download-progress")?.(progress),
+    invoke: (channel) => handlers.get(channel)?.(),
     send,
     cleanup: () => rmSync(dir, { recursive: true, force: true }),
   };
@@ -111,6 +118,36 @@ it("does not turn an out-of-range percent into completed download evidence", () 
       transferred: 25,
       total: 100,
     });
+  } finally {
+    f.cleanup();
+  }
+});
+
+// @lat: [[desktop-updates#Manual update check#Latest release is not an update]]
+it("reports no update when the latest release is the installed version", async () => {
+  // Shape electron-updater returns when the feed is not newer: `updateInfo`
+  // still carries the latest release.
+  const f = updaterFixture({
+    isUpdateAvailable: false,
+    versionInfo: { version: "0.7.9" },
+    updateInfo: { version: "0.7.9" },
+  });
+  try {
+    await expect(f.invoke("check-for-updates")).resolves.toBeNull();
+  } finally {
+    f.cleanup();
+  }
+});
+
+// @lat: [[desktop-updates#Manual update check#Newer release is reported]]
+it("reports the newer release version when an update is available", async () => {
+  const f = updaterFixture({
+    isUpdateAvailable: true,
+    versionInfo: { version: "0.8.0" },
+    updateInfo: { version: "0.8.0" },
+  });
+  try {
+    await expect(f.invoke("check-for-updates")).resolves.toBe("0.8.0");
   } finally {
     f.cleanup();
   }

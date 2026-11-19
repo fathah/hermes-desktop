@@ -44,6 +44,20 @@ Actual About and Settings state retain byte totals and speed, show fractional pr
 
 Unknown downloads omit fake zero-percent values. An inactive measurement triggers one waiting deadline, hides stale speed, retains bytes and recovers after progress resumes without persistent polling.
 
+## Manual update check
+
+The About pane's manual check reports a version only when electron-updater says the feed is newer than the running app.
+
+[[src/main/app/updater.ts#setupUpdater]] answers `check-for-updates` from `isUpdateAvailable`. electron-updater fills `updateInfo` with the latest release even when it is not newer, so its version alone cannot signal an update.
+
+### Latest release is not an update
+
+When electron-updater does not offer the feed's release to this install (for example, it equals the installed version), the handler returns null so About shows up to date instead of offering a download electron-updater would reject.
+
+### Newer release is reported
+
+When electron-updater marks the feed as newer, the handler returns that release version so About can offer the download.
+
 ## Agent phases
 
 Agent install and update steps describe subprocess phases, not measured work percentages. Running work stays indeterminate; successful IPC completion alone presents a completed result.
