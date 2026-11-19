@@ -540,10 +540,13 @@ export async function createCronJob(
   profile?: string,
 ): Promise<{ success: boolean; error?: string }> {
   const conn = getConnectionConfig();
-  const args = ["create", schedule];
-  if (prompt) args.push(prompt);
+  const args = ["create"];
   if (name) args.push("--name", name);
   if (deliver) args.push("--deliver", deliver);
+  // Keep user text positional even when it looks like a CLI option. Flags
+  // must precede the delimiter or argparse would consume them as prompt text.
+  args.push("--", schedule);
+  if (prompt) args.push(prompt);
 
   const sshResult = await runNamedProfileSshCron(args, profile, conn);
   if (sshResult) {

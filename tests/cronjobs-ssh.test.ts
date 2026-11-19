@@ -157,12 +157,13 @@ describe("SSH profile cron jobs", () => {
       sshConfig,
       [
         "create",
-        "0 9 * * *",
-        "Prepare the daily brief.",
         "--name",
         "Daily brief",
         "--deliver",
         "discord",
+        "--",
+        "0 9 * * *",
+        "Prepare the daily brief.",
       ],
       { profile: "biz-office", timeoutMs: 15000 },
     );
