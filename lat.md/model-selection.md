@@ -91,3 +91,9 @@ A selected model replaces the local default without inheriting another providerâ
 ### Remote credential boundary
 
 Remote and SSH selections remain usable without local provider secrets. Missing remote model selections cannot be filled from an unrelated local default.
+
+## Fast-tier read lifetime
+
+Delayed fast-tier reads may update only their original profile and may not replace a newer explicit choice. Failed reads retain the normal-tier fallback.
+
+[[src/renderer/src/screens/Chat/hooks/useFastMode.ts#useFastMode]] invalidates reads on profile changes, unmount and selection. [[src/renderer/src/screens/Chat/hooks/useFastMode.test.ts]] verifies profile switches, read-versus-selection races, rejected-read fallback, and rejection after a newer selection or profile has taken ownership.
