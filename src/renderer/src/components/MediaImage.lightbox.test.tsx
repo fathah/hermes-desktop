@@ -1,7 +1,7 @@
 import { fireEvent, render } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MediaImage } from "./MediaImage";
-import type { MediaToken } from "../screens/Chat/mediaUtils";
+import { MediaImage, MediaSegmentView } from "./MediaImage";
+import { parseMediaTokens, type MediaToken } from "../screens/Chat/mediaUtils";
 
 vi.mock("./useI18n", () => ({
   useI18n: () => ({
@@ -32,6 +32,42 @@ describe("MediaImage lightbox", () => {
       },
     });
   });
+
+  it("renders signed image URLs as images and retains their access query", () => {
+    const src =
+      "https://images.example.test/chart.png?signature=abc&expires=123";
+    const segment = parseMediaTokens(`MEDIA:${src}`)[0];
+    if (segment.type !== "media") throw new Error("expected media segment");
+    const view = render(<MediaSegmentView {...segment} />);
+    expect(view.getByRole("img", { name: "chart.png" })).toHaveAttribute(
+      "src",
+      src,
+    );
+  });
+
+  it.each(["png", "pdf"])(
+    "uses a decoded %s download name without changing the signed source",
+    (extension) => {
+      const src = `https://files.example.test/my%20chart.${extension}?signature=a%2Fb#preview`;
+      const name = `my chart.${extension}`;
+      const segment = parseMediaTokens(`MEDIA:${src}`)[0];
+      if (segment.type !== "media") throw new Error("expected media segment");
+      const view = render(<MediaSegmentView {...segment} />);
+
+      if (extension === "png") {
+        const image = view.getByRole("img", { name });
+        expect(image).toHaveAttribute("src", src);
+        fireEvent.click(image);
+        fireEvent.click(
+          view.getByRole("button", { name: "chat.media.saveImage" }),
+        );
+      } else {
+        fireEvent.click(view.getByRole("button", { name }));
+      }
+
+      expect(window.hermesAPI.saveMediaFile).toHaveBeenCalledWith(src, name);
+    },
+  );
 
   it("portals the lightbox to document.body so paint containment cannot clip it", () => {
     // Regression for the content-visibility clipping bug: `.chat-message` rows

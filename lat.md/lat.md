@@ -5,6 +5,7 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[chat-commands]] — how typed slash commands are routed through the gateway's `slash.exec`/`command.dispatch` pipeline instead of being sent as prompt text.
 - [[bot-groups]] — experimental, local-only Agent group UI over the Hermes-owned groups protocol; no second coordination runtime.
 - [[chat-input]] — the unified chat composer surface and its theme-aware animated border treatment.
+- [[chat-media]] — image URL classification, signed query preservation, and download filenames.
 - [[chat-performance]] — how chat rendering stays responsive through contained transcript rows, batched textarea resizing, and fixed-row slash-command virtualization.
 - [[chat-experience-preferences]] — user-message Markdown plus persisted completion-sound and native multi-language spell-check preferences.
 - [[shared-pets]] — the official Hermes pet gateway contract shared across profiles, gallery selection, sprite rendering, and live activity.
