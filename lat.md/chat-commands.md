@@ -108,6 +108,12 @@ A busy model command before prompt submission preserves the existing runtime; re
 
 A busy submission can overlap a displayed approval from upstream work. Retiring that attempted UI turn expires its stale controls without sending `session.interrupt` to the still-running session.
 
+## SSE byte decoding
+
+Chat Completions and Runs SSE responses preserve UTF-8 characters when HTTP chunks split their bytes. Each response owns a decoder, so concurrent streams cannot share partial characters.
+
+Both transports decode incrementally before SSE framing and flush at EOF in [[src/main/hermes.ts#sendMessage]]. Regressions split CJK, accented text and emoji into bytes, including a terminal event without a trailing delimiter.
+
 ## Streaming source-of-truth ref
 
 `handleGatewayEvent` in [[src/renderer/src/screens/Chat/hooks/useDashboardChatTransport.ts#useDashboardChatTransport]] applies stream events against a synchronous `messagesRef`, not React state, because state lags a render behind and each successive delta must build on the previous one.
