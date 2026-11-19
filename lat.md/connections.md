@@ -172,3 +172,9 @@ Malformed, duplicate-identity, and newer-version registries are rejected without
 ### Non-destructive session metadata recovery
 
 Malformed and newer-version session-location stores reject new records without changing the existing file, preserving metadata for repair or a compatible desktop.
+
+## Failed local write cleanup
+
+Atomic settings writes clean their temporary path after either a partial write failure or a rename failure. The original destination and original error remain available for recovery.
+
+[[src/main/utils.ts#safeWriteFile]] attempts cleanup even when the write throws before completion. [[tests/safe-write-file.test.ts]] injects a partial disk-full write against real files and checks rename failure as well as successful text and binary replacements.
