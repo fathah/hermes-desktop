@@ -130,3 +130,14 @@ describe("getYamlPath", () => {
     expect(getYamlPath(crlf, "memory.provider")).toBe("honcho");
   });
 });
+
+describe("quoted scalar decoding", () => {
+  it("decodes YAML single quotes and keeps hashes inside quotes", () => {
+    expect(getYamlPath("k: 'it''s #literal' # outside", "k")).toBe(
+      "it's #literal",
+    );
+  });
+  it("refuses malformed quoted scalars instead of returning a truncated value", () => {
+    expect(getYamlPath('k: "unfinished', "k")).toBeNull();
+  });
+});

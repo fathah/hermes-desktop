@@ -358,3 +358,9 @@ API Route CLI fallback forwards the selected profile's resolved key from its vau
 The real Setup form saves API Route credentials and the chosen custom model to its selected profile, then real config readers reopen the files without changing another profile.
 
 An isolated fixture selects the preset and enters a model ID and fake key. Actual config writers persist `custom`, the unchanged model ID, the endpoint and `API_ROUTE_API_KEY`; fresh readers recover them and reverse branding remains API Route.
+
+## Quoted configuration values
+
+Configuration reads decode YAML quoted scalars, preserving escaped quotes, backslashes, newlines and intentional quoted whitespace. Invalid quoted values remain unavailable instead of returning truncated text.
+
+[[src/main/yaml-path.ts#getYamlPath]] uses the existing YAML parser for quoted leaf values while retaining indentation-aware traversal. [[tests/config-value-paths.test.ts]] verifies real writer-to-reader round trips, and [[tests/yaml-path.test.ts]] covers single quotes, comments and malformed input.

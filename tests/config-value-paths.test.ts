@@ -36,6 +36,22 @@ afterEach(() => {
   rmSync(TEST_DIR, { recursive: true, force: true });
 });
 
+describe("quoted config round trips", () => {
+  it.each([
+    'http://proxy/path?name="quoted"',
+    String.raw`C:\Users\Renquan\workspace`,
+    "it's #work",
+    "line one\nline two",
+    "  padded value  ",
+  ])("reads a newly written scalar exactly: %j", async (value) => {
+    writeFileSync(join(TEST_DIR, "config.yaml"), "network:\n");
+    const { getConfigValue, setConfigValue } =
+      await importConfigWithHome(TEST_DIR);
+    setConfigValue("network.proxy", value);
+    expect(getConfigValue("network.proxy")).toBe(value);
+  });
+});
+
 describe("getConfigValue — dotted paths (issue #247)", () => {
   it("resolves a 2-segment path: agent.service_tier", async () => {
     writeFileSync(
