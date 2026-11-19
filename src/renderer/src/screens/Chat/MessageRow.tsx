@@ -6,6 +6,7 @@ import { OrbLoader } from "../../components/OrbLoader";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
 import { AttachmentChip } from "../../components/AttachmentChip";
 import { MediaSegmentView } from "../../components/MediaImage";
+import { InlinePreview } from "../../components/InlinePreview";
 import { useI18n } from "../../components/useI18n";
 import { parseMediaTokens, cleanLeakedToolTags } from "./mediaUtils";
 import { SpeechButton } from "./SpeechButton";
@@ -170,6 +171,9 @@ interface MessageRowProps {
   profile?: string;
   connectionId?: string;
   speechEnabled?: boolean;
+  /** Linked workspace for this conversation, used to resolve relative
+   *  `::preview` file paths. */
+  contextFolder?: string | null;
 }
 
 export const MessageRow = memo(function MessageRow({
@@ -183,6 +187,7 @@ export const MessageRow = memo(function MessageRow({
   profile,
   connectionId,
   speechEnabled,
+  contextFolder,
 }: MessageRowProps): React.JSX.Element {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
@@ -317,6 +322,14 @@ export const MessageRow = memo(function MessageRow({
                     {segment.value}
                   </AgentMarkdown>
                 ) : null
+              ) : segment.type === "preview" ? (
+                <InlinePreview
+                  key={`p-${segment.start}`}
+                  file={segment.attrs.file}
+                  raw={segment.raw}
+                  height={segment.attrs.height}
+                  workspace={contextFolder}
+                />
               ) : (
                 <MediaSegmentView
                   key={`m-${segment.start}`}

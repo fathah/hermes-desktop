@@ -12,6 +12,7 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[model-selection]] — the session-scoped in-chat model override that switches the model (and provider) for one conversation without touching the global default.
 - [[reasoning-effort]] — the composer's Faster⟷Smarter effort control: a draggable `role="slider"` over six ordered levels that stays open until dismissed and commits one `onChange` per real change.
 - [[web-preview]] — the in-app split-screen webview and the `partition`-based gate that lets only it load remote HTTPS while staying sandboxed.
+- [[inline-preview]] — the `::preview{file="…"}` transcript directive that renders a workspace HTML file live in a sandboxed message iframe.
 - [[code-blocks]] — collapsible long code blocks, and why expansion state is keyed on source position to survive react-markdown's streaming remounts.
 - [[rtl-chat]] — per-block message direction, LTR code isolation, and Persian locale registration with English fallback.
 - [[loading-indicators]] — the thinking-orbs dotted-orb loaders behind every loading state, and the OrbLoader wrapper that pins dark/light from the Hermes theme registry instead of the library's auto-detection.
