@@ -83,6 +83,42 @@ describe("OAuth provider model discovery", () => {
     );
   });
 
+  it("runs OAuth discovery in the requested profile home", async () => {
+    behavior.stdout = '["profile-model"]';
+    await discoverProviderModels("openai-codex", undefined, undefined, "work");
+    expect(execFileSpy.mock.calls[0][2]).toMatchObject({
+      env: { HERMES_HOME: "/tmp/hermes-home/profiles/work" },
+    });
+  });
+
+  it("does not reuse another profile's OAuth catalogue", async () => {
+    behavior.stdout = '["personal-model"]';
+    await discoverProviderModels(
+      "openai-codex",
+      undefined,
+      undefined,
+      undefined,
+    );
+    behavior.stdout = '["work-model"]';
+    expect(
+      await discoverProviderModels(
+        "openai-codex",
+        undefined,
+        undefined,
+        "work",
+      ),
+    ).toMatchObject({ models: ["work-model"], cached: false });
+    expect(
+      await discoverProviderModels(
+        "openai-codex",
+        undefined,
+        undefined,
+        "default",
+      ),
+    ).toMatchObject({ models: ["personal-model"], cached: true });
+    expect(execFileSpy).toHaveBeenCalledTimes(2);
+  });
+
   it("falls back to the curated list when the Python call fails", async () => {
     behavior.err = new Error("python: command not found");
     const result = await discoverProviderModels(
