@@ -176,7 +176,7 @@ async function fetchNousFreeModelIds(
         {
           method: "GET",
           protocol: u.protocol,
-          hostname: u.hostname,
+          hostname: u.hostname.replace(/^\[|\]$/g, ""),
           port: u.port || undefined,
           path: `${u.pathname}${u.search}`,
           headers: {
@@ -433,7 +433,7 @@ function authHeaders(provider: string, apiKey: string): Record<string, string> {
 function isLoopbackBaseUrl(baseUrl: string): boolean {
   try {
     const host = new URL(baseUrl).hostname.toLowerCase();
-    return host === "localhost" || host === "127.0.0.1" || host === "::1";
+    return host === "localhost" || host === "127.0.0.1" || host === "[::1]";
   } catch {
     return false;
   }
@@ -457,7 +457,7 @@ function fetchModelsHttp(
       {
         method: "GET",
         protocol: u.protocol,
-        hostname: u.hostname,
+        hostname: u.hostname.replace(/^\[|\]$/g, ""),
         port: u.port || undefined,
         path: `${u.pathname}${u.search}`,
         headers: { Accept: "application/json", ...headers },

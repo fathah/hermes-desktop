@@ -358,3 +358,9 @@ API Route CLI fallback forwards the selected profile's resolved key from its vau
 The real Setup form saves API Route credentials and the chosen custom model to its selected profile, then real config readers reopen the files without changing another profile.
 
 An isolated fixture selects the preset and enters a model ID and fake key. Actual config writers persist `custom`, the unchanged model ID, the endpoint and `API_ROUTE_API_KEY`; fresh readers recover them and reverse branding remains API Route.
+
+## IPv6 discovery endpoints
+
+Model discovery accepts IPv6 loopback endpoints without credentials, just like IPv4 loopback. URL brackets are retained in URLs but removed from Node HTTP hostname options.
+
+[[src/main/model-discovery.ts#discoverProviderModels]] and [[src/main/model-discovery.ts#getModelContextWindow]] reach a real `::1` server in [[tests/model-discovery.test.ts]], both with and without an explicit key. Nous pricing uses the same hostname normalization.
