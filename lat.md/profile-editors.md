@@ -201,3 +201,9 @@ A pending SSH credential save survives Providers→Entries→Providers. The next
 ### Queued credentials follow the parent target
 
 Leaving Providers does not cancel an already-admitted blur save while its parent target remains current. Connection changes refuse queued dispatch, and unmounted panes never receive late Saved feedback.
+
+## Concurrent appearance saves
+
+Local name, color and avatar updates to one profile are serialized across the complete read-modify-write operation. Independent fields remain present after overlapping saves, and one failed write does not block the queue.
+
+[[src/main/profile-meta.ts#writeProfileMeta]] scopes its queue to the metadata file. [[src/main/profile-meta.test.ts]] uses real files with deterministic read timing and verifies both concurrent updates and recovery after a failed write.
