@@ -358,3 +358,15 @@ API Route CLI fallback forwards the selected profile's resolved key from its vau
 The real Setup form saves API Route credentials and the chosen custom model to its selected profile, then real config readers reopen the files without changing another profile.
 
 An isolated fixture selects the preset and enters a model ID and fake key. Actual config writers persist `custom`, the unchanged model ID, the endpoint and `API_ROUTE_API_KEY`; fresh readers recover them and reverse branding remains API Route.
+
+## Direct nested setting insertion
+
+Adding a direct nested setting expands an existing empty mapping, follows its sibling indentation and inserts a missing line break. Unsupported scalar or flow-map parents are rejected without changing the file.
+
+[[src/main/config.ts#appendDirectNestedYamlValue]] preserves parent comments and sibling values instead of appending duplicate parent keys. [[tests/config-value-paths.test.ts]] parses real saved files and verifies empty maps, CRLF, missing final newlines, nondefault indentation and refusal paths.
+
+### Nested insertion ownership validation
+
+Before inserting a missing direct setting, YAML parsing verifies the parent is a mapping and the child does not already belong to it. Lists fail without writes; quoted grandchildren and scalar text do not block unrelated direct settings.
+
+The existing text splice preserves comments and layout. Regression tests parse the saved document and cover unindented sequences, quoted direct children, grandchildren, block scalars and multiline quoted strings.
