@@ -665,12 +665,12 @@ export async function getModelContextWindow(
 
   const readCtx = (): number | null => _ctxCache.get(key)?.[modelId] ?? null;
 
-  const cached = readCtx();
-  if (cached) return cached;
-  // A present (even empty) ctx map means we've already fetched this
-  // catalogue, so a missing entry is authoritative — don't re-fetch. This
-  // also avoids hammering the endpoint for providers that omit the field.
-  if (_ctxCache.has(key)) return null;
+  // Context metadata and negative lookups belong to the same catalogue
+  // generation as the model IDs. Neither can outlive its five-minute TTL.
+  if (fromCache(lowerProvider, baseUrl) !== null && _ctxCache.has(key)) {
+    return readCtx();
+  }
+  _ctxCache.delete(key);
 
   // Not fetched yet (e.g. the model picker primed `_cache` but never the ctx
   // map). Fetch directly here rather than via `discoverProviderModels`, whose
