@@ -10924,6 +10924,15 @@ body:has(.shell-vibrant),
   border-color: var(--border-bright);
 }
 
+.settings-language-trigger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.settings-language-trigger:disabled:hover {
+  border-color: var(--border);
+}
+
 .settings-language-dropdown {
   position: absolute;
   top: calc(100% + 4px);
