@@ -49,8 +49,8 @@ export const URL_KEY_MAP: ReadonlyArray<UrlKeyMapping> = [
     matchHostname: true,
   },
   {
-    pattern: /^api\.uberllm\.dev$/i,
-    envKey: "UBERLLM_API_KEY",
+    pattern: /^api\.martllm\.dev$/i,
+    envKey: "MARTLLM_API_KEY",
     matchHostname: true,
   },
   {
@@ -173,7 +173,7 @@ export const OPENAI_COMPAT_PROVIDERS: ReadonlySet<string> = new Set([
   "novita",
   "requesty",
   "api_route",
-  "uberllm",
+  "martllm",
   "cheaperinference",
   "mistral",
 ]);

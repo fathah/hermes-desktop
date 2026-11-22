@@ -71,15 +71,15 @@ describe("expectedEnvKeyForModel — URL fallback for custom/auto providers", ()
     expect(expectedEnvKeyForModel("custom", url)).toBe(expected);
     expect(expectedEnvKeyForModel("auto", url)).toBe(expected);
   });
-  // @lat: [[provider-setup#UberLLM provider preset#Installer readiness]]
+  // @lat: [[provider-setup#MartLLM provider preset#Installer readiness]]
   it.each([
-    ["https://api.uberllm.dev/v1", "UBERLLM_API_KEY"],
-    ["https://openai.com:password@api.uberllm.dev:443/v1", "UBERLLM_API_KEY"],
-    ["https://API.UBERLLM.DEV/v1", "UBERLLM_API_KEY"],
-    ["https://api.uberllm.dev.attacker.example/v1", null],
-    ["https://api.uberllm.dev@evil.example/v1", null],
-    ["https://evil.example/api.uberllm.dev/v1", null],
-  ])("resolves UberLLM installer credentials for %s", (url, expected) => {
+    ["https://api.martllm.com/v1", "MARTLLM_API_KEY"],
+    ["https://openai.com:password@api.martllm.com:443/v1", "MARTLLM_API_KEY"],
+    ["https://API.MARTLLM.DEV/v1", "MARTLLM_API_KEY"],
+    ["https://api.martllm.com.attacker.example/v1", null],
+    ["https://api.martllm.com@evil.example/v1", null],
+    ["https://evil.example/api.martllm.com/v1", null],
+  ])("resolves MartLLM installer credentials for %s", (url, expected) => {
     expect(expectedEnvKeyForModel("custom", url)).toBe(expected);
     expect(expectedEnvKeyForModel("auto", url)).toBe(expected);
   });

@@ -11,28 +11,28 @@ import {
   expectedEnvKeyForUrl,
 } from "../src/shared/url-key-map";
 
-describe("UberLLM preset", () => {
-  // @lat: [[provider-setup#UberLLM provider preset#Setup persistence]]
+describe("MartLLM preset", () => {
+  // @lat: [[provider-setup#MartLLM provider preset#Setup persistence]]
   it("keeps setup, saved model branding, discovery and credentials on the same route", () => {
-    const preset = LOCAL_PRESETS.find((entry) => entry.id === "uberllm");
+    const preset = LOCAL_PRESETS.find((entry) => entry.id === "martllm");
     expect(preset).toBeDefined();
     expect(preset?.group).toBe("remote");
-    expect(preset?.baseUrl).toBe("https://api.uberllm.dev/v1");
-    expect(preset?.envKey).toBe("UBERLLM_API_KEY");
-    expect(OPENAI_COMPAT_PROVIDERS.has("uberllm")).toBe(true);
-    expect(canonicalProviderBaseUrl("uberllm")).toBe(preset?.baseUrl);
-    expect(OPENAI_COMPATIBLE_BASE_URLS.uberllm).toBe(preset?.baseUrl);
+    expect(preset?.baseUrl).toBe("https://api.martllm.com/v1");
+    expect(preset?.envKey).toBe("MARTLLM_API_KEY");
+    expect(OPENAI_COMPAT_PROVIDERS.has("martllm")).toBe(true);
+    expect(canonicalProviderBaseUrl("martllm")).toBe(preset?.baseUrl);
+    expect(OPENAI_COMPATIBLE_BASE_URLS.martllm).toBe(preset?.baseUrl);
     expect(displayBrandFromConfig("custom", preset?.baseUrl || "")).toBe(
-      "uberllm",
+      "martllm",
     );
     expect(expectedEnvKeyForUrl(preset?.baseUrl)).toBe(preset?.envKey);
     expect(
       SETTINGS_SECTIONS.flatMap((section) => section.items),
     ).toContainEqual({
-      key: "UBERLLM_API_KEY",
-      label: "constants.uberllmApiKey",
+      key: "MARTLLM_API_KEY",
+      label: "constants.martllmApiKey",
       type: "password",
-      hint: "constants.uberllmHint",
+      hint: "constants.martllmHint",
     });
   });
 });

@@ -26,7 +26,7 @@ export default {
     novita: "NovitaAI",
     requesty: "Requesty",
     api_route: "API Route",
-    uberllm: "UberLLM",
+    martllm: "MartLLM",
     cheaperinference: "Cheaper Inference",
     mistral: "Mistral",
     aimlapi: "AIML API",

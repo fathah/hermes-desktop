@@ -24,7 +24,7 @@ export default {
     cerebras: "Cerebras",
     requesty: "Requesty",
     api_route: "API Route",
-    uberllm: "UberLLM",
+    martllm: "MartLLM",
     mistral: "Mistral",
   },
   serverPreset: "תבנית שרת",

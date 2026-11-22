@@ -21,14 +21,14 @@ vi.mock("../src/renderer/src/components/common/BrandLogo", () => ({
   default: () => null,
 }));
 
-// @lat: [[provider-setup#UberLLM provider preset#Rendered setup save and reload]]
+// @lat: [[provider-setup#MartLLM provider preset#Rendered setup save and reload]]
 it.each(["default", "work"])(
-  "saves UberLLM through real Setup and reopens profile %s",
+  "saves MartLLM through real Setup and reopens profile %s",
   async (profile) => {
-    const home = mkdtempSync(join(tmpdir(), "hermes-uberllm-setup-"));
+    const home = mkdtempSync(join(tmpdir(), "hermes-martllm-setup-"));
     const previousAPI = Object.getOwnPropertyDescriptor(window, "hermesAPI");
     const model = "deepseek/deepseek-v4-flash";
-    const endpoint = "https://api.uberllm.dev/v1";
+    const endpoint = "https://api.martllm.com/v1";
     const originalConfig = "model:\n  provider: openai\n  default: untouched\n";
     const originalEnv = "OPENAI_API_KEY=untouched-key\n";
     const workHome = join(home, "profiles", "work");
@@ -66,9 +66,9 @@ it.each(["default", "work"])(
       const onComplete = vi.fn();
       render(createElement(Setup, { profile, onComplete }));
       fireEvent.click(screen.getByText("constants.localName"));
-      fireEvent.click(screen.getByText("setup.localPresets.uberllm"));
+      fireEvent.click(screen.getByText("setup.localPresets.martllm"));
       fireEvent.change(screen.getByPlaceholderText("sk-..."), {
-        target: { value: " fixture-uberllm-key " },
+        target: { value: " fixture-martllm-key " },
       });
       fireEvent.change(
         screen.getByPlaceholderText("setup.modelNamePlaceholder"),
@@ -79,8 +79,8 @@ it.each(["default", "work"])(
       fireEvent.click(screen.getByText("setup.continue"));
       await waitFor(() => expect(onComplete).toHaveBeenCalledExactlyOnceWith());
       expect(api.setEnv).toHaveBeenCalledExactlyOnceWith(
-        "UBERLLM_API_KEY",
-        "fixture-uberllm-key",
+        "MARTLLM_API_KEY",
+        "fixture-martllm-key",
         profile,
       );
       expect(api.setModelConfig).toHaveBeenCalledExactlyOnceWith(
@@ -93,11 +93,11 @@ it.each(["default", "work"])(
       const reopened = await import("../src/main/config");
       const saved = reopened.getModelConfig(profile);
       expect(saved).toEqual({ provider: "custom", model, baseUrl: endpoint });
-      expect(reopened.readEnv(profile).UBERLLM_API_KEY).toBe(
-        "fixture-uberllm-key",
+      expect(reopened.readEnv(profile).MARTLLM_API_KEY).toBe(
+        "fixture-martllm-key",
       );
       expect(displayBrandFromConfig(saved.provider, saved.baseUrl)).toBe(
-        "uberllm",
+        "martllm",
       );
       const untouchedHome = profile === "default" ? workHome : home;
       expect(readFileSync(join(untouchedHome, "config.yaml"), "utf8")).toBe(
