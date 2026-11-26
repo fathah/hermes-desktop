@@ -341,7 +341,7 @@ export const WorktreePanel = memo(function WorktreePanel({
           isResizing ? "worktree-resize-handle-active" : ""
         }`}
         onPointerDown={startResize}
-        title="Drag to resize"
+        title={t("common.dragToResize")}
       />
       <div className="worktree-header">
         <Folder size={16} className="worktree-header-icon" />

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ProfileEditorTarget } from "../../../../shared/profile-editor-target";
 import { formatSessionUsage, type SessionUsage } from "./sessionUsage";
 import { useProfileEditorTarget } from "../../hooks/useProfileEditorTarget";
+import { useI18n } from "../../components/useI18n";
 
 interface StatusInfo {
   mode: string;
@@ -27,6 +28,7 @@ export function StatusBar({
   /** Token usage of the visible chat session; omitted when not on the chat tab. */
   sessionUsage?: SessionUsage | null;
 }): React.JSX.Element {
+  const { t } = useI18n();
   const [loadedInfo, setInfo] = useState<
     (StatusInfo & { target: ProfileEditorTarget }) | null
   >(null);
@@ -80,7 +82,7 @@ export function StatusBar({
   const usageDisplay = formatSessionUsage(sessionUsage);
 
   return (
-    <footer className="status-bar" aria-label="Status">
+    <footer className="status-bar" aria-label={t("common.statusBarLabel")}>
       <div className="status-bar-group">
         {info && (
           <>
@@ -89,12 +91,22 @@ export function StatusBar({
               aria-hidden="true"
             />
             <span className="status-item status-strong">
-              {info.gatewayRunning ? "gateway" : "offline"}
+              {info.gatewayRunning
+                ? t("common.statusGateway")
+                : t("common.statusOffline")}
             </span>
             <span className="status-sep" aria-hidden="true">
               &middot;
             </span>
-            <span className="status-item">{info.mode}</span>
+            <span className="status-item">
+              {info.mode === "local"
+                ? t("common.statusModeLocal")
+                : info.mode === "remote"
+                  ? t("common.statusModeRemote")
+                  : info.mode === "ssh"
+                    ? t("common.statusModeSsh")
+                    : info.mode}
+            </span>
             {info.model && (
               <>
                 <span className="status-sep" aria-hidden="true">
@@ -106,7 +118,9 @@ export function StatusBar({
             <span className="status-sep" aria-hidden="true">
               &middot;
             </span>
-            <span className="status-item">{info.skillCount} skills</span>
+            <span className="status-item">
+              {t("common.skillsCount", { count: info.skillCount })}
+            </span>
           </>
         )}
         {usageDisplay ? (
@@ -130,13 +144,13 @@ export function StatusBar({
       </div>
       <div className="status-bar-group status-bar-hints">
         <span className="status-item">
-          <kbd className="status-kbd">/</kbd> commands
+          <kbd className="status-kbd">/</kbd> {t("common.commandsHint")}
         </span>
         <span className="status-sep" aria-hidden="true">
           &middot;
         </span>
         <span className="status-item">
-          <kbd className="status-kbd">{mod},</kbd> settings
+          <kbd className="status-kbd">{mod},</kbd> {t("common.settingsHint")}
         </span>
       </div>
     </footer>

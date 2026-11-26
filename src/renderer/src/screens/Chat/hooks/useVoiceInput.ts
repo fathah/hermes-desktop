@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { localizeDefinition } from "../../../../../shared/i18n/definitions";
 
 /**
  * Voice input for the chat box.
@@ -108,7 +109,7 @@ export function useVoiceInput(
         // A late interim must not overwrite the final transcript.
         if (!isFinal && finalizingRef.current) return;
         if (text) onResultRef.current(text, isFinal);
-        else if (isFinal) setError("No speech detected.");
+        else if (isFinal) setError(localizeDefinition("No speech detected."));
       } catch (e) {
         // Interim failures are transient — only surface the final one.
         if (isFinal) setError((e as Error).message || "Transcription failed.");
@@ -121,7 +122,7 @@ export function useVoiceInput(
 
   const startMediaRecorder = useCallback(async () => {
     if (!canRecord) {
-      setError("Voice input isn't available here.");
+      setError(localizeDefinition("Voice input isn't available here."));
       return;
     }
     try {
@@ -157,7 +158,7 @@ export function useVoiceInput(
       setRecording(true);
       setError(null);
     } catch {
-      setError("Microphone access was denied or is unavailable.");
+      setError(localizeDefinition("Microphone access was denied or is unavailable."));
       setRecording(false);
     }
   }, [canRecord, stopStream, transcribeAccumulated]);

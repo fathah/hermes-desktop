@@ -12,6 +12,7 @@ import {
 } from "../../assets/icons";
 import { CronRunHistory } from "./CronRunHistory";
 import { useI18n } from "../../components/useI18n";
+import { localizeDefinition } from "../../../../shared/i18n/definitions";
 import { OrbLoader } from "../../components/OrbLoader";
 
 const DELIVER_TARGETS = [
@@ -175,10 +176,10 @@ function Schedules({
         closeCreateModal();
         await loadJobs();
       } else {
-        setError(result.error || "Failed to create job");
+        setError(result.error || localizeDefinition("Failed to create job"));
       }
     } catch {
-      setError("Failed to create job");
+      setError(localizeDefinition("Failed to create job"));
     } finally {
       setActionInProgress(null);
     }
@@ -193,10 +194,10 @@ function Schedules({
       if (result.success) {
         await loadJobs();
       } else {
-        setError(result.error || "Failed to remove job");
+        setError(result.error || localizeDefinition("Failed to remove job"));
       }
     } catch {
-      setError("Failed to remove job");
+      setError(localizeDefinition("Failed to remove job"));
     } finally {
       setActionInProgress(null);
     }
@@ -213,10 +214,10 @@ function Schedules({
       if (result.success) {
         await loadJobs();
       } else {
-        setError(result.error || "Failed to update job");
+        setError(result.error || localizeDefinition("Failed to update job"));
       }
     } catch {
-      setError("Failed to update job");
+      setError(localizeDefinition("Failed to update job"));
     } finally {
       setActionInProgress(null);
     }
@@ -230,10 +231,10 @@ function Schedules({
       if (result.success) {
         await loadJobs();
       } else {
-        setError(result.error || "Failed to trigger job");
+        setError(result.error || localizeDefinition("Failed to trigger job"));
       }
     } catch {
-      setError("Failed to trigger job");
+      setError(localizeDefinition("Failed to trigger job"));
     } finally {
       setActionInProgress(null);
     }

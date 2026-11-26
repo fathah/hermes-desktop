@@ -433,7 +433,7 @@ export const WebPreviewPanel = memo(function WebPreviewPanel({
           isResizing ? "web-preview-resize-handle-active" : ""
         }`}
         onPointerDown={startResize}
-        title="Drag to resize"
+        title={t("common.dragToResize")}
       />
       <div className="web-preview-header">
         <button
@@ -472,7 +472,7 @@ export const WebPreviewPanel = memo(function WebPreviewPanel({
             className="web-preview-address-input"
             value={inputUrl}
             onChange={(e) => setInputUrl(e.target.value)}
-            placeholder="Search or enter web address..."
+            placeholder={t("common.searchOrEnterAddress")}
           />
         </form>
 
@@ -565,15 +565,15 @@ export const WebPreviewPanel = memo(function WebPreviewPanel({
                 value={annotationComment}
                 onChange={(e) => setAnnotationComment(e.target.value)}
                 placeholder="Add a comment…"
-                aria-label="Annotation comment"
+                aria-label={t("common.annotationComment")}
                 maxLength={2_000}
               />
               <button
                 type="button"
                 className="web-preview-annotation-cancel"
                 onClick={cancelAnnotation}
-                title="Cancel annotation"
-                aria-label="Cancel annotation"
+                title={t("common.cancelAnnotation")}
+                aria-label={t("common.cancelAnnotation")}
               >
                 <X size={14} />
               </button>
@@ -581,8 +581,8 @@ export const WebPreviewPanel = memo(function WebPreviewPanel({
                 type="submit"
                 className="web-preview-annotation-submit"
                 disabled={!annotationComment.trim()}
-                title="Add annotation to chat"
-                aria-label="Add annotation to chat"
+                title={t("common.addAnnotationToChat")}
+                aria-label={t("common.addAnnotationToChat")}
               >
                 <ArrowUp size={15} />
               </button>

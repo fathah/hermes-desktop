@@ -86,7 +86,9 @@ export const ContextFolderChip = memo(function ContextFolderChip({
       <div className="chat-ctxfolder-dropdown-header">Recent</div>
       <div className="chat-ctxfolder-dropdown-list">
         {recentFolders.length === 0 ? (
-          <div className="chat-ctxfolder-dropdown-empty">No recent folders</div>
+          <div className="chat-ctxfolder-dropdown-empty">
+            {t("common.noRecentFolders")}
+          </div>
         ) : (
           recentFolders.map((path) => {
             const isSelected = path === contextFolder;
@@ -126,7 +128,7 @@ export const ContextFolderChip = memo(function ContextFolderChip({
           onPickFolder();
         }}
       >
-        <span>Open folder...</span>
+        <span>{t("common.openFolder")}</span>
       </button>
     </div>
   );

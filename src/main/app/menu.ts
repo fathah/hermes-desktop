@@ -1,5 +1,6 @@
 import { app, type BrowserWindow, Menu } from "electron";
 import { is } from "@electron-toolkit/utils";
+import { localizeDefinition } from "../../shared/i18n/definitions";
 
 interface MenuDeps {
   getMainWindow: () => BrowserWindow | null;
@@ -28,16 +29,16 @@ export function buildMenu({ getMainWindow, openExternalUrl }: MenuDeps): void {
         ]
       : []),
     {
-      label: "Chat",
+      label: localizeDefinition("Chat"),
       submenu: [
         {
-          label: "New Chat",
+          label: localizeDefinition("New Chat"),
           accelerator: "CmdOrCtrl+N",
           click: () => getMainWindow()?.webContents.send("menu-new-chat"),
         },
         { type: "separator" },
         {
-          label: "Search Sessions",
+          label: localizeDefinition("Search Sessions"),
           accelerator: "CmdOrCtrl+K",
           click: () =>
             getMainWindow()?.webContents.send("menu-search-sessions"),
@@ -45,7 +46,7 @@ export function buildMenu({ getMainWindow, openExternalUrl }: MenuDeps): void {
       ],
     },
     {
-      label: "Edit",
+      label: localizeDefinition("Edit"),
       submenu: [
         { role: "undo" },
         { role: "redo" },
@@ -57,7 +58,7 @@ export function buildMenu({ getMainWindow, openExternalUrl }: MenuDeps): void {
       ],
     },
     {
-      label: "View",
+      label: localizeDefinition("View"),
       submenu: [
         { role: "resetZoom" },
         { role: "zoomIn" },
@@ -74,7 +75,7 @@ export function buildMenu({ getMainWindow, openExternalUrl }: MenuDeps): void {
       ],
     },
     {
-      label: "Window",
+      label: localizeDefinition("Window"),
       submenu: [
         { role: "minimize" },
         { role: "zoom" },
@@ -84,12 +85,12 @@ export function buildMenu({ getMainWindow, openExternalUrl }: MenuDeps): void {
       ],
     },
     {
-      label: "Help",
+      label: localizeDefinition("Help"),
       submenu: [
         ...(!is.dev
           ? [
               {
-                label: "Toggle Developer Tools",
+                label: localizeDefinition("Toggle Developer Tools"),
                 accelerator: "Alt+Command+I",
                 click: () => getMainWindow()?.webContents.toggleDevTools(),
               },
@@ -97,12 +98,12 @@ export function buildMenu({ getMainWindow, openExternalUrl }: MenuDeps): void {
             ]
           : []),
         {
-          label: "Hermes Agent on GitHub",
+          label: localizeDefinition("Hermes Agent on GitHub"),
           click: () =>
             openExternalUrl("https://github.com/NousResearch/hermes-agent/"),
         },
         {
-          label: "Report an Issue",
+          label: localizeDefinition("Report an Issue"),
           click: () =>
             openExternalUrl("https://github.com/fathah/hermes-desktop/issues"),
         },

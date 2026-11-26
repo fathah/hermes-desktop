@@ -44,6 +44,7 @@ import {
   INSTALLER_VERIFICATION_FAILED,
   verifiedInstallerCommand,
 } from "./installer-download";
+import { localizeDefinition } from "../shared/i18n/definitions";
 
 const IS_WINDOWS = process.platform === "win32";
 
@@ -682,7 +683,7 @@ export function clearVersionCache(): void {
 
 export function runHermesDoctor(): string {
   if (!canInvokeHermesCli()) {
-    return "Hermes is not installed.";
+    return localizeDefinition("Hermes is not installed.");
   }
   try {
     const output = execFileSync(HERMES_PYTHON, hermesCliArgs(["doctor"]), {
@@ -745,12 +746,12 @@ export async function runClawMigrate(
   onProgress: (progress: InstallProgress) => void,
 ): Promise<void> {
   if (!existsSync(HERMES_PYTHON) || !existsSync(HERMES_SCRIPT)) {
-    throw new Error("Hermes is not installed.");
+    throw new Error(localizeDefinition("Hermes is not installed."));
   }
 
   const openclaw = checkOpenClawExists();
   if (!openclaw.found) {
-    throw new Error("No OpenClaw installation found.");
+    throw new Error(localizeDefinition("No OpenClaw installation found."));
   }
 
   let log = "";
@@ -759,7 +760,7 @@ export async function runClawMigrate(
     onProgress({
       step: 1,
       totalSteps: 1,
-      title: "Migrating from OpenClaw",
+      title: localizeDefinition("Migrating from OpenClaw"),
       detail: text.trim().slice(0, 120),
       log,
     });
@@ -820,7 +821,7 @@ export async function runHermesUpdate(
       operation: "update",
       step: 0,
       totalSteps: 0,
-      title: "Updating Hermes Agent",
+      title: localizeDefinition("Updating Hermes Agent"),
       detail: text.trim().slice(0, 120),
       log,
     });
@@ -960,7 +961,7 @@ export async function runInstall(
     onProgress({
       step: currentStep,
       totalSteps,
-      title: currentTitle,
+      title: localizeDefinition(currentTitle),
       detail: text.trim().slice(0, 120),
       log,
     });
@@ -1253,7 +1254,7 @@ export async function runHermesBackup(
   profile?: string,
 ): Promise<{ success: boolean; path?: string; error?: string }> {
   if (!existsSync(HERMES_PYTHON) || !existsSync(HERMES_SCRIPT)) {
-    return { success: false, error: "Hermes is not installed." };
+    return { success: false, error: localizeDefinition("Hermes is not installed.") };
   }
   const args = hermesCliArgs();
   if (profile && profile !== "default") args.push("-p", profile);
@@ -1305,7 +1306,7 @@ export async function runHermesImport(
   if (getConnectionConfig().mode !== "local") {
     return {
       success: false,
-      error: "Backup import requires a Local connection.",
+      error: localizeDefinition("Backup import requires a Local connection."),
     };
   }
   const archive = validateImportArchivePath(archivePath);
@@ -1314,7 +1315,7 @@ export async function runHermesImport(
   }
 
   if (!existsSync(HERMES_PYTHON) || !existsSync(HERMES_SCRIPT)) {
-    return { success: false, error: "Hermes is not installed." };
+    return { success: false, error: localizeDefinition("Hermes is not installed.") };
   }
   const targetProfile = profile || getActiveProfileNameSync();
   if (!isValidProfileName(targetProfile)) {
@@ -1322,10 +1323,20 @@ export async function runHermesImport(
   }
   const options: MessageBoxOptions = {
     type: "warning",
-    title: "Restore Hermes backup",
-    message: "Restore this Hermes backup?",
-    detail: `Archive: ${basename(archive.path)}\nLocal profile: "${targetProfile}"\n\nThis replaces configuration, credentials, sessions and other backup contents. Provider backups may also restore files outside this profile.`,
-    buttons: ["Cancel", "Restore backup"],
+    title: localizeDefinition("Restore Hermes backup"),
+    message: localizeDefinition("Restore this Hermes backup?"),
+    detail:
+      localizeDefinition("Archive:") +
+      ` ${basename(archive.path)}\n` +
+      localizeDefinition("Local profile:") +
+      ` "${targetProfile}"\n\n` +
+      localizeDefinition(
+        "This replaces configuration, credentials, sessions and other backup contents. Provider backups may also restore files outside this profile.",
+      ),
+    buttons: [
+      localizeDefinition("Cancel"),
+      localizeDefinition("Restore backup"),
+    ],
     defaultId: 0,
     cancelId: 0,
     noLink: true,
@@ -1336,15 +1347,18 @@ export async function runHermesImport(
         ? await dialog.showMessageBox(parentWindow, options)
         : await dialog.showMessageBox(options);
     if (result.response !== 1) {
-      return { success: false, error: "Backup import cancelled." };
+      return { success: false, error: localizeDefinition("Backup import cancelled.") };
     }
   } catch {
-    return { success: false, error: "Could not confirm backup import." };
+    return {
+      success: false,
+      error: localizeDefinition("Could not confirm backup import."),
+    };
   }
   if (getConnectionConfig().mode !== "local") {
     return {
       success: false,
-      error: "Connection changed; backup import cancelled.",
+      error: localizeDefinition("Connection changed; backup import cancelled."),
     };
   }
   const args = hermesCliArgs();
@@ -1384,20 +1398,32 @@ export function validateImportArchivePath(
   archivePath: unknown,
 ): { success: true; path: string } | { success: false; error: string } {
   if (typeof archivePath !== "string" || archivePath.trim() === "") {
-    return { success: false, error: "Import archive path is required." };
+    return {
+      success: false,
+      error: localizeDefinition("Import archive path is required."),
+    };
   }
 
   const path = resolve(archivePath);
   if (!existsSync(path)) {
-    return { success: false, error: "Import archive does not exist." };
+    return {
+      success: false,
+      error: localizeDefinition("Import archive does not exist."),
+    };
   }
 
   try {
     if (!statSync(path).isFile()) {
-      return { success: false, error: "Import archive must be a file." };
+      return {
+        success: false,
+        error: localizeDefinition("Import archive must be a file."),
+      };
     }
   } catch {
-    return { success: false, error: "Import archive is not readable." };
+    return {
+      success: false,
+      error: localizeDefinition("Import archive is not readable."),
+    };
   }
 
   return { success: true, path };
@@ -1409,7 +1435,7 @@ export function validateImportArchivePath(
 
 export function runHermesDump(): Promise<string> {
   if (!existsSync(HERMES_PYTHON) || !existsSync(HERMES_SCRIPT)) {
-    return Promise.resolve("Hermes is not installed.");
+    return Promise.resolve(localizeDefinition("Hermes is not installed."));
   }
   return new Promise((resolve) => {
     execFile(

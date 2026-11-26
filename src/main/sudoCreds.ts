@@ -2,6 +2,7 @@ import { BrowserWindow, ipcMain, type IpcMainEvent } from "electron";
 import { spawn } from "child_process";
 import { join } from "path";
 import { ASKPASS_SUBMIT_CHANNEL } from "../shared/askpass";
+import { localizeDefinition } from "../shared/i18n/definitions";
 
 export interface SudoPrecacheResult {
   ok: boolean;
@@ -114,7 +115,7 @@ function showSudoDialog(parent: BrowserWindow | null): Promise<string | null> {
       minimizable: false,
       maximizable: false,
       fullscreenable: false,
-      title: "Administrator Password",
+      title: localizeDefinition("Administrator Password"),
       alwaysOnTop: true,
       webPreferences: {
         preload: join(__dirname, "../preload/askpass.js"),
@@ -181,12 +182,12 @@ function buildDialogHtml(): string {
   button:hover { opacity:0.9; }
 </style></head>
 <body>
-<div class="title">Hermes needs your computer password</div>
-<div class="prompt">The installer will install browser libraries that require administrator access. You'll only be asked once — the password is used locally and never stored.</div>
-<input id="pw" type="password" autofocus autocomplete="off" placeholder="Password" />
+<div class="title">${localizeDefinition("Hermes needs your computer password")}</div>
+<div class="prompt">${localizeDefinition("The installer will install browser libraries that require administrator access. You'll only be asked once — the password is used locally and never stored.")}</div>
+<input id="pw" type="password" autofocus autocomplete="off" placeholder="${localizeDefinition("Password")}" />
 <div class="row">
-  <button id="cancel">Cancel</button>
-  <button id="ok" class="primary">Continue</button>
+  <button id="cancel">${localizeDefinition("Cancel")}</button>
+  <button id="ok" class="primary">${localizeDefinition("Continue")}</button>
 </div>
 </body></html>`;
 }

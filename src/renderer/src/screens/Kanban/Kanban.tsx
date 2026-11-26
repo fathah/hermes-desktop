@@ -1092,7 +1092,7 @@ function KanbanContent({
                 </label>
                 <select
                   className="input"
-                  aria-label="Assignee profile"
+                  aria-label={t("common.assigneeProfile")}
                   value={newAssignee}
                   onChange={(e) => setNewAssignee(e.target.value)}
                 >

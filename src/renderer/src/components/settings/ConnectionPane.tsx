@@ -351,7 +351,9 @@ export default function ConnectionPane(): React.JSX.Element {
             </div>
           )}
           <div className="settings-field">
-            <label className="settings-field-label">Chat transport</label>
+            <label className="settings-field-label">
+              {t("common.chatTransport")}
+            </label>
             <div className="settings-theme-options">
               {CHAT_TRANSPORT_OPTIONS.filter(
                 (option) => remoteAuthMode !== "oauth" || option !== "legacy",
@@ -486,7 +488,9 @@ export default function ConnectionPane(): React.JSX.Element {
             onProvisioned={() => void handleSaveConnection()}
           />
           <div className="settings-field">
-            <label className="settings-field-label">Chat transport</label>
+            <label className="settings-field-label">
+              {t("common.chatTransport")}
+            </label>
             <div className="settings-theme-options">
               {CHAT_TRANSPORT_OPTIONS.map((option) => (
                 <button
