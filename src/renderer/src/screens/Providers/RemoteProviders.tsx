@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useConnectionTargetRevision } from "../../hooks/useConnectionTargetRevision";
 import { SETTINGS_SECTIONS, PROVIDERS } from "../../constants";
-import { useI18n } from "../../components/useI18n";
+import { useI18n, useLocalize } from "../../components/useI18n";
 import type { ProviderRequestTarget } from "../../../../shared/provider-target";
 
 type Pool = Awaited<ReturnType<typeof window.hermesAPI.getCredentialPool>>;
@@ -30,6 +30,7 @@ function RemoteProvidersView({
   profile = "default",
 }: Props): React.JSX.Element {
   const { t } = useI18n();
+  const tr = useLocalize();
   const mounted = useRef(true);
   const [target, setTarget] = useState<ProviderRequestTarget | null>(null);
   const [env, setEnv] = useState<Record<string, string>>({});
@@ -203,7 +204,7 @@ function RemoteProvidersView({
                 </p>
                 <div className="settings-pool-add">
                   <select
-                    aria-label="Pool provider"
+                    aria-label={tr("Pool provider")}
                     className="input"
                     value={poolProvider}
                     disabled={busy}
@@ -219,7 +220,7 @@ function RemoteProvidersView({
                       ))}
                   </select>
                   <input
-                    aria-label="Pool API key"
+                    aria-label={tr("Pool API key")}
                     className="input"
                     type="password"
                     value={poolKey}
@@ -227,7 +228,7 @@ function RemoteProvidersView({
                     onChange={(event) => setPoolKey(event.target.value)}
                   />
                   <input
-                    aria-label="Pool label"
+                    aria-label={tr("Pool label")}
                     className="input"
                     value={poolLabel}
                     disabled={busy}

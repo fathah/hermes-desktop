@@ -964,7 +964,7 @@ function Layout({
             )}
             <div
               className="sidebar-footer-actions"
-              aria-label="Workspace tools"
+              aria-label={t("common.workspaceTools")}
             >
               {FOOTER_NAV_ITEMS.map(({ view: v, icon: Icon, labelKey }) => (
                 <button

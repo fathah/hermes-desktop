@@ -1,9 +1,17 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render as rtlRender, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { StatusBar } from "./StatusBar";
 import type { SessionUsage } from "./sessionUsage";
 import { profileEditorFixture } from "../../test/profileEditorFixture";
+import { I18nProvider } from "../../components/I18nProvider";
+
+// StatusBar reads its labels from i18n, so every render needs the provider.
+const render = (
+  ui: Parameters<typeof rtlRender>[0],
+): ReturnType<typeof rtlRender> => rtlRender(<I18nProvider>{ui}</I18nProvider>);
+const wrap = (ui: Parameters<typeof rtlRender>[0]): Parameters<typeof rtlRender>[0] =>
+  <I18nProvider>{ui}</I18nProvider>;
 
 const usage: SessionUsage = {
   contextTokens: 38_200,
@@ -102,7 +110,7 @@ it("binds model/mode metadata to the captured connection and profile", async () 
   );
   await act(async () => {
     scope.change("b", "ssh");
-    view.rerender(<StatusBar activeProfile="work" connectionId="b" />);
+    view.rerender(wrap(<StatusBar activeProfile="work" connectionId="b" />));
   });
   await screen.findByText("new-model");
   expect(screen.getByText("ssh")).toBeTruthy();
@@ -289,10 +297,12 @@ it.each(["connection", "profile", "private revision"] as const)(
         if (change !== "profile")
           scope.change(change === "connection" ? "b" : "a");
         view.rerender(
-          <StatusBar
-            activeProfile={nextProfile}
-            connectionId={change === "connection" ? "b" : "a"}
-          />,
+          wrap(
+            <StatusBar
+              activeProfile={nextProfile}
+              connectionId={change === "connection" ? "b" : "a"}
+            />,
+          ),
         );
         await vi.advanceTimersByTimeAsync(0);
       });

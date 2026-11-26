@@ -1,3 +1,5 @@
+import { t } from "../../../../shared/i18n";
+
 /**
  * Token usage of one chat session, as shown in the persistent status bar.
  * Reported upward by <Chat> (like loading/title) so the shell can display it
@@ -78,9 +80,10 @@ export function formatSessionUsage(
   const approx = usage.estimated ? "~" : "";
   let context = "";
   if (hasContext) {
+    const ctxLabel = t("common.usageContextShort");
     context = knownWindow
-      ? `ctx ${approx}${formatTokens(usage.contextTokens)}/${formatTokens(usage.contextWindow)} · ${approx}${percent}%`
-      : `ctx ${approx}${formatTokens(usage.contextTokens)}`;
+      ? `${ctxLabel} ${approx}${formatTokens(usage.contextTokens)}/${formatTokens(usage.contextWindow)} · ${approx}${percent}%`
+      : `${ctxLabel} ${approx}${formatTokens(usage.contextTokens)}`;
   }
 
   const totalsParts: string[] = [];
@@ -97,30 +100,49 @@ export function formatSessionUsage(
   if (hasContext) {
     lines.push(
       knownWindow
-        ? `Context: ${usage.contextTokens.toLocaleString("en-US")} of ${usage.contextWindow.toLocaleString("en-US")} tokens (${percent}%)`
+        ? t("common.usageContextWithWindow", {
+            used: usage.contextTokens.toLocaleString("en-US"),
+            total: usage.contextWindow.toLocaleString("en-US"),
+            percent,
+          })
         : windowExceeded
-          ? `Context: ${usage.contextTokens.toLocaleString("en-US")} tokens — above the assumed ${usage.contextWindow.toLocaleString("en-US")} window, so that size is probably wrong (set model.context_length)`
-          : `Context: ${usage.contextTokens.toLocaleString("en-US")} tokens (window unknown)`,
+          ? t("common.usageContextExceeded", {
+              used: usage.contextTokens.toLocaleString("en-US"),
+              total: usage.contextWindow.toLocaleString("en-US"),
+            })
+          : t("common.usageContextNoWindow", {
+              used: usage.contextTokens.toLocaleString("en-US"),
+            }),
     );
   }
   if (hasTotals) {
     lines.push(
-      `Session: ${usage.promptTokens.toLocaleString("en-US")} in, ${usage.completionTokens.toLocaleString("en-US")} out, ${usage.totalTokens.toLocaleString("en-US")} total`,
+      t("common.usageSession", {
+        in: usage.promptTokens.toLocaleString("en-US"),
+        out: usage.completionTokens.toLocaleString("en-US"),
+        total: usage.totalTokens.toLocaleString("en-US"),
+      }),
     );
   }
   if (usage.estimated) {
-    lines.push("Context is estimated from the transcript (≈ chars ÷ 4).");
+    lines.push(t("common.usageEstimated"));
   }
   if (usage.cacheReadTokens !== undefined) {
-    lines.push(`Cache read: ${usage.cacheReadTokens.toLocaleString("en-US")}`);
+    lines.push(
+      t("common.usageCacheRead", {
+        tokens: usage.cacheReadTokens.toLocaleString("en-US"),
+      }),
+    );
   }
   if (usage.cacheWriteTokens !== undefined) {
     lines.push(
-      `Cache write: ${usage.cacheWriteTokens.toLocaleString("en-US")}`,
+      t("common.usageCacheWrite", {
+        tokens: usage.cacheWriteTokens.toLocaleString("en-US"),
+      }),
     );
   }
   if (usage.cost !== undefined && usage.cost > 0) {
-    lines.push(`Cost: ${formatCost(usage.cost)}`);
+    lines.push(t("common.usageCost", { cost: formatCost(usage.cost) }));
   }
 
   return {

@@ -1,6 +1,10 @@
 import type { BrowserWindow } from "electron";
 import { showPasswordDialog } from "./askpass";
 import type { GatewayServerRequest } from "../shared/gateway-server-requests";
+import { getLocale } from "../shared/i18n";
+import { localizeDefinition } from "../shared/i18n/definitions";
+
+const be = (): boolean => getLocale() === "be";
 
 /**
  * Mid-turn gateway credential prompts (`sudo.request` / `secret.request`).
@@ -39,11 +43,12 @@ export async function promptSudoPassword(
   const parent = parentWindowGetter();
   const value = await showPasswordDialog(
     parent,
-    "An agent command needs administrator (sudo) access to continue. " +
-      "Your password is sent only to the requesting Hermes Agent's sudo prompt and is never stored.",
+    localizeDefinition(
+      "An agent command needs administrator (sudo) access to continue. Your password is sent only to the requesting Hermes Agent's sudo prompt and is never stored.",
+    ),
     {
-      title: "Administrator Password Required",
-      heading: "Hermes needs your sudo password",
+      title: localizeDefinition("Administrator Password Required"),
+      heading: localizeDefinition("Hermes needs your sudo password"),
       signal,
     },
   );
@@ -63,12 +68,16 @@ export async function promptSecretValue(
   const parent = parentWindowGetter();
   const detail =
     (prompt && prompt.trim()) ||
-    `The agent is requesting a value for ${envVar || "a secret"}.`;
+    (be()
+      ? `Агент запытвае значэнне для ${envVar || "сакрэту"}.`
+      : `The agent is requesting a value for ${envVar || "a secret"}.`);
   const value = await showPasswordDialog(parent, detail, {
-    title: "Secret Required",
+    title: localizeDefinition("Secret Required"),
     heading: envVar
-      ? `Hermes needs a value for ${envVar}`
-      : "Hermes needs a secret value",
+      ? be()
+        ? `Hermes патрабуе значэнне для ${envVar}`
+        : `Hermes needs a value for ${envVar}`
+      : localizeDefinition("Hermes needs a secret value"),
     signal,
   });
   return value ?? "";
@@ -105,8 +114,12 @@ export async function collectGatewayRequestValue(
   ) {
     const detail =
       request.method === "vault.unlock_prompt"
-        ? `Unlock ${typeof request.params.display_name === "string" ? request.params.display_name.slice(0, 256) : "the requested password manager"}.`
-        : `Enter the one-time code for ${typeof request.params.site === "string" ? request.params.site.slice(0, 256) : "the requested site"}.`;
+        ? be()
+          ? `Разблакуйце ${typeof request.params.display_name === "string" ? request.params.display_name.slice(0, 256) : "запытаны мэнэджэр пароляў"}.`
+          : `Unlock ${typeof request.params.display_name === "string" ? request.params.display_name.slice(0, 256) : "the requested password manager"}.`
+        : be()
+          ? `Увядзіце аднаразовы код для ${typeof request.params.site === "string" ? request.params.site.slice(0, 256) : "запытанага сайта"}.`
+          : `Enter the one-time code for ${typeof request.params.site === "string" ? request.params.site.slice(0, 256) : "the requested site"}.`;
     return { value: await promptSecretValue("", detail, signal) };
   }
   return null;

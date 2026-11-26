@@ -1,4 +1,5 @@
 import { type BrowserWindow, Menu } from "electron";
+import { localizeDefinition } from "../../shared/i18n/definitions";
 
 export function showChatContextMenu(
   mainWindow: BrowserWindow | null,
@@ -19,7 +20,7 @@ export function showChatContextMenu(
       { role: "copy", enabled: editFlags.canCopy },
       { type: "separator" },
       {
-        label: "Select All",
+        label: localizeDefinition("Select All"),
         click: () =>
           mainWindow?.webContents.send("context-menu-select-bubble", {
             x: params.x,
@@ -31,12 +32,12 @@ export function showChatContextMenu(
   template.push(
     { type: "separator" },
     {
-      label: "Copy entire chat (text)",
+      label: localizeDefinition("Copy entire chat (text)"),
       click: () =>
         mainWindow?.webContents.send("context-menu-copy-chat", "text"),
     },
     {
-      label: "Copy entire chat (Markdown)",
+      label: localizeDefinition("Copy entire chat (Markdown)"),
       click: () =>
         mainWindow?.webContents.send("context-menu-copy-chat", "markdown"),
     },

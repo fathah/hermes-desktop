@@ -12,6 +12,7 @@ import { Square as Stop, Search, Paperclip, Mic, ArrowUp } from "lucide-react";
 import { BorderBeam } from "border-beam";
 import { isImeComposing } from "./keyboard";
 import { useI18n } from "../../components/useI18n";
+import { localizeDefinition } from "../../../../shared/i18n/definitions";
 import { useChatPreferences } from "../../components/ChatPreferencesProvider";
 import { useTheme } from "../../components/ThemeProvider";
 import { THEMES } from "../../constants";
@@ -383,13 +384,13 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     function slashCategoryLabel(category: SlashCommand["category"]): string {
       switch (category) {
         case "chat":
-          return "Chat";
+          return localizeDefinition("Chat");
         case "info":
-          return "Pages & settings";
+          return localizeDefinition("Pages & settings");
         case "tools":
-          return "Tools & skills";
+          return localizeDefinition("Tools & skills");
         case "agent":
-          return "Hermes Agent";
+          return localizeDefinition("Hermes Agent");
       }
     }
 
@@ -680,7 +681,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                           {row.command.name?.replace(/^\//, "")}
                         </span>
                         <span className="slash-menu-item-desc">
-                          {row.command.description}
+                          {localizeDefinition(row.command.description)}
                         </span>
                         <span className="slash-menu-item-badge">
                           {slashCategoryLabel(row.command.category)}

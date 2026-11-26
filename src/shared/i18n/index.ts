@@ -36,6 +36,30 @@ import installEn from "./locales/en/install";
 import constantsEn from "./locales/en/constants";
 import kanbanEn from "./locales/en/kanban";
 import diagnoseEn from "./locales/en/diagnose";
+import botGroupsBe from "./locales/be/botGroups";
+import commonBe from "./locales/be/common";
+import navigationBe from "./locales/be/navigation";
+import discoverBe from "./locales/be/discover";
+import welcomeBe from "./locales/be/welcome";
+import setupBe from "./locales/be/setup";
+import chatBe from "./locales/be/chat";
+import settingsBe from "./locales/be/settings";
+import toolsBe from "./locales/be/tools";
+import sessionsBe from "./locales/be/sessions";
+import modelsBe from "./locales/be/models";
+import providersBe from "./locales/be/providers";
+import officeBe from "./locales/be/office";
+import errorsBe from "./locales/be/errors";
+import schedulesBe from "./locales/be/schedules";
+import skillsBe from "./locales/be/skills";
+import gatewayBe from "./locales/be/gateway";
+import agentsBe from "./locales/be/agents";
+import soulBe from "./locales/be/soul";
+import memoryBe from "./locales/be/memory";
+import installBe from "./locales/be/install";
+import constantsBe from "./locales/be/constants";
+import kanbanBe from "./locales/be/kanban";
+import diagnoseBe from "./locales/be/diagnose";
 import commonHe from "./locales/he/common";
 import navigationHe from "./locales/he/navigation";
 import discoverHe from "./locales/he/discover";
@@ -306,6 +330,34 @@ export const resources = {
       constants: constantsEn,
       kanban: kanbanEn,
       diagnose: diagnoseEn,
+    },
+  },
+  be: {
+    translation: {
+      botGroups: botGroupsBe,
+      common: commonBe,
+      navigation: navigationBe,
+      discover: discoverBe,
+      welcome: welcomeBe,
+      setup: setupBe,
+      chat: chatBe,
+      settings: settingsBe,
+      tools: toolsBe,
+      sessions: sessionsBe,
+      models: modelsBe,
+      providers: providersBe,
+      office: officeBe,
+      errors: errorsBe,
+      schedules: schedulesBe,
+      skills: skillsBe,
+      gateway: gatewayBe,
+      agents: agentsBe,
+      soul: soulBe,
+      memory: memoryBe,
+      install: installBe,
+      constants: constantsBe,
+      kanban: kanbanBe,
+      diagnose: diagnoseBe,
     },
   },
   he: {
@@ -629,16 +681,18 @@ export function setLocale(nextLocale: AppLocale): AppLocale {
 
 export function t(
   key: string,
-  lang: AppLocale = locale,
+  langOrOptions: AppLocale | Record<string, unknown> = locale,
   options?: Record<string, unknown>,
 ): string {
+  const lang = typeof langOrOptions === "string" ? langOrOptions : locale;
+  const opts = typeof langOrOptions === "string" ? options : langOrOptions;
   const translated = readKey(resources[lang]?.translation, key);
   const fallback = readKey(resources[FALLBACK_LOCALE].translation, key);
   const base = translated ?? fallback ?? key;
 
-  if (!options) return base;
+  if (!opts) return base;
 
-  return Object.entries(options).reduce((message, [name, value]) => {
+  return Object.entries(opts).reduce((message, [name, value]) => {
     return message.replaceAll(`{{${name}}}`, String(value));
   }, base);
 }

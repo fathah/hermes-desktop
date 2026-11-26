@@ -6,6 +6,7 @@ vi.mock("../../components/useI18n", () => ({
   useI18n: () => ({
     t: (key: string): string => key,
   }),
+  useLocalize: () => (text: string) => text,
 }));
 
 vi.mock("../../components/common/BrandLogo", () => ({

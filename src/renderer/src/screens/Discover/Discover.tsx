@@ -16,6 +16,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
 import { useI18n } from "../../components/useI18n";
+import { localizeDefinition } from "../../../../shared/i18n/definitions";
 import { OrbLoader } from "../../components/OrbLoader";
 import { useConnectionTargetRevision } from "../../hooks/useConnectionTargetRevision";
 import type {
@@ -150,7 +151,7 @@ function DiscoverContent({
           })),
         );
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load");
+        setError(e instanceof Error ? e.message : localizeDefinition("Failed to load"));
         setCatalog(EMPTY);
       } finally {
         setLoading(false);
@@ -525,7 +526,7 @@ function DiscoverContent({
           target="_blank"
           rel="noreferrer"
           className="btn btn-secondary btn-sm"
-          title="Open Registry on GitHub"
+          title={t("common.openRegistryOnGitHub")}
         >
           <ExternalLink size={14} />
           Open Registry

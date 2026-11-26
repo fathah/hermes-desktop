@@ -5,6 +5,7 @@ export const FALLBACK_LOCALE: AppLocale = "en";
 export const DEFAULT_ACTIVE_LOCALE: AppLocale = "en";
 export const APP_LOCALES: AppLocale[] = [
   "en",
+  "be",
   "ar",
   "es",
   "fa",

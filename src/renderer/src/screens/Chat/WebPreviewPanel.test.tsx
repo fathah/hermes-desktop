@@ -7,13 +7,15 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../components/useI18n", () => ({
-  useI18n: () => ({
-    t: (key: string) => key,
-    locale: "en",
-    setLocale: vi.fn(),
-  }),
-}));
+vi.mock("../../components/useI18n", async () => {
+  const i18n = await vi.importActual<typeof import("../../../../shared/i18n")>(
+    "../../../../shared/i18n",
+  );
+  return {
+    useI18n: () => ({ t: i18n.t, locale: "en", setLocale: () => {} }),
+    useLocalize: () => (text: string) => text,
+  };
+});
 
 vi.mock("lucide-react", () => ({
   X: () => null,

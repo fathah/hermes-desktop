@@ -14,7 +14,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useI18n } from "../../components/useI18n";
+import { useI18n, useLocalize } from "../../components/useI18n";
 import BrandLogo from "../../components/common/BrandLogo";
 import { useConnectionTargetRevision } from "../../hooks/useConnectionTargetRevision";
 import type {
@@ -39,6 +39,7 @@ function GatewayContent({
   remoteMode = false,
 }: GatewayProps): React.JSX.Element {
   const { t } = useI18n();
+  const tr = useLocalize();
   const [gatewayRunning, setGatewayRunning] = useState(false);
   const [gatewayBusy, setGatewayBusy] = useState(false);
   const [remoteCommandPending, setRemoteCommandPending] = useState(remoteMode);
@@ -184,13 +185,17 @@ function GatewayContent({
     if (!needle) return platforms;
     return platforms.filter((platform) => {
       const haystack = [
+        tr(platform.name),
         platform.name,
         platform.id,
         platform.description,
+        tr(platform.description),
         ...platform.env_vars.map((field) => field.key),
+        ...(platform.env_vars ?? []).map((field) => tr(field.description)),
         ...(platform.toolsets ?? []).flatMap((toolset) => [
           toolset.key,
           toolset.label,
+          tr(toolset.label),
         ]),
       ]
         .join(" ")
@@ -739,6 +744,7 @@ function PlatformCard({
   visibleKeys,
 }: PlatformCardProps): React.JSX.Element {
   const { t } = useI18n();
+  const tr = useLocalize();
   const [modalOpen, setModalOpen] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [pendingRiskKey, setPendingRiskKey] = useState<string | null>(null);
@@ -791,7 +797,7 @@ function PlatformCard({
           <BrandLogo provider={platform.id} size={28} />
           <div className="settings-platform-info">
             <div className="gateway-platform-title-row">
-              <span className="settings-platform-label">{platform.name}</span>
+              <span className="settings-platform-label">{tr(platform.name)}</span>
               <span className={`gateway-state-pill ${status.tone}`}>
                 {status.icon === "ok" ? (
                   <CheckCircle2 size={13} />
@@ -802,7 +808,7 @@ function PlatformCard({
               </span>
             </div>
             <span className="settings-platform-desc">
-              {platform.description}
+              {tr(platform.description)}
             </span>
           </div>
         </div>
@@ -857,7 +863,7 @@ function PlatformCard({
               message && !message.ok ? " warn" : ""
             }`}
             onClick={() => setModalOpen(true)}
-            title={`${detailsLabel} ${platform.name}`}
+            title={`${detailsLabel} ${tr(platform.name)}`}
           >
             <Settings2 size={15} />
             {detailsLabel}
@@ -892,12 +898,12 @@ function PlatformCard({
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"
-            aria-label={`${t("gateway.configure")} ${platform.name}`}
+            aria-label={`${t("gateway.configure")} ${tr(platform.name)}`}
           >
             <div className="gateway-modal-header">
               <div className="gateway-modal-title">
                 <BrandLogo provider={platform.id} size={24} />
-                <span>{platform.name}</span>
+                <span>{tr(platform.name)}</span>
                 <span className={`gateway-state-pill ${status.tone}`}>
                   {status.icon === "ok" ? (
                     <CheckCircle2 size={13} />
@@ -919,7 +925,7 @@ function PlatformCard({
             </div>
 
             <div className="gateway-modal-body">
-              <p className="gateway-modal-desc">{platform.description}</p>
+              <p className="gateway-modal-desc">{tr(platform.description)}</p>
               {message && (
                 <div
                   className={`gateway-test-message ${
@@ -1015,7 +1021,7 @@ function PlatformCard({
                             )}
                           </div>
                           <div className="settings-field-hint">
-                            {field.description}
+                            {tr(field.description)}
                             {field.advanced && (
                               <span className="gateway-advanced-badge">
                                 {t("gateway.advanced")}
@@ -1044,7 +1050,7 @@ function PlatformCard({
                       >
                         <div className="gateway-capability-copy">
                           <div className="gateway-capability-title">
-                            <span>{toolset.label}</span>
+                            <span>{tr(toolset.label)}</span>
                             <code>{toolset.key}</code>
                             {toolset.risk === "high" && (
                               <span className="gateway-risk-pill">
@@ -1053,7 +1059,7 @@ function PlatformCard({
                             )}
                           </div>
                           <div className="gateway-capability-description">
-                            {toolset.description}
+                            {tr(toolset.description)}
                           </div>
                         </div>
                         <label

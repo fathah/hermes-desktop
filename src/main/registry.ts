@@ -6,6 +6,7 @@ import { createProfile } from "./profiles";
 import { writeSoul } from "./soul";
 import { listMcpServers } from "./installer";
 import { registrySnapshot, REGISTRY_COMMIT } from "./registry-integrity";
+import { localizeDefinition } from "../shared/i18n/definitions";
 import type {
   RegistryKind,
   RegistryItem,
@@ -150,7 +151,7 @@ export async function fetchRegistry(
   } catch (err) {
     return {
       ...EMPTY_CATALOG,
-      error: err instanceof Error ? err.message : "Failed to load registry",
+      error: err instanceof Error ? err.message : localizeDefinition("Failed to load registry"),
     };
   }
 }
@@ -185,7 +186,7 @@ export async function fetchModelRegistry(
   } catch (err) {
     return {
       providers: [],
-      error: err instanceof Error ? err.message : "Failed to load models",
+      error: err instanceof Error ? err.message : localizeDefinition("Failed to load models"),
     };
   }
 }
@@ -241,43 +242,43 @@ function buildSpec(
 
   if (kind === "mcps" && m) {
     rows.push({
-      label: "Transport",
+      label: localizeDefinition("Transport"),
       value: m.transport || (m.url ? "http" : "stdio"),
     });
     if (m.url) rows.push({ label: "URL", value: m.url, mono: true });
     if (m.command) {
       rows.push({
-        label: "Command",
+        label: localizeDefinition("Command"),
         value: [m.command, ...(m.args ?? [])].join(" "),
         mono: true,
       });
     }
     if (m.env && Object.keys(m.env).length) {
-      rows.push({ label: "Environment", chips: Object.keys(m.env) });
+      rows.push({ label: localizeDefinition("Environment"), chips: Object.keys(m.env) });
     }
     if (m.permissions?.length) {
-      rows.push({ label: "Permissions", chips: m.permissions });
+      rows.push({ label: localizeDefinition("Permissions"), chips: m.permissions });
     }
   } else if (kind === "agents" && m) {
-    if (m.model) rows.push({ label: "Model", value: m.model, mono: true });
-    if (m.tools?.length) rows.push({ label: "Tools", chips: m.tools });
+    if (m.model) rows.push({ label: localizeDefinition("Model"), value: m.model, mono: true });
+    if (m.tools?.length) rows.push({ label: localizeDefinition("Tools"), chips: m.tools });
   } else if (kind === "workflows" && m) {
-    if (m.entry) rows.push({ label: "Entry", value: m.entry, mono: true });
-    if (m.requires?.length) rows.push({ label: "Requires", chips: m.requires });
+    if (m.entry) rows.push({ label: localizeDefinition("Entry"), value: m.entry, mono: true });
+    if (m.requires?.length) rows.push({ label: localizeDefinition("Requires"), chips: m.requires });
   }
 
-  if (item.category) rows.push({ label: "Category", value: item.category });
+  if (item.category) rows.push({ label: localizeDefinition("Category"), value: item.category });
   if (item.platforms?.length) {
-    rows.push({ label: "Platforms", chips: item.platforms });
+    rows.push({ label: localizeDefinition("Platforms"), chips: item.platforms });
   }
-  if (item.tags?.length) rows.push({ label: "Tags", chips: item.tags });
+  if (item.tags?.length) rows.push({ label: localizeDefinition("Tags"), chips: item.tags });
   const license = m?.license || item.license;
-  if (license) rows.push({ label: "License", value: license });
-  if (item.author) rows.push({ label: "Author", value: item.author });
-  if (item.version) rows.push({ label: "Version", value: item.version });
+  if (license) rows.push({ label: localizeDefinition("License"), value: license });
+  if (item.author) rows.push({ label: localizeDefinition("Author"), value: item.author });
+  if (item.version) rows.push({ label: localizeDefinition("Version"), value: item.version });
   const compat = m?.compatibility;
   if (compat?.hermes) {
-    rows.push({ label: "Requires Hermes", value: compat.hermes, mono: true });
+    rows.push({ label: localizeDefinition("Requires Hermes"), value: compat.hermes, mono: true });
   }
 
   return { description: m?.description || item.description || "", rows };
@@ -323,7 +324,7 @@ async function downloadFolder(
 ): Promise<InstallResult> {
   const files = await registrySnapshot.readFolder(repoFolder);
   if (!files.length)
-    return { success: false, error: "No files found for this entry" };
+    return { success: false, error: localizeDefinition("No files found for this entry") };
   for (const file of files)
     safeWriteFile(join(destDir, file.relativePath), file.bytes);
   return { success: true };
@@ -385,10 +386,10 @@ async function installMcp(
   item: RegistryItem,
   profile?: string,
 ): Promise<InstallResult> {
-  if (!item.path) return { success: false, error: "MCP entry has no path" };
+  if (!item.path) return { success: false, error: localizeDefinition("MCP entry has no path") };
   const m = await fetchManifest(item.path);
   if (!m || (!m.url && !m.command)) {
-    return { success: false, error: "MCP manifest has no connection config" };
+    return { success: false, error: localizeDefinition("MCP manifest has no connection config") };
   }
 
   const configPath = join(profileHome(profile), "config.yaml");
@@ -398,7 +399,7 @@ async function installMcp(
 
   if (sectionRe.test(content)) {
     if (new RegExp(`^[ ]{2}${item.id}:\\s*$`, "m").test(content)) {
-      return { success: false, error: "Already configured" };
+      return { success: false, error: localizeDefinition("Already configured") };
     }
     content = content.replace(sectionRe, (mm) => mm + block);
   } else {
@@ -412,7 +413,7 @@ async function installMcp(
   } catch (err) {
     return {
       success: false,
-      error: err instanceof Error ? err.message : "Failed to write config",
+      error: err instanceof Error ? err.message : localizeDefinition("Failed to write config"),
     };
   }
 }
@@ -422,7 +423,7 @@ async function installRegistrySkill(
   item: RegistryItem,
   profile?: string,
 ): Promise<InstallResult> {
-  if (!item.path) return { success: false, error: "Skill entry has no path" };
+  if (!item.path) return { success: false, error: localizeDefinition("Skill entry has no path") };
   const category = item.category || "uncategorized";
   const dest = join(profileHome(profile), "skills", category, item.id);
   return downloadFolder(item.path, dest);
@@ -434,7 +435,7 @@ async function installWorkflow(
   profile?: string,
 ): Promise<InstallResult> {
   if (!item.path)
-    return { success: false, error: "Workflow entry has no path" };
+    return { success: false, error: localizeDefinition("Workflow entry has no path") };
   const dest = join(profileHome(profile), "workflows", item.id);
   return downloadFolder(item.path, dest);
 }
@@ -447,18 +448,18 @@ async function installWorkflow(
  * the published agent.
  */
 async function installAgent(item: RegistryItem): Promise<InstallResult> {
-  if (!item.path) return { success: false, error: "Agent entry has no path" };
+  if (!item.path) return { success: false, error: localizeDefinition("Agent entry has no path") };
   const manifest = await fetchManifest(item.path);
   const markdown = await registrySnapshot.readText(
     `${item.path}/${manifest?.entry || "AGENT.md"}`,
   );
   if (!markdown.trim())
-    return { success: false, error: "Agent persona is empty" };
+    return { success: false, error: localizeDefinition("Agent persona is empty") };
   const created = createProfile(item.id, "default");
   if (!created.success) return created;
   return writeSoul(markdown, item.id)
     ? { success: true }
-    : { success: false, error: "Failed to write agent persona (SOUL.md)" };
+    : { success: false, error: localizeDefinition("Failed to write agent persona (SOUL.md)") };
 }
 
 /**
@@ -489,12 +490,12 @@ export async function installRegistryItem(
       case "workflows":
         return await installWorkflow(item, profile);
       default:
-        return { success: false, error: "Unknown item kind" };
+        return { success: false, error: localizeDefinition("Unknown item kind") };
     }
   } catch (err) {
     return {
       success: false,
-      error: err instanceof Error ? err.message : "Install failed",
+      error: err instanceof Error ? err.message : localizeDefinition("Install failed"),
     };
   }
 }

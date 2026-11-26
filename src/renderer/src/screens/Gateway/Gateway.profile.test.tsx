@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const stableT = (key: string): string => key;
 vi.mock("../../components/useI18n", () => ({
   useI18n: () => ({ t: stableT }),
+  useLocalize: () => (text: string) => text,
 }));
 vi.mock("../../components/common/BrandLogo", () => ({
   default: () => <div data-testid="brand-logo" />,
