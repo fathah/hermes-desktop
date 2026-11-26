@@ -23,6 +23,7 @@ export type TransportProbe = {
 
 export const LANGUAGE_NATIVE_NAMES: Record<AppLocale, string> = {
   en: "English",
+  be: "Беларуская",
   ar: "العربية",
   es: "Español",
   fa: "فارسی",
