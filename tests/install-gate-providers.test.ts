@@ -71,6 +71,18 @@ describe("expectedEnvKeyForModel — URL fallback for custom/auto providers", ()
     expect(expectedEnvKeyForModel("custom", url)).toBe(expected);
     expect(expectedEnvKeyForModel("auto", url)).toBe(expected);
   });
+  // @lat: [[provider-setup#MartLLM provider preset#Installer readiness]]
+  it.each([
+    ["https://api.martllm.com/v1", "MARTLLM_API_KEY"],
+    ["https://openai.com:password@api.martllm.com:443/v1", "MARTLLM_API_KEY"],
+    ["https://API.MARTLLM.COM/v1", "MARTLLM_API_KEY"],
+    ["https://api.martllm.com.attacker.example/v1", null],
+    ["https://api.martllm.com@evil.example/v1", null],
+    ["https://evil.example/api.martllm.com/v1", null],
+  ])("resolves MartLLM installer credentials for %s", (url, expected) => {
+    expect(expectedEnvKeyForModel("custom", url)).toBe(expected);
+    expect(expectedEnvKeyForModel("auto", url)).toBe(expected);
+  });
   it.each([
     [
       "https://user:pass@api.cheaperinference.com:443/v1",

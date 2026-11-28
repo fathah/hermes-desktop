@@ -39,6 +39,7 @@ export default {
   cerebras: "Cerebras",
   requesty: "Requesty",
   api_route: "API Route",
+  martllm: "MartLLM",
   mistral: "Mistral",
   // Theme
   themeSystem: "Systemowy",
@@ -95,6 +96,8 @@ export default {
   requestyApiKey: "Klucz API Requesty",
   apiRouteApiKey: "Klucz API API Route",
   apiRouteHint: "Wielomodelowa brama zgodna z OpenAI",
+  martllmApiKey: "Klucz API MartLLM",
+  martllmHint: "Wielomodelowa brama zgodna z OpenAI",
   requestyHint: "Wielomodelowa brama zgodna z OpenAI",
   mistralApiKey: "Klucz API Mistral",
   mistralHint: "Modele Mistral i Codestral",

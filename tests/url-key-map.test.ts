@@ -45,6 +45,26 @@ describe("URL_KEY_MAP", () => {
       );
     },
   );
+  // @lat: [[provider-setup#MartLLM provider preset#Credential host boundary]]
+  it.each([
+    ["https://api.martllm.com/v1", true],
+    ["https://API.MARTLLM.COM:443/v1", true],
+    ["api.martllm.com/v1", true],
+    ["https://api.martllm.com.:443/v1", true],
+    ["https://openai.com:password@api.martllm.com/v1", true],
+    ["https://api.martllm.com/v1/api.openai.com", true],
+    ["https://api.martllm.com:443@evil.example/v1", false],
+    ["https://api.martllm.com.attacker.example/v1", false],
+    ["https://evil.example/api.martllm.com/v1", false],
+    ["https://martllm.com/v1", false],
+    ["ftp://api.martllm.com/v1", false],
+  ])("resolves MartLLM credentials only for its HTTP host %s", (url, known) => {
+    expect(expectedEnvKeyForUrl(url)).toBe(
+      known ? "MARTLLM_API_KEY" : CUSTOM_API_KEY_ENV,
+    );
+    expect(isKnownProviderUrl(url)).toBe(known);
+    expect(hostDerivedEnvKeyForUrl(url)).toBe(known ? "MARTLLM_API_KEY" : null);
+  });
   // @lat: [[provider-setup#Cheaper Inference provider preset#Credential host boundary]]
   it.each([
     ["https://user:pass@api.cheaperinference.com:443/v1", true],
@@ -114,6 +134,7 @@ describe("URL_KEY_MAP", () => {
       "https://api.novita.ai/openai/v1": "NOVITA_API_KEY",
       "https://router.requesty.ai/v1": "REQUESTY_API_KEY",
       "https://global.api-route.com/v1": "API_ROUTE_API_KEY",
+      "https://api.martllm.com/v1": "MARTLLM_API_KEY",
       "https://router.eu.requesty.ai/v1": "REQUESTY_API_KEY",
       "https://api.cheaperinference.com/v1": "CHEAPERINFERENCE_API_KEY",
     };

@@ -28,6 +28,7 @@ export default {
     cerebras: "Cerebras",
     requesty: "Requesty",
     api_route: "API Route",
+    martllm: "MartLLM",
     mistral: "Mistral",
   },
   serverPreset: "Preajuste de servidor",
