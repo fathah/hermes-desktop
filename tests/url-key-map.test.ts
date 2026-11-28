@@ -48,7 +48,7 @@ describe("URL_KEY_MAP", () => {
   // @lat: [[provider-setup#MartLLM provider preset#Credential host boundary]]
   it.each([
     ["https://api.martllm.com/v1", true],
-    ["https://API.MARTLLM.DEV:443/v1", true],
+    ["https://API.MARTLLM.COM:443/v1", true],
     ["api.martllm.com/v1", true],
     ["https://api.martllm.com.:443/v1", true],
     ["https://openai.com:password@api.martllm.com/v1", true],

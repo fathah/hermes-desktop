@@ -75,7 +75,7 @@ describe("expectedEnvKeyForModel — URL fallback for custom/auto providers", ()
   it.each([
     ["https://api.martllm.com/v1", "MARTLLM_API_KEY"],
     ["https://openai.com:password@api.martllm.com:443/v1", "MARTLLM_API_KEY"],
-    ["https://API.MARTLLM.DEV/v1", "MARTLLM_API_KEY"],
+    ["https://API.MARTLLM.COM/v1", "MARTLLM_API_KEY"],
     ["https://api.martllm.com.attacker.example/v1", null],
     ["https://api.martllm.com@evil.example/v1", null],
     ["https://evil.example/api.martllm.com/v1", null],

@@ -49,7 +49,7 @@ export const URL_KEY_MAP: ReadonlyArray<UrlKeyMapping> = [
     matchHostname: true,
   },
   {
-    pattern: /^api\.martllm\.dev$/i,
+    pattern: /^api\.martllm\.com$/i,
     envKey: "MARTLLM_API_KEY",
     matchHostname: true,
   },
